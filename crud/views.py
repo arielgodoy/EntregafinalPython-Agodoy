@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from .models import Documento,Propiedades,Propietario
-from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm
+from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login,authenticate
 from django.contrib.auth.forms import UserCreationForm
@@ -187,15 +187,14 @@ def deletePropietario(request, id):
 
 @login_required
 def register(request):
-    if request.method == 'POST':
-        #form = UserCreationForm(request.POST)
+    if request.method == 'POST':        
         form = UserRegisterForm(request.POST)
         if form.is_valid():
             username = form.cleaned_data['username']
             form.save()
-            return render(request, "login.html", {"mensaje": "Usuario Creado"})
-    else:
-        form = UserCreationForm()
+            return render(request, "base.html", {"mensaje": "Usuario Creado"})
+    else:        
+        form = UserRegisterForm()
     
     return render(request, "registro.html", {"form": form})
 
@@ -220,3 +219,18 @@ def login_request(request):
     
     return render(request, "login.html", {'form': form, "mensaje": mensaje})
 
+def editarUsuario(request):
+    usuario = request.user
+    if request.method == 'POST':
+        miformulario = UserEditform(request.POST)
+        if miformulario.is_valid():
+            #infomacion = miformulario.cleaned_data
+            usuario.email = miformulario.cleaned_data['email']
+            usuario.password1 = miformulario.cleaned_data['password1']
+            usuario.password2 = miformulario.cleaned_data['password2']
+            usuario.save()
+            return render(request,"base.html")
+    else:
+        miformulario = UserEditform(initial={'email':usuario.email})
+    
+    return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})

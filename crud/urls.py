@@ -20,9 +20,12 @@ urlpatterns = [
     path('crea-Propietario/', views.creaPropietario, name='creaPropietario'),
     path('update-Propietario/<int:id>', views.updatePropietario, name='updatePropietario'),
     path('delete-Propietario/<int:id>', views.deletePropietario, name='deletePropietario'),
+
+
     path('login', views.login_request, name='login'),
     path('register', views.register , name='register'),
     path('logout', LogoutView.as_view(template_name='logout.html'), name='logout'),
+    path('editarUsuario', views.editarUsuario, name='editarUsuario'),
 
         
 ]

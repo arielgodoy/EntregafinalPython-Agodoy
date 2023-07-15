@@ -31,8 +31,16 @@ class UserRegisterForm(UserCreationForm):
         # Saca los mensajes de ayuda
         help_texts = {k:"" for k in fields}
 
-
-
+class UserEditform(UserCreationForm):
+    email = forms.EmailField(label="Modificar E-mail")
+    password1 = forms.CharField(label="Contraseña", widget=forms.PasswordInput)
+    password2 = forms.CharField(label="Repetir contraseña", widget=forms.PasswordInput)
+ 
+    class Meta:
+        model = User
+        fields = ['email', 'password1', 'password2']
+        # Saca los mensajes de ayuda
+        help_texts = {k:"" for k in fields}
 
 
 class PropietarioForm(ModelForm):
