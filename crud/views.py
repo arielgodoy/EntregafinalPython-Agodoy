@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
-from .models import Documento,Propiedades,Propietario
-from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform
+from .models import Documento,Propiedades,Propietario,Avatar
+from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,Avatarformulario
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login,authenticate
 from django.contrib.auth.forms import UserCreationForm
@@ -10,6 +10,7 @@ from django.views import View
 from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
+from django.contrib.auth.models import User
 
 
 #################################################################
@@ -56,7 +57,7 @@ class ListarPropiedadesView(LoginRequiredMixin,View):
 #################################################################
 
 @login_required
-def inicio(request):   
+def inicio(request):       
     return render(request,"base.html")  
 
 @login_required
@@ -198,6 +199,7 @@ def login_request(request):
             user = authenticate(username=usuario, password=contra)
             if user is not None:
                 login(request, user)
+                Avatar.objects.get_or_create(user=user)
                 return redirect("inicio")
             else:
                 mensaje = "Error, datos incorrectos"
@@ -205,33 +207,37 @@ def login_request(request):
             mensaje = "Error, formulario erróneo"
     else:
         form = AuthenticationForm()
-        mensaje = "Ingrese sus credenciales"
-    
+        mensaje = "Ingrese sus credenciales"    
     return render(request, "login.html", {'form': form, "mensaje": mensaje})
 
+@login_required
 def editarUsuario(request):
     usuario = request.user
+    #infoavatar=request.user.avatar
     if request.method == 'POST':
         miformulario = UserEditform(request.POST)       
 
         if miformulario.is_valid():            
             usuario.email = miformulario.cleaned_data['email']
+            usuario.first_name = miformulario.cleaned_data['first_name']
+            usuario.last_name = miformulario.cleaned_data['last_name'] 
             usuario.password1 = miformulario.cleaned_data['password1']
             usuario.password2 = miformulario.cleaned_data['password2']
             usuario.set_password(usuario.password2)
             usuario.save()
+            #avatar=miformulario.cleaned_data.get['avatar']
+            #infoavatar.avatar = avatar
+            #infoavatar.save()
+
+
+
             return render(request,"base.html")
     else:
-        miformulario = UserEditform(initial={'email':usuario.email})
+        miformulario = UserEditform(initial={'email':usuario.email,'first_name':usuario.first_name,'last_name':usuario.last_name})
+        #miformulario = UserEditform(isinstance=request.user)
         
     
     return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})
-
-
-
-
-
-
 
 def register(request):
     if request.method == 'POST':        
@@ -247,3 +253,16 @@ def register(request):
         form = UserRegisterForm()
     
     return render(request, "registro.html", {"form": form})
+
+def subeavatar(request):
+    if request.method == 'POST':
+        formulario = Avatarformulario(request.POST,request.FILES)
+        if formulario.is_valid():
+            usuario = User.objects.get(username=request.user)
+            avatar = Avatar (user=usuario,imagen=formulario.cleaned_data['imagen'])
+            avatar.save
+            return render(request,"base.html")
+    else:
+        formulario = Avatarformulario()
+
+    return render(request,"base.html",{"formulario":formulario})

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+<div class="card-body">
+    <h4>Modifica Documento</h4>
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{formulario.as_p}}        
+        <button type="submit" class="btn btn-success">Grabar</button>
+    </form>
+</div>
+</div>
+{% endblock %}
