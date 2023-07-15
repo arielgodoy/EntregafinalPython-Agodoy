@@ -213,9 +213,9 @@ def login_request(request):
 @login_required
 def editarUsuario(request):
     usuario = request.user
-    #infoavatar=request.user.avatar
+    infoavatar=request.user.avatar
     if request.method == 'POST':
-        miformulario = UserEditform(request.POST)       
+        miformulario = UserEditform(request.POST,instance=request.user)       
 
         if miformulario.is_valid():            
             usuario.email = miformulario.cleaned_data['email']
@@ -224,18 +224,15 @@ def editarUsuario(request):
             usuario.password1 = miformulario.cleaned_data['password1']
             usuario.password2 = miformulario.cleaned_data['password2']
             usuario.set_password(usuario.password2)
+            avatar=miformulario.cleaned_data['avatar']            
+            if avatar:
+                infoavatar.avatar = avatar
+                infoavatar.save()
+
             usuario.save()
-            #avatar=miformulario.cleaned_data.get['avatar']
-            #infoavatar.avatar = avatar
-            #infoavatar.save()
-
-
-
-            return render(request,"base.html")
+            return redirect("inicio")
     else:
-        miformulario = UserEditform(initial={'email':usuario.email,'first_name':usuario.first_name,'last_name':usuario.last_name})
-        #miformulario = UserEditform(isinstance=request.user)
-        
+        miformulario = UserEditform(initial={'avatar':request.user.avatar.imagen},instance=request.user)              
     
     return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})
 
