@@ -8,6 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.shortcuts import render
+from django.urls import reverse_lazy
+from django.http import HttpResponse, HttpResponseRedirect
 
 
 #################################################################
@@ -185,18 +187,6 @@ def deletePropietario(request, id):
 
 
 
-@login_required
-def register(request):
-    if request.method == 'POST':        
-        form = UserRegisterForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data['username']
-            form.save()
-            return render(request, "base.html", {"mensaje": "Usuario Creado"})
-    else:        
-        form = UserRegisterForm()
-    
-    return render(request, "registro.html", {"form": form})
 
 
 def login_request(request):
@@ -222,15 +212,38 @@ def login_request(request):
 def editarUsuario(request):
     usuario = request.user
     if request.method == 'POST':
-        miformulario = UserEditform(request.POST)
-        if miformulario.is_valid():
-            #infomacion = miformulario.cleaned_data
+        miformulario = UserEditform(request.POST)       
+
+        if miformulario.is_valid():            
             usuario.email = miformulario.cleaned_data['email']
             usuario.password1 = miformulario.cleaned_data['password1']
             usuario.password2 = miformulario.cleaned_data['password2']
+            usuario.set_password(usuario.password2)
             usuario.save()
             return render(request,"base.html")
     else:
         miformulario = UserEditform(initial={'email':usuario.email})
+        
     
     return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})
+
+
+
+
+
+
+
+def register(request):
+    if request.method == 'POST':        
+        form = UserRegisterForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            form.save()
+            form = UserRegisterForm(request.POST)
+            #return render(request, "login.html", {"mensaje": "Usuario Creado"})
+            success_url = reverse_lazy("login")
+            return HttpResponseRedirect(success_url)
+    else:        
+        form = UserRegisterForm()
+    
+    return render(request, "registro.html", {"form": form})

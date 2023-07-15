@@ -1,9 +1,8 @@
 from django import forms
 from django.forms import ModelForm
 from .models import Documento,Propiedades,Propietario
-from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-
+from django.contrib.auth.forms import UserCreationForm  
 
 class DocForm(ModelForm):
     class Meta:
@@ -32,7 +31,7 @@ class UserRegisterForm(UserCreationForm):
         help_texts = {k:"" for k in fields}
 
 class UserEditform(UserCreationForm):
-    email = forms.EmailField(label="Modificar E-mail")
+    email = forms.EmailField(label="Modifica E-mail")
     password1 = forms.CharField(label="Contraseña", widget=forms.PasswordInput)
     password2 = forms.CharField(label="Repetir contraseña", widget=forms.PasswordInput)
  

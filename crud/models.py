@@ -36,5 +36,10 @@ class Propietario(models.Model):
     
     def __str__(self):
         return f"Propietario: {self.nombre}, {self.direccion}, {self.fono}"
+    
+
+
+
+
 
 
