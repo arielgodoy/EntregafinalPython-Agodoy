@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <form action="?" method="get">   
+        {{form}}
+        <button type="submit" class="btn btn-info">Buscar</button>
+        <a type="button" class="btn btn-success" href="{%url 'creaPropiedades' %}">Crear</a> 
+    </form>   
+    
+<div class="card-body">
+    <h4>Listado de Propiedades </h4>
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Rol</th>
+                <th scope="col">Direccion</th>
+                <th scope="col">rut</th>                
+                <th scope="col">Accion</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prop in props %}
+            <tr>
+                <td>{{ prop.rol }}</td>
+                <td>{{ prop.direccion }}</td>
+                <td>{{ prop.rut }}</td>                
+                <td>
+                    <a type="button" class="btn btn-warning" href="../update-Propiedades/{{ prop.id }}">Modificar</a>
+                    <a type="button" class="btn btn-danger" href="../delete-Propiedades/{{ prop.id }}">Borrar</a>
+                    
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+</div>
+</div>
+{% endblock %}

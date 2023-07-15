@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+<div class="card-body">
+    <h4>Modifica Documento</h4>
+    <form method="post">
+        {% csrf_token %}
+        {{form.as_p}}
+        <a type="button" class="btn btn-danger" href="{%url 'listarDocs' %}">Cancelar</a>
+        <button type="submit" class="btn btn-success">Grabar</button>
+    </form>
+</div>
+</div>
+{% endblock %}

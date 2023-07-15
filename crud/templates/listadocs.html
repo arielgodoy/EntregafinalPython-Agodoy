@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <form action="?" method="get">   
+        {{form}}
+        <button type="submit" class="btn btn-info">Buscar</button>
+        <a type="button" class="btn btn-success" href="{%url 'creaDocs' %}">Crear</a> 
+    </form>   
+    
+<div class="card-body">
+    <h4>Listado de Documentos </h4>
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Titulo</th>
+                <th scope="col">Descripcion</th>
+                <th scope="col">autor</th>
+                <th scope="col">Anio</th>
+                <th scope="col">Accion</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in docs %}
+            <tr>
+                <td>{{ doc.titulo }}</td>
+                <td>{{ doc.descripcion }}</td>
+                <td>{{ doc.autor }}</td>
+                <td>{{ doc.anio }}</td>
+                <td>
+                    <a type="button" class="btn btn-warning" href="../update-Docs/{{ doc.id }}">Modificar</a>
+                    <a type="button" class="btn btn-danger" href="../delete-Docs/{{ doc.id }}">Borrar</a>
+                    
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+</div>
+</div>
+{% endblock %}
