@@ -8,6 +8,7 @@
     </form>   
     
 <div class="card-body">
+    {% if propietarios %}
     <h4>Listado de Propietarios </h4>
     <table class="table">
         <thead>
@@ -33,6 +34,9 @@
             {% endfor %}
         </tbody>
     </table>
+    {% else  %}
+    <h1>Sin Propietarios  que listar</h1>
+    {% endif  %}
     
 </div>
 </div>
