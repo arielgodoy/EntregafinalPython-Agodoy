@@ -3,7 +3,7 @@ from django.forms import ModelForm
 from .models import Documento,Propiedades,Propietario,Avatar
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm  
-from .models import Mensaje
+from .models import Mensaje, Conversacion
 
 class DocForm(ModelForm):
     class Meta:
@@ -71,3 +71,14 @@ class MensajeForm(forms.ModelForm):
     class Meta:
         model = Mensaje
         fields = ('contenido',)
+
+class ConversacionForm(forms.ModelForm):
+    participantes = forms.ModelMultipleChoiceField(queryset=User.objects.all(), widget=forms.CheckboxSelectMultiple)
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user')
+        super().__init__(*args, **kwargs)
+        self.fields['participantes'].queryset = User.objects.exclude(username=user.username)
+
+    class Meta:
+        model = Conversacion
+        fields = ('participantes',)

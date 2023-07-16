@@ -11,7 +11,7 @@ from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth.models import User
-from .forms import MensajeForm
+from .forms import MensajeForm,ConversacionForm
 
 
 
@@ -289,3 +289,13 @@ def enviar_mensaje(request, conversacion_id):
         return redirect('detalle_conversacion', conversacion_id=conversacion_id)
 
     return render(request, 'enviar_mensaje.html', {'conversacion': conversacion, 'form': form})
+
+@login_required
+def crear_conversacion(request):
+    form = ConversacionForm(request.POST or None, user=request.user)
+    
+    if request.method == 'POST' and form.is_valid():
+        conversacion = form.save()
+        return redirect('detalle_conversacion', conversacion_id=conversacion.id)
+
+    return render(request, 'crear_conversacion.html', {'form': form})
