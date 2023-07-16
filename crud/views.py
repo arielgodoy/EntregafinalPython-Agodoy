@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from .models import Documento,Propiedades,Propietario,Avatar
-from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,Avatarformulario
+from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,AvatarForm
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login,authenticate
 from django.contrib.auth.forms import UserCreationForm
@@ -213,10 +213,10 @@ def login_request(request):
 @login_required
 def editarUsuario(request):
     usuario = request.user
-    infoavatar=request.user.avatar
+    infoavatar=request.user.avatar.imagen
+    #request.user.avatar.imagen.url
     if request.method == 'POST':
-        miformulario = UserEditform(request.POST,instance=request.user)       
-
+        miformulario = UserEditform(request.POST,instance=request.user)
         if miformulario.is_valid():            
             usuario.email = miformulario.cleaned_data['email']
             usuario.first_name = miformulario.cleaned_data['first_name']
@@ -228,12 +228,11 @@ def editarUsuario(request):
             if avatar:
                 infoavatar.avatar = avatar
                 infoavatar.save()
-
             usuario.save()
-            return redirect("inicio")
+            
+            return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})
     else:
-        miformulario = UserEditform(initial={'avatar':request.user.avatar.imagen},instance=request.user)              
-    
+        miformulario = UserEditform(initial={'avatar':request.user.avatar.imagen},instance=request.user)
     return render(request,"editar_usuario.html",{"miformulario":miformulario,"usuario":usuario})
 
 def register(request):
@@ -251,15 +250,14 @@ def register(request):
     
     return render(request, "registro.html", {"form": form})
 
-def subeavatar(request):
+def subeAvatar(request):
+    avatar = request.user.avatar
     if request.method == 'POST':
-        formulario = Avatarformulario(request.POST,request.FILES)
-        if formulario.is_valid():
-            usuario = User.objects.get(username=request.user)
-            avatar = Avatar (user=usuario,imagen=formulario.cleaned_data['imagen'])
-            avatar.save
-            return render(request,"base.html")
+        form = AvatarForm(request.POST, request.FILES, instance=avatar)
+        if form.is_valid():
+            form.save()
+            return redirect('inicio')  # Redirect to the user's profile page after successful update
     else:
-        formulario = Avatarformulario()
+        form = AvatarForm(instance=avatar)
 
-    return render(request,"base.html",{"formulario":formulario})
+    return render(request, 'upload_avatar.html', {'form': form})

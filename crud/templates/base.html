@@ -13,9 +13,11 @@
     <nav class="navbar navbar-expand-lg bg-body-tertiary">
         <div class="container-fluid">
 
-          <a class="navbar-brand" href="#"> 
+          <a class="navbar-brand" href="{%url 'subeavatar' %}"> 
             {% if request.user.is_authenticated %}
-            <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 20px;"></img>            
+            {% if request.user.avatar.imagen.url %}
+            <img  class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 20px;"></img>
+            {% endif%}
             <p class="text-muted small mb-4 mb-lg-0">{{ user.username }} </p>
             {% endif%}
           </a>
@@ -31,6 +33,7 @@
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="navbarDropdown">                    
                     <li><a class="dropdown-item" href="{%url 'editarUsuario' %}">Editar Perfil de Usuario</a></li>
+                    <li><a class="dropdown-item" href="{%url 'subeavatar' %}">Sube avatar</a></li>
                     <li><a class="dropdown-item" href="{%url 'logout' %}">Salir del Sistema (Logout)</a></li>
 
                   </ul>
