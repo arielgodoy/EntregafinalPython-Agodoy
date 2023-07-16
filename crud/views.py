@@ -1,6 +1,6 @@
-from django.shortcuts import render, redirect
-from .models import Documento,Propiedades,Propietario,Avatar
-from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,AvatarForm
+from django.shortcuts import render, redirect,get_object_or_404
+from .models import Documento,Propiedades,Propietario,Avatar,Conversacion
+from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,AvatarForm, MensajeForm
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login,authenticate
 from django.contrib.auth.forms import UserCreationForm
@@ -11,6 +11,9 @@ from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth.models import User
+from .forms import MensajeForm
+
+
 
 
 #################################################################
@@ -213,8 +216,7 @@ def login_request(request):
 @login_required
 def editarUsuario(request):
     usuario = request.user
-    infoavatar=request.user.avatar.imagen
-    #request.user.avatar.imagen.url
+    infoavatar=request.user.avatar.imagen  
     if request.method == 'POST':
         miformulario = UserEditform(request.POST,instance=request.user)
         if miformulario.is_valid():            
@@ -241,8 +243,7 @@ def register(request):
         if form.is_valid():
             username = form.cleaned_data['username']
             form.save()
-            form = UserRegisterForm(request.POST)
-            #return render(request, "login.html", {"mensaje": "Usuario Creado"})
+            form = UserRegisterForm(request.POST)            
             success_url = reverse_lazy("login")
             return HttpResponseRedirect(success_url)
     else:        
@@ -256,8 +257,35 @@ def subeAvatar(request):
         form = AvatarForm(request.POST, request.FILES, instance=avatar)
         if form.is_valid():
             form.save()
-            return redirect('inicio')  # Redirect to the user's profile page after successful update
+            return redirect('inicio') 
     else:
         form = AvatarForm(instance=avatar)
-
     return render(request, 'upload_avatar.html', {'form': form})
+
+
+
+
+@login_required
+def lista_conversaciones(request):
+    conversaciones = Conversacion.objects.filter(participantes=request.user)
+    return render(request, 'lista_conversaciones.html', {'conversaciones': conversaciones})
+
+@login_required
+def detalle_conversacion(request, conversacion_id):
+    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
+    return render(request, 'detalle_conversacion.html', {'conversacion': conversacion})
+
+
+@login_required
+def enviar_mensaje(request, conversacion_id):
+    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
+    form = MensajeForm(request.POST or None)
+    
+    if request.method == 'POST' and form.is_valid():
+        mensaje = form.save(commit=False)
+        mensaje.conversacion = conversacion
+        mensaje.remitente = request.user
+        mensaje.save()
+        return redirect('detalle_conversacion', conversacion_id=conversacion_id)
+
+    return render(request, 'enviar_mensaje.html', {'conversacion': conversacion, 'form': form})

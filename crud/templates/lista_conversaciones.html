@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+
+{% block content %}
+
+<div class="container">
+    <div class="card-body">
+{% for conversacion in conversaciones %}
+  <a href="{% url 'detalle_conversacion' conversacion.id %}">{{ conversacion }}</a><br>
+{% empty %}
+  <p>No tienes conversaciones.</p>
+{% endfor %}
+
+</div>
+</div>
+
+{% endblock %}

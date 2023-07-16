@@ -3,6 +3,7 @@ from django.forms import ModelForm
 from .models import Documento,Propiedades,Propietario,Avatar
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm  
+from .models import Mensaje
 
 class DocForm(ModelForm):
     class Meta:
@@ -64,3 +65,9 @@ class AvatarForm(ModelForm):
         fields = ['imagen']
         
 
+
+
+class MensajeForm(forms.ModelForm):
+    class Meta:
+        model = Mensaje
+        fields = ('contenido',)

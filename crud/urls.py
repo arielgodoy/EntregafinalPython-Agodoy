@@ -3,6 +3,8 @@ from django.urls import path
 from django.contrib.auth.views import LogoutView
 from django.conf import settings
 from django.conf.urls.static import static
+#from .views import lista_conversaciones, detalle_conversacion
+
 
 
 urlpatterns = [    
@@ -29,6 +31,10 @@ urlpatterns = [
     path('logout', LogoutView.as_view(template_name='logout.html'), name='logout'),
     path('editarUsuario', views.editarUsuario, name='editarUsuario'),
     path('subeavatar', views.subeAvatar, name='subeavatar'),
+
+    path('conversaciones/', views.lista_conversaciones, name='lista_conversaciones'),
+    path('conversaciones/<int:conversacion_id>/', views.detalle_conversacion, name='detalle_conversacion'),
+    path('conversaciones/<int:conversacion_id>/enviar-mensaje/', views.enviar_mensaje, name='enviar_mensaje'),
         
 ]
 

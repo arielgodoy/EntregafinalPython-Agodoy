@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+
+{% block content %}
+<div class="container">
+    <div class="card-body">
+
+      <h1>Conversación: {{ conversacion }}</h1>
+
+      {% for mensaje in conversacion.mensajes.all %}
+        <p>{{ mensaje.remitente }}: {{ mensaje.contenido }}</p>
+        <a href="{% url 'enviar_mensaje' conversacion_id=conversacion.id %}?respuesta_id={{ mensaje.id }}">Responder</a>
+        <hr>
+      {% empty %}
+        <p>No hay mensajes en esta conversación.</p>
+      {% endfor %}
+      
+
+</div>
+</div>
+
+{% endblock %}

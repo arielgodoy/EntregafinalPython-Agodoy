@@ -7,6 +7,8 @@ admin.site.register(Documento)
 admin.site.register(Propiedades)
 admin.site.register(Propietario)
 admin.site.register(Avatar)
+admin.site.register(Conversacion)
+admin.site.register(Mensaje)
 
 
 
