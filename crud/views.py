@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect,get_object_or_404
-from .models import Documento,Propiedades,Propietario,Avatar,Conversacion
+from .models import Documento,Propiedades,Propietario,Avatar,Conversacion,Mensaje
 from .forms import DocForm,BuscaDocs,PropForm,BuscaProps,PropietarioForm,BuscaPropietario,UserRegisterForm,UserEditform,AvatarForm, MensajeForm
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login,authenticate
@@ -11,7 +11,7 @@ from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth.models import User
-from .forms import MensajeForm,ConversacionForm
+from .forms import MensajeForm,ConversacionForm, EnviarMensajeForm
 
 
 
@@ -271,12 +271,6 @@ def lista_conversaciones(request):
     return render(request, 'lista_conversaciones.html', {'conversaciones': conversaciones})
 
 @login_required
-def detalle_conversacion(request, conversacion_id):
-    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
-    return render(request, 'detalle_conversacion.html', {'conversacion': conversacion})
-
-
-@login_required
 def enviar_mensaje(request, conversacion_id):
     conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
     form = MensajeForm(request.POST or None)
@@ -292,10 +286,30 @@ def enviar_mensaje(request, conversacion_id):
 
 @login_required
 def crear_conversacion(request):
-    form = ConversacionForm(request.POST or None, user=request.user)
-    
-    if request.method == 'POST' and form.is_valid():
-        conversacion = form.save()
-        return redirect('detalle_conversacion', conversacion_id=conversacion.id)
+    if request.method == 'POST':
+        form = ConversacionForm(request.POST, user=request.user)
+        if form.is_valid():
+            conversacion = form.save()
+            # Imprime el ID de la nueva conversación para verificar que se está generando y guardando correctamente
+            print(f"ID de la nueva conversación: {conversacion.id}")
+            return redirect('detalle_conversacion', conversacion_id=conversacion.id)
+    else:
+        form = ConversacionForm(user=request.user)
 
     return render(request, 'crear_conversacion.html', {'form': form})
+
+@login_required
+def detalle_conversacion(request, conversacion_id):
+    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
+    mensajes = Mensaje.objects.filter(conversacion=conversacion)
+
+    if request.method == 'POST':
+        form = EnviarMensajeForm(request.POST)
+        if form.is_valid():
+            mensaje = Mensaje(contenido=form.cleaned_data['contenido'], conversacion=conversacion, remitente=request.user)
+            mensaje.save()
+            return redirect('detalle_conversacion', conversacion_id=conversacion_id)
+    else:
+        form = EnviarMensajeForm()
+
+    return render(request, 'detalle_conversacion.html', {'conversacion': conversacion, 'mensajes': mensajes, 'form': form})

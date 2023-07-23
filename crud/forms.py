@@ -72,12 +72,17 @@ class MensajeForm(forms.ModelForm):
         model = Mensaje
         fields = ('contenido',)
 
+class EnviarMensajeForm(forms.Form):
+    contenido = forms.CharField(label="Contenido", widget=forms.Textarea(attrs={'rows': 4, 'cols': 40}))
+
 class ConversacionForm(forms.ModelForm):
     participantes = forms.ModelMultipleChoiceField(queryset=User.objects.all(), widget=forms.CheckboxSelectMultiple)
+
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user')
-        super().__init__(*args, **kwargs)
-        self.fields['participantes'].queryset = User.objects.exclude(username=user.username)
+        super().__init__(*args, **kwargs)        
+        self.fields['participantes'].queryset = User.objects.all()
+        self.fields['participantes'].initial = [user.id]  
 
     class Meta:
         model = Conversacion
