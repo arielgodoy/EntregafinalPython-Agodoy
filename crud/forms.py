@@ -21,8 +21,10 @@ class BuscaProps(forms.Form):
     rol = forms.CharField(max_length=10,required=False)
 
 class UserRegisterForm(UserCreationForm):
-    username = forms.CharField(label="Usuario")
-    email = forms.EmailField()
+    username = forms.CharField(label="Usuario", error_messages={'required': 'Este campo es obligatorio.'})
+    email = forms.EmailField(error_messages={'required': 'Este campo es obligatorio.', 'invalid': 'Ingrese un correo electrónico válido.'})
+    # Resto de los campos y código del formulario...
+
     first_name = forms.CharField(label="Nombre")
     last_name = forms.CharField(label="Apellido")
     password1 = forms.CharField(label="Contraseña", widget=forms.PasswordInput)

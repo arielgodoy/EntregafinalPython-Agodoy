@@ -1,4 +1,4 @@
-<html lang="en">
+<html lang="es">
 
 <head>
     <title>{% block title %}{% endblock %}</title>
@@ -33,8 +33,7 @@
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="navbarDropdown">                    
                     <li><a class="dropdown-item" href="{%url 'editarUsuario' %}">Editar Perfil de Usuario</a></li>
-                    <li><a class="dropdown-item" href="{%url 'subeavatar' %}">Sube avatar</a></li>
-                    <li><a class="dropdown-item" href="{%url 'logout' %}">Salir del Sistema (Logout)</a></li>
+                    <li><a class="dropdown-item" href="{%url 'subeavatar' %}">Sube avatar</a></li>                    
 
                   </ul>
               </li> 
@@ -79,6 +78,16 @@
                           
             </ul>
           </div>
+
+          <div class="d-flex">
+            {% if request.user.is_authenticated %}
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a href="{% url 'logout' %}" class="btn btn-danger">Salir</a>
+                </li>
+            </ul>
+            {% endif %}
+        </div>
         </div>
       </nav>
     </div>
