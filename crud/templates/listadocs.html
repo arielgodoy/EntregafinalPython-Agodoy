@@ -7,44 +7,87 @@
         <a type="button" class="btn btn-success" href="{%url 'creaDocs' %}">Crear</a> 
     </form>   
     
-<div class="card-body">
-    
-    {% if docs %}
-    <h4>Listado de Documentos </h4>
-    <table class="table">
-        <thead>
-            <tr>
-                <th scope="col">Titulo</th>
-                <th scope="col">Descripcion</th>
-                <th scope="col">autor</th>
-                <th scope="col">Anio</th>
-                <th scope="col">Accion</th>
-            </tr>
-        </thead>
-        <tbody>
-            
-            {% for doc in docs %}
-            <tr>
-                <td>{{ doc.titulo }}</td>
-                <td>{{ doc.descripcion }}</td>
-                <td>{{ doc.autor }}</td>
-                <td>{{ doc.anio }}</td>
-                <td>
-                    <a type="button" class="btn btn-warning" href="../update-Docs/{{ doc.id }}">Modificar</a>
-                    <a type="button" class="btn btn-danger" href="../delete-Docs/{{ doc.id }}">Borrar</a>
-                    
-                </td>
-            </tr>
-            {% endfor %}
-            
+    <div class="card-body">
+        
+        {% if docs %}
+        <h4>Listado de Documentos </h4>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th scope="col">Titulo</th>
+                    <th scope="col">Descripcion</th>
+                    <th scope="col">autor</th>
+                    <th scope="col">Anio</th>
+                    <th scope="col">Accion</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+                {% for doc in docs %}
+                <tr>
+                    <td>{{ doc.titulo }}</td>
+                    <td>{{ doc.descripcion }}</td>
+                    <td>{{ doc.autor }}</td>
+                    <td>{{ doc.anio }}</td>
+                    <td>
+                        <a type="button" class="btn btn-warning" href="../update-Docs/{{ doc.id }}">Modificar</a>
 
-        </tbody>
-    </table>
+                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#myModal" data-docid="{{ doc.id }}">Borrar</button>
 
-    {% else  %}
-    <h1>Sin documentos que listar</h1>
-    {% endif  %}
-    
+                        
+                    </td>
+                </tr>
+                {% endfor %}
+                
+            </tbody>
+        </table>
+
+        {% else  %}
+        <h1>Sin documentos que listar</h1>
+        {% endif  %}
+        
+    </div>
 </div>
+
+<!-- Modal -->
+<div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="myModalLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro de que desea eliminar este documento?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <a id="deleteLink" href="#" class="btn btn-danger">Eliminar</a>
+            </div>
+        </div>
+    </div>
 </div>
+
+
+<script>
+    $('#myModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget);
+        var docId = button.data('docid');
+
+        // Verificar si docId es un valor numérico válido antes de construir la URL
+        if (!isNaN(parseInt(docId))) {
+            var deleteUrl = "{% url 'delete-Docs' doc_id=0 %}".replace('0', docId);
+            $("#deleteLink").attr("href", deleteUrl);
+        } else {
+            // Si docId no es válido, ocultar el botón de eliminación
+            $("#deleteLink").hide();
+        }
+    });
+</script>
+
+
+
+
+
+
 {% endblock %}

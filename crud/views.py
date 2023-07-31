@@ -161,14 +161,24 @@ def updatePropietario(request, id):
                 pass    
     return render(request,'propietarioupdate.html',{'form':form})  
 
+# @login_required
+# def deleteDocs(request, id):
+#     doc = Documento.objects.get(id=id)
+#     try:
+#         doc.delete()
+#     except:
+#         pass
+#     return redirect('listarDocs')
 @login_required
-def deleteDocs(request, id):
-    doc = Documento.objects.get(id=id)
+def deleteDocs(request, doc_id):
+    doc = get_object_or_404(Documento, id=doc_id)
     try:
         doc.delete()
     except:
         pass
     return redirect('listarDocs')
+
+
 
 
 @login_required

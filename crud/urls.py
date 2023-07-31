@@ -13,7 +13,14 @@ urlpatterns = [
     path('listarDocs/', views.ListarDocsView.as_view(), name='listarDocs'), #claseView
     path('crea-Docs/', views.creaDocs, name='creaDocs'),
     path('update-Docs/<int:id>', views.updateDocs, name='updateDocs'),
-    path('delete-Docs/<int:id>', views.deleteDocs, name='deleteDocs'),
+    #path('delete-Docs/<int:id>', views.deleteDocs, name='deleteDocs'),       
+    path('delete-Docs/<int:doc_id>/', views.deleteDocs, name='delete-Docs'),
+     
+    
+
+
+
+
 
     path('listarPropiedades/', views.ListarPropiedadesView.as_view(), name='listarPropiedades'), #claseView
     path('crea-Propiedades/', views.creaPropiedades, name='creaPropiedades'),
