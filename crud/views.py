@@ -182,17 +182,18 @@ def deleteDocs(request, doc_id):
 
 
 @login_required
-def deletePropiedades(request, id):
-    prop = Propiedades.objects.get(id=id)
+def delete_Propiedad(request, propid):
+    prop = Propiedades.objects.get(id=propid)
     try:
         prop.delete()
     except:
         pass
     return redirect('listarPropiedades')
 
+
 @login_required
-def deletePropietario(request, id):
-    propietario = Propietario.objects.get(id=id)
+def deletePropietario(request, propid):
+    propietario = Propietario.objects.get(id=propid)
     try:
         propietario.delete()
     except:
