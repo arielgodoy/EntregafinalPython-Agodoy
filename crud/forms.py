@@ -73,7 +73,7 @@ class MensajeForm(forms.ModelForm):
         fields = ('contenido',)
 
 class EnviarMensajeForm(forms.Form):
-    contenido = forms.CharField(label="Contenido", widget=forms.Textarea(attrs={'rows': 4, 'cols': 40}))
+    contenido = forms.CharField(label="Mensaje", widget=forms.Textarea(attrs={'rows': 1, 'cols': 85}))
 
 class ConversacionForm(forms.ModelForm):
     participantes = forms.ModelMultipleChoiceField(queryset=User.objects.all(), widget=forms.CheckboxSelectMultiple)
