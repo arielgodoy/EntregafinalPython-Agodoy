@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block contenido %}
+  <h1>Crear Tipo de Documento</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    {{ form.media }}
+    <button type="submit">Guardar</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block contenido %}
+
+<h1>{{ propietario.nombre }}</h1>
+<p>RUT: {{ propietario.rut }}</p>
+<p>Teléfono: {{ propietario.telefono }}</p>
+<p>Rol: {{ propietario.get_rol_display }}</p>
+
+<h2>Propiedades asociadas:</h2>
+<table class="table">
+  <thead>
+    <tr>
+      <th>Rol</th>
+      <th>Dirección</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for propiedad in propietario.propiedad_set.all %}
+    <tr>
+      <td>{{ propiedad.rol }}</td>
+      <td>{{ propiedad.direccion }}</td>
+      <td>
+        <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary">Ver detalles</a>
+        <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger">Eliminar</a>
+        <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning">Modificar</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

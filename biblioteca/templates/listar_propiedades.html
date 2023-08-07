@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Listado de Propiedades</h1>
+    <a href="{% url 'crear_propiedad' %}" class="btn btn-success">Agregar Propiedad</a>
+</div>
+
+<table class="table" id="tabla-propiedades">
+    <thead>
+        <tr>
+            <th>Rol</th>
+            <th>Dirección</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for propiedad in propiedades %}
+        <tr>
+            <td>{{ propiedad.rol }}</td>
+            <td>{{ propiedad.direccion }}</td>
+            <td>
+                <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary">Ver Documentos</a>
+                <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger">Eliminar</a>
+                <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning">Modificar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#tabla-propiedades').DataTable();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block contenido %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Listado de Propietarios</h1>
+    <a href="{% url 'crear_propietario' %}" class="btn btn-success">Agregar Propietario</a>
+</div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nombre</th>
+            <th>RUT</th>
+            <th>Teléfono</th>
+            <th>Rol</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for propietario in propietarios %}
+        <tr>
+            <td>{{ propietario.nombre }}</td>
+            <td>{{ propietario.rut }}</td>
+            <td>{{ propietario.telefono }}</td>
+            <td>{{ propietario.get_rol_display }}</td>
+            <td>
+                <a href="{% url 'detalle_propietario' propietario.pk %}" class="btn btn-primary">Ver detalles</a>
+                <a href="{% url 'eliminar_propietario' propietario.pk %}" class="btn btn-danger">Eliminar</a>
+                <a href="{% url 'modificar_propietario' propietario.pk %}" class="btn btn-warning">Modificar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

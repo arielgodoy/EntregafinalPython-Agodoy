@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Listado de Tipos de Documentos</h1>
+    <a href="{% url 'crear_tipo_documento' %}" class="btn btn-success">Agregar Tipo de Documento</a>
+</div>
+
+<table class="table" id="tabla-tipos-documentos">
+    <thead>
+        <tr>
+            <th>Tipo de Documento</th>
+            <th>Modificar</th>
+            <th>Eliminar</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tipo_documento in tipos_documentos %}
+        <tr>
+            <td>{{ tipo_documento.nombre }}</td>
+            <td>{{ tipo_documento.descricion | safe }}</td>
+
+            <td>
+                <a href="{% url 'modificar_tipo_documento' tipo_documento.pk %}" class="btn btn-primary btn-sm">Modificar</a>
+            </td>
+            <td>
+                <a href="{% url 'eliminar_tipo_documento' tipo_documento.pk %}" class="btn btn-danger btn-sm">Eliminar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#tabla-tipos-documentos').DataTable({
+            "language": {
+                "url": "https://cdn.datatables.net/plug-ins/1.11.5/i18n/Spanish.json"
+            }
+        });
+    });
+</script>
+{% endblock %}

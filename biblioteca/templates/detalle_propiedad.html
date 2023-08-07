@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block contenido %}
+
+<h1>{{ propiedad.nombre }}</h1>
+<p>Dirección: {{ propiedad.direccion }}</p>
+
+<h2>Documentos asociados:</h2>
+<table class="table">
+  <thead>
+    <tr>
+      <th>Nombre</th>
+      <th>Tipo de Archivo</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for documento in propiedad.documento_set.all %}
+    <tr>
+      <td>{{ documento.Nombre_documento }}</td>
+      <td>{{ documento.tipo_documento }}</td>
+      <!-- <td>{{ documento.get_tipo_archivo_display }}</td> -->
+      <td>
+        <a href="{{ documento.archivo.url }}" class="btn btn-primary">Ver/Descargar</a>
+        <!-- Agregar el enlace que muestra el modal de confirmación -->
+        <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}">Eliminar</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<a href="{% url 'crear_documento' propiedad.pk %}" class="btn btn-primary">Agregar nuevo documento</a>
+
+
+<!-- Modal de confirmación de eliminación -->
+{% for documento in propiedad.documento_set.all %}
+<div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" role="dialog" aria-labelledby="confirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que deseas eliminar este documento?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <!-- Agregar el enlace que envía el formulario de eliminación -->
+        <a href="{% url 'eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+<!-- Modal de confirmación de eliminación -->
+
+
+{% endblock %}

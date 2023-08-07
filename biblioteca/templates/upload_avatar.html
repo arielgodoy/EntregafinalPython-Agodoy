@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="container">
+    <div class="card-body">
+        <h4>Información del Usuario</h4>
+        <p><strong>Usuario:</strong> {{ user.username }}</p>        
+        <p><strong>Nombre:</strong> {{ user.avatar.first_name }}</p>
+        <p><strong>Apellidos :</strong> {{ user.avatar.last_name }}</p>
+        <p><strong>E-Mail</strong> {{ user.avatar.email }}</p>        
+        <p><strong>Profesión:</strong> {{ user.avatar.profesion }}</p>
+        <p><strong>RUT/DNI:</strong> {{ user.avatar.dni }}</p>
+
+        {% if user.avatar.imagen %}
+            <div class="avatar-section">
+                <img class="avatar-img" src="{{ user.avatar.imagen.url }}" alt="Avatar del Usuario" style="max-width: 21em; margin-right: 100px;">
+            </div>
+        {% else %}
+            <p>No se ha cargado un avatar</p>
+        {% endif %}
+
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#editarModal">
+            Editar Datos
+        </button>
+        <a href="{% url 'cambiar_password' %}" class="btn btn-primary ms-2">
+            Cambiar Password
+        </a>                
+    </div>
+</div>
+
+<!-- Modal de edición de datos -->
+<div class="modal fade" id="editarModal" tabindex="-1" aria-labelledby="editarModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editarModalLabel">Editar Datos del Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>                    
+                </form>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
