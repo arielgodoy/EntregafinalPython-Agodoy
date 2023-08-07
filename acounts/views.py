@@ -1,10 +1,7 @@
 from django.shortcuts import render,redirect
-from .models import Avatar
-from .models import CustomUser
 from .forms  import AvatarForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
-from .forms import CustomUserForm
 from django.contrib import messages
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login,logout
@@ -41,7 +38,7 @@ def registro_usuario(request):
             form.save()
             username = form.cleaned_data.get('username')
             messages.success(request, f'Usuario {username} creado con éxito. Por favor, inicia sesión.')
-            time.sleep(5)
+            #time.sleep(5)
             return redirect('login')
     else:
         form = UserCreationForm()
