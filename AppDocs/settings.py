@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'acounts',
     'chat',
     'ckeditor',
+    'django.contrib.humanize',
 ]
 
 MIDDLEWARE = [

@@ -20,7 +20,12 @@
       <td>{{ documento.tipo_documento }}</td>
       <!-- <td>{{ documento.get_tipo_archivo_display }}</td> -->
       <td>
-        <a href="{{ documento.archivo.url }}" class="btn btn-primary">Ver/Descargar</a>
+        <a href="{{ documento.archivo.url }}" class="btn btn-primary">Ver</a>
+        <button class="btn btn-primary" onclick="copiarenlace('{{ documento.archivo.url }}')">Copiar Enlace</button>
+        <!-- Resto de tu código -->
+
+
+
         <!-- Agregar el enlace que muestra el modal de confirmación -->
         <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}">Eliminar</a>
       </td>
@@ -47,13 +52,28 @@
         <p>¿Estás seguro de que deseas eliminar este documento?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>       
+        
         <!-- Agregar el enlace que envía el formulario de eliminación -->
         <a href="{% url 'eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
       </div>
     </div>
   </div>
 </div>
+
+
+<script>
+  function copiarenlace(url) {
+    // Obtener la URL base
+    var base_url = '{{ request.scheme }}://{{ request.get_host }}';
+    // Construir la URL completa
+    var full_url = base_url + url;
+    navigator.clipboard.writeText(full_url);
+    alert("Enlace copiado: " + full_url);
+  }
+  </script>
+  
+
 {% endfor %}
 <!-- Modal de confirmación de eliminación -->
 
