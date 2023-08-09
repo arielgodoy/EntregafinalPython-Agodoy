@@ -1,5 +1,6 @@
 from django.db import models
 from ckeditor.fields import RichTextField  
+from django.utils import timezone
 
 
 class TipoDocumento(models.Model):
@@ -35,11 +36,14 @@ class Documento(models.Model):
         ('pdf', 'PDF'),
         ('jpeg', 'JPEG'),
         ('dwg', 'DWG'),
-    )
+    )    
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.CASCADE)
     Nombre_documento = models.CharField(max_length=100)
     propiedad = models.ForeignKey(Propiedad, on_delete=models.CASCADE)
     archivo = models.FileField(upload_to='archivos_documentos/')
+    fecha_documento = models.DateField(default=timezone.now)
+    fecha_vencimiento = models.DateField(null=True, blank=True)  # Fecha de vencimiento puede ser nula
+
     def __str__(self):
         return f"{self.tipo_documento} - {self.propiedad.rol}"
 

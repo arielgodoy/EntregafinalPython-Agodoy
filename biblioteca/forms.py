@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 class DocumentoForm(forms.ModelForm):
     class Meta:
         model = Documento
-        fields = ('tipo_documento', 'Nombre_documento','propiedad', 'archivo')
+        fields = ('tipo_documento', 'Nombre_documento','propiedad','fecha_documento','fecha_vencimiento', 'archivo')
 
 class PropietarioForm(forms.ModelForm):
     class Meta:

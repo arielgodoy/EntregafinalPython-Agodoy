@@ -1,23 +1,32 @@
 {% extends 'base.html' %}
 {% block contenido %}
 
-<h1>{{ propiedad.nombre }}</h1>
+<h1>ROL NRO : {{ propiedad.rol }}</h1>
 <p>Dirección: {{ propiedad.direccion }}</p>
 
 <h2>Documentos asociados:</h2>
 <table class="table">
   <thead>
     <tr>
-      <th>Nombre</th>
-      <th>Tipo de Archivo</th>
+      <th>Tipo</th>
+      <th>Documento</th>
+      <th>Fecha</th>
+      <th>Vencimiento</th>      
       <th>Acciones</th>
     </tr>
   </thead>
   <tbody>
     {% for documento in propiedad.documento_set.all %}
     <tr>
-      <td>{{ documento.Nombre_documento }}</td>
       <td>{{ documento.tipo_documento }}</td>
+      <td>{{ documento.Nombre_documento }}</td>
+      <td>{{ documento.fecha_documento }}</td>
+      {% if documento.fecha_vencimiento is None %}
+      <td>Sin vencimiento</td>  
+      {% else %}    
+      <td>{{ documento.fecha_vencimiento }}</td>  
+      {% endif %}    
+      
       <!-- <td>{{ documento.get_tipo_archivo_display }}</td> -->
       <td>
         <a href="{{ documento.archivo.url }}" class="btn btn-primary">Ver</a>
