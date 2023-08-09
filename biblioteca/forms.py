@@ -7,7 +7,13 @@ from django.contrib.auth.models import User
 class DocumentoForm(forms.ModelForm):
     class Meta:
         model = Documento
-        fields = ('tipo_documento', 'Nombre_documento','propiedad','fecha_documento','fecha_vencimiento', 'archivo')
+        fields = ('tipo_documento', 'Nombre_documento', 'propiedad', 'fecha_documento', 'fecha_vencimiento', 'archivo')
+        widgets = {
+            'fecha_documento': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_vencimiento': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+
 
 class PropietarioForm(forms.ModelForm):
     class Meta:
