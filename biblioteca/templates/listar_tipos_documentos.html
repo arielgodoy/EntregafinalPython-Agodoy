@@ -8,7 +8,8 @@
 <table class="table" id="tabla-tipos-documentos">
     <thead>
         <tr>
-            <th>Tipo de Documento</th>
+            <th>Tipo</th>
+            <th>Descripcion</th>
             <th>Modificar</th>
             <th>Eliminar</th>
         </tr>
@@ -30,16 +31,12 @@
     </tbody>
 </table>
 
-{% endblock %}
-
-{% block scripts %}
 <script>
     $(document).ready(function() {
-        $('#tabla-tipos-documentos').DataTable({
-            "language": {
-                "url": "https://cdn.datatables.net/plug-ins/1.11.5/i18n/Spanish.json"
-            }
-        });
+        $('#tabla-tipos-documentos').DataTable();
     });
 </script>
+
 {% endblock %}
+
+
