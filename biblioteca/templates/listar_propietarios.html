@@ -6,7 +6,7 @@
     <a href="{% url 'crear_propietario' %}" class="btn btn-success">Agregar Propietario</a>
 </div>
 
-<table class="table">
+<table class="table" id="propietarios-table">
     <thead>
         <tr>
             <th>Nombre</th>
@@ -32,5 +32,11 @@
         {% endfor %}
     </tbody>
 </table>
+
+<script>
+    $(document).ready(function() {
+        $('#propietarios-table').DataTable();
+    });
+</script>
 
 {% endblock %}
