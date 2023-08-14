@@ -10,8 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
-    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.js"></script>
-   
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.js"></script>   
 <body>
 <div class="container content-wrapper">
 {% if user.is_authenticated %}
@@ -37,63 +36,28 @@
                         <li><a class="dropdown-item" href="{% url 'crear_propiedad' %}">Ingresar Propiedad</a></li>
                         <li><a class="dropdown-item" href="{% url 'crear_tipo_documento' %}">Ingresar Tipo Documento</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_propietarios' %}">Listado de Propietarios</a></li>
-                        <li><a class="dropdown-item" href="{% url 'listar_propiedades' %}">Listar Propiedades</a></li>
-                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listar Tipos de Documentos</a></li>
+                        <li><a class="dropdown-item" href="{% url 'listar_propiedades' %}">Listado de Propiedades</a></li>
+                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>
                     </ul>
                 </li>
-                
-                <!--<li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Propiedades</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
-                    </ul>
-                </li>
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Tipos de Documentos</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
-                    </ul>
-                </li>
-
-                 <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Chat- WSP
-                  </a>
-                  <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-                    
-                    <li><a class="dropdown-item" href="{%url 'lista_conversaciones' %}">Listado de Chats</a></li>   
-                  </ul>
-                 </li> -->
-                
-
             </ul>
         </div>
         <!-- Botón para el perfil de usuario -->
             <div class="text-end mt-3">                
-                <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
-                    <i class="fas fa-user"></i> Perfil
-                </a>
-                
-                <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
-                    Salir
-                </a>
-
-
-                
-            </div>
-        
+                <a href="{% url 'subeavatar' %}" class="btn btn-secondary"><i class="fas fa-user"></i> Perfil</a>                
+                <a href="{% url 'logout' %}" class="btn btn-primary ms-2"> Salir</a>                
+            </div>        
     </div>
 </nav>
 {% endif %} 
-</div>
-    
+</div>    
 <div class="container content-wrapper">
     {% block contenido %}
     {% endblock %}
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-   
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>   
 </body>
 </html>
 
