@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'chat',
     'ckeditor',
     'django.contrib.humanize',
+    'crispy_forms',
+     "crispy_bootstrap5",
 ]
 
 MIDDLEWARE = [
@@ -160,3 +162,8 @@ AUTHENTICATION_BACKENDS = [
 
 #CKEDITOR_UPLOAD_PATH = 'uploads/'
 #CKEDITOR_JQUERY_URL = 'https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js'
+
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+
+CRISPY_TEMPLATE_PACK = "bootstrap5"
