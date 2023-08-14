@@ -2,6 +2,7 @@
 {% block contenido %}
 
 <h1>ROL NRO : {{ propiedad.rol }}</h1>
+<h2>Descr. : {{ propiedad.descripcion }}</h2>
 <p>Dirección: {{ propiedad.direccion }}</p>
 
 <h2>Documentos asociados:</h2>
@@ -29,15 +30,16 @@
       
       <!-- <td>{{ documento.get_tipo_archivo_display }}</td> -->
       <td>
-        <a href="{{ documento.archivo.url }}" class="btn btn-primary">Ver</a>
-        <button class="btn btn-primary" onclick="copiarenlace('{{ documento.archivo.url }}')">Copiar Enlace</button>
-        <!-- Resto de tu código -->
-
-
-
+        <a href="{{ documento.archivo.url }}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
+        <button class="btn btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')" > <i class="bi bi-clipboard"></i></button>
         <!-- Agregar el enlace que muestra el modal de confirmación -->
-        <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}">Eliminar</a>
+        <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a>
       </td>
+
+
+  
+
+
     </tr>
     {% endfor %}
   </tbody>
