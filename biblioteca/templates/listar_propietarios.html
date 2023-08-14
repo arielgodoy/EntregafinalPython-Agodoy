@@ -10,8 +10,7 @@
     <thead>
         <tr>
             <th>Nombre</th>
-            <th>RUT</th>            
-            <th>Rol</th>
+            <th>RUT</th>                        
             <th>Acciones</th>
         </tr>
     </thead>
@@ -19,8 +18,7 @@
         {% for propietario in propietarios %}
         <tr>
             <td>{{ propietario.nombre }}</td>
-            <td>{{ propietario.rut }}</td>            
-            <td>{{ propietario.get_rol_display }}</td>
+            <td>{{ propietario.rut }}</td>                        
             <td>
                 <a href="{% url 'detalle_propietario' propietario.pk %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
                 <a href="{% url 'eliminar_propietario' propietario.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
