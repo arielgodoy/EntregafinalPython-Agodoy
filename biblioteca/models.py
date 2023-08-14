@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 
 
 class TipoDocumento(models.Model):
-    nombre = models.CharField(max_length=100)
+    nombre = models.CharField(max_length=50)
     descricion = RichTextField(default='',null=True)
 
     def __str__(self):
@@ -17,7 +17,7 @@ class Propietario(models.Model):
         ('persona', 'Persona Natural'),
         ('sociedad', 'Sociedad'),
     )
-    nombre = models.CharField(max_length=100)
+    nombre = models.CharField(max_length=50)
     rut = models.CharField(max_length=20, unique=True)
     telefono = models.CharField(max_length=20)
     rol = models.CharField(max_length=20, choices=ROL_CHOICES)
@@ -25,9 +25,9 @@ class Propietario(models.Model):
         return self.nombre
 
 class Propiedad(models.Model):    
-    rol = models.CharField(max_length=100)
-    descripcion = models.CharField(default='',max_length=200)
-    direccion = models.CharField(default='',max_length=200)
+    rol = models.CharField(max_length=20)
+    descripcion = models.CharField(default='',max_length=50)
+    direccion = models.CharField(default='',max_length=50)
     ciudad = models.CharField(max_length=100)
     telefono = models.CharField(default='452379500',max_length=20)
     propietario = models.ForeignKey(Propietario, on_delete=models.CASCADE)
@@ -46,7 +46,7 @@ class Documento(models.Model):
         ('dwg', 'DWG'),
     )    
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.CASCADE)
-    Nombre_documento = models.CharField(max_length=100)
+    Nombre_documento = models.CharField(max_length=50)
     propiedad = models.ForeignKey(Propiedad, on_delete=models.CASCADE)
     archivo = models.FileField(upload_to='archivos_documentos/', validators=[validate_file_extension])
     fecha_documento = models.DateField(default=timezone.now)
