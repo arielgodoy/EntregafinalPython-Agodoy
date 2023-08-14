@@ -10,8 +10,7 @@
     <thead>
         <tr>
             <th>Nombre</th>
-            <th>RUT</th>
-            <th>Teléfono</th>
+            <th>RUT</th>            
             <th>Rol</th>
             <th>Acciones</th>
         </tr>
@@ -20,13 +19,13 @@
         {% for propietario in propietarios %}
         <tr>
             <td>{{ propietario.nombre }}</td>
-            <td>{{ propietario.rut }}</td>
-            <td>{{ propietario.telefono }}</td>
+            <td>{{ propietario.rut }}</td>            
             <td>{{ propietario.get_rol_display }}</td>
             <td>
-                <a href="{% url 'detalle_propietario' propietario.pk %}" class="btn btn-primary">Ver detalles</a>
-                <a href="{% url 'eliminar_propietario' propietario.pk %}" class="btn btn-danger">Eliminar</a>
-                <a href="{% url 'modificar_propietario' propietario.pk %}" class="btn btn-warning">Modificar</a>
+                <a href="{% url 'detalle_propietario' propietario.pk %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'eliminar_propietario' propietario.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
+                <a href="{% url 'modificar_propietario' propietario.pk %}" class="btn btn-warning"><i class="bi bi-pencil"></i></a>
+
             </td>
         </tr>
         {% endfor %}

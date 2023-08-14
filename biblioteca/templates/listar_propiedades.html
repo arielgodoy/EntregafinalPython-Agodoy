@@ -9,7 +9,7 @@
     <thead>
         <tr>
             <th>Rol</th>
-            <th>Dirección</th>
+            <th>Detalle</th>
             <th>Acciones</th>
         </tr>
     </thead>
@@ -17,16 +17,17 @@
         {% for propiedad in propiedades %}
         <tr>
             <td>{{ propiedad.rol }}</td>
-            <td>{{ propiedad.direccion }}</td>
+            <td>{{ propiedad.descripcion }}</td>
             <td>
-                <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary">Ver Documentos</a>
-                <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger">Eliminar</a>
-                <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning">Modificar</a>
+                <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
+                <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning"><i class="bi bi-pencil"></i></a>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+
 
 <script>
     $(document).ready(function() {
