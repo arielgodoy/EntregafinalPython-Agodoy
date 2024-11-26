@@ -1,39 +1,37 @@
 {% extends 'base.html' %}
 {% block contenido %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Listado de Tipos de Documentos</h1>
+    <h1 class="text-light">Listado de Tipos de Documentos</h1>
     <a href="{% url 'crear_tipo_documento' %}" class="btn btn-success">Agregar Tipo de Documento</a>
 </div>
 
-<table class="table" id="tabla-tipos-documentos">
-    <thead>
-        <tr>
-            <th>Tipo</th>
-            <th>Descripcion</th>
-            <th>Acciones</th>            
-        </tr>
-    </thead>
-    <tbody>
-        {% for tipo_documento in tipos_documentos %}
-        <tr>
-            <td>{{ tipo_documento.nombre }}</td>
-            <td>{{ tipo_documento.descricion | safe }}</td>
-            <td>
-                <a href="{% url 'modificar_tipo_documento' tipo_documento.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
-                <a href="{% url 'eliminar_tipo_documento' tipo_documento.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
-            </td>
-        </tr>
-        {% endfor %}
-
-    </tbody>
-</table>
+<div class="table-responsive">
+    <table class="table table-dark table-striped" id="tabla-tipos-documentos">
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Descripción</th>
+                <th>Acciones</th>            
+            </tr>
+        </thead>
+        <tbody>
+            {% for tipo_documento in tipos_documentos %}
+            <tr>
+                <td>{{ tipo_documento.nombre }}</td>
+                <td>{{ tipo_documento.descricion | safe }}</td>
+                <td>
+                    <a href="{% url 'modificar_tipo_documento' tipo_documento.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></a>
+                    <a href="{% url 'eliminar_tipo_documento' tipo_documento.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <script>
     $(document).ready(function() {
         $('#tabla-tipos-documentos').DataTable();
     });
 </script>
-
 {% endblock %}
-
-

@@ -36,15 +36,19 @@ class CrearDocumentoView(CreateView):
     success_url = reverse_lazy('listar_propiedades')
 
     def get_initial(self):
-        # Prellenar el campo propiedad en el formulario
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return {'propiedad': propiedad}
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['propiedad'] = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
+        return context
+
     def form_valid(self, form):
-        # Asegúrate de que el documento esté asociado a la propiedad
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         form.instance.propiedad = propiedad
         return super().form_valid(form)
+
     
 
 

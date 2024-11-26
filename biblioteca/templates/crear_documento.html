@@ -1,7 +1,12 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags %}
 
 {% block contenido %}
+{% load crispy_forms_tags %}
+
+<h1>ROL NRO : {{ propiedad.rol }}</h1>
+<h2>Descr. : {{ propiedad.descripcion }}</h2>
+<p>Dirección: {{ propiedad.direccion }}</p>
+
 <h1>Crear nuevo documento</h1>
 <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
