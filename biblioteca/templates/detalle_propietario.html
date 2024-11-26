@@ -21,9 +21,12 @@
       <td>{{ propiedad.rol }}</td>
       <td>{{ propiedad.direccion }}</td>
       <td>
-        <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary">Ver detalles</a>
-        <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger">Eliminar</a>
-        <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning">Modificar</a>
+        <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
+        <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
+        <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning"><i class="bi bi-pencil"></i></a>
+
+        
+
       </td>
     </tr>
     {% endfor %}
