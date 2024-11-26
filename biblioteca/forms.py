@@ -15,7 +15,13 @@ class DocumentoForm(forms.ModelForm):
 class PropietarioForm(forms.ModelForm):
     class Meta:
         model = Propietario
-        fields = '__all__'
+        fields = ['nombre', 'rut', 'telefono', 'rol']
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'rut': forms.TextInput(attrs={'class': 'form-control'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control'}),
+            'rol': forms.Select(attrs={'class': 'form-select'}),
+        }
 
 class PropiedadForm(forms.ModelForm):
     class Meta:
