@@ -76,6 +76,28 @@
             outline: none; /* Eliminar el borde adicional del navegador */
             box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); /* Efecto de sombra */
         }
+
+        .modal-content {
+        background-color: #1e1e1e; /* Fondo oscuro */
+        color: #f5f5f5; /* Texto claro */
+        border: 1px solid #444; /* Borde más claro */
+    }
+    .modal-header {
+        border-bottom: 1px solid #444;
+    }
+    .modal-footer {
+        border-top: 1px solid #444;
+    }
+    .modal-title {
+        color: #f5f5f5; /* Color del título */
+    }    
+    .close {
+        color: #f5f5f5; /* Color de la X de cerrar */
+        opacity: 1;
+    }
+    .close:hover {
+        color: #fff;
+    }
     </style>
     
 </head>
@@ -108,35 +130,10 @@
                         <li><a class="dropdown-item" href="{% url 'listar_propiedades' %}">Listado de Propiedades</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>                                                
                     </ul>
-                </li>
-                <!-- <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Propiedades</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
-                        <li><a class="nav-link" href="{% url 'crear_propiedad' %}">Ingresar Propiedad</a></li>
-                        <li><a class="nav-link" href="{% url 'listar_propiedades' %}">Listar Propiedades</a></li>
-                    </ul>
-                </li> -->
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Tipos de Documentos</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
-                        <li><a class="nav-link" href="{% url 'crear_tipo_documento' %}">Ingresar Tipo Documento</a></li>
-                        <li><a class="nav-link" href="{% url 'listar_tipos_documentos' %}">Listar Tipos de Documentos</a></li>
-                    </ul>
-                </li>
-                <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Chat- WSP
-                  </a>
-                  <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-                    <li><a class="dropdown-item" href="{%url 'lista_conversaciones' %}">Listado de Chats</a></li>   
-                  </ul>
-              </li>
+                </li>               
             </ul>
         </div>
-        <div class="text-end mt-3">
-            <a href="{% url 'about' %}" class="btn btn-secondary">
-                <i class="fas fa-user"></i> About
-            </a>
+        <div class="text-end mt-2">            
             <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
                 <i class="fas fa-user"></i> Perfil
             </a>
@@ -151,11 +148,7 @@
 
             </ul>            
         </div>
-        <!-- Botón para el perfil de usuario -->
-            <div class="text-end mt-3">                
-                <a href="{% url 'subeavatar' %}" class="btn btn-secondary"><i class="fas fa-user"></i> Perfil</a>                
-                <a href="{% url 'logout' %}" class="btn btn-primary ms-2"> Salir</a>                
-            </div>        
+        
     </div>
 </nav>
 {% endif %} 

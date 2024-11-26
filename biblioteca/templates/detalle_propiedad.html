@@ -6,7 +6,7 @@
 <p>Dirección: {{ propiedad.direccion }}</p>
 
 <h2>Documentos asociados:</h2>
-<table class="table">
+<table class="table table-dark table-striped">
   <thead>
     <tr>
       <th>Tipo</th>
@@ -63,9 +63,7 @@
         <p>¿Estás seguro de que deseas eliminar este documento?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>       
-        
-        <!-- Agregar el enlace que envía el formulario de eliminación -->
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
         <a href="{% url 'eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
       </div>
     </div>
@@ -73,16 +71,25 @@
 </div>
 
 
+
 <script>
   function copiarenlace(url) {
-    // Obtener la URL base
-    var base_url = '{{ request.scheme }}://{{ request.get_host }}';
-    // Construir la URL completa
-    var full_url = base_url + url;
-    navigator.clipboard.writeText(full_url);
-    alert("Enlace copiado: " + full_url);
+    try {
+      const full_url = `${window.location.origin}${url}`;
+      const tempInput = document.createElement("input");
+      tempInput.value = full_url;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand("copy");
+      document.body.removeChild(tempInput);
+      alert("Enlace copiado: " + full_url);
+    } catch (error) {
+      console.error("Error al copiar el enlace: ", error);
+      alert("No se pudo copiar el enlace. Por favor, copia manualmente.");
+    }
   }
-  </script>
+</script>
+
   
 
 {% endfor %}
