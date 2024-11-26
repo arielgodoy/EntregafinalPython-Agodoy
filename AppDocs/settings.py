@@ -28,7 +28,7 @@ DEBUG = True
 
 # settings.py
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.1.0/24','192.168.1.15']  # Agrega aquí las direcciones IP o nombres de host permitidos
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.0.185']  # Agrega aquí las direcciones IP o nombres de host permitidos
 
 
 

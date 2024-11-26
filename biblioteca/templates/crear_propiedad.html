@@ -1,9 +1,35 @@
 {% extends 'base.html' %}
+
 {% block contenido %}
-<h1>Ingresar Propiedad</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Guardar</button>
-</form>
+<div class="container mt-5">
+    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
+        <h1 class="my-4 text-center">Ingresar Propiedad</h1>
+        <form method="post" class="row g-3 needs-validation" novalidate>
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label for="id_rol" class="form-label text-light">ROL</label>
+                {{ form.rol }}
+            </div>
+            <div class="col-md-6">
+                <label for="id_direccion" class="form-label text-light">Dirección</label>
+                {{ form.direccion }}
+            </div>
+            <div class="col-md-6">
+                <label for="id_ciudad" class="form-label text-light">Ciudad</label>
+                {{ form.ciudad }}
+            </div>
+            <div class="col-md-6">
+                <label for="id_telefono" class="form-label text-light">Teléfono</label>
+                {{ form.telefono }}
+            </div>
+            <div class="col-12">
+                <label for="id_propietario" class="form-label text-light">Propietario</label>
+                {{ form.propietario }}
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary w-100">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
