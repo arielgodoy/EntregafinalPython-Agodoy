@@ -28,18 +28,26 @@ class DetallePropiedadView(LoginRequiredMixin,DetailView):
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
 
-class CrearDocumentoView(LoginRequiredMixin,CreateView):
+
+class CrearDocumentoView(CreateView):
     model = Documento
-    form_class = DocumentoForm
+    fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
     template_name = 'crear_documento.html'
     success_url = reverse_lazy('listar_propiedades')
 
-    def form_valid(self, form):        
-        propiedad = form.save()
-        return super().form_valid(form)
+    def get_initial(self):
+        # Prellenar el campo propiedad en el formulario
+        propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
+        return {'propiedad': propiedad}
 
-    def get_success_url(self):
-        return reverse_lazy('detalle_propiedad', kwargs={'pk': self.object.propiedad.pk})
+    def form_valid(self, form):
+        # Asegúrate de que el documento esté asociado a la propiedad
+        propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
+        form.instance.propiedad = propiedad
+        return super().form_valid(form)
+    
+
+
 
 @login_required
 def eliminar_documento(request, pk):    

@@ -46,7 +46,7 @@ class Documento(models.Model):
         ('dwg', 'DWG'),
     )    
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.CASCADE)
-    Nombre_documento = models.CharField(max_length=50)
+    nombre_documento = models.CharField(max_length=50)
     propiedad = models.ForeignKey(Propiedad, on_delete=models.CASCADE)
     archivo = models.FileField(upload_to='archivos_documentos/', validators=[validate_file_extension])
     fecha_documento = models.DateField(default=timezone.now)
