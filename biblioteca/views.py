@@ -86,11 +86,22 @@ class ModificarPropietarioView(LoginRequiredMixin,UpdateView):
     template_name = 'modificar_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
     
-class CrearPropiedadView(LoginRequiredMixin,CreateView):
+
+class CrearPropiedadView(LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+
+    def form_valid(self, form):
+        print("Formulario válido, guardando propiedad...")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        print("Formulario inválido:")
+        print(form.errors)  # Muestra los errores en la consola
+        return super().form_invalid(form)
+
 
 
 class EliminarPropiedadView(LoginRequiredMixin,DeleteView):

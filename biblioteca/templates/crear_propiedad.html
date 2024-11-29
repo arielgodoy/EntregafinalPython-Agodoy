@@ -4,13 +4,38 @@
 <div class="container mt-5">
     <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
         <h1 class="my-4 text-center">Ingresar Propiedad</h1>
-        <form method="post" class="needs-validation" novalidate>
+
+        <form method="post" action="{% url 'crear_propiedad' %}" class="needs-validation" novalidate>
+
             {% csrf_token %}
             <table class="table table-dark table-striped">
+                {% if form.errors %}
+<div class="alert alert-danger">
+    <ul>
+        {% for field, errors in form.errors.items %}
+            <li>{{ field }}: {{ errors|join:", " }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
                 <tr>
                     <td><label for="id_rol" class="form-label text-light">ROL</label></td>
                     <td>{{ form.rol }}</td>
                 </tr>
+                <tr>
+                    <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
+                    <td>{{ form.descripcion }}</td>
+                </tr>
+                    {% if form.descripcion.errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.descripcion.errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+
                 <tr>
                     <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
                     <td>{{ form.direccion }}</td>
