@@ -28,7 +28,11 @@ class PropietarioForm(forms.ModelForm):
 class PropiedadForm(forms.ModelForm):
     class Meta:
         model = Propiedad
-        fields = '__all__'
+        fields = '__all__'  # Asegúrate de incluir todos los campos
+        widgets = {
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
 
 class TipoDocumentoForm(forms.ModelForm):
     class Meta:
