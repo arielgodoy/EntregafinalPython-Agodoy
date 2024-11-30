@@ -93,6 +93,11 @@ class CrearPropiedadView(LoginRequiredMixin, CreateView):
     template_name = 'crear_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['propietarios'] = Propietario.objects.all()  # Agregamos los propietarios al contexto
+        return context
+
     def form_valid(self, form):
         print("Formulario válido, guardando propiedad...")
         return super().form_valid(form)

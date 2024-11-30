@@ -6,52 +6,116 @@
         <h1 class="my-4 text-center">Ingresar Propiedad</h1>
 
         <form method="post" action="{% url 'crear_propiedad' %}" class="needs-validation" novalidate>
-
             {% csrf_token %}
-            <table class="table table-dark table-striped">
-                {% if form.errors %}
-<div class="alert alert-danger">
-    <ul>
-        {% for field, errors in form.errors.items %}
-            <li>{{ field }}: {{ errors|join:", " }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
 
+            <table class="table table-dark table-striped">
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        <ul>
+                            {% for error in form.non_field_errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+
+                <!-- Campo ROL -->
                 <tr>
                     <td><label for="id_rol" class="form-label text-light">ROL</label></td>
-                    <td>{{ form.rol }}</td>
+                    <td>
+                        {{ form.rol }}
+                        {% if form.rol.errors %}
+                            <div class="text-danger">
+                                {% for error in form.rol.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
+
+                <!-- Campo Descripción -->
                 <tr>
                     <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
-                    <td>{{ form.descripcion }}</td>
+                    <td>
+                        {{ form.descripcion }}
+                        {% if form.descripcion.errors %}
+                            <div class="text-danger">
+                                {% for error in form.descripcion.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
-                    {% if form.descripcion.errors %}
-                    <div class="alert alert-danger">
-                        {% for error in form.descripcion.errors %}
-                            <p>{{ error }}</p>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
 
-
+                <!-- Campo Dirección -->
                 <tr>
                     <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
-                    <td>{{ form.direccion }}</td>
+                    <td>
+                        {{ form.direccion }}
+                        {% if form.direccion.errors %}
+                            <div class="text-danger">
+                                {% for error in form.direccion.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
+
+                <!-- Campo Ciudad -->
                 <tr>
                     <td><label for="id_ciudad" class="form-label text-light">Ciudad</label></td>
-                    <td>{{ form.ciudad }}</td>
+                    <td>
+                        {{ form.ciudad }}
+                        {% if form.ciudad.errors %}
+                            <div class="text-danger">
+                                {% for error in form.ciudad.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
+
+                <!-- Campo Teléfono -->
                 <tr>
                     <td><label for="id_telefono" class="form-label text-light">Teléfono</label></td>
-                    <td>{{ form.telefono }}</td>
+                    <td>
+                        {{ form.telefono }}
+                        {% if form.telefono.errors %}
+                            <div class="text-danger">
+                                {% for error in form.telefono.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
+
+                <!-- Campo Propietario -->
                 <tr>
-                    <td><label for="id_propietario" class="form-label text-light">Propietario</label></td>
-                    <td>{{ form.propietario }}</td>
+                    <td><label for="id_propietario_display" class="form-label text-light">Propietario</label></td>
+                    <td>
+                        <!-- Input visible para mostrar el nombre del propietario -->
+                        <input type="text" id="id_propietario_display" class="form-control" readonly>
+
+                        <!-- Input oculto para enviar el ID del propietario -->
+                        <input type="hidden" id="id_propietario" name="propietario">
+
+                        <button type="button" class="btn btn-secondary mt-2" onclick="openPropietarioModal()">Buscar Propietario</button>
+                        {% if form.propietario.errors %}
+                            <div class="text-danger">
+                                {% for error in form.propietario.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </td>
                 </tr>
+
+                <!-- Botón Guardar -->
                 <tr>
                     <td colspan="2" class="text-center">
                         <button type="submit" class="btn btn-primary w-50">Guardar</button>
@@ -61,4 +125,60 @@
         </form>
     </div>
 </div>
+
+<!-- Modal Propietarios -->
+<div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title" id="propietarioModalLabel">Seleccionar Propietario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-striped table-dark" id="propietariosTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for propietario in propietarios %}
+                        <tr>
+                            <td>{{ propietario.id }}</td>
+                            <td>{{ propietario.nombre }}</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" onclick="selectPropietario('{{ propietario.id }}', '{{ propietario.nombre }}')">Seleccionar</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openPropietarioModal() {
+        const modal = new bootstrap.Modal(document.getElementById('propietarioModal'));
+        modal.show();
+    }
+
+    function selectPropietario(id, nombre) {
+        document.getElementById('id_propietario').value = id;
+        document.getElementById('id_propietario_display').value = nombre;
+        const modal = bootstrap.Modal.getInstance(document.getElementById('propietarioModal'));
+        modal.hide();
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'F2') {
+            e.preventDefault();
+            openPropietarioModal();
+        }
+    });
+</script>
+
 {% endblock %}

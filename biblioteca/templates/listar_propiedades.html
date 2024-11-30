@@ -11,7 +11,9 @@
         <thead>
             <tr>
                 <th>Rol</th>
+                <th>Descripción</th>
                 <th>Dirección</th>
+                <th>Propietario</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -19,7 +21,9 @@
             {% for propiedad in propiedades %}
             <tr>
                 <td>{{ propiedad.rol }}</td>
+                <td>{{ propiedad.descripcion }}</td>
                 <td>{{ propiedad.direccion }}</td>
+                <td>{{ propiedad.propietario.nombre }}</td>
                 <td>
                     <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm">Ver Documentos</a>
                     <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm">Eliminar</a>
@@ -30,7 +34,6 @@
         </tbody>
     </table>
 </div>
-
 
 <script>
     $(document).ready(function() {

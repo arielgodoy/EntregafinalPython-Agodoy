@@ -2,6 +2,7 @@
 from django import forms
 from .models import Documento, Propiedad,TipoDocumento,Propietario
 from django.contrib.auth.models import User
+import re
 
 class DocumentoForm(forms.ModelForm):
     class Meta:
@@ -24,6 +25,12 @@ class PropietarioForm(forms.ModelForm):
             'telefono': forms.TextInput(attrs={'class': 'form-control'}),
             'rol': forms.Select(attrs={'class': 'form-select'}),
         }
+    def clean_rut(self):
+        rut = self.cleaned_data['rut']
+        pattern = r'^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$'  # Regex para el formato RUT
+        if not re.match(pattern, rut):
+            raise forms.ValidationError("El RUT debe tener el formato XX.XXX.XXX-X.")
+        return rut
 
 class PropiedadForm(forms.ModelForm):
     class Meta:
