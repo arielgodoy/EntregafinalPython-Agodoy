@@ -122,7 +122,7 @@ class EliminarPropiedadView(LoginRequiredMixin,DeleteView):
         return redirect(self.success_url)
 
 
-class ModificarPropiedadView(LoginRequiredMixin,UpdateView):
+class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
@@ -132,6 +132,12 @@ class ModificarPropiedadView(LoginRequiredMixin,UpdateView):
         # Guardar los cambios en la propiedad
         propiedad = form.save()
         return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Agregamos los propietarios al contexto para mostrarlos en el modal
+        context['propietarios'] = Propietario.objects.all()
+        return context
 
 
 class CrearTipoDocumentoView(LoginRequiredMixin,CreateView):

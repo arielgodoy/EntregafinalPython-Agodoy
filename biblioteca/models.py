@@ -26,8 +26,7 @@ class Propietario(models.Model):
 
 class Propiedad(models.Model):    
     rol = models.CharField(max_length=20)
-    descripcion = models.CharField(default='',max_length=50)
-    #descripcion = models.TextField(blank=True, null=True)
+    descripcion = models.CharField(default='',max_length=50)    
     direccion = models.CharField(default='',max_length=50)
     ciudad = models.CharField(max_length=100)
     telefono = models.CharField(default='452379500',max_length=20)

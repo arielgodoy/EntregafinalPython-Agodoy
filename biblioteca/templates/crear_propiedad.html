@@ -135,6 +135,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
                 <table class="table table-striped table-dark" id="propietariosTable">
                     <thead>
                         <tr>
@@ -143,16 +144,8 @@
                             <th>Acción</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for propietario in propietarios %}
-                        <tr>
-                            <td>{{ propietario.id }}</td>
-                            <td>{{ propietario.nombre }}</td>
-                            <td>
-                                <button class="btn btn-primary btn-sm" onclick="selectPropietario('{{ propietario.id }}', '{{ propietario.nombre }}')">Seleccionar</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="propietariosBody">
+                        <!-- Este contenido se actualizará dinámicamente -->
                     </tbody>
                 </table>
             </div>
@@ -160,10 +153,33 @@
     </div>
 </div>
 
+
 <script>
     function openPropietarioModal() {
         const modal = new bootstrap.Modal(document.getElementById('propietarioModal'));
         modal.show();
+        fetchPropietarios(); // Cargar datos al abrir el modal
+    }
+
+    function fetchPropietarios(query = '') {
+        fetch(`/api/v1/propietarios/?search=${query}`)
+            .then(response => response.json())
+            .then(data => {
+                const propietariosBody = document.getElementById('propietariosBody');
+                propietariosBody.innerHTML = '';
+                data.forEach(propietario => {
+                    propietariosBody.innerHTML += `
+                        <tr>
+                            <td>${propietario.id}</td>
+                            <td>${propietario.nombre}</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            })
+            .catch(error => console.error('Error al cargar propietarios:', error));
     }
 
     function selectPropietario(id, nombre) {
@@ -173,12 +189,12 @@
         modal.hide();
     }
 
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'F2') {
-            e.preventDefault();
-            openPropietarioModal();
-        }
+    // Escuchar eventos del campo de búsqueda
+    document.getElementById('searchPropietario').addEventListener('input', function (e) {
+        const query = e.target.value;
+        fetchPropietarios(query); // Filtrar datos dinámicamente
     });
 </script>
+
 
 {% endblock %}

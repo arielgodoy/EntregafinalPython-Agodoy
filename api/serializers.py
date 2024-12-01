@@ -1,5 +1,25 @@
 from rest_framework import serializers
-from .models import Company,Persona, Ciudad
+from .models import Company,Persona, Ciudad,Propietario
+
+#uso la misma validacion de la app biblioteca para agregar al serializer
+from biblioteca.forms import PropietarioForm
+
+
+
+class PropietarioSeralizer(serializers.ModelSerializer):
+    class Meta:
+        model = Propietario
+        fields = ('__all__')
+
+    def validate(self, data):
+        # Crear una instancia del formulario de Propietario con los datos recibidos
+        form = PropietarioForm(data=data)        
+        # Validar los datos con las reglas definidas en el formulario
+        if not form.is_valid():
+            # Mapear los errores del formulario a los errores del serializador
+            raise serializers.ValidationError(form.errors)        
+        return data
+
 
 class CiudadSerializer(serializers.ModelSerializer):
     class Meta:

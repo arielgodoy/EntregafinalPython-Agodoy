@@ -1,4 +1,5 @@
 from django.db import models
+from biblioteca.models import Propietario
 
 # Create your models here.
 class Company(models.Model):
