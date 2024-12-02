@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Empresas</title>
+</head>
+<body>
+    <h1>Lista de Empresas</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for empresa in empresas %}
+            <tr>
+                <td>{{ empresa.nombre }}</td>
+                <td>{{ empresa.descripcion }}</td>
+                <td>
+                    <a href="{% url 'empresa_editar' empresa.id %}">Editar</a>
+                    <a href="{% url 'empresa_eliminar' empresa.id %}">Eliminar</a>
+                </td>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="{% url 'empresa_crear' %}">Agregar Empresa</a>
+</body>
+</html>

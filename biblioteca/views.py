@@ -17,11 +17,33 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
+from access_control.decorators import verificar_permiso
+from django.utils.decorators import method_decorator
+# Cambia la importación
+from access_control.models import Empresa
 
-class ListarPropiedadesView(LoginRequiredMixin,ListView):    
+def seleccionar_empresa(request):
+    if request.method == "POST":
+        empresa_id = request.POST.get("empresa_id")
+        request.session['empresa_id'] = empresa_id
+        return redirect('listar_propiedades')  # Cambia por la URL de destino
+
+    empresas = Empresa.objects.filter(usuarios=request.user)
+    return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
+
+
+@method_decorator(
+    #aqui debo setear empresa_id?
+    verificar_permiso(vista_nombre="Listado de Propiedades", permiso_requerido="ingresar"),
+    name='dispatch'
+)
+class ListarPropiedadesView(LoginRequiredMixin, ListView):
     model = Propiedad
     template_name = 'listar_propiedades.html'
     context_object_name = 'propiedades'
+
+
+
 
 class DetallePropiedadView(LoginRequiredMixin,DetailView):
     model = Propiedad

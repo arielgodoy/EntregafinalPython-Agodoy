@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Permisos</title>
+</head>
+<body>
+    <h1>Editar Permisos para {{ usuario.username }} en {{ empresa.nombre }}</h1>
+    <form method="post">
+        {% csrf_token %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Vista</th>
+                    <th>Ingresar</th>
+                    <th>Crear</th>
+                    <th>Modificar</th>
+                    <th>Eliminar</th>
+                    <th>Autorizar</th>
+                    <th>Supervisor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for permiso in permisos %}
+                <tr>
+                    <td>{{ permiso.vista.nombre }}</td>
+                    <td><input type="checkbox" name="ingresar_{{ permiso.id }}" {% if permiso.ingresar %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="crear_{{ permiso.id }}" {% if permiso.crear %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="modificar_{{ permiso.id }}" {% if permiso.modificar %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="eliminar_{{ permiso.id }}" {% if permiso.eliminar %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="autorizar_{{ permiso.id }}" {% if permiso.autorizar %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="supervisor_{{ permiso.id }}" {% if permiso.supervisor %}checked{% endif %}></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit">Guardar</button>
+    </form>
+    <a href="{% url 'usuarios_lista' %}">Volver</a>
+</body>
+</html>

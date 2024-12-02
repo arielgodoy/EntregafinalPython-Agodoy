@@ -1,0 +1,10 @@
+<form method="post">
+    {% csrf_token %}
+    <label for="empresa">Selecciona una empresa:</label>
+    <select name="empresa_id" id="empresa">
+        {% for empresa in empresas %}
+            <option value="{{ empresa.id }}">{{ empresa.nombre }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Confirmar</button>
+</form>

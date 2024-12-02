@@ -1,0 +1,31 @@
+{% extends 'biblioteca/base.html' %}
+
+{% block contenido %}
+<h1>Lista de Usuarios</h1>
+{% if usuarios %}
+<table class="table table-striped">
+    <thead class="table-dark">
+        <tr>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for usuario in usuarios %}
+        <tr>
+            <td>{{ usuario.username }}</td>
+            <td>{{ usuario.email }}</td>
+            <td>
+                <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">Editar</a>
+                <a href="{% url 'access_control:usuario_eliminar' usuario.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este usuario?');">Eliminar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No hay usuarios registrados.</p>
+{% endif %}
+<a href="{% url 'access_control:usuario_crear' %}" class="btn btn-success">Crear Nuevo Usuario</a>
+{% endblock %}

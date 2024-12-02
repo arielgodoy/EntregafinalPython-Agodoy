@@ -29,7 +29,7 @@ urlpatterns = [
     path('eliminar_tipo_documento/<int:pk>/', views.EliminarTipoDocumentoView.as_view(), name='eliminar_tipo_documento'),
 
     path('about/', views.about, name='about'),
-
+    path('seleccionar_empresa/', views.seleccionar_empresa, name='seleccionar_empresa'),
 
 
 
