@@ -20,7 +20,7 @@
     {% for documento in propiedad.documento_set.all %}
     <tr>
       <td>{{ documento.tipo_documento }}</td>
-      <td>{{ documento.Nombre_documento }}</td>
+      <td>{{ documento.nombre_documento }}</td>
       <td>{{ documento.fecha_documento }}</td>
       {% if documento.fecha_vencimiento is None %}
       <td>Sin vencimiento</td>  
