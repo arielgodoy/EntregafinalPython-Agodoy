@@ -118,7 +118,7 @@
 {% if user.is_authenticated %}
 <nav class="navbar navbar-expand-md navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{% url 'subeavatar' %}"> 
+        <a class="navbar-brand" href="{% url 'subeavatar' %}">
             {% if request.user.is_authenticated %}
             {% if request.user.avatar.imagen.url %}
             <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 20px;"></img>
@@ -130,21 +130,36 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav">                
+            <ul class="navbar-nav">
+                <!-- Biblioteca Digital -->
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Biblioteca Digital</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
+                    <a class="nav-link dropdown-toggle" href="#" id="bibliotecaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Biblioteca Digital
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="bibliotecaMenu">
                         <li><a class="dropdown-item" href="{% url 'crear_propietario' %}">Ingresar Propietario</a></li>
                         <li><a class="dropdown-item" href="{% url 'crear_propiedad' %}">Ingresar Propiedad</a></li>
                         <li><a class="dropdown-item" href="{% url 'crear_tipo_documento' %}">Ingresar Tipo Documento</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_propietarios' %}">Listado de Propietarios</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_propiedades' %}">Listado de Propiedades</a></li>
-                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>                                                
+                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>
                     </ul>
-                </li>               
+                </li>
+                <!-- Control de Acceso -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="accessControlMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Control de Acceso
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="accessControlMenu">
+                        <li><a class="dropdown-item" href="{% url 'access_control:usuarios_lista' %}">Gestión de Usuarios</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:empresas_lista' %}">Gestión de Empresas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:vistas_lista' %}">Gestión de Vistas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:permisos_lista' %}">Gestión de Permisos</a></li>
+                    </ul>
+                </li>
             </ul>
         </div>
-        <div class="text-end mt-2">            
+        <div class="text-end mt-2">
             <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
                 <i class="fas fa-user"></i> Perfil
             </a>
@@ -154,6 +169,7 @@
         </div>
     </div>
 </nav>
+
 
 </div>
 

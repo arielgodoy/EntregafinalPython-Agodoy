@@ -1,13 +1,27 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.validators import RegexValidator
+
 
 class Empresa(models.Model):
-    nombre = models.CharField(max_length=255)
+
+    codigo = models.CharField(
+    max_length=2,
+    unique=True,
+    validators=[
+        RegexValidator(
+            regex=r'^\d{2}$',
+            message="El código debe ser un número de 2 dígitos entre 00 y 99."
+        )
+    ],
+    verbose_name="Código"
+)
+
+    
     descripcion = models.TextField(blank=True, null=True)
-    usuarios = models.ManyToManyField(User, related_name="empresas")
 
     def __str__(self):
-        return self.nombre
+        return f"{self.codigo} - {self.descripcion or 'Sin descripción'}"
 
 
 class Vista(models.Model):

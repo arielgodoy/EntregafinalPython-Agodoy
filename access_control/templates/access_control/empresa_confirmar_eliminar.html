@@ -1,0 +1,11 @@
+{% extends 'biblioteca/base.html' %}
+
+{% block contenido %}
+<h1>Eliminar Empresa</h1>
+<p>¿Estás seguro de que deseas eliminar la empresa "{{ object.nombre }}"?</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

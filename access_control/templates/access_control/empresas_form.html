@@ -1,17 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agregar/Editar Empresa</title>
-</head>
-<body>
-    <h1>{{ empresa.id|yesno:"Editar Empresa,Agregar Empresa" }}</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Guardar</button>
-    </form>
-    <a href="{% url 'empresas_lista' %}">Volver a la lista de empresas</a>
-</body>
-</html>
+{% extends 'biblioteca/base.html' %}
+
+{% block contenido %}
+<h1>{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}</h1>
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label for="codigo">Código</label>
+        <input type="text" name="codigo" id="codigo" class="form-control" maxlength="2" required value="{{ form.codigo.value }}">
+        <small class="text-muted">Debe ser un número de 2 dígitos (00-99).</small>
+    </div>
+    <div class="mb-3">
+        {{ form.descripcion.label_tag }}
+        {{ form.descripcion }}
+    </div>
+    <button type="submit" class="btn btn-success">Guardar</button>
+    <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

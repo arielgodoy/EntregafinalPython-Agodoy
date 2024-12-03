@@ -20,20 +20,22 @@ from django.contrib import messages
 from access_control.decorators import verificar_permiso
 from django.utils.decorators import method_decorator
 # Cambia la importación
-from access_control.models import Empresa
+from access_control.models import Permiso,Empresa
 
 def seleccionar_empresa(request):
     if request.method == "POST":
         empresa_id = request.POST.get("empresa_id")
-        request.session['empresa_id'] = empresa_id
-        return redirect('listar_propiedades')  # Cambia por la URL de destino
+        request.session["empresa_id"] = empresa_id
+        return redirect("listar_propiedades")  # Cambia esto a la URL correspondiente
 
-    empresas = Empresa.objects.filter(usuarios=request.user)
+    # Obtener empresas basadas en permisos del usuario
+    permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
+    empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
+
     return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
 
 
-@method_decorator(
-    #aqui debo setear empresa_id?
+@method_decorator(    
     verificar_permiso(vista_nombre="Listado de Propiedades", permiso_requerido="ingresar"),
     name='dispatch'
 )
@@ -42,9 +44,10 @@ class ListarPropiedadesView(LoginRequiredMixin, ListView):
     template_name = 'listar_propiedades.html'
     context_object_name = 'propiedades'
 
-
-
-
+@method_decorator(    
+    verificar_permiso(vista_nombre="Detalle de Propiedades", permiso_requerido="ingresar"),
+    name='dispatch'
+)
 class DetallePropiedadView(LoginRequiredMixin,DetailView):
     model = Propiedad
     template_name = 'detalle_propiedad.html'
