@@ -14,9 +14,7 @@ class PermisoForm(forms.ModelForm):
             'autorizar': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'supervisor': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
-class FiltroPermisosForm(forms.Form):
-    usuario = forms.ModelChoiceField(queryset=User.objects.all(), required=True, label="Usuario")
-    empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=True, label="Empresa")
+
 class PermisoFiltroForm(forms.Form):
     usuario = forms.ModelChoiceField(queryset=User.objects.all(), required=False, label="Usuario")
     empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=False, label="Empresa")

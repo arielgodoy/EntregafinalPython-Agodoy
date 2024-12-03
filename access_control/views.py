@@ -7,7 +7,7 @@ from django.views.generic import ListView
 from django.shortcuts import render
 
 from .models import Empresa,Permiso,Vista
-from .forms import PermisoForm,FiltroPermisosForm,PermisoFiltroForm
+from .forms import PermisoForm,PermisoFiltroForm
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -16,13 +16,13 @@ def toggle_permiso(request):
     if request.method == "POST":
         permiso_id = request.POST.get("permiso_id")
         permiso_field = request.POST.get("permiso_field")
+        value = request.POST.get("value") == "true"  # Convertir el valor a booleano
 
         try:
             permiso = Permiso.objects.get(id=permiso_id)
-            current_value = getattr(permiso, permiso_field, False)
-            setattr(permiso, permiso_field, not current_value)
+            setattr(permiso, permiso_field, value)
             permiso.save()
-            return JsonResponse({"success": True, "new_value": not current_value})
+            return JsonResponse({"success": True, "new_value": value})
         except Permiso.DoesNotExist:
             return JsonResponse({"success": False, "error": "Permiso no encontrado"})
         except Exception as e:

@@ -1,6 +1,5 @@
-{% extends "base.html" %}
+{% extends 'biblioteca/base.html' %}
 {% load custom_tags %}
-
 
 {% block contenido %}
 <h1>Gestión de Permisos Filtrados</h1>
@@ -17,12 +16,12 @@
             <th>Usuario</th>
             <th>Empresa</th>
             <th>Vista</th>
-            <th>I</th>
-            <th>C</th>
-            <th>M</th>
-            <th>E</th>
-            <th>A</th>
-            <th>S</th>
+            <th>_I_</th>
+            <th>_C_</th>
+            <th>_M_</th>
+            <th>_E_</th>
+            <th>_A_</th>
+            <th>_S_</th>
         </tr>
     </thead>
     <tbody>
@@ -33,22 +32,15 @@
             <td>{{ permiso.vista.nombre }}</td>
             {% for field in fields %}
             <td>
-                <span class="permiso-toggle" 
-                      data-permiso-id="{{ permiso.id }}" 
-                      data-permiso-field="{{ field }}">
-                    {% if permiso|getattribute:field %}
-                    ✔
-                    {% else %}
-                    ✖
-                    {% endif %}
-                </span>
+                <input type="checkbox" class="permiso-checkbox"
+                       data-permiso-id="{{ permiso.id }}" 
+                       data-permiso-field="{{ field }}" 
+                       {% if permiso|getattribute:field %}checked{% endif %}>
             </td>
             {% endfor %}
         </tr>
         {% endfor %}
     </tbody>
-    
-    
 </table>
 {% else %}
 <p>No hay permisos para mostrar.</p>
@@ -56,37 +48,37 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const toggles = document.querySelectorAll(".permiso-toggle");
+        const checkboxes = document.querySelectorAll(".permiso-checkbox");
     
-        toggles.forEach(toggle => {
-            toggle.addEventListener("click", function() {
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener("change", function() {
                 const permisoId = this.getAttribute("data-permiso-id");
                 const permisoField = this.getAttribute("data-permiso-field");
-    
+                const isChecked = this.checked;
+
                 fetch("{% url 'access_control:toggle_permiso' %}", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/x-www-form-urlencoded",
                         "X-CSRFToken": "{{ csrf_token }}"
                     },
-                    body: `permiso_id=${permisoId}&permiso_field=${permisoField}`
+                    body: `permiso_id=${permisoId}&permiso_field=${permisoField}&value=${isChecked}`
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        this.textContent = data.new_value ? "✔" : "✖";
-                    } else {
+                    if (!data.success) {
                         alert(data.error || "Error al cambiar el permiso.");
+                        // Revertir el checkbox si hubo un error
+                        this.checked = !isChecked;
                     }
                 })
-                .catch(error => console.error("Error:", error));
+                .catch(error => {
+                    console.error("Error:", error);
+                    // Revertir el checkbox en caso de error
+                    this.checked = !isChecked;
+                });
             });
         });
     });
-    </script>
-    
-
-
+</script>
 {% endblock %}
-
-

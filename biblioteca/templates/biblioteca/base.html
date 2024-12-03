@@ -116,6 +116,7 @@
 <body>
 <div class="container content-wrapper">
 {% if user.is_authenticated %}
+
 <nav class="navbar navbar-expand-md navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="{% url 'subeavatar' %}">
@@ -156,7 +157,18 @@
                         <li><a class="dropdown-item" href="{% url 'access_control:vistas_lista' %}">Gestión de Vistas</a></li>
                         <li><a class="dropdown-item" href="{% url 'access_control:permisos_lista' %}">Gestión de Permisos</a></li>
                         <li><a class="dropdown-item" href="{% url 'access_control:permisos_filtrados' %}">Filtrar Permisos</a></li>
-
+                    </ul>
+                </li>
+                <!-- Accounts -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="accountsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Cuentas
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="accountsMenu">
+                        <li><a class="dropdown-item" href="{% url 'login' %}">Iniciar Sesión</a></li>
+                        <li><a class="dropdown-item" href="{% url 'registro_usuario' %}">Registrar Usuario</a></li>
+                        <li><a class="dropdown-item" href="{% url 'cambiar_password' %}">Cambiar Contraseña</a></li>
+                        <li><a class="dropdown-item" href="{% url 'logout' %}">Cerrar Sesión</a></li>
                     </ul>
                 </li>
             </ul>
@@ -171,6 +183,8 @@
         </div>
     </div>
 </nav>
+
+
 
 
 </div>
