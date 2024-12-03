@@ -18,59 +18,51 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
 from access_control.decorators import verificar_permiso
-from django.utils.decorators import method_decorator
-# Cambia la importación
 from access_control.models import Permiso,Empresa
 
+from django.utils.decorators import method_decorator
+#Decorador generar para verificar permispo por mixim
+class VerificarPermisoMixin:
+    vista_nombre = None
+    permiso_requerido = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.vista_nombre and self.permiso_requerido:
+            decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+            vista_decorada = decorador(super().dispatch)
+            return vista_decorada(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
 
-def seleccionar_empresa(request):
-    if request.method == "POST":
-        empresa_id = request.POST.get("empresa_id")
-        request.session["empresa_id"] = empresa_id
-        return redirect("listar_propiedades")    
-    permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
-    empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
-    return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
 
-
-@method_decorator(    
-    verificar_permiso(vista_nombre="Listado de Propiedades", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class ListarPropiedadesView(LoginRequiredMixin, ListView):
+class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propiedad
     template_name = 'listar_propiedades.html'
     context_object_name = 'propiedades'
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "ingresar"
 
-@method_decorator(    
-    verificar_permiso(vista_nombre="Detalle de Propiedades", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class DetallePropiedadView(LoginRequiredMixin,DetailView):
+class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Propiedad
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "ingresar"
 
-@method_decorator(    
-    verificar_permiso(vista_nombre="Agregar Documento a Propiedad", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class CrearDocumentoView(CreateView):
+class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin,CreateView):
     model = Documento
     fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
     template_name = 'crear_documento.html'
     success_url = reverse_lazy('listar_propiedades')
-
+    vista_nombre="Maestro Propiedades" 
+    permiso_requerido="modificar"
     def get_initial(self):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return {'propiedad': propiedad}
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['propiedad'] = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return context
-
     def form_valid(self, form):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         form.instance.propiedad = propiedad
@@ -79,47 +71,61 @@ class CrearDocumentoView(CreateView):
     
 
 
-@method_decorator(    
-    verificar_permiso(vista_nombre="Crear Propietario", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class CrearPropietarioView(LoginRequiredMixin,CreateView):
+#
+#MAESTRO DE PROPIETARIOS
+#
+
+class CrearPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'crear_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
+    vista_nombre="Maestro Propietarios"
+    permiso_requerido="crear"
 
-
-class ListarPropietariosView(LoginRequiredMixin,ListView):    
+class ListarPropietariosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):    
     model = Propietario
     template_name = 'listar_propietarios.html'
     context_object_name = 'propietarios'
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="ingresar"
 
-class DetallePropietarioView(LoginRequiredMixin,DetailView):
+class DetallePropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DetailView):
     model = Propietario
     template_name = 'detalle_propietario.html'
     context_object_name = 'propietario'
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="ingresar"
 
-class EliminarPropietarioView(LoginRequiredMixin,DeleteView):
+class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propietario
     template_name = 'eliminar_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
-class ModificarPropietarioView(LoginRequiredMixin,UpdateView):
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="eliminar"
+
+class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'modificar_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="modificar"
     
 
-@method_decorator(    
-    verificar_permiso(vista_nombre="Crear Propiedad", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class CrearPropiedadView(LoginRequiredMixin, CreateView):
+
+
+#
+#MAESTRO DE PROPIEDADES
+#
+
+class CrearPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="crear"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -137,10 +143,12 @@ class CrearPropiedadView(LoginRequiredMixin, CreateView):
 
 
 
-class EliminarPropiedadView(LoginRequiredMixin,DeleteView):
+class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propiedad
     template_name = 'eliminar_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="eliminar"
 
     def form_valid(self, form):
         # Obtener la propiedad a eliminar
@@ -149,12 +157,13 @@ class EliminarPropiedadView(LoginRequiredMixin,DeleteView):
         propiedad.delete()
         return redirect(self.success_url)
 
-
-class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
+class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="modificar"
 
     def form_valid(self, form):
         # Guardar los cambios en la propiedad
@@ -167,25 +176,31 @@ class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
         context['propietarios'] = Propietario.objects.all()
         return context
 
-@method_decorator(    
-    verificar_permiso(vista_nombre="Crear Documento", permiso_requerido="ingresar"),
-    name='dispatch'
-)
-class CrearTipoDocumentoView(LoginRequiredMixin,CreateView):
+
+
+#
+#MAESTRO DE DOCUMENTOS
+#
+
+class CrearTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = TipoDocumento
     form_class = TipoDocumentoForm
     template_name = 'crear_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
-
-class ListarTiposDocumentosView(LoginRequiredMixin,ListView):
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="crear"
+class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):
     model = TipoDocumento
     template_name = 'listar_tipos_documentos.html'
     context_object_name = 'tipos_documentos'
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="ingresar"
 
-
-class ModificarTipoDocumentoView(LoginRequiredMixin,View):
+class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'modificar_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="modificar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -200,9 +215,11 @@ class ModificarTipoDocumentoView(LoginRequiredMixin,View):
             return redirect(self.success_url)
         return render(request, self.template_name, {'form': form})
 
-class EliminarTipoDocumentoView(LoginRequiredMixin,View):
+class EliminarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'eliminar_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="eliminar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -212,12 +229,6 @@ class EliminarTipoDocumentoView(LoginRequiredMixin,View):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
         tipo_documento.delete()
         return redirect(self.success_url)
-
-
-
-
-
-
 
 
 
@@ -239,7 +250,6 @@ def enviar_mensaje(request, conversacion_id):
         mensaje.remitente = request.user
         mensaje.save()
         return redirect('detalle_conversacion', conversacion_id=conversacion_id)
-
     return render(request, 'enviar_mensaje.html', {'conversacion': conversacion, 'form': form})
 
 @login_required
@@ -322,3 +332,12 @@ def eliminar_documento(request, pk):
     documento = get_object_or_404(Documento, pk=pk)    
     documento.delete()    
     return redirect('detalle_propiedad', pk=documento.propiedad.pk)
+
+def seleccionar_empresa(request):
+    if request.method == "POST":
+        empresa_id = request.POST.get("empresa_id")
+        request.session["empresa_id"] = empresa_id
+        return redirect("listar_propiedades")    
+    permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
+    empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
+    return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
