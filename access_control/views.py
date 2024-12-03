@@ -11,6 +11,20 @@ from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioEditarF
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from .decorators import verificar_permiso
+from django.utils.decorators import method_decorator
+#Decorador generar para verificar permispo por mixim
+class VerificarPermisoMixin:
+    vista_nombre = None
+    permiso_requerido = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.vista_nombre and self.permiso_requerido:
+            decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+            vista_decorada = decorador(super().dispatch)
+            return vista_decorada(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
+    
 @csrf_exempt
 def toggle_permiso(request):
     if request.method == "POST":
@@ -48,103 +62,139 @@ def permisos_filtrados_view(request):
     return render(request, 'access_control/permisos_filtrados.html', context)
     
 
-class VistaListaView(LoginRequiredMixin, ListView):
+class VistaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Vista
     template_name = 'access_control/vistas_lista.html'
     context_object_name = 'vistas'
+    vista_nombre = "Maestro Vistas"
+    permiso_requerido = "ingresar"
 
-class VistaCrearView(LoginRequiredMixin, CreateView):
+class VistaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = Vista
     fields = ['nombre', 'descripcion']
     template_name = 'access_control/vistas_form.html'
     success_url = reverse_lazy('access_control:vistas_lista')
+    vista_nombre = "Maestro Vistas"
+    permiso_requerido = "crear"
 
-class VistaEditarView(LoginRequiredMixin, UpdateView):
+class VistaEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = Vista
     fields = ['nombre', 'descripcion']
     template_name = 'access_control/vistas_form.html'
     success_url = reverse_lazy('access_control:vistas_lista')
+    vista_nombre = "Maestro Vistas"
+    permiso_requerido = "editar"
 
-class VistaEliminarView(LoginRequiredMixin, DeleteView):
+class VistaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Vista
     template_name = 'access_control/vista_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:vistas_lista')
+    vista_nombre = "Maestro Vistas"
+    permiso_requerido = "eliminar"
 
 
 
-class PermisoListaView(LoginRequiredMixin, ListView):
+class PermisoListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Permiso
     template_name = 'access_control/permisos_lista.html'
     context_object_name = 'permisos'
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "ingresar"
 
 class PermisoCrearView(LoginRequiredMixin, CreateView):
     model = Permiso
     fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "crear"
 
 class PermisoEditarView(LoginRequiredMixin, UpdateView):
     model = Permiso
     fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "modificar"
 
 class PermisoEliminarView(LoginRequiredMixin, DeleteView):
     model = Permiso
     template_name = 'access_control/permiso_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:permisos_lista')
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "eliminar"
 
 
 
-class EmpresaListaView(LoginRequiredMixin, ListView):
+class EmpresaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Empresa
     template_name = 'access_control/empresas_lista.html'
     context_object_name = 'empresas'
-class EmpresaCrearView(LoginRequiredMixin, CreateView):
+    vista_nombre = "Maestro Empresas"
+    permiso_requerido = "ingresar"
+
+class EmpresaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = Empresa
     fields = ['codigo', 'descripcion']
     template_name = 'access_control/empresas_form.html'
     success_url = reverse_lazy('access_control:empresas_lista')
-class EmpresaEditarView(LoginRequiredMixin, UpdateView):
+    vista_nombre = "Maestro Empresas"
+    permiso_requerido = "crear"
+
+
+class EmpresaEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = Empresa
     fields = ['codigo', 'descripcion']
     template_name = 'access_control/empresas_form.html'
     success_url = reverse_lazy('access_control:empresas_lista')
-class EmpresaEliminarView(LoginRequiredMixin, DeleteView):
+    vista_nombre = "Maestro Empresas"
+    permiso_requerido = "modificar"
+
+class EmpresaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Empresa
     template_name = 'access_control/empresa_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:empresas_lista')
+    vista_nombre = "Maestro Empresas"
+    permiso_requerido = "eliminar"
 
 
 
 
-class UsuariosListaView(LoginRequiredMixin, ListView):
+class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = User
     template_name = 'access_control/usuarios_lista.html'
     context_object_name = 'usuarios'
+    vista_nombre = "Maestro Usuarios"
+    permiso_requerido = "ingresar"
 
     def render_to_response(self, context, **response_kwargs):
         # Imprime el contexto para verificar los datos
         print(context['usuarios'])
         return super().render_to_response(context, **response_kwargs)
     
-class UsuarioCrearView(LoginRequiredMixin, CreateView):
+class UsuarioCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = User
     form_class = UsuarioCrearForm
     template_name = 'access_control/usuarios_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
+    vista_nombre = "Maestro Usuarios"
+    permiso_requerido = "crear"
 
     def form_valid(self, form):
         return super().form_valid(form)
 
-class UsuarioEditarView(LoginRequiredMixin, UpdateView):
+class UsuarioEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = User
     form_class = UsuarioEditarForm
     template_name = 'access_control/usuarios_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
+    vista_nombre = "Maestro Usuarios"
+    permiso_requerido = "modificar"
 
 
-class UsuarioEliminarView(LoginRequiredMixin, DeleteView):
+class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = User
     template_name = 'access_control/usuario_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
+    vista_nombre = "Maestro Usuarios"
+    permiso_requerido = "eliminar"

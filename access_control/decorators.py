@@ -49,6 +49,11 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 )
                 print(f"Permiso creado para la vista {vista_nombre} y empresa {empresa.codigo} - {empresa.descripcion or 'Sin descripción'}")
 
+            # Verificar si el usuario es supervisor
+            if permiso.supervisor:
+                print(f"El usuario {request.user.username} tiene permisos de supervisor.")
+                return view_func(request, *args, **kwargs)
+
             # Verificar si el usuario tiene el permiso requerido
             if not getattr(permiso, permiso_requerido, False):
                 empresa_nombre = f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}"
