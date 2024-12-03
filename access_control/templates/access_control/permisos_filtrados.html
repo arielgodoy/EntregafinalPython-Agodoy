@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% load custom_tags %}
+
+
+{% block contenido %}
+<h1>Gestión de Permisos Filtrados</h1>
+
+<form method="get" class="mb-4">
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+</form>
+
+{% if permisos %}
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Usuario</th>
+            <th>Empresa</th>
+            <th>Vista</th>
+            <th>I</th>
+            <th>C</th>
+            <th>M</th>
+            <th>E</th>
+            <th>A</th>
+            <th>S</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for permiso in permisos %}
+        <tr>
+            <td>{{ permiso.usuario.username }}</td>
+            <td>{{ permiso.empresa.codigo }}</td>
+            <td>{{ permiso.vista.nombre }}</td>
+            {% for field in fields %}
+            <td>
+                <span class="permiso-toggle" 
+                      data-permiso-id="{{ permiso.id }}" 
+                      data-permiso-field="{{ field }}">
+                    {% if permiso|getattribute:field %}
+                    ✔
+                    {% else %}
+                    ✖
+                    {% endif %}
+                </span>
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+    
+    
+</table>
+{% else %}
+<p>No hay permisos para mostrar.</p>
+{% endif %}
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const toggles = document.querySelectorAll(".permiso-toggle");
+    
+        toggles.forEach(toggle => {
+            toggle.addEventListener("click", function() {
+                const permisoId = this.getAttribute("data-permiso-id");
+                const permisoField = this.getAttribute("data-permiso-field");
+    
+                fetch("{% url 'access_control:toggle_permiso' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRFToken": "{{ csrf_token }}"
+                    },
+                    body: `permiso_id=${permisoId}&permiso_field=${permisoField}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        this.textContent = data.new_value ? "✔" : "✖";
+                    } else {
+                        alert(data.error || "Error al cambiar el permiso.");
+                    }
+                })
+                .catch(error => console.error("Error:", error));
+            });
+        });
+    });
+    </script>
+    
+
+
+{% endblock %}
+
+

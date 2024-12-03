@@ -4,9 +4,48 @@ from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView
+from django.shortcuts import render
 
 from .models import Empresa,Permiso,Vista
-from .forms import PermisoForm
+from .forms import PermisoForm,FiltroPermisosForm,PermisoFiltroForm
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def toggle_permiso(request):
+    if request.method == "POST":
+        permiso_id = request.POST.get("permiso_id")
+        permiso_field = request.POST.get("permiso_field")
+
+        try:
+            permiso = Permiso.objects.get(id=permiso_id)
+            current_value = getattr(permiso, permiso_field, False)
+            setattr(permiso, permiso_field, not current_value)
+            permiso.save()
+            return JsonResponse({"success": True, "new_value": not current_value})
+        except Permiso.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Permiso no encontrado"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+    return JsonResponse({"success": False, "error": "Método no permitido"})
+
+def permisos_filtrados_view(request):
+    form = PermisoFiltroForm(request.GET or None)
+    permisos = None
+
+    if form.is_valid():
+        usuario = form.cleaned_data.get('usuario')
+        empresa = form.cleaned_data.get('empresa')
+        if usuario and empresa:
+            permisos = Permiso.objects.filter(usuario=usuario, empresa=empresa)
+
+    context = {
+        'form': form,
+        'permisos': permisos,
+        'fields': ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor'],
+    }
+    return render(request, 'access_control/permisos_filtrados.html', context)
+
 
 class VistaListaView(LoginRequiredMixin, ListView):
     model = Vista
