@@ -22,16 +22,15 @@ from django.utils.decorators import method_decorator
 # Cambia la importación
 from access_control.models import Permiso,Empresa
 
+
+
 def seleccionar_empresa(request):
     if request.method == "POST":
         empresa_id = request.POST.get("empresa_id")
         request.session["empresa_id"] = empresa_id
-        return redirect("listar_propiedades")  # Cambia esto a la URL correspondiente
-
-    # Obtener empresas basadas en permisos del usuario
+        return redirect("listar_propiedades")    
     permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
     empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
-
     return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
 
 
@@ -53,7 +52,10 @@ class DetallePropiedadView(LoginRequiredMixin,DetailView):
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
 
-
+@method_decorator(    
+    verificar_permiso(vista_nombre="Agregar Documento a Propiedad", permiso_requerido="ingresar"),
+    name='dispatch'
+)
 class CrearDocumentoView(CreateView):
     model = Documento
     fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
@@ -77,13 +79,10 @@ class CrearDocumentoView(CreateView):
     
 
 
-
-@login_required
-def eliminar_documento(request, pk):    
-    documento = get_object_or_404(Documento, pk=pk)    
-    documento.delete()    
-    return redirect('detalle_propiedad', pk=documento.propiedad.pk)
-
+@method_decorator(    
+    verificar_permiso(vista_nombre="Crear Propietario", permiso_requerido="ingresar"),
+    name='dispatch'
+)
 class CrearPropietarioView(LoginRequiredMixin,CreateView):
     model = Propietario
     form_class = PropietarioForm
@@ -112,6 +111,10 @@ class ModificarPropietarioView(LoginRequiredMixin,UpdateView):
     success_url = reverse_lazy('listar_propietarios')
     
 
+@method_decorator(    
+    verificar_permiso(vista_nombre="Crear Propiedad", permiso_requerido="ingresar"),
+    name='dispatch'
+)
 class CrearPropiedadView(LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
@@ -164,7 +167,10 @@ class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
         context['propietarios'] = Propietario.objects.all()
         return context
 
-
+@method_decorator(    
+    verificar_permiso(vista_nombre="Crear Documento", permiso_requerido="ingresar"),
+    name='dispatch'
+)
 class CrearTipoDocumentoView(LoginRequiredMixin,CreateView):
     model = TipoDocumento
     form_class = TipoDocumentoForm
@@ -206,6 +212,8 @@ class EliminarTipoDocumentoView(LoginRequiredMixin,View):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
         tipo_documento.delete()
         return redirect(self.success_url)
+
+
 
 
 
@@ -278,7 +286,7 @@ def eliminar_conversacion(request, conversacion_id):
     return render(request, 'eliminar_conversacion.html', {'conversacion': conversacion})
 
 
-
+@login_required
 def subeAvatar(request):
     avatar = request.user.avatar
     if request.method == 'POST':
@@ -309,3 +317,8 @@ def cambiar_password(request):
         form = PasswordChangeForm(request.user)
     return render(request, 'cambiar_password.html', {'form': form})
     
+@login_required
+def eliminar_documento(request, pk):    
+    documento = get_object_or_404(Documento, pk=pk)    
+    documento.delete()    
+    return redirect('detalle_propiedad', pk=documento.propiedad.pk)

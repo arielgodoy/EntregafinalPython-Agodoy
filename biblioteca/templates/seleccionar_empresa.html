@@ -1,3 +1,5 @@
+{% extends 'base.html' %}
+{% block contenido %}
 <form method="post">
     {% csrf_token %}
     <label for="empresa">Selecciona una empresa:</label>
@@ -8,3 +10,4 @@
     </select>
     <button type="submit" class="btn btn-primary mt-2">Confirmar</button>
 </form>
+{% endblock %}
