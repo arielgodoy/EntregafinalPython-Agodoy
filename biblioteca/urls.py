@@ -11,7 +11,7 @@ urlpatterns = [
     path('', views.ListarPropiedadesView.as_view(), name='listar_propiedades'),  # Redirigir a la lista de propiedades
     path('propiedades/<int:pk>/', views.DetallePropiedadView.as_view(), name='detalle_propiedad'),
     path('propiedades/<int:pk>/crear_documento/', views.CrearDocumentoView.as_view(), name='crear_documento'),
-    path('documentos/<int:pk>/eliminar/', views.eliminar_documento, name='eliminar_documento'),    
+    path('documentos/<int:pk>/eliminar/', views.EliminarDocumentoView.as_view(), name='eliminar_documento'),
     path('ingresar_propietario/', views.CrearPropietarioView.as_view(), name='crear_propietario'),
     path('listar_propietarios/', views.ListarPropietariosView.as_view(), name='listar_propietarios'),
     path('propietarios/<int:pk>/', views.DetallePropietarioView.as_view(), name='detalle_propietario'),
@@ -28,7 +28,7 @@ urlpatterns = [
     path('modificar_tipo_documento/<int:pk>/', views.ModificarTipoDocumentoView.as_view(), name='modificar_tipo_documento'),
     path('eliminar_tipo_documento/<int:pk>/', views.EliminarTipoDocumentoView.as_view(), name='eliminar_tipo_documento'),
 
-    path('about/', views.about, name='about'),
+    #path('about/', views.about, name='about'),
     path('seleccionar_empresa/', views.seleccionar_empresa, name='seleccionar_empresa'),
 
 

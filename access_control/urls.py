@@ -4,12 +4,14 @@ from .views import UsuariosListaView,UsuarioEditarView, UsuarioEliminarView,Usua
 from .views import EmpresaListaView,EmpresaCrearView,EmpresaEditarView,EmpresaEliminarView
 from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEliminarView
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
-from .views import permisos_filtrados_view,toggle_permiso
+from .views import permisos_filtrados_view, toggle_permiso
+
 
 app_name = 'access_control'  # Define el espacio de nombres
 
 urlpatterns = [
-    path('permisos-filtrados/', permisos_filtrados_view, name='permisos_filtrados'),
+    path('permisos-filtrados/', permisos_filtrados_view, name='permisos_filtrados'),    
+    #path('permisos-filtrados/', PermisosFiltradosView.as_view(), name='permisos_filtrados'),
     path('toggle-permiso/', views.toggle_permiso, name='toggle_permiso'),
 
     path('vistas/', VistaListaView.as_view(), name='vistas_lista'),

@@ -18,3 +18,42 @@ class PermisoForm(forms.ModelForm):
 class PermisoFiltroForm(forms.Form):
     usuario = forms.ModelChoiceField(queryset=User.objects.all(), required=False, label="Usuario")
     empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=False, label="Empresa")
+
+
+
+
+class UsuarioCrearForm(forms.ModelForm):
+    password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        label="Contraseña"
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(self.cleaned_data['password'])
+        if commit:
+            user.save()
+        return user
+
+class UsuarioEditarForm(forms.ModelForm):
+    password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        label="Contraseña",
+        required=False
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password']
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if self.cleaned_data['password']:
+            user.set_password(self.cleaned_data['password'])
+        if commit:
+            user.save()
+        return user

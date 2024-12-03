@@ -47,4 +47,4 @@ class Permiso(models.Model):
         unique_together = ('usuario', 'empresa', 'vista')
 
     def __str__(self):
-        return f"{self.usuario.username} - {self.vista.nombre} - {self.empresa.nombre}"
+        return f"{self.usuario.username} - {self.vista.nombre} - {self.empresa.descripcion or 'Sin descripción'}"

@@ -119,20 +119,22 @@
 
 <nav class="navbar navbar-expand-md navbar-dark bg-dark">
     <div class="container-fluid">
+        <!-- Usuario y avatar -->
         <a class="navbar-brand" href="{% url 'subeavatar' %}">
             {% if request.user.is_authenticated %}
-            {% if request.user.avatar.imagen.url %}
-            <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 20px;"></img>
-            {% endif %}
-            <p class="text-muted small mb-4 mb-lg-0">{{ user.username }} </p>
+                {% if request.user.avatar.imagen.url %}
+                    <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 10px;">
+                {% endif %}
+                <span>{{ user.username }}</span>
             {% endif %}
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
+
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav">
-                <!-- Biblioteca Digital -->
+            <ul class="navbar-nav me-auto">
+                <!-- Menú Biblioteca Digital -->
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="bibliotecaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Biblioteca Digital
@@ -146,7 +148,7 @@
                         <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>
                     </ul>
                 </li>
-                <!-- Control de Acceso -->
+                <!-- Menú Control de Acceso -->
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="accessControlMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Control de Acceso
@@ -159,7 +161,7 @@
                         <li><a class="dropdown-item" href="{% url 'access_control:permisos_filtrados' %}">Filtrar Permisos</a></li>
                     </ul>
                 </li>
-                <!-- Accounts -->
+                <!-- Menú Cuentas -->
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="accountsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         Cuentas
@@ -172,17 +174,28 @@
                     </ul>
                 </li>
             </ul>
-        </div>
-        <div class="text-end mt-2">
-            <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
-                <i class="fas fa-user"></i> Perfil
-            </a>
-            <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
-                Salir
-            </a>
+            <!-- Usuario y empresa seleccionada -->
+            <div class="text-end mt-2">
+                {% if empresa_seleccionada %}
+                    <span class="text-white me-3">
+                        Empresa: {{ empresa_seleccionada.descripcion }}
+                    </span>
+                {% else %}
+                    <span class="text-white me-3">
+                        Empresa: No seleccionada
+                    </span>
+                {% endif %}
+                <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
+                    <i class="fas fa-user"></i> Perfil
+                </a>
+                <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
+                    Salir
+                </a>
+            </div>
         </div>
     </div>
 </nav>
+
 
 
 

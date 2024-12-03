@@ -3,11 +3,11 @@ from django.urls import reverse_lazy
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import ListView
+from django.views.generic import ListView,FormView
 from django.shortcuts import render
 
 from .models import Empresa,Permiso,Vista
-from .forms import PermisoForm,PermisoFiltroForm
+from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioEditarForm
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -29,6 +29,7 @@ def toggle_permiso(request):
             return JsonResponse({"success": False, "error": str(e)})
     return JsonResponse({"success": False, "error": "Método no permitido"})
 
+
 def permisos_filtrados_view(request):
     form = PermisoFiltroForm(request.GET or None)
     permisos = None
@@ -45,7 +46,7 @@ def permisos_filtrados_view(request):
         'fields': ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor'],
     }
     return render(request, 'access_control/permisos_filtrados.html', context)
-
+    
 
 class VistaListaView(LoginRequiredMixin, ListView):
     model = Vista
@@ -129,27 +130,18 @@ class UsuariosListaView(LoginRequiredMixin, ListView):
     
 class UsuarioCrearView(LoginRequiredMixin, CreateView):
     model = User
-    template_name = 'access_control/usuarios_form.html'
-    fields = ['username', 'email']
-    success_url = reverse_lazy('access_control:usuarios_lista')  # Redirigir a la lista de usuarios
-
-    def form_valid(self, form):
-        # Encriptar la contraseña antes de guardar
-        #form.instance.set_password(form.cleaned_data['password'])
-        return super().form_valid(form)
-
-class UsuarioEditarView(LoginRequiredMixin, UpdateView):
-    model = User
-    fields = ['username', 'email']  # Campos que el usuario puede editar
+    form_class = UsuarioCrearForm
     template_name = 'access_control/usuarios_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
 
     def form_valid(self, form):
-        # Encriptar la contraseña antes de guardar
-        #if form.cleaned_data['password']:
-        #    form.instance.set_password(form.cleaned_data['password'])
         return super().form_valid(form)
 
+class UsuarioEditarView(LoginRequiredMixin, UpdateView):
+    model = User
+    form_class = UsuarioEditarForm
+    template_name = 'access_control/usuarios_form.html'
+    success_url = reverse_lazy('access_control:usuarios_lista')
 
 
 class UsuarioEliminarView(LoginRequiredMixin, DeleteView):
