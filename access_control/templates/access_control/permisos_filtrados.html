@@ -4,10 +4,31 @@
 {% block contenido %}
 <h1>Gestión de Permisos Filtrados</h1>
 
-<form method="get" class="mb-4">
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-primary">Filtrar</button>
+<form method="post" class="mb-4 p-3 rounded bg-dark text-white shadow" id="filtro-form">
+    {% csrf_token %}
+    <div class="form-group mb-3">
+        <label for="usuario" class="form-label text-white">{{ form.usuario.label }}</label>
+        <select name="usuario" id="usuario" class="form-select">
+            {% for option in form.usuario.field.queryset %}
+            <option value="{{ option.id }}" {% if option.id == form.initial.usuario.id %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group mb-3">
+        <label for="empresa" class="form-label text-white">{{ form.empresa.label }}</label>
+        <select name="empresa" id="empresa" class="form-select">
+            {% for option in form.empresa.field.queryset %}
+            <option value="{{ option.id }}" {% if option.id == form.initial.empresa.id %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary mt-3 w-100">Filtrar</button>
 </form>
+
 
 {% if permisos %}
 <table class="table table-striped">
@@ -47,11 +68,23 @@
 {% endif %}
 
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("filtro-form");
+        const usuarioField = form.querySelector('select[name="usuario"]');
+        const empresaField = form.querySelector('select[name="empresa"]');
+
+        // Enviar el formulario automáticamente al cambiar "usuario" o "empresa"
+        usuarioField.addEventListener("change", function () {
+            form.submit();
+        });
+
+        empresaField.addEventListener("change", function () {
+            form.submit();
+        });
+
         const checkboxes = document.querySelectorAll(".permiso-checkbox");
-    
         checkboxes.forEach(checkbox => {
-            checkbox.addEventListener("change", function() {
+            checkbox.addEventListener("change", function () {
                 const permisoId = this.getAttribute("data-permiso-id");
                 const permisoField = this.getAttribute("data-permiso-field");
                 const isChecked = this.checked;
@@ -68,13 +101,11 @@
                 .then(data => {
                     if (!data.success) {
                         alert(data.error || "Error al cambiar el permiso.");
-                        // Revertir el checkbox si hubo un error
                         this.checked = !isChecked;
                     }
                 })
                 .catch(error => {
                     console.error("Error:", error);
-                    // Revertir el checkbox en caso de error
                     this.checked = !isChecked;
                 });
             });

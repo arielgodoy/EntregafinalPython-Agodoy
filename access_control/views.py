@@ -24,7 +24,58 @@ class VerificarPermisoMixin:
             vista_decorada = decorador(super().dispatch)
             return vista_decorada(request, *args, **kwargs)
         return super().dispatch(request, *args, **kwargs)
+
+
+class PermisosFiltradosView(VerificarPermisoMixin,LoginRequiredMixin, FormView):
+    template_name = 'access_control/permisos_filtrados.html'
+    form_class = PermisoFiltroForm
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "modificar"
+    success_url = reverse_lazy('access_control:permisos_filtrados')    
     
+    def get(self, request, *args, **kwargs):
+        print("Datos enviados en la solicitud GET:", request.GET)
+        return super().get(request, *args, **kwargs)
+
+    def get_initial(self):
+        initial = super().get_initial()
+        initial['usuario'] = User.objects.first()  # Ajusta a un usuario válido
+        initial['empresa'] = Empresa.objects.first()  # Ajusta a una empresa válida
+        print(f"Valores iniciales del formulario: {initial}")
+        return initial
+
+
+
+    def form_valid(self, form):
+        print("Entrando en form_valid")
+        usuario = form.cleaned_data.get('usuario')
+        empresa = form.cleaned_data.get('empresa')
+        print(f"Usuario recibido: {usuario}")
+        print(f"Empresa recibida: {empresa}")
+
+        # Filtra los permisos según los datos proporcionados en el formulario
+        print(usuario)
+        if usuario and empresa:
+            permisos = Permiso.objects.filter(usuario=usuario, empresa=empresa)
+            print("Contenido de permisos:", permisos)  # Inspecciona qué contiene permisos
+        else:
+            print("Usuario o empresa no proporcionados en el formulario.")
+
+        # Agrega los datos filtrados al contexto
+        context = self.get_context_data(form=form)
+        context['permisos'] = permisos
+        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        return self.render_to_response(context)
+
+    def form_invalid(self, form):
+        print("Formulario inválido")        
+        print(f"Errores en el formulario: {form.errors}")
+        context = self.get_context_data(form=form)
+        context['permisos'] = None
+        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        return self.render_to_response(context)
+
+
 @csrf_exempt
 def toggle_permiso(request):
     if request.method == "POST":
