@@ -1,6 +1,8 @@
 from django.views.generic.edit import UpdateView,DeleteView,CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.models import User
+from django.contrib.auth.models import User as Usuario
+
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView,FormView
@@ -10,6 +12,7 @@ from .models import Empresa,Permiso,Vista
 from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioEditarForm
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views import View
 
 from .decorators import verificar_permiso
 from django.utils.decorators import method_decorator
@@ -24,7 +27,76 @@ class VerificarPermisoMixin:
             vista_decorada = decorador(super().dispatch)
             return vista_decorada(request, *args, **kwargs)
         return super().dispatch(request, *args, **kwargs)
-    
+
+class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
+    template_name = 'access_control/permisos_filtrados.html'
+    form_class = PermisoFiltroForm
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "modificar"
+    success_url = reverse_lazy('access_control:permisos_filtrados')    
+
+    def get_initial(self):
+        """
+        Obtiene los valores iniciales para los campos del formulario.
+        Si se enviaron datos en la solicitud GET o POST, los usa para mantener la selección del usuario.
+        """
+        initial = super().get_initial()
+        
+        # Intenta usar los valores enviados en GET o POST
+        usuario_id = self.request.GET.get('usuario') or self.request.POST.get('usuario')
+        empresa_id = self.request.GET.get('empresa') or self.request.POST.get('empresa')
+        
+        # Si no hay valores enviados, usa valores predeterminados
+        if usuario_id:
+            try:
+                initial['usuario'] = User.objects.get(id=usuario_id)
+            except User.DoesNotExist:
+                initial['usuario'] = User.objects.first()
+        else:
+            initial['usuario'] = User.objects.first()
+
+        if empresa_id:
+            try:
+                initial['empresa'] = Empresa.objects.get(id=empresa_id)
+            except Empresa.DoesNotExist:
+                initial['empresa'] = Empresa.objects.first()
+        else:
+            initial['empresa'] = Empresa.objects.first()
+
+        print(f"Valores iniciales del formulario: {initial}")
+        return initial
+
+    def form_valid(self, form):
+        print("Entrando en form_valid")
+        usuario = form.cleaned_data.get('usuario')
+        empresa = form.cleaned_data.get('empresa')
+        print(f"Usuario recibido: {usuario}")
+        print(f"Empresa recibida: {empresa}")
+
+        # Filtra los permisos según los datos proporcionados en el formulario
+        if usuario and empresa:
+            permisos = Permiso.objects.filter(usuario=usuario, empresa=empresa)
+            print("Contenido de permisos:", permisos)
+        else:
+            permisos = None
+            print("Usuario o empresa no proporcionados en el formulario.")
+
+        # Agrega los datos filtrados al contexto
+        context = self.get_context_data(form=form)
+        context['permisos'] = permisos
+        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        return self.render_to_response(context)
+
+    def form_invalid(self, form):
+        print("Formulario inválido")        
+        print(f"Errores en el formulario: {form.errors}")
+        context = self.get_context_data(form=form)
+        context['permisos'] = None
+        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        return self.render_to_response(context)
+
+
+
 @csrf_exempt
 def toggle_permiso(request):
     if request.method == "POST":
@@ -44,23 +116,59 @@ def toggle_permiso(request):
     return JsonResponse({"success": False, "error": "Método no permitido"})
 
 
-def permisos_filtrados_view(request):
-    form = PermisoFiltroForm(request.GET or None)
-    permisos = None
+# def permisos_filtrados_view(request):
+#     form = PermisoFiltroForm(request.GET or None)
+#     permisos = None
 
-    if form.is_valid():
-        usuario = form.cleaned_data.get('usuario')
-        empresa = form.cleaned_data.get('empresa')
-        if usuario and empresa:
-            permisos = Permiso.objects.filter(usuario=usuario, empresa=empresa)
+#     if form.is_valid():
+#         usuario = form.cleaned_data.get('usuario')
+#         empresa = form.cleaned_data.get('empresa')
+#         if usuario and empresa:
+#             permisos = Permiso.objects.filter(usuario=usuario, empresa=empresa)
 
-    context = {
-        'form': form,
-        'permisos': permisos,
-        'fields': ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor'],
-    }
-    return render(request, 'access_control/permisos_filtrados.html', context)
-    
+#     context = {
+#         'form': form,
+#         'permisos': permisos,
+#         'fields': ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor'],
+#     }
+#     return render(request, 'access_control/permisos_filtrados.html', context)
+class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Maestro Permisos"
+    permiso_requerido = "supervisor"
+
+    def post(self, request, *args, **kwargs):
+        origen_usuario_id = request.POST.get("origen_usuario")
+        origen_empresa_id = request.POST.get("origen_empresa")
+        destino_usuario_id = request.POST.get("destino_usuario")
+        destino_empresa_id = request.POST.get("destino_empresa")
+        try:
+            origen_usuario = Usuario.objects.get(id=origen_usuario_id)
+            origen_empresa = Empresa.objects.get(id=origen_empresa_id)
+            destino_usuario = Usuario.objects.get(id=destino_usuario_id)
+            destino_empresa = Empresa.objects.get(id=destino_empresa_id)
+
+            permisos_actuales = Permiso.objects.filter(usuario=origen_usuario, empresa=origen_empresa)
+            for permiso in permisos_actuales:
+                Permiso.objects.update_or_create(
+                    usuario=destino_usuario,
+                    empresa=destino_empresa,
+                    vista=permiso.vista,
+                    defaults={
+                        'ingresar': permiso.ingresar,
+                        'crear': permiso.crear,
+                        'modificar': permiso.modificar,
+                        'eliminar': permiso.eliminar,
+                        'autorizar': permiso.autorizar,
+                        'supervisor': permiso.supervisor,
+                    }
+                )
+            return JsonResponse({"success": True})
+        except Usuario.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Usuario no encontrado."})
+        except Empresa.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Empresa no encontrada."})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
 
 class VistaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Vista

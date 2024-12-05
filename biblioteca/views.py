@@ -385,7 +385,7 @@ def cambiar_password(request):
     
 
 
-
+@login_required
 def seleccionar_empresa(request):
     if request.method == "POST":
         empresa_id = request.POST.get("empresa_id")

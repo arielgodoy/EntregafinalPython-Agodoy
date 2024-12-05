@@ -19,6 +19,18 @@ class PermisoFiltroForm(forms.Form):
     usuario = forms.ModelChoiceField(queryset=User.objects.all(), required=False, label="Usuario")
     empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=False, label="Empresa")
 
+    def clean_usuario(self):
+        usuario = self.cleaned_data.get('usuario')
+        print("Usuario validado:", usuario)
+        return usuario
+
+    def clean_empresa(self):
+        empresa = self.cleaned_data.get('empresa')
+        print("Empresa validada:", empresa)
+        return empresa
+
+
+
 
 
 

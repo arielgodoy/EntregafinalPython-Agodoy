@@ -12,7 +12,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
             # Verificar si la vista existe en el modelo Vista
             vista, created = Vista.objects.get_or_create(nombre=vista_nombre)
             if created:
-                vista.descripcion = f"Descripción inicial de la vista: {vista_nombre}"
+                vista.descripcion = f"Vista : {vista_nombre}"
                 vista.save()
             print(f"Verificando permisos para la vista: {vista_nombre}")
 
