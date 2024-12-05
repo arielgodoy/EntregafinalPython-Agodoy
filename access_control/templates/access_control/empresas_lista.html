@@ -1,0 +1,31 @@
+{% extends 'biblioteca/base.html' %}
+
+{% block contenido %}
+<h1>Lista de Empresas</h1>
+{% if empresas %}
+<table class="table table-striped">
+    <thead class="table-dark">
+        <tr>
+            <th>Codigo</th>
+            <th>Descripción</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for empresa in empresas %}
+        <tr>
+            <td>{{ empresa.codigo }}</td>
+            <td>{{ empresa.descripcion }}</td>
+            <td>
+                <a href="{% url 'access_control:empresa_editar' empresa.id %}" class="btn btn-primary btn-sm">Editar</a>
+                <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar esta empresa?');">Eliminar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No hay empresas registradas.</p>
+{% endif %}
+<a href="{% url 'access_control:empresa_crear' %}" class="btn btn-success">Crear Nueva Empresa</a>
+{% endblock %}

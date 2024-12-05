@@ -116,44 +116,89 @@
 <body>
 <div class="container content-wrapper">
 {% if user.is_authenticated %}
+
 <nav class="navbar navbar-expand-md navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{% url 'subeavatar' %}"> 
+        <!-- Usuario y avatar -->
+        <a class="navbar-brand" href="{% url 'subeavatar' %}">
             {% if request.user.is_authenticated %}
-            {% if request.user.avatar.imagen.url %}
-            <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 20px;"></img>
-            {% endif %}
-            <p class="text-muted small mb-4 mb-lg-0">{{ user.username }} </p>
+                {% if request.user.avatar.imagen.url %}
+                    <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 10px;">
+                {% endif %}
+                <span>{{ user.username }}</span>
             {% endif %}
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
+
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav">                
+            <ul class="navbar-nav me-auto">
+                <!-- Menú Biblioteca Digital -->
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="propMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">Biblioteca Digital</a>
-                    <ul class="dropdown-menu" aria-labelledby="propMenu">
+                    <a class="nav-link dropdown-toggle" href="#" id="bibliotecaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Biblioteca Digital
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="bibliotecaMenu">
                         <li><a class="dropdown-item" href="{% url 'crear_propietario' %}">Ingresar Propietario</a></li>
                         <li><a class="dropdown-item" href="{% url 'crear_propiedad' %}">Ingresar Propiedad</a></li>
                         <li><a class="dropdown-item" href="{% url 'crear_tipo_documento' %}">Ingresar Tipo Documento</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_propietarios' %}">Listado de Propietarios</a></li>
                         <li><a class="dropdown-item" href="{% url 'listar_propiedades' %}">Listado de Propiedades</a></li>
-                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>                                                
+                        <li><a class="dropdown-item" href="{% url 'listar_tipos_documentos' %}">Listado de Tipos de Documentos</a></li>
                     </ul>
-                </li>               
+                </li>
+                <!-- Menú Control de Acceso -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="accessControlMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Control de Acceso
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="accessControlMenu">
+                        <li><a class="dropdown-item" href="{% url 'access_control:usuarios_lista' %}">Gestión de Usuarios</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:empresas_lista' %}">Gestión de Empresas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:vistas_lista' %}">Gestión de Vistas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:permisos_lista' %}">Gestión de Permisos</a></li>
+                        <li><a class="dropdown-item" href="{% url 'access_control:permisos_filtrados' %}">Filtrar Permisos</a></li>
+                    </ul>
+                </li>
+                <!-- Menú Cuentas -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="accountsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Cuentas
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="accountsMenu">
+                        <li><a class="dropdown-item" href="{% url 'login' %}">Iniciar Sesión</a></li>
+                        <li><a class="dropdown-item" href="{% url 'registro_usuario' %}">Registrar Usuario</a></li>
+                        <li><a class="dropdown-item" href="{% url 'cambiar_password' %}">Cambiar Contraseña</a></li>
+                        <li><a class="dropdown-item" href="{% url 'logout' %}">Cerrar Sesión</a></li>
+                    </ul>
+                </li>
             </ul>
-        </div>
-        <div class="text-end mt-2">            
-            <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
-                <i class="fas fa-user"></i> Perfil
-            </a>
-            <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
-                Salir
-            </a>
+            <!-- Usuario y empresa seleccionada -->
+            <div class="text-end mt-2">
+                {% if empresa_seleccionada %}
+                    <span class="text-white me-3">
+                        Empresa: {{ empresa_seleccionada.descripcion }}
+                    </span>
+                {% else %}
+                    <span class="text-white me-3">
+                        Empresa: No seleccionada
+                    </span>
+                {% endif %}
+                <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
+                    <i class="fas fa-user"></i> Perfil
+                </a>
+                <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
+                    Salir
+                </a>
+            </div>
         </div>
     </div>
 </nav>
+
+
+
+
 
 </div>
 

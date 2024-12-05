@@ -22,6 +22,8 @@ urlpatterns = [
     path('acounts/',include('acounts.urls')),
     path('chat/',include('chat.urls')),
     path('admin/', admin.site.urls),
-    path('api/v1/',include('api.urls'))
+    path('api/v1/',include('api.urls')),
+    #path('access-control/', include('access_control.urls')), 
+    path('access-control/', include('access_control.urls', namespace='access_control')),
 
 ]

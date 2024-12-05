@@ -1,0 +1,205 @@
+{% extends 'biblioteca/base.html' %}
+{% load custom_tags %}
+
+{% block contenido %}
+<h1>Gestión de Permisos Filtrados</h1>
+
+<form method="post" class="mb-4 p-3 rounded bg-dark text-white shadow" id="filtro-form">
+    {% csrf_token %}
+    <div class="form-group mb-3">
+        <label for="usuario" class="form-label text-white">{{ form.usuario.label }}</label>
+        <select name="usuario" id="usuario" class="form-select">
+            {% for option in form.usuario.field.queryset %}
+            <option value="{{ option.id }}" {% if option.id == form.initial.usuario.id %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group mb-3">
+        <label for="empresa" class="form-label text-white">{{ form.empresa.label }}</label>
+        <select name="empresa" id="empresa" class="form-select">
+            {% for option in form.empresa.field.queryset %}
+            <option value="{{ option.id }}" {% if option.id == form.initial.empresa.id %}selected{% endif %}>
+                {{ option }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary mt-3 w-100">Filtrar</button>
+</form>
+
+{% if permisos %}
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Usuario</th>
+            <th>Empresa</th>
+            <th>Vista</th>
+            <th>_I_</th>
+            <th>_C_</th>
+            <th>_M_</th>
+            <th>_E_</th>
+            <th>_A_</th>
+            <th>_S_</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for permiso in permisos %}
+        <tr>
+            <td>{{ permiso.usuario.username }}</td>
+            <td>{{ permiso.empresa.codigo }}</td>
+            <td>{{ permiso.vista.nombre }}</td>
+            {% for field in fields %}
+            <td>
+                <input type="checkbox" class="permiso-checkbox"
+                       data-permiso-id="{{ permiso.id }}" 
+                       data-permiso-field="{{ field }}" 
+                       {% if permiso|getattribute:field %}checked{% endif %}>
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="text-end mb-3">
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#copyModal">Copiar Permisos</button>
+</div>
+{% else %}
+<p>No hay permisos para mostrar.</p>
+{% endif %}
+
+<!-- Modal para copiar permisos -->
+<!-- Modal para copiar permisos -->
+<div class="modal fade" id="copyModal" tabindex="-1" aria-labelledby="copyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="copyModalLabel">Copiar Permisos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="copyForm">
+                    <div class="form-group mb-3">
+                        <label for="origenUsuario" class="form-label">Usuario Origen</label>
+                        <select id="origenUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.usuario.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="origenEmpresa" class="form-label">Empresa Origen</label>
+                        <select id="origenEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.empresa.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoUsuario" class="form-label">Usuario Destino</label>
+                        <select id="destinoUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoEmpresa" class="form-label">Empresa Destino</label>
+                        <select id="destinoEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="copyPermissionsButton">Copiar Permisos</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("filtro-form");
+        const usuarioField = form.querySelector('select[name="usuario"]');
+        const empresaField = form.querySelector('select[name="empresa"]');
+
+        // Enviar el formulario automáticamente al cambiar "usuario" o "empresa"
+        usuarioField.addEventListener("change", function () {
+            form.submit();
+        });
+
+        empresaField.addEventListener("change", function () {
+            form.submit();
+        });
+
+        const checkboxes = document.querySelectorAll(".permiso-checkbox");
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener("change", function () {
+                const permisoId = this.getAttribute("data-permiso-id");
+                const permisoField = this.getAttribute("data-permiso-field");
+                const isChecked = this.checked;
+
+                fetch("{% url 'access_control:toggle_permiso' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRFToken": "{{ csrf_token }}"
+                    },
+                    body: `permiso_id=${permisoId}&permiso_field=${permisoField}&value=${isChecked}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert(data.error || "Error al cambiar el permiso.");
+                        this.checked = !isChecked;
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    this.checked = !isChecked;
+                });
+            });
+        });
+
+        const copyButton = document.getElementById("copyPermissionsButton");
+    copyButton.addEventListener("click", function () {
+        const origenUsuario = document.getElementById("origenUsuario").value;
+        const origenEmpresa = document.getElementById("origenEmpresa").value;
+        const destinoUsuario = document.getElementById("destinoUsuario").value;
+        const destinoEmpresa = document.getElementById("destinoEmpresa").value;
+
+        fetch("{% url 'access_control:copy_permissions' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: `origen_usuario=${origenUsuario}&origen_empresa=${origenEmpresa}&destino_usuario=${destinoUsuario}&destino_empresa=${destinoEmpresa}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Permisos copiados con éxito.");
+                location.reload();
+            } else {
+                alert(data.error || "Error al copiar permisos.");
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("Error al copiar permisos.");
+        });
+    });
+});
+</script>
+{% endblock %}

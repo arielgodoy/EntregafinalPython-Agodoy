@@ -1,0 +1,11 @@
+{% extends 'biblioteca/base.html' %}
+{% block contenido %}
+<h1>Eliminar Permiso</h1>
+<p>¿Estás seguro de que deseas eliminar este permiso?</p>
+<p><strong>{{ object }}</strong></p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

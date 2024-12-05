@@ -3,7 +3,7 @@ from django.views.generic.edit import UpdateView
 from django.shortcuts import render, redirect,get_object_or_404
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
-from django.views.generic.edit import CreateView
+from django.views.generic.edit import CreateView, FormView,FormMixin,DeleteView
 from .models import Propiedad, Documento,Propietario
 from .forms import DocumentoForm,PropietarioForm,PropiedadForm
 from django.urls import reverse
@@ -17,81 +17,115 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
+from access_control.decorators import verificar_permiso
+from access_control.models import Permiso,Empresa
+from chat.models import Conversacion
+from chat.forms import MensajeForm,ConversacionForm,EnviarMensajeForm
+from acounts.forms import AvatarForm
+from acounts.models import Avatar
+from django.utils.decorators import method_decorator
+#Decorador generar para verificar permispo por mixim
+class VerificarPermisoMixin:
+    vista_nombre = None
+    permiso_requerido = None
 
-class ListarPropiedadesView(LoginRequiredMixin,ListView):    
+    def dispatch(self, request, *args, **kwargs):
+        if self.vista_nombre and self.permiso_requerido:
+            decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+            vista_decorada = decorador(super().dispatch)
+            return vista_decorada(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
+
+
+
+class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propiedad
     template_name = 'listar_propiedades.html'
     context_object_name = 'propiedades'
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "ingresar"
 
-class DetallePropiedadView(LoginRequiredMixin,DetailView):
+class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Propiedad
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "ingresar"
 
-
-class CrearDocumentoView(CreateView):
+class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin,CreateView):
     model = Documento
     fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
     template_name = 'crear_documento.html'
     success_url = reverse_lazy('listar_propiedades')
-
+    vista_nombre="Maestro Propiedades" 
+    permiso_requerido="modificar"
     def get_initial(self):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return {'propiedad': propiedad}
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['propiedad'] = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return context
-
     def form_valid(self, form):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         form.instance.propiedad = propiedad
         return super().form_valid(form)
 
-    
+#
+#MAESTRO DE PROPIETARIOS
+#
 
-
-
-@login_required
-def eliminar_documento(request, pk):    
-    documento = get_object_or_404(Documento, pk=pk)    
-    documento.delete()    
-    return redirect('detalle_propiedad', pk=documento.propiedad.pk)
-
-class CrearPropietarioView(LoginRequiredMixin,CreateView):
+class CrearPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'crear_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
+    vista_nombre="Maestro Propietarios"
+    permiso_requerido="crear"
 
-
-class ListarPropietariosView(LoginRequiredMixin,ListView):    
+class ListarPropietariosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):    
     model = Propietario
     template_name = 'listar_propietarios.html'
     context_object_name = 'propietarios'
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="ingresar"
 
-class DetallePropietarioView(LoginRequiredMixin,DetailView):
+class DetallePropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DetailView):
     model = Propietario
     template_name = 'detalle_propietario.html'
     context_object_name = 'propietario'
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="ingresar"
 
-class EliminarPropietarioView(LoginRequiredMixin,DeleteView):
+class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propietario
     template_name = 'eliminar_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
-class ModificarPropietarioView(LoginRequiredMixin,UpdateView):
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="eliminar"
+
+class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'modificar_propietario.html'
     success_url = reverse_lazy('listar_propietarios')
+    vista_nombre="Maestro Propietarios" 
+    permiso_requerido="modificar"
     
 
-class CrearPropiedadView(LoginRequiredMixin, CreateView):
+
+
+#
+#MAESTRO DE PROPIEDADES
+#
+
+class CrearPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="crear"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -109,10 +143,12 @@ class CrearPropiedadView(LoginRequiredMixin, CreateView):
 
 
 
-class EliminarPropiedadView(LoginRequiredMixin,DeleteView):
+class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propiedad
     template_name = 'eliminar_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="eliminar"
 
     def form_valid(self, form):
         # Obtener la propiedad a eliminar
@@ -121,12 +157,13 @@ class EliminarPropiedadView(LoginRequiredMixin,DeleteView):
         propiedad.delete()
         return redirect(self.success_url)
 
-
-class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
+class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
     success_url = reverse_lazy('listar_propiedades')
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="modificar"
 
     def form_valid(self, form):
         # Guardar los cambios en la propiedad
@@ -139,22 +176,42 @@ class ModificarPropiedadView(LoginRequiredMixin, UpdateView):
         context['propietarios'] = Propietario.objects.all()
         return context
 
+class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
+    model = Documento
+    template_name = 'eliminar_documento.html'  # Cambia esto si tienes un template para confirmar eliminación.
+    vista_nombre="Maestro Propiedades"
+    permiso_requerido="eliminar"
 
-class CrearTipoDocumentoView(LoginRequiredMixin,CreateView):
+    def get_success_url(self):
+        """Redirige a la página de detalle de la propiedad asociada."""
+        documento = self.object
+        return reverse_lazy('detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
+
+
+
+#
+#MAESTRO DE DOCUMENTOS
+#
+
+class CrearTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = TipoDocumento
     form_class = TipoDocumentoForm
     template_name = 'crear_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
-
-class ListarTiposDocumentosView(LoginRequiredMixin,ListView):
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="crear"
+class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):
     model = TipoDocumento
     template_name = 'listar_tipos_documentos.html'
     context_object_name = 'tipos_documentos'
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="ingresar"
 
-
-class ModificarTipoDocumentoView(LoginRequiredMixin,View):
+class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'modificar_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="modificar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -169,9 +226,11 @@ class ModificarTipoDocumentoView(LoginRequiredMixin,View):
             return redirect(self.success_url)
         return render(request, self.template_name, {'form': form})
 
-class EliminarTipoDocumentoView(LoginRequiredMixin,View):
+class EliminarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'eliminar_tipo_documento.html'
     success_url = reverse_lazy('listar_tipos_documentos')
+    vista_nombre="Maestro Documentos"
+    permiso_requerido="eliminar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -187,88 +246,128 @@ class EliminarTipoDocumentoView(LoginRequiredMixin,View):
 
 
 
+class ListaConversacionesView(LoginRequiredMixin, ListView):
+    model = Conversacion
+    template_name = 'lista_conversaciones.html'
+    context_object_name = 'conversaciones'
 
-@login_required
-def lista_conversaciones(request):    
-    conversaciones = Conversacion.objects.filter(participantes=request.user)   
-    
-    print(conversaciones)
-    return render(request, 'lista_conversaciones.html', {'conversaciones': conversaciones})
+    def get_queryset(self):
+        # Filtrar solo las conversaciones en las que el usuario es participante
+        return Conversacion.objects.filter(participantes=self.request.user)
 
-@login_required
-def enviar_mensaje(request, conversacion_id):
-    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
-    form = MensajeForm(request.POST or None)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Imprimir las conversaciones en la consola para depuración
+        print(context['conversaciones'])
+        return context
     
-    if request.method == 'POST' and form.is_valid():
+
+class EnviarMensajeView(LoginRequiredMixin, FormView):
+    template_name = 'enviar_mensaje.html'
+    form_class = MensajeForm
+
+    def get_context_data(self, **kwargs):
+        # Agrega la conversación al contexto
+        context = super().get_context_data(**kwargs)
+        context['conversacion'] = self.get_conversacion()
+        return context
+
+    def get_conversacion(self):
+        # Obtener la conversación usando el ID y asegurarse de que el usuario sea participante
+        return get_object_or_404(Conversacion, id=self.kwargs['conversacion_id'], participantes=self.request.user)
+
+    def form_valid(self, form):
+        # Si el formulario es válido, guardar el mensaje
         mensaje = form.save(commit=False)
-        mensaje.conversacion = conversacion
-        mensaje.remitente = request.user
+        mensaje.conversacion = self.get_conversacion()
+        mensaje.remitente = self.request.user
         mensaje.save()
-        return redirect('detalle_conversacion', conversacion_id=conversacion_id)
+        return redirect('detalle_conversacion', conversacion_id=self.kwargs['conversacion_id'])
 
-    return render(request, 'enviar_mensaje.html', {'conversacion': conversacion, 'form': form})
 
-@login_required
-def crear_conversacion(request):
-    if request.method == 'POST':
-        form = ConversacionForm(request.POST, user=request.user)
+
+class CrearConversacionView(LoginRequiredMixin, FormView):
+    template_name = 'crear_conversacion.html'
+    form_class = ConversacionForm
+
+    def get_form_kwargs(self):
+        # Pasar el usuario autenticado al formulario
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        # Guardar la conversación cuando el formulario es válido
+        conversacion = form.save()
+        print(f"ID de la nueva conversación: {conversacion.id}")  # Imprimir ID para depuración
+        return redirect('detalle_conversacion', conversacion_id=conversacion.id)
+
+
+
+class DetalleConversacionView(LoginRequiredMixin, FormMixin, DetailView):
+    model = Conversacion
+    template_name = 'detalle_conversacion.html'
+    context_object_name = 'conversacion'
+    form_class = EnviarMensajeForm
+
+    def get_queryset(self):
+        # Filtrar conversaciones para que solo se puedan acceder a las del usuario autenticado
+        return super().get_queryset().filter(participantes=self.request.user)
+
+    def get_context_data(self, **kwargs):
+        # Agregar los mensajes de la conversación al contexto
+        context = super().get_context_data(**kwargs)
+        context['mensajes'] = Mensaje.objects.filter(conversacion=self.get_object())
+        if 'form' not in context:
+            context['form'] = self.get_form()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # Manejar el formulario cuando se envía un mensaje
+        self.object = self.get_object()  # Obtener la conversación actual
+        form = self.get_form()
         if form.is_valid():
-            conversacion = form.save()
-            # Imprime el ID de la nueva conversación para verificar que se está generando y guardando correctamente
-            print(f"ID de la nueva conversación: {conversacion.id}")
-            return redirect('detalle_conversacion', conversacion_id=conversacion.id)
-    else:
-        form = ConversacionForm(user=request.user)
+            return self.form_valid(form)
+        else:
+            return self.form_invalid(form)
 
-    return render(request, 'crear_conversacion.html', {'form': form})
+    def form_valid(self, form):
+        # Crear y guardar un nuevo mensaje
+        mensaje = form.save(commit=False)
+        mensaje.conversacion = self.get_object()
+        mensaje.remitente = self.request.user
+        mensaje.save()
+        return redirect('detalle_conversacion', conversacion_id=self.get_object().id)
+    
 
-@login_required
-def detalle_conversacion(request, conversacion_id):
-    conversacion = get_object_or_404(Conversacion, id=conversacion_id, participantes=request.user)
-    mensajes = Mensaje.objects.filter(conversacion=conversacion)
 
-    if request.method == 'POST':
-        form = EnviarMensajeForm(request.POST)
-        if form.is_valid():
-            mensaje = Mensaje(contenido=form.cleaned_data['contenido'], conversacion=conversacion, remitente=request.user)
-            mensaje.save()
-            return redirect('detalle_conversacion', conversacion_id=conversacion_id)
-    else:
-        form = EnviarMensajeForm()
+class EliminarConversacionView(LoginRequiredMixin, DeleteView):
+    model = Conversacion
+    template_name = 'eliminar_conversacion.html'
+    context_object_name = 'conversacion'
+    success_url = reverse_lazy('lista_conversaciones')
 
-    return render(request, 'detalle_conversacion.html', {'conversacion': conversacion, 'mensajes': mensajes, 'form': form})
-
-@login_required
-def eliminar_conversacion(request, conversacion_id):
-    # Obtener la conversación por su ID o retornar un error 404 si no existe
-    conversacion = get_object_or_404(Conversacion, id=conversacion_id)
-
-    if request.method == 'POST':
-        # Eliminar la conversación
-        conversacion.delete()
-        # Redireccionar a la lista de conversaciones después de eliminar
-        return redirect('lista_conversaciones')
-
-    return render(request, 'eliminar_conversacion.html', {'conversacion': conversacion})
+    def get_queryset(self):
+        # Filtrar conversaciones que solo el usuario autenticado puede eliminar
+        return super().get_queryset().filter(participantes=self.request.user)
 
 
 
-def subeAvatar(request):
-    avatar = request.user.avatar
-    if request.method == 'POST':
-        form = AvatarForm(request.POST, request.FILES, instance=avatar)
-        if form.is_valid():
-            form.save()
-            return redirect('subeavatar') 
-    else:
-        form = AvatarForm(instance=avatar)
-    return render(request, 'upload_avatar.html', {'form': form})
+class SubirAvatarView(LoginRequiredMixin, FormView):
+    template_name = 'upload_avatar.html'
+    form_class = AvatarForm
+    success_url = reverse_lazy('subeavatar')
 
+    def get_form(self, form_class=None):
+        """Sobrescribe para cargar el formulario con la instancia del avatar del usuario."""
+        avatar = get_object_or_404(Avatar, user=self.request.user)
+        return self.form_class(instance=avatar, **self.get_form_kwargs())
 
-@login_required
-def about(request):
-    return render(request, 'about.html')
+    def form_valid(self, form):
+        """Sobrescribe para guardar el avatar del usuario."""
+        form.save()
+        return super().form_valid(form)
+
 
 @login_required
 def cambiar_password(request):
@@ -284,3 +383,14 @@ def cambiar_password(request):
         form = PasswordChangeForm(request.user)
     return render(request, 'cambiar_password.html', {'form': form})
     
+
+
+@login_required
+def seleccionar_empresa(request):
+    if request.method == "POST":
+        empresa_id = request.POST.get("empresa_id")
+        request.session["empresa_id"] = empresa_id
+        return redirect("listar_propiedades")    
+    permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
+    empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
+    return render(request, 'seleccionar_empresa.html', {'empresas': empresas})

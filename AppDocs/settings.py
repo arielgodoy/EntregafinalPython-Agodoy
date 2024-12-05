@@ -50,6 +50,7 @@ INSTALLED_APPS = [
      "crispy_bootstrap5",
      'rest_framework',
      'api',
+     'access_control'
 ]
 
 MIDDLEWARE = [
@@ -67,7 +68,7 @@ ROOT_URLCONF = 'AppDocs.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],
+        'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],        
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -75,6 +76,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                #global_conext para mostra nombre de la empresa activa
+                'access_control.context_processors.global_context',
             ],
         },
     },

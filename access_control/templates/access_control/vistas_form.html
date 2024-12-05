@@ -1,0 +1,10 @@
+{% extends 'biblioteca/base.html' %}
+{% block contenido %}
+<h1>{% if object %}Editar{% else %}Crear{% endif %} Vista</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-success">Guardar</button>
+    <a href="{% url 'access_control:vistas_lista' %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

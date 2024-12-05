@@ -47,6 +47,3 @@ class TipoDocumentoForm(forms.ModelForm):
         fields = '__all__' 
 
 
-
-
-
