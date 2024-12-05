@@ -29,7 +29,6 @@
     <button type="submit" class="btn btn-primary mt-3 w-100">Filtrar</button>
 </form>
 
-
 {% if permisos %}
 <table class="table table-striped">
     <thead>
@@ -63,9 +62,70 @@
         {% endfor %}
     </tbody>
 </table>
+<div class="text-end mb-3">
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#copyModal">Copiar Permisos</button>
+</div>
 {% else %}
 <p>No hay permisos para mostrar.</p>
 {% endif %}
+
+<!-- Modal para copiar permisos -->
+<!-- Modal para copiar permisos -->
+<div class="modal fade" id="copyModal" tabindex="-1" aria-labelledby="copyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="copyModalLabel">Copiar Permisos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="copyForm">
+                    <div class="form-group mb-3">
+                        <label for="origenUsuario" class="form-label">Usuario Origen</label>
+                        <select id="origenUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.usuario.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="origenEmpresa" class="form-label">Empresa Origen</label>
+                        <select id="origenEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.empresa.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoUsuario" class="form-label">Usuario Destino</label>
+                        <select id="destinoUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoEmpresa" class="form-label">Empresa Destino</label>
+                        <select id="destinoEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="copyPermissionsButton">Copiar Permisos</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -110,6 +170,36 @@
                 });
             });
         });
+
+        const copyButton = document.getElementById("copyPermissionsButton");
+    copyButton.addEventListener("click", function () {
+        const origenUsuario = document.getElementById("origenUsuario").value;
+        const origenEmpresa = document.getElementById("origenEmpresa").value;
+        const destinoUsuario = document.getElementById("destinoUsuario").value;
+        const destinoEmpresa = document.getElementById("destinoEmpresa").value;
+
+        fetch("{% url 'access_control:copy_permissions' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: `origen_usuario=${origenUsuario}&origen_empresa=${origenEmpresa}&destino_usuario=${destinoUsuario}&destino_empresa=${destinoEmpresa}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Permisos copiados con éxito.");
+                location.reload();
+            } else {
+                alert(data.error || "Error al copiar permisos.");
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("Error al copiar permisos.");
+        });
     });
+});
 </script>
 {% endblock %}
