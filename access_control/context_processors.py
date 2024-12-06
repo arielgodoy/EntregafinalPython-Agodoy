@@ -1,5 +1,5 @@
 # access_control/context_processors.py
-from access_control.models import Empresa
+from access_control.models import Empresa, Permiso
 
 def global_context(request):
     """
@@ -14,3 +14,9 @@ def global_context(request):
     return {
         'empresa_seleccionada': empresa_seleccionada,
     }
+def empresas_disponibles(request):
+    if request.user.is_authenticated:
+        permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
+        empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
+        return {'empresas': empresas}
+    return {}

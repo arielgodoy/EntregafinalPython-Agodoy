@@ -4,8 +4,8 @@
 <html>
 <head>
     <title>Biblioteca Digital</title>    
-    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">     
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">    
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">         
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -109,6 +109,44 @@
     input[type="search"]::placeholder {
         color: #adb5bd; /* Color gris claro para el marcador de posición */
     }
+    /* Dropdown */
+    /* Cambiar el color del texto del select (cuando no está desplegado) */
+    select {
+        color: #ffffff; /* Texto blanco */
+        background-color: #333333; /* Fondo oscuro */
+        border: 1px solid #555555; /* Borde opcional */
+    }
+
+    /* Cambiar el color del texto y el fondo de las opciones desplegadas */
+    select option {
+        color: #ffffff; /* Texto blanco */
+        background-color: #333333; /* Fondo oscuro */
+    }
+
+    /* Cambiar el color del texto de la opción seleccionada */
+    select option:checked {
+        color: #ffffff; /* Texto blanco */
+        background-color: #444444; /* Fondo más oscuro para la opción seleccionada */
+    }
+
+    /* Asegurar estilos consistentes en todos los navegadores */
+    select:focus {
+        border-color: #ffffff; /* Borde blanco al enfocarse */
+        outline: none; /* Elimina el contorno predeterminado */
+    }
+    .btn-close {
+    background-color: transparent;
+    border: none;
+    width: 1em;
+    height: 1em;
+    opacity: 0.5;
+}
+
+.btn-close:hover {
+    opacity: 0.75;
+}
+
+
     </style>
     
 </head>
@@ -177,14 +215,14 @@
             <!-- Usuario y empresa seleccionada -->
             <div class="text-end mt-2">
                 {% if empresa_seleccionada %}
-                    <span class="text-white me-3">
-                        Empresa: {{ empresa_seleccionada.descripcion }}
-                    </span>
-                {% else %}
-                    <span class="text-white me-3">
-                        Empresa: No seleccionada
-                    </span>
-                {% endif %}
+                <span class="text-white me-3" data-toggle="modal" data-target="#cambiarEmpresaModal" style="cursor: pointer;">
+                    Empresa: {{ empresa_seleccionada.descripcion }}
+                </span>
+            {% else %}
+                <span class="text-white me-3" data-toggle="modal" data-target="#cambiarEmpresaModal" style="cursor: pointer;">
+                    Seleccionar Empresa
+                </span>
+            {% endif %}
                 <a href="{% url 'subeavatar' %}" class="btn btn-secondary">
                     <i class="fas fa-user"></i> Perfil
                 </a>
@@ -213,6 +251,39 @@
     {% block contenido %}
     {% endblock %}
 </div>
+<div class="modal fade" id="cambiarEmpresaModal" tabindex="-1" role="dialog" aria-labelledby="cambiarEmpresaLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cambiarEmpresaLabel">Seleccionar Empresa</h5>
+                <button type="button" class="btn-close btn-close-white" data-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{% url 'access_control:seleccionar_empresa' %}">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="empresa_id">Empresas Disponibles</label>
+                        <select class="form-control" id="empresa_id" name="empresa_id">
+                            {% for empresa in empresas %}
+                                <option value="{{ empresa.id }}">{{ empresa.codigo }} - {{ empresa.descripcion }}</option>
+                            {% endfor %}
+                        </select>
+                        
+                    </div>
+                    <button type="submit" class="btn btn-primary">Cambiar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("cambiarEmpresaModal");
+    modal.addEventListener("show.bs.modal", function () {
+        console.log("El modal para cambiar de empresa se está mostrando.");
+    });
+});
+</script>    
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>   

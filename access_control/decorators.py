@@ -7,7 +7,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
         def _wrapped_view(request, *args, **kwargs):
             empresa_id = request.session.get("empresa_id")
             if not empresa_id:
-                return redirect("seleccionar_empresa")  # Redirige si no hay empresa seleccionada
+                return redirect("access_control:seleccionar_empresa")  # Redirige si no hay empresa seleccionada
             
             # Verificar si la vista existe en el modelo Vista
             vista, created = Vista.objects.get_or_create(nombre=vista_nombre)
