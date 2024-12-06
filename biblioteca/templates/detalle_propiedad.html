@@ -6,13 +6,13 @@
 <p>Dirección: {{ propiedad.direccion }}</p>
 
 <h2>Documentos asociados:</h2>
-<table class="table table-dark table-striped">
+<table id="documentosTable" class="table table-dark table-striped">
   <thead>
     <tr>
       <th>Tipo</th>
       <th>Documento</th>
       <th>Fecha</th>
-      <th>Vencimiento</th>      
+      <th>Vencimiento</th>
       <th>Acciones</th>
     </tr>
   </thead>
@@ -22,31 +22,24 @@
       <td>{{ documento.tipo_documento }}</td>
       <td>{{ documento.nombre_documento }}</td>
       <td>{{ documento.fecha_documento }}</td>
-      {% if documento.fecha_vencimiento is None %}
-      <td>Sin vencimiento</td>  
-      {% else %}    
-      <td>{{ documento.fecha_vencimiento }}</td>  
-      {% endif %}    
-      
-      <!-- <td>{{ documento.get_tipo_archivo_display }}</td> -->
+      <td>
+        {% if documento.fecha_vencimiento %}
+        {{ documento.fecha_vencimiento }}
+        {% else %}
+        Sin vencimiento
+        {% endif %}
+      </td>
       <td>
         <a href="{{ documento.archivo.url }}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
-        <button class="btn btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')" > <i class="bi bi-clipboard"></i></button>
-        <!-- Agregar el enlace que muestra el modal de confirmación -->
+        <button class="btn btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')"><i class="bi bi-clipboard"></i></button>
         <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a>
       </td>
-
-
-  
-
-
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
 <a href="{% url 'crear_documento' propiedad.pk %}" class="btn btn-primary">Agregar nuevo documento</a>
-
 
 <!-- Modal de confirmación de eliminación -->
 {% for documento in propiedad.documento_set.all %}
@@ -69,8 +62,7 @@
     </div>
   </div>
 </div>
-
-
+{% endfor %}
 
 <script>
   function copiarenlace(url) {
@@ -88,12 +80,14 @@
       alert("No se pudo copiar el enlace. Por favor, copia manualmente.");
     }
   }
+
+  $(document).ready(function () {
+    $('#documentosTable').DataTable({
+      language: {
+        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+      }
+    });
+  });
 </script>
-
-  
-
-{% endfor %}
-<!-- Modal de confirmación de eliminación -->
-
 
 {% endblock %}
