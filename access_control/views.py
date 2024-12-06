@@ -2,6 +2,8 @@ from django.views.generic.edit import UpdateView,DeleteView,CreateView
 from django.urls import reverse_lazy
 from django.contrib.auth.models import User
 from django.contrib.auth.models import User as Usuario
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
 
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -306,3 +308,35 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('access_control:usuarios_lista')
     vista_nombre = "Maestro Usuarios"
     permiso_requerido = "eliminar"
+
+
+# class SeleccionarEmpresaView(VerificarPermisoMixin,LoginRequiredMixin, View):
+#     template_name = "access_control/seleccionar_empresa.html"
+#     vista_nombre = "Cambiar Empresa"
+#     permiso_requerido = "modificar"
+
+#     def get(self, request, *args, **kwargs):
+#         permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
+#         empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
+
+#         print(empresas)  # Para depuración
+#         return render(request, self.template_name, {"empresas": empresas})
+
+#     def post(self, request, *args, **kwargs):
+#         empresa_id = request.POST.get("empresa_id")
+#         request.session["empresa_id"] = empresa_id
+#         return redirect("listar_propiedades")
+
+@login_required
+def seleccionar_empresa(request):
+    if request.method == "POST":
+        empresa_id = request.POST.get("empresa_id")
+        request.session["empresa_id"] = empresa_id
+        return redirect("listar_propiedades")
+
+    permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
+    empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
+
+    print(empresas)  # Para depuración
+    return render(request, "access_control/seleccionar_empresa.html", {"empresas": empresas})
+

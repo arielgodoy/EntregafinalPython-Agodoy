@@ -13,7 +13,7 @@ from .models import TipoDocumento
 from .forms import TipoDocumentoForm
 from django.views.generic import View
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import render, redirect
+
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
@@ -52,24 +52,34 @@ class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView
     vista_nombre = "Maestro Propiedades"
     permiso_requerido = "ingresar"
 
-class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin,CreateView):
+from django.urls import reverse_lazy, reverse
+from django.shortcuts import get_object_or_404
+
+class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Documento
     fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
     template_name = 'crear_documento.html'
-    success_url = reverse_lazy('listar_propiedades')
-    vista_nombre="Maestro Propiedades" 
-    permiso_requerido="modificar"
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "modificar"
+
     def get_initial(self):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return {'propiedad': propiedad}
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['propiedad'] = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         return context
+
     def form_valid(self, form):
         propiedad = get_object_or_404(Propiedad, pk=self.kwargs['pk'])
         form.instance.propiedad = propiedad
         return super().form_valid(form)
+
+    def get_success_url(self):
+        # Redirigir al detalle de la propiedad después de crear un nuevo documento
+        return reverse('detalle_propiedad', kwargs={'pk': self.kwargs['pk']})
+
 
 #
 #MAESTRO DE PROPIETARIOS
@@ -385,12 +395,4 @@ def cambiar_password(request):
     
 
 
-@login_required
-def seleccionar_empresa(request):
-    if request.method == "POST":
-        empresa_id = request.POST.get("empresa_id")
-        request.session["empresa_id"] = empresa_id
-        return redirect("listar_propiedades")    
-    permisos = Permiso.objects.filter(usuario=request.user).select_related('empresa')
-    empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
-    return render(request, 'seleccionar_empresa.html', {'empresas': empresas})
+

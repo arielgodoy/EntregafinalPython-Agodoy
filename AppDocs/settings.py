@@ -78,6 +78,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 #global_conext para mostra nombre de la empresa activa
                 'access_control.context_processors.global_context',
+                'access_control.context_processors.empresas_disponibles',
             ],
         },
     },
