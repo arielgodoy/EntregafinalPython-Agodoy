@@ -14,6 +14,7 @@ app_name = 'access_control'  # Define el espacio de nombres
 
 urlpatterns = [
     #path('permisos-filtrados/', permisos_filtrados_view, name='permisos_filtrados'),  
+    #path("seleccionar_empresa/", SeleccionarEmpresaView.as_view(), name="seleccionar_empresa"),
     path('seleccionar_empresa/', views.seleccionar_empresa, name='seleccionar_empresa'), 
     path('copiar-permisos/', CopyPermisosView.as_view(), name='copy_permissions'),
     path('permisos-filtrados/', PermisosFiltradosView.as_view(), name='permisos_filtrados'), 

@@ -309,6 +309,24 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     vista_nombre = "Maestro Usuarios"
     permiso_requerido = "eliminar"
 
+
+# class SeleccionarEmpresaView(VerificarPermisoMixin,LoginRequiredMixin, View):
+#     template_name = "access_control/seleccionar_empresa.html"
+#     vista_nombre = "Cambiar Empresa"
+#     permiso_requerido = "modificar"
+
+#     def get(self, request, *args, **kwargs):
+#         permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
+#         empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
+
+#         print(empresas)  # Para depuración
+#         return render(request, self.template_name, {"empresas": empresas})
+
+#     def post(self, request, *args, **kwargs):
+#         empresa_id = request.POST.get("empresa_id")
+#         request.session["empresa_id"] = empresa_id
+#         return redirect("listar_propiedades")
+
 @login_required
 def seleccionar_empresa(request):
     if request.method == "POST":
