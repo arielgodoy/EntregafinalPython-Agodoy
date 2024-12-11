@@ -215,3 +215,12 @@ LOGGING = {
         },
     },
 }
+
+
+# ... other settings ...
+
+CONFIGURACIONES = {
+    'CLIENTE_SISTEMA': 'eltit_',  # Example value
+    'APLICACION': 'My Application',  # Example value
+    # Add more configurations as needed
+}
