@@ -94,23 +94,28 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    },
+    'eltit_gestion00': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'eltit_gestion00',
+        'USER': 'root',
+        'PASSWORD': '123',
+        'HOST': 'localhost',
+        'PORT': '3306',
+    },    
+    'eltit_gestion01': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'eltit_gestion01',
+        'USER': 'root',
+        'PASSWORD': '123',
+        'HOST': 'localhost',
+        'PORT': '3306',
+    },
 }
 
+DATABASE_ROUTERS = ['api.Router_Databases.MultiDatabaseRouter']
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'HOST': 'localhost',
-#         'PORT': '3306',
-#         'USER': 'root',
-#         'PASSWORD': '123',
-#         'NAME': 'eltit_gestion',
-#         'OPTIONS': {
-#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
-#         }
-#     }
-# }
+
 
 
 # Password validation
@@ -195,3 +200,18 @@ REST_FRAMEWORK = {
     ]
 }
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    },
+}
