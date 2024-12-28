@@ -17,6 +17,24 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+
+# # Redirige automáticamente a HTTPS
+# SECURE_SSL_REDIRECT = True
+# # Evita que el contenido se cargue en navegadores inseguros
+# SECURE_CONTENT_TYPE_NOSNIFF = True
+# # Habilita la protección XSS
+# SECURE_BROWSER_XSS_FILTER = True
+# # Configura HSTS (Strict-Transport-Security)
+# SECURE_HSTS_SECONDS = 31536000  # Un año en segundos
+# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# SECURE_HSTS_PRELOAD = True
+# # Marca las cookies como seguras (solo HTTPS)
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+
+
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
