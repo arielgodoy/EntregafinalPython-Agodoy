@@ -39,10 +39,32 @@ Listado de Propietarios
                                     <td>{{ propietario.get_rol_display }}</td>
                                     <td>
                                         <a href="{% url 'biblioteca:detalle_propietario' propietario.pk %}" class="btn btn-primary btn-sm">Ver detalles</a>
-                                        <a href="{% url 'biblioteca:eliminar_propietario' propietario.pk %}" class="btn btn-danger btn-sm">Eliminar</a>
+                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ propietario.pk }}">Eliminar</button>
                                         <a href="{% url 'biblioteca:modificar_propietario' propietario.pk %}" class="btn btn-warning btn-sm">Modificar</a>
                                     </td>
                                 </tr>
+
+                                <!-- Modal de confirmación -->
+                                <div class="modal fade" id="confirmModal-{{ propietario.pk }}" tabindex="-1" aria-labelledby="confirmModalLabel-{{ propietario.pk }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="confirmModalLabel-{{ propietario.pk }}">Confirmar eliminación</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                ¿Estás seguro de que deseas eliminar al propietario <strong>{{ propietario.nombre }}</strong>?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form method="post" action="{% url 'biblioteca:eliminar_propietario' propietario.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {% endfor %}
                             </tbody>
                         </table>

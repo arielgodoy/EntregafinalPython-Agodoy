@@ -9,19 +9,19 @@ Ingresar Propietario
 {% endblock pagetitle %}
 
 {% block content %}
-<div class="main-content"> <!-- Contenedor principal ajustado -->
+<div class="main-content"> 
     <div class="page-content">
         <div class="container-fluid">
-            <div class="row">
-                <div class="col-lg-8 offset-lg-2">
-                    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card shadow-lg p-4 mb-5 rounded">
                         <h1 class="my-4 text-center">Ingresar Propietario</h1>
                         <form method="post" class="needs-validation" novalidate>
                             {% csrf_token %}
 
                             <!-- Campo Nombre -->
                             <div class="mb-3">
-                                <label for="id_nombre" class="form-label text-light">{{ form.nombre.label }}</label>
+                                <label for="id_nombre" class="form-label">{{ form.nombre.label }}</label>
                                 {{ form.nombre }}
                                 {% if form.nombre.errors %}
                                     <div class="text-danger">
@@ -34,7 +34,7 @@ Ingresar Propietario
 
                             <!-- Campo RUT -->
                             <div class="mb-3">
-                                <label for="id_rut" class="form-label text-light">RUT</label>
+                                <label for="id_rut" class="form-label">RUT</label>
                                 <input type="text" id="id_rut" name="rut" class="form-control" value="{{ form.rut.value|default:'' }}">
                                 {% if form.rut.errors %}
                                     <div class="text-danger">
@@ -47,7 +47,7 @@ Ingresar Propietario
 
                             <!-- Campo Teléfono -->
                             <div class="mb-3">
-                                <label for="id_telefono" class="form-label text-light">{{ form.telefono.label }}</label>
+                                <label for="id_telefono" class="form-label">{{ form.telefono.label }}</label>
                                 {{ form.telefono }}
                                 {% if form.telefono.errors %}
                                     <div class="text-danger">
@@ -60,7 +60,7 @@ Ingresar Propietario
 
                             <!-- Campo Rol -->
                             <div class="mb-3">
-                                <label for="id_rol" class="form-label text-light">{{ form.rol.label }}</label>
+                                <label for="id_rol" class="form-label">{{ form.rol.label }}</label>
                                 {{ form.rol }}
                                 {% if form.rol.errors %}
                                     <div class="text-danger">
@@ -82,31 +82,34 @@ Ingresar Propietario
 </div>
 
 <script>
-    document.getElementById('id_rut').addEventListener('input', function (e) {
-        let value = e.target.value.replace(/[^0-9kK]/g, '');
-        let formattedRut = '';
+    document.addEventListener('DOMContentLoaded', function () {
+        const rutInput = document.getElementById('id_rut');
+        rutInput.addEventListener('input', function (e) {
+            let value = e.target.value.replace(/[^0-9kK]/g, '');
+            let formattedRut = '';
 
-        if (value.length <= 7) {
-            if (value.length > 6) {
-                formattedRut =
-                    value.slice(0, value.length - 6) + '.' +
-                    value.slice(value.length - 6, value.length - 3) + '.' +
-                    value.slice(value.length - 3);
-            } else if (value.length > 3) {
-                formattedRut =
-                    value.slice(0, value.length - 3) + '.' +
-                    value.slice(value.length - 3);
+            if (value.length <= 7) {
+                if (value.length > 6) {
+                    formattedRut =
+                        value.slice(0, value.length - 6) + '.' +
+                        value.slice(value.length - 6, value.length - 3) + '.' +
+                        value.slice(value.length - 3);
+                } else if (value.length > 3) {
+                    formattedRut =
+                        value.slice(0, value.length - 3) + '.' +
+                        value.slice(value.length - 3);
+                } else {
+                    formattedRut = value;
+                }
             } else {
-                formattedRut = value;
+                formattedRut =
+                    value.slice(0, value.length - 7) + '.' +
+                    value.slice(value.length - 7, value.length - 4) + '.' +
+                    value.slice(value.length - 4, value.length - 1) + '-' +
+                    value.slice(value.length - 1);
             }
-        } else {
-            formattedRut =
-                value.slice(0, value.length - 7) + '.' +
-                value.slice(value.length - 7, value.length - 4) + '.' +
-                value.slice(value.length - 4, value.length - 1) + '-' +
-                value.slice(value.length - 1);
-        }
-        e.target.value = formattedRut;
+            e.target.value = formattedRut;
+        });
     });
 </script>
 {% endblock content %}

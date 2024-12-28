@@ -24,6 +24,9 @@ from chat.forms import MensajeForm,ConversacionForm,EnviarMensajeForm
 from acounts.forms import AvatarForm
 from acounts.models import Avatar
 from django.utils.decorators import method_decorator
+from django.urls import reverse_lazy, reverse
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -53,8 +56,7 @@ class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView
     vista_nombre = "Maestro Propiedades"
     permiso_requerido = "ingresar"
 
-from django.urls import reverse_lazy, reverse
-from django.shortcuts import get_object_or_404
+
 
 class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Documento
@@ -186,7 +188,6 @@ class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateVie
         # Agregamos los propietarios al contexto para mostrarlos en el modal
         context['propietarios'] = Propietario.objects.all()
         return context
-
 class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Documento
     template_name = 'eliminar_documento.html'  # Cambia esto si tienes un template para confirmar eliminación.
@@ -197,7 +198,6 @@ class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView
         """Redirige a la página de detalle de la propiedad asociada."""
         documento = self.object
         return reverse_lazy('biblioteca:detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
-
 
 
 #

@@ -8,25 +8,16 @@ Eliminar Tipo de Documento
 {% include "partials/page-title.html" with title="Eliminar Tipo de Documento" pagetitle="Tipos de Documentos" %}
 {% endblock pagetitle %}
 
-{% block content %}
-<div class="main-content">
-    <div class="page-content">
-        <div class="container-fluid">
-            <h1 class="mb-4 text-light">Eliminar Tipo de Documento</h1>
-            <p class="text-light">¿Estás seguro que deseas eliminar el siguiente tipo de documento?</p>
-            <p class="text-warning"><strong>{{ tipo_documento.nombre }}</strong></p>
-            
-            <form method="post" class="d-flex gap-3">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-danger">Eliminar</button>
-                <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="btn btn-secondary">Cancelar</a>
-            </form>
-        </div>
-    </div>
-</div>
 
-<!-- Modal de confirmación (opcional, pero no necesario para este flujo directo) -->
-<script>
-    // Si deseas manejar el modal, agrega aquí la funcionalidad
-</script>
+{% block content %}
+
+<h1>Confirmar Eliminación</h1>
+<p>¿Estás seguro de que deseas eliminar este documento?</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a href="{% url 'biblioteca:detalle_propiedad' pk=documento.propiedad.pk %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}
+
 {% endblock content %}

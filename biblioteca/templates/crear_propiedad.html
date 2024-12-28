@@ -12,43 +12,43 @@ Ingresar Propiedad
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="card shadow p-4 bg-dark text-light">
-                <h1 class="my-4 text-center">Ingresar Propiedad</h1>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Ingresar Propiedad</h5>
+                    <a href="{% url 'biblioteca:crear_propiedad' %}" class="btn btn-success">Agregar Propiedad</a>
+                </div>
+                
                 <form method="post" action="{% url 'biblioteca:crear_propiedad' %}" class="needs-validation" novalidate>
                     {% csrf_token %}
-                    <table class="table table-dark table-striped">
+                    <table class="table table-bordered dt-responsive nowrap table-striped align-middle">
                         {% if form.non_field_errors %}
-                            <div class="alert alert-danger">
-                                <ul>
-                                    {% for error in form.non_field_errors %}
-                                        <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
+                        <div class="alert alert-danger">
+                            <ul>
+                                {% for error in form.non_field_errors %}
+                                <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
                         {% endif %}
 
-                        <!-- Campos del formulario -->
                         {% for field in form %}
                         <tr>
                             <td>
-                                <label for="{{ field.id_for_label }}" class="form-label text-light">
-                                    {{ field.label }}
-                                </label>
+                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
                             </td>
                             <td>
                                 {{ field }}
                                 {% if field.errors %}
-                                    <div class="text-danger">
-                                        {% for error in field.errors %}
-                                            <small>{{ error }}</small>
-                                        {% endfor %}
-                                    </div>
+                                <div class="text-danger">
+                                    {% for error in field.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
                                 {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
 
-                        <!-- Botón Guardar -->
                         <tr>
                             <td colspan="2" class="text-center">
                                 <button type="submit" class="btn btn-primary w-50">Guardar</button>
@@ -61,7 +61,6 @@ Ingresar Propiedad
     </div>
 </div>
 
-<!-- Modal para buscar propietarios -->
 <div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-light">
@@ -71,62 +70,61 @@ Ingresar Propiedad
             </div>
             <div class="modal-body">
                 <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
-                <table class="table table-striped table-dark" id="propietariosTable">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Nombre</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="propietariosBody">
-                        <!-- Datos cargados dinámicamente -->
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped" id="propietariosTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="propietariosBody">
+                            <!-- Datos cargados dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    function openPropietarioModal() {
-        const modal = new bootstrap.Modal(document.getElementById('propietarioModal'));
-        modal.show();
-        fetchPropietarios(); // Cargar datos al abrir el modal
-    }
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('searchPropietario');
+        const propietariosBody = document.getElementById('propietariosBody');
 
-    function fetchPropietarios(query = '') {
-        fetch(`/api/v1/propietarios/?search=${query}`)
-            .then(response => response.json())
-            .then(data => {
-                const propietariosBody = document.getElementById('propietariosBody');
-                propietariosBody.innerHTML = '';
-                data.forEach(propietario => {
-                    propietariosBody.innerHTML += `
-                        <tr>
-                            <td>${propietario.id}</td>
-                            <td>${propietario.nombre}</td>
-                            <td>
-                                <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            })
-            .catch(error => console.error('Error al cargar propietarios:', error));
-    }
+        function fetchPropietarios(query = '') {
+            fetch(`/api/v1/propietarios/?search=${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    propietariosBody.innerHTML = '';
+                    data.forEach(propietario => {
+                        propietariosBody.innerHTML += `
+                            <tr>
+                                <td>${propietario.id}</td>
+                                <td>${propietario.nombre}</td>
+                                <td>
+                                    <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
+                                </td>
+                            </tr>`;
+                    });
+                })
+                .catch(error => console.error('Error al cargar propietarios:', error));
+        }
 
-    function selectPropietario(id, nombre) {
-        document.getElementById('id_propietario').value = id;
-        document.getElementById('id_propietario_display').value = nombre;
-        const modal = bootstrap.Modal.getInstance(document.getElementById('propietarioModal'));
-        modal.hide();
-    }
+        function selectPropietario(id, nombre) {
+            document.getElementById('id_propietario').value = id;
+            document.getElementById('id_propietario_display').value = nombre;
+            const modal = bootstrap.Modal.getInstance(document.getElementById('propietarioModal'));
+            modal.hide();
+        }
 
-    // Escuchar eventos del campo de búsqueda
-    document.getElementById('searchPropietario').addEventListener('input', function (e) {
-        const query = e.target.value;
-        fetchPropietarios(query); // Filtrar datos dinámicamente
+        searchInput.addEventListener('input', function () {
+            fetchPropietarios(this.value);
+        });
+
+        fetchPropietarios(); // Inicializar al abrir la página
     });
 </script>
 {% endblock content %}

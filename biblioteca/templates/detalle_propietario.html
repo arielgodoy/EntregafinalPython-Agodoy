@@ -12,17 +12,17 @@ Detalle de Propietario
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
-                <h1>{{ propietario.nombre }}</h1>
+            <div class="card shadow-lg p-4 mb-5 rounded">
+                <h1 class="mb-4">{{ propietario.nombre }}</h1>
                 <p><strong>RUT:</strong> {{ propietario.rut }}</p>
                 <p><strong>Teléfono:</strong> {{ propietario.telefono }}</p>
                 <p><strong>Rol:</strong> {{ propietario.get_rol_display }}</p>
             </div>
 
-            <div class="card shadow-lg p-4 mt-4 bg-dark rounded text-light">
-                <h2>Propiedades asociadas:</h2>
+            <div class="card shadow-lg p-4 mt-4 rounded">
+                <h2 class="mb-4">Propiedades asociadas:</h2>
                 <div class="table-responsive">
-                    <table id="tabla-propiedades" class="table table-dark table-striped">
+                    <table id="tabla-propiedades" class="table table-bordered dt-responsive nowrap table-striped align-middle">
                         <thead>
                             <tr>
                                 <th>Rol</th>
@@ -36,9 +36,15 @@ Detalle de Propietario
                                 <td>{{ propiedad.rol }}</td>
                                 <td>{{ propiedad.direccion }}</td>
                                 <td>
-                                    <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
-                                    <a href="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
-                                    <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil"></i></a>
+                                    <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-eye"></i> Ver
+                                    </a>
+                                    <a href="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm">
+                                        <i class="bi bi-trash"></i> Eliminar
+                                    </a>
+                                    <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm">
+                                        <i class="bi bi-pencil"></i> Modificar
+                                    </a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -51,8 +57,14 @@ Detalle de Propietario
 </div>
 
 <script>
-    $(document).ready(function() {
-        $('#tabla-propiedades').DataTable();
+    document.addEventListener("DOMContentLoaded", function () {
+        $('#tabla-propiedades').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            },
+            responsive: true,
+            autoWidth: false,
+        });
     });
 </script>
 {% endblock content %}

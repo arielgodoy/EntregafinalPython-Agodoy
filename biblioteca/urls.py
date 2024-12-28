@@ -12,6 +12,8 @@ urlpatterns = [
     path('propiedades/<int:pk>/', views.DetallePropiedadView.as_view(), name='detalle_propiedad'),
     path('propiedades/<int:pk>/crear_documento/', views.CrearDocumentoView.as_view(), name='crear_documento'),
     path('documentos/<int:pk>/eliminar/', views.EliminarDocumentoView.as_view(), name='eliminar_documento'),
+   
+
     path('ingresar_propietario/', views.CrearPropietarioView.as_view(), name='crear_propietario'),
     path('listar_propietarios/', views.ListarPropietariosView.as_view(), name='listar_propietarios'),
     path('propietarios/<int:pk>/', views.DetallePropietarioView.as_view(), name='detalle_propietario'),

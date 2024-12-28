@@ -23,8 +23,13 @@ Detalle de Propiedad
             <div class="row mt-4">
                 <div class="col-12">
                     <h2>Documentos asociados:</h2>
-                    <table id="documentosTable" class="table table-striped table-bordered">
-                        <thead class="table-dark">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button class="btn btn-dark" onclick="copiarTodosLosEnlaces()">
+                            <i class="bi bi-clipboard"></i> Copiar todos los enlaces
+                        </button>
+                    </div>
+                    <table id="documentosTable" class="table table-bordered dt-responsive nowrap table-striped align-middle">
+                        <thead>
                             <tr>
                                 <th>Tipo</th>
                                 <th>Documento</th>
@@ -47,15 +52,18 @@ Detalle de Propiedad
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{{ documento.archivo.url }}" class="btn btn-sm btn-primary">
+                                    <a href="{{ documento.archivo.url }}" class="btn btn-sm btn-primary" target="_blank">
                                         <i class="bi bi-eye"></i> Ver
                                     </a>
                                     <button class="btn btn-sm btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')">
                                         <i class="bi bi-clipboard"></i> Copiar enlace
                                     </button>
-                                    <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ documento.pk }}">
-                                        <i class="bi bi-trash"></i> Eliminar
-                                    </button>
+                                    <!-- <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a> -->
+                                    <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a>
+
+                                    
+                                    
+
                                 </td>
                             </tr>
                             {% endfor %}
@@ -69,25 +77,31 @@ Detalle de Propiedad
 </div>
 
 <!-- Modales para eliminación -->
+<!-- Modal de confirmación de eliminación -->
 {% for documento in propiedad.documento_set.all %}
-<div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>¿Estás seguro de que deseas eliminar este documento?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <a href="{% url 'biblioteca:eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
-            </div>
-        </div>
+<div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" role="dialog" aria-labelledby="confirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de que deseas eliminar este documento?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <a href="{% url 'biblioteca:eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
+      </div>
     </div>
+  </div>
 </div>
 {% endfor %}
+
+  
+
 
 <script>
     function copiarenlace(url) {
@@ -100,6 +114,59 @@ Detalle de Propiedad
             alert("No se pudo copiar el enlace. Por favor, copia manualmente.");
         }
     }
+
+    function copiarTodosLosEnlaces() {
+    const enlaces = Array.from(document.querySelectorAll("#documentosTable tbody tr")).map(row => {
+        const nombreDocumento = row.children[1].textContent.trim(); // Nombre del documento
+        const enlace = row.querySelector("a.btn-primary").href; // Enlace del documento
+        return `${nombreDocumento}:\n${enlace}\n`; // Eliminar concatenación con window.location.origin
+    });
+
+    const texto = enlaces.join("\n");
+
+    navigator.clipboard.writeText(texto).then(() => {
+        alert("Todos los enlaces han sido copiados al portapapeles con sus nombres.");
+    }).catch(err => {
+        console.error("Error al copiar todos los enlaces: ", err);
+        alert("No se pudieron copiar los enlaces.");
+    });
+}
+
+let documentoIdToDelete = null;
+
+function openDeleteModal(documentoId) {
+    documentoIdToDelete = documentoId; // Guarda el ID del documento a eliminar
+    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
+}
+
+document.getElementById('confirmDeleteButton').addEventListener('click', function () {
+    if (documentoIdToDelete) {
+        const url = `/biblioteca/documentos/${documentoIdToDelete}/eliminar/`; // Ajusta según tu ruta
+        fetch(url, {
+            method: "POST", // Usa POST si no puedes usar DELETE directamente
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}"
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                alert("Documento eliminado con éxito.");
+                location.reload(); // Recarga la página para actualizar la lista
+            } else {
+                alert("No se pudo eliminar el documento. Inténtalo nuevamente.");
+            }
+        })
+        .catch(error => {
+            console.error("Error al eliminar el documento:", error);
+            alert("Ocurrió un error al intentar eliminar el documento.");
+        });
+    }
+});
+
+
+
+
 
     $(document).ready(function () {
         $('#documentosTable').DataTable({

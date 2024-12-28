@@ -38,10 +38,32 @@ Listado de Propiedades
                                     <td>{{ propiedad.propietario.nombre }}</td>
                                     <td>
                                         <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> Ver</a>
-                                        <a href="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i> Eliminar</a>
+                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ propiedad.pk }}"><i class="bi bi-trash"></i> Eliminar</button>
                                         <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil"></i> Modificar</a>
                                     </td>
                                 </tr>
+
+                                <!-- Modal de confirmación -->
+                                <div class="modal fade" id="confirmModal-{{ propiedad.pk }}" tabindex="-1" aria-labelledby="confirmModalLabel-{{ propiedad.pk }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="confirmModalLabel-{{ propiedad.pk }}">Confirmación de Eliminación</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                ¿Estás seguro de que deseas eliminar la propiedad <strong>{{ propiedad.descripcion }}</strong>?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form method="post" action="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -53,7 +75,6 @@ Listado de Propiedades
 </div>
 
 {% block extra_js %}
-
 <script>
     $(document).ready(function() {
         $('#tabla-propiedades').DataTable({

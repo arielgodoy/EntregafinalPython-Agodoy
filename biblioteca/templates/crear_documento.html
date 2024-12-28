@@ -25,6 +25,10 @@ Crear Nuevo Documento
             <div class="row mt-4">
                 <div class="col-12">
                     <h1 class="mb-4">Crear Nuevo Documento</h1>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="btn btn-success">Agregar Tipo de Documento</a>
+                    </div>
+
                     <form method="post" enctype="multipart/form-data">
                         {% csrf_token %}
                         {{ form|crispy }}
