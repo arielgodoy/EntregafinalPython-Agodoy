@@ -1,11 +1,26 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 {% load crispy_forms_tags %}
-{% block contenido %}
-  <h1>Crear Tipo de Documento</h1>
-  <form method="post">
-    {% csrf_token %}    
-    {{ form|crispy }}
-    {{ form.media }}
-    <button type="submit">Guardar</button>
-  </form>
-{% endblock %}
+
+{% block title %}
+Crear Tipo de Documento
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Crear Tipo de Documento" pagetitle="Tipos de Documentos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <h1 class="text-light mb-4">Crear Tipo de Documento</h1>
+            <form method="post">
+                {% csrf_token %}
+                {{ form|crispy }}
+                {{ form.media }}
+                <button type="submit" class="btn btn-primary mt-3">Guardar</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock content %}

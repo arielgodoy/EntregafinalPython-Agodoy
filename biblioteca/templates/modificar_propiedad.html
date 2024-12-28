@@ -1,128 +1,105 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<div class="container mt-5">
-    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
-        <h1 class="my-4 text-center">Modificar Propiedad</h1>
+{% block title %}
+Modificar Propiedad
+{% endblock title %}
 
-        <form method="post">
-            {% csrf_token %}
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Modificar Propiedad" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
 
-            <table class="table table-dark table-striped">
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        <ul>
-                            {% for error in form.non_field_errors %}
-                                <li>{{ error }}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                {% endif %}
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
+                <h1 class="my-4 text-center">Modificar Propiedad</h1>
+                <form method="post">
+                    {% csrf_token %}
 
-                <!-- Campo ROL -->
-                <tr>
-                    <td><label for="id_rol" class="form-label text-light">ROL</label></td>
-                    <td>
-                        {{ form.rol }}
-                        {% if form.rol.errors %}
-                            <div class="text-danger">
-                                {% for error in form.rol.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
+                    <table class="table table-dark table-striped">
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
                             </div>
                         {% endif %}
-                    </td>
-                </tr>
 
-                <!-- Campo Descripción -->
-                <tr>
-                    <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
-                    <td>
-                        {{ form.descripcion }}
-                        {% if form.descripcion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.descripcion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
+                        <!-- Campo ROL -->
+                        <tr>
+                            <td><label for="id_rol" class="form-label text-light">ROL</label></td>
+                            <td>
+                                {{ form.rol }}
+                                {% if form.rol.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.rol.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
 
-                <!-- Campo Dirección -->
-                <tr>
-                    <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
-                    <td>
-                        {{ form.direccion }}
-                        {% if form.direccion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.direccion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
+                        <!-- Campo Descripción -->
+                        <tr>
+                            <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
+                            <td>
+                                {{ form.descripcion }}
+                                {% if form.descripcion.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.descripcion.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
 
-                <!-- Campo Ciudad -->
-                <tr>
-                    <td><label for="id_ciudad" class="form-label text-light">Ciudad</label></td>
-                    <td>
-                        {{ form.ciudad }}
-                        {% if form.ciudad.errors %}
-                            <div class="text-danger">
-                                {% for error in form.ciudad.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
+                        <!-- Campo Dirección -->
+                        <tr>
+                            <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
+                            <td>
+                                {{ form.direccion }}
+                                {% if form.direccion.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.direccion.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
 
-                <!-- Campo Teléfono -->
-                <tr>
-                    <td><label for="id_telefono" class="form-label text-light">Teléfono</label></td>
-                    <td>
-                        {{ form.telefono }}
-                        {% if form.telefono.errors %}
-                            <div class="text-danger">
-                                {% for error in form.telefono.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
+                        <!-- Campo Propietario -->
+                        <tr>
+                            <td><label for="id_propietario_display" class="form-label text-light">Propietario</label></td>
+                            <td>
+                                <input type="text" id="id_propietario_display" class="form-control" value="{{ propiedad.propietario.nombre }}" readonly>
+                                <input type="hidden" id="id_propietario" name="propietario" value="{{ propiedad.propietario.id }}">
+                                <button type="button" class="btn btn-secondary mt-2" onclick="openPropietarioModal()">Buscar Propietario</button>
+                                {% if form.propietario.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.propietario.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
 
-                <!-- Campo Propietario -->
-                <tr>
-                    <td><label for="id_propietario_display" class="form-label text-light">Propietario</label></td>
-                    <td>
-                        <!-- Input visible para mostrar el nombre del propietario -->
-                        <input type="text" id="id_propietario_display" class="form-control" value="{{ propiedad.propietario.nombre }}" readonly>
-
-                        <!-- Input oculto para enviar el ID del propietario -->
-                        <input type="hidden" id="id_propietario" name="propietario" value="{{ propiedad.propietario.id }}">
-
-                        <button type="button" class="btn btn-secondary mt-2" onclick="openPropietarioModal()">Buscar Propietario</button>
-                        {% if form.propietario.errors %}
-                            <div class="text-danger">
-                                {% for error in form.propietario.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Botón Guardar -->
-                <tr>
-                    <td colspan="2" class="text-center">
-                        <button type="submit" class="btn btn-primary w-50">Guardar cambios</button>
-                    </td>
-                </tr>
-            </table>
-        </form>
+                        <!-- Botón Guardar -->
+                        <tr>
+                            <td colspan="2" class="text-center">
+                                <button type="submit" class="btn btn-primary w-50">Guardar cambios</button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -153,12 +130,11 @@
     </div>
 </div>
 
-
 <script>
     function openPropietarioModal() {
         const modal = new bootstrap.Modal(document.getElementById('propietarioModal'));
         modal.show();
-        fetchPropietarios(); // Cargar datos al abrir el modal
+        fetchPropietarios();
     }
 
     function fetchPropietarios(query = '') {
@@ -189,11 +165,9 @@
         modal.hide();
     }
 
-    // Escuchar eventos del campo de búsqueda
     document.getElementById('searchPropietario').addEventListener('input', function (e) {
         const query = e.target.value;
-        fetchPropietarios(query); // Filtrar datos dinámicamente
+        fetchPropietarios(query);
     });
 </script>
-
-{% endblock %}
+{% endblock content %}

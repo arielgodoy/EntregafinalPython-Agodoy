@@ -1,16 +1,38 @@
-{% extends 'biblioteca/base.html' %}
-
-{% block contenido %}
+{% extends "partials/base.html" %}
 {% load crispy_forms_tags %}
 
-<h1>ROL NRO : {{ propiedad.rol }}</h1>
-<h2>Descr. : {{ propiedad.descripcion }}</h2>
-<p>Dirección: {{ propiedad.direccion }}</p>
 
-<h1>Crear nuevo documento</h1>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form|crispy }}
-    <button type="submit" class="btn btn-primary">Guardar</button>
-</form>
-{% endblock %}
+{% block title %}
+Crear Nuevo Documento
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Crear Documento" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="mb-4">ROL NRO: {{ propiedad.rol }}</h1>
+                    <h2>Descripción: {{ propiedad.descripcion }}</h2>
+                    <p>Dirección: {{ propiedad.direccion }}</p>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h1 class="mb-4">Crear Nuevo Documento</h1>
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        {{ form|crispy }}
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

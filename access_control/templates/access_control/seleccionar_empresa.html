@@ -1,13 +1,35 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-<form method="post">
-    {% csrf_token %}
-    <label for="empresa">Selecciona una empresa:</label>
-    <select name="empresa_id" id="empresa" class="form-select">
-        {% for empresa in empresas %}
-            <option value="{{ empresa.id }}">{{ empresa.codigo }} - {{ empresa.descripcion }}</option>
-        {% endfor %}
-    </select>
-    <button type="submit" class="btn btn-primary mt-2">Confirmar</button>
-</form>
-{% endblock %}
+{% extends "partials/base.html" %}
+
+{% block title %}
+Seleccionar Empresa
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Seleccionar Empresa" pagetitle="Empresas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Selecciona una Empresa</h5>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="empresa" class="form-label">Selecciona una empresa:</label>
+                            <select name="empresa_id" id="empresa" class="form-select">
+                                {% for empresa in empresas %}
+                                <option value="{{ empresa.id }}">{{ empresa.codigo }} - {{ empresa.descripcion }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary mt-2">Confirmar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

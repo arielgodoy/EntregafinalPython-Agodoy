@@ -1,26 +1,64 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-<h1>Lista de Vistas</h1>
-<a href="{% url 'access_control:vista_crear' %}" class="btn btn-success">Crear Nueva Vista</a>
-<table class="table table-striped">
-    <thead class="table-dark">
-        <tr>
-            <th>Nombre</th>
-            <th>Descripción</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for vista in vistas %}
-        <tr>
-            <td>{{ vista.nombre }}</td>
-            <td>{{ vista.descripcion }}</td>
-            <td>
-                <a href="{% url 'access_control:vista_editar' vista.id %}" class="btn btn-primary btn-sm">Editar</a>
-                <a href="{% url 'access_control:vista_eliminar' vista.id %}" class="btn btn-danger btn-sm">Eliminar</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endblock %}
+{% extends "partials/base.html" %}
+
+{% block title %}
+Lista de Vistas
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Lista de Vistas" pagetitle="Vistas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h1 class="text-light">Lista de Vistas</h1>
+                    <a href="{% url 'access_control:vista_crear' %}" class="btn btn-success">Crear Nueva Vista</a>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table align-middle dt-responsive nowrap" id="vistas-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Descripción</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for vista in vistas %}
+                            <tr>
+                                <td>{{ vista.nombre }}</td>
+                                <td>{{ vista.descripcion }}</td>
+                                <td>
+                                    <a href="{% url 'access_control:vista_editar' vista.id %}" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-pencil"></i> Editar
+                                    </a>
+                                    <a href="{% url 'access_control:vista_eliminar' vista.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar esta vista?');">
+                                        <i class="bi bi-trash"></i> Eliminar
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#vistas-table').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            },
+            responsive: true,
+            autoWidth: false
+        });
+    });
+</script>
+{% endblock content %}

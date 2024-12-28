@@ -1,132 +1,67 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<div class="container mt-5">
-    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
-        <h1 class="my-4 text-center">Ingresar Propiedad</h1>
+{% block title %}
+Ingresar Propiedad
+{% endblock title %}
 
-        <form method="post" action="{% url 'crear_propiedad' %}" class="needs-validation" novalidate>
-            {% csrf_token %}
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Ingresar Propiedad" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
 
-            <table class="table table-dark table-striped">
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        <ul>
-                            {% for error in form.non_field_errors %}
-                                <li>{{ error }}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                {% endif %}
-
-                <!-- Campo ROL -->
-                <tr>
-                    <td><label for="id_rol" class="form-label text-light">ROL</label></td>
-                    <td>
-                        {{ form.rol }}
-                        {% if form.rol.errors %}
-                            <div class="text-danger">
-                                {% for error in form.rol.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow p-4 bg-dark text-light">
+                <h1 class="my-4 text-center">Ingresar Propiedad</h1>
+                <form method="post" action="{% url 'biblioteca:crear_propiedad' %}" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    <table class="table table-dark table-striped">
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
                             </div>
                         {% endif %}
-                    </td>
-                </tr>
 
-                <!-- Campo Descripción -->
-                <tr>
-                    <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
-                    <td>
-                        {{ form.descripcion }}
-                        {% if form.descripcion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.descripcion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
+                        <!-- Campos del formulario -->
+                        {% for field in form %}
+                        <tr>
+                            <td>
+                                <label for="{{ field.id_for_label }}" class="form-label text-light">
+                                    {{ field.label }}
+                                </label>
+                            </td>
+                            <td>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="text-danger">
+                                        {% for error in field.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
 
-                <!-- Campo Dirección -->
-                <tr>
-                    <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
-                    <td>
-                        {{ form.direccion }}
-                        {% if form.direccion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.direccion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Ciudad -->
-                <tr>
-                    <td><label for="id_ciudad" class="form-label text-light">Ciudad</label></td>
-                    <td>
-                        {{ form.ciudad }}
-                        {% if form.ciudad.errors %}
-                            <div class="text-danger">
-                                {% for error in form.ciudad.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Teléfono -->
-                <tr>
-                    <td><label for="id_telefono" class="form-label text-light">Teléfono</label></td>
-                    <td>
-                        {{ form.telefono }}
-                        {% if form.telefono.errors %}
-                            <div class="text-danger">
-                                {% for error in form.telefono.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Propietario -->
-                <tr>
-                    <td><label for="id_propietario_display" class="form-label text-light">Propietario</label></td>
-                    <td>
-                        <!-- Input visible para mostrar el nombre del propietario -->
-                        <input type="text" id="id_propietario_display" class="form-control" readonly>
-
-                        <!-- Input oculto para enviar el ID del propietario -->
-                        <input type="hidden" id="id_propietario" name="propietario">
-
-                        <button type="button" class="btn btn-secondary mt-2" onclick="openPropietarioModal()">Buscar Propietario</button>
-                        {% if form.propietario.errors %}
-                            <div class="text-danger">
-                                {% for error in form.propietario.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Botón Guardar -->
-                <tr>
-                    <td colspan="2" class="text-center">
-                        <button type="submit" class="btn btn-primary w-50">Guardar</button>
-                    </td>
-                </tr>
-            </table>
-        </form>
+                        <!-- Botón Guardar -->
+                        <tr>
+                            <td colspan="2" class="text-center">
+                                <button type="submit" class="btn btn-primary w-50">Guardar</button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- Modal Propietarios -->
+<!-- Modal para buscar propietarios -->
 <div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-light">
@@ -145,14 +80,13 @@
                         </tr>
                     </thead>
                     <tbody id="propietariosBody">
-                        <!-- Este contenido se actualizará dinámicamente -->
+                        <!-- Datos cargados dinámicamente -->
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
-
 
 <script>
     function openPropietarioModal() {
@@ -195,6 +129,4 @@
         fetchPropietarios(query); // Filtrar datos dinámicamente
     });
 </script>
-
-
-{% endblock %}
+{% endblock content %}

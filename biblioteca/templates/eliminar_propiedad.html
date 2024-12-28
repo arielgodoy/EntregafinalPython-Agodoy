@@ -1,51 +1,59 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
+{% extends "partials/base.html" %}
 
-<h1>Eliminar Propiedad</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <!-- Agregar el enlace que muestra el modal de confirmación -->
-  <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal">Eliminar</a>
-</form>
+{% block title %}
+Eliminar Propiedad
+{% endblock title %}
 
-<!-- Modal -->
-<!-- Modal de confirmación de eliminación -->
-<div class="modal fade" id="confirmModal" tabindex="-1" role="dialog" aria-labelledby="confirmModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p>¿Estás seguro de que deseas eliminar esta propiedad?</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-        <!-- Agregar el formulario de eliminación -->
-        <form id="eliminarForm" action="{% url 'eliminar_propiedad' propiedad.pk %}" method="post">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-danger" id="eliminarBtn">Eliminar</button>
-        </form>
-      </div>
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar Propiedad" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="page-content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">Eliminar Propiedad</h1>
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <!-- Botón para abrir el modal -->
+                    <a href="#" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#confirmModal">Eliminar</a>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal de confirmación de eliminación -->
+        <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>¿Estás seguro de que deseas eliminar esta propiedad?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <!-- Formulario de eliminación -->
+                        <form id="eliminarForm" action="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger" id="eliminarBtn">Eliminar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // Obtener el botón "Eliminar" del cuadro de diálogo modal
-    const eliminarBtn = document.getElementById("eliminarBtn");
-
-    // Agregar un controlador de eventos para el clic del botón "Eliminar"
-    eliminarBtn.addEventListener("click", function () {
-      // Enviar el formulario al hacer clic en el botón "Eliminar"
-      document.getElementById("eliminarForm").submit();
+    document.addEventListener("DOMContentLoaded", function () {
+        const eliminarBtn = document.getElementById("eliminarBtn");
+        eliminarBtn.addEventListener("click", function () {
+            document.getElementById("eliminarForm").submit();
+        });
     });
-  });
 </script>
-
-{% endblock %}
+{% endblock content %}

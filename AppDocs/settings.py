@@ -68,7 +68,8 @@ ROOT_URLCONF = 'AppDocs.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],        
+        #'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],        
+        'DIRS': [os.path.join(BASE_DIR,'templates')],        
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -106,6 +107,14 @@ DATABASES = {
     'eltit_gestion01': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'eltit_gestion01',
+        'USER': 'root',
+        'PASSWORD': '123',
+        'HOST': 'localhost',
+        'PORT': '3306',
+    },
+    'eltit_gestion08': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'eltit_gestion08',
         'USER': 'root',
         'PASSWORD': '123',
         'HOST': 'localhost',
@@ -149,17 +158,12 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-#STATIC_URL = 'static/'
 
 
-
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'biblioteca/static'),
+    os.path.join(BASE_DIR, 'static'),  # Sin barra inicial
 ]
 
 
@@ -192,7 +196,9 @@ AUTHENTICATION_BACKENDS = [
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 
-CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+CRISPY_TEMPLATE_PACK = 'bootstrap5'
+
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

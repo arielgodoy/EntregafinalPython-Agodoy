@@ -1,11 +1,32 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-<h1>Eliminar Permiso</h1>
-<p>¿Estás seguro de que deseas eliminar este permiso?</p>
-<p><strong>{{ object }}</strong></p>
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Eliminar</button>
-    <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary">Cancelar</a>
-</form>
-{% endblock %}
+{% extends "partials/base.html" %}
+
+{% block title %}
+Eliminar Permiso
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar Permiso" pagetitle="Permisos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Eliminar Permiso</h4>
+                    <p class="mb-3">¿Estás seguro de que deseas eliminar este permiso?</p>
+                    <p><strong>{{ object }}</strong></p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-danger me-2">Eliminar</button>
+                            <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

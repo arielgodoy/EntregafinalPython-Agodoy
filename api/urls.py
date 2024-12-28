@@ -1,11 +1,12 @@
 from django.urls import path, include
 from rest_framework import routers
-from api.views import CompanyViewSet, PersonaViewSet,PropietarioViewSet  # Asegúrate de tener un ViewSet para cada recurso
+from api.views import ContratopublicidadViewSet,LmovimientosDetalle19ViewSet
 
 router = routers.DefaultRouter()
-router.register(r'companies', CompanyViewSet, basename='companies')  # Para empresas
-router.register(r'personas', PersonaViewSet, basename='personas')    # Para personas
-router.register(r'propietarios', PropietarioViewSet, basename='propietarios')    # Para personas
+
+
+router.register(r'contratos', ContratopublicidadViewSet, basename='contratos')  # Para contratos
+router.register(r'lmdetalle', LmovimientosDetalle19ViewSet, basename='lmdetalle')  # Para lmdetalle
 
 urlpatterns = [
     path('', include(router.urls)),

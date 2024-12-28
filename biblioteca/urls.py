@@ -5,7 +5,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 
-
+app_name = 'biblioteca'
 urlpatterns = [
     #path('acounts/',include('acounts.urls')),
     path('', views.ListarPropiedadesView.as_view(), name='listar_propiedades'),  # Redirigir a la lista de propiedades

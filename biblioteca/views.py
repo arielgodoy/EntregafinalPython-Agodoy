@@ -47,6 +47,7 @@ class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView)
 
 class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Propiedad
+    #template_name = 'detalle_propiedad.html'
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
     vista_nombre = "Maestro Propiedades"
@@ -78,7 +79,7 @@ class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         # Redirigir al detalle de la propiedad después de crear un nuevo documento
-        return reverse('detalle_propiedad', kwargs={'pk': self.kwargs['pk']})
+        return reverse('biblioteca:detalle_propiedad', kwargs={'pk': self.kwargs['pk']})
 
 
 #
@@ -89,7 +90,7 @@ class CrearPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'crear_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios"
     permiso_requerido="crear"
 
@@ -110,7 +111,7 @@ class DetallePropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DetailView
 class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propietario
     template_name = 'eliminar_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="eliminar"
 
@@ -118,7 +119,7 @@ class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateVi
     model = Propietario
     form_class = PropietarioForm
     template_name = 'modificar_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="modificar"
     
@@ -133,7 +134,7 @@ class CrearPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
+    success_url = reverse_lazy('biblioteca:listar_propiedades')
     vista_nombre="Maestro Propiedades"
     permiso_requerido="crear"
 
@@ -156,7 +157,7 @@ class CrearPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
 class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propiedad
     template_name = 'eliminar_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
+    success_url = reverse_lazy('biblioteca:listar_propiedades')
     vista_nombre="Maestro Propiedades"
     permiso_requerido="eliminar"
 
@@ -171,7 +172,7 @@ class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateVie
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
+    success_url = reverse_lazy('biblioteca:listar_propiedades')
     vista_nombre="Maestro Propiedades"
     permiso_requerido="modificar"
 
@@ -195,7 +196,7 @@ class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView
     def get_success_url(self):
         """Redirige a la página de detalle de la propiedad asociada."""
         documento = self.object
-        return reverse_lazy('detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
+        return reverse_lazy('biblioteca:detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
 
 
 
@@ -207,7 +208,7 @@ class CrearTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,CreateView
     model = TipoDocumento
     form_class = TipoDocumentoForm
     template_name = 'crear_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="crear"
 class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):
@@ -219,7 +220,7 @@ class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListVie
 
 class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'modificar_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="modificar"
 
@@ -238,7 +239,7 @@ class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
 
 class EliminarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'eliminar_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="eliminar"
 

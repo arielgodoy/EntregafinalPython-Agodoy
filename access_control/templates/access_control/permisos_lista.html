@@ -1,54 +1,92 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-<h1>Gestión de Permisos</h1>
+{% extends "partials/base.html" %}
 
-<table class="table table-striped">
-    <thead class="table-dark">
-        <tr>
-            <th>Usuario</th>
-            <th>Empresa</th>
-            <th>Vista</th>
-            <th class="text-center">I</th> <!-- Ingresar -->
-            <th class="text-center">C</th> <!-- Crear -->
-            <th class="text-center">M</th> <!-- Modificar -->
-            <th class="text-center">E</th> <!-- Eliminar -->
-            <th class="text-center">A</th> <!-- Autorizar -->
-            <th class="text-center">S</th> <!-- Supervisor -->
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for permiso in permisos %}
-        <tr>
-            <td>{{ permiso.usuario.username }}</td>
-            <td>{{ permiso.empresa.codigo }}</td>
-            <td>{{ permiso.vista.nombre }}</td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.ingresar %}checked{% endif %} disabled>
-            </td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.crear %}checked{% endif %} disabled>
-            </td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.modificar %}checked{% endif %} disabled>
-            </td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.eliminar %}checked{% endif %} disabled>
-            </td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.autorizar %}checked{% endif %} disabled>
-            </td>
-            <td class="text-center">
-                <input type="checkbox" {% if permiso.supervisor %}checked{% endif %} disabled>
-            </td>
-            <td>
-                <a href="{% url 'access_control:permiso_editar' permiso.id %}" class="btn btn-primary btn-sm">Editar</a>
-                <a href="{% url 'access_control:permiso_eliminar' permiso.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este permiso?');">Eliminar</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+{% block title %}
+Gestión de Permisos
+{% endblock title %}
 
-<a href="{% url 'access_control:permiso_crear' %}" class="btn btn-success">Crear Nuevo Permiso</a>
-{% endblock %}
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Gestión de Permisos" pagetitle="Permisos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="card-title">Gestión de Permisos</h4>
+                        <a href="{% url 'access_control:permiso_crear' %}" class="btn btn-success">Crear Nuevo Permiso</a>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="permisos-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Empresa</th>
+                                    <th>Vista</th>
+                                    <th class="text-center">I</th> <!-- Ingresar -->
+                                    <th class="text-center">C</th> <!-- Crear -->
+                                    <th class="text-center">M</th> <!-- Modificar -->
+                                    <th class="text-center">E</th> <!-- Eliminar -->
+                                    <th class="text-center">A</th> <!-- Autorizar -->
+                                    <th class="text-center">S</th> <!-- Supervisor -->
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for permiso in permisos %}
+                                <tr>
+                                    <td>{{ permiso.usuario.username }}</td>
+                                    <td>{{ permiso.empresa.codigo }}</td>
+                                    <td>{{ permiso.vista.nombre }}</td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.ingresar %}checked{% endif %} disabled>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.crear %}checked{% endif %} disabled>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.modificar %}checked{% endif %} disabled>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.eliminar %}checked{% endif %} disabled>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.autorizar %}checked{% endif %} disabled>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" {% if permiso.supervisor %}checked{% endif %} disabled>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'access_control:permiso_editar' permiso.id %}" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </a>
+                                        <a href="{% url 'access_control:permiso_eliminar' permiso.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este permiso?');">
+                                            <i class="bi bi-trash"></i> Eliminar
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#permisos-table').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            },
+            responsive: true,
+            autoWidth: false,
+        });
+    });
+</script>
+{% endblock content %}

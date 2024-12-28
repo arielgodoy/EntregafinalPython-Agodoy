@@ -1,40 +1,58 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
+{% extends "partials/base.html" %}
 
-<h1>{{ propietario.nombre }}</h1>
-<p>RUT: {{ propietario.rut }}</p>
-<p>Teléfono: {{ propietario.telefono }}</p>
-<p>Rol: {{ propietario.get_rol_display }}</p>
+{% block title %}
+Detalle de Propietario
+{% endblock title %}
 
-<h2>Propiedades asociadas:</h2>
-<table id="tabla-propiedades" class="table table-dark table-striped">
-  <thead>
-    <tr>
-      <th>Rol</th>
-      <th>Dirección</th>
-      <th>Acciones</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for propiedad in propietario.propiedad_set.all %}
-    <tr>
-      <td>{{ propiedad.rol }}</td>
-      <td>{{ propiedad.direccion }}</td>
-      <td>
-        <a href="{% url 'detalle_propiedad' propiedad.pk %}" class="btn btn-primary"><i class="bi bi-eye"></i></a>
-        <a href="{% url 'eliminar_propiedad' propiedad.pk %}" class="btn btn-danger"><i class="bi bi-trash"></i></a>
-        <a href="{% url 'modificar_propiedad' propiedad.pk %}" class="btn btn-warning"><i class="bi bi-pencil"></i></a>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Detalle de Propietario" pagetitle="Propietarios" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
+                <h1>{{ propietario.nombre }}</h1>
+                <p><strong>RUT:</strong> {{ propietario.rut }}</p>
+                <p><strong>Teléfono:</strong> {{ propietario.telefono }}</p>
+                <p><strong>Rol:</strong> {{ propietario.get_rol_display }}</p>
+            </div>
+
+            <div class="card shadow-lg p-4 mt-4 bg-dark rounded text-light">
+                <h2>Propiedades asociadas:</h2>
+                <div class="table-responsive">
+                    <table id="tabla-propiedades" class="table table-dark table-striped">
+                        <thead>
+                            <tr>
+                                <th>Rol</th>
+                                <th>Dirección</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for propiedad in propietario.propiedad_set.all %}
+                            <tr>
+                                <td>{{ propiedad.rol }}</td>
+                                <td>{{ propiedad.direccion }}</td>
+                                <td>
+                                    <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i></a>
+                                    <a href="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></a>
+                                    <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-      $(document).ready(function() {
+    $(document).ready(function() {
         $('#tabla-propiedades').DataTable();
     });
-  
 </script>
-
-{% endblock %}
+{% endblock content %}

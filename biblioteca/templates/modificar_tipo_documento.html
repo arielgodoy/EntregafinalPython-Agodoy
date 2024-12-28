@@ -1,11 +1,28 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-  <h1>Modificar Tipo de Documento</h1>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    {{ form.media }}
-    <button type="submit" class="btn btn-primary">Guardar cambios</button>
-    <a href="{% url 'listar_tipos_documentos' %}" class="btn btn-secondary">Cancelar</a>
-  </form>
-{% endblock %}
+{% extends "partials/base.html" %}
+
+{% block title %}
+Modificar Tipo de Documento
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Modificar Tipo de Documento" pagetitle="Tipos de Documentos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <h1 class="mb-4 text-light">Modificar Tipo de Documento</h1>
+            <form method="post">
+                {% csrf_token %}
+                {{ form.as_p }}
+                {{ form.media }}
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-primary me-2">Guardar cambios</button>
+                    <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="btn btn-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock content %}

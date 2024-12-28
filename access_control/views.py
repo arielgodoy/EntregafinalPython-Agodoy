@@ -335,7 +335,7 @@ def seleccionar_empresa(request):
         empresa_codigo = empresa.codigo
         request.session["empresa_id"] = empresa_id
         request.session["empresa_codigo"] = empresa_codigo
-        return redirect("listar_propiedades")
+        return redirect("biblioteca:listar_propiedades")
 
     permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
     empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))

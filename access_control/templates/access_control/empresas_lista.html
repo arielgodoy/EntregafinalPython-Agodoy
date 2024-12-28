@@ -1,31 +1,66 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<h1>Lista de Empresas</h1>
-{% if empresas %}
-<table class="table table-striped">
-    <thead class="table-dark">
-        <tr>
-            <th>Codigo</th>
-            <th>Descripción</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for empresa in empresas %}
-        <tr>
-            <td>{{ empresa.codigo }}</td>
-            <td>{{ empresa.descripcion }}</td>
-            <td>
-                <a href="{% url 'access_control:empresa_editar' empresa.id %}" class="btn btn-primary btn-sm">Editar</a>
-                <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar esta empresa?');">Eliminar</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p>No hay empresas registradas.</p>
-{% endif %}
-<a href="{% url 'access_control:empresa_crear' %}" class="btn btn-success">Crear Nueva Empresa</a>
-{% endblock %}
+{% block title %}
+Lista de Empresas
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Lista de Empresas" pagetitle="Empresas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h1 class="card-title">Lista de Empresas</h1>
+                        <a href="{% url 'access_control:empresa_crear' %}" class="btn btn-success">Crear Nueva Empresa</a>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="empresas-table">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descripción</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for empresa in empresas %}
+                                <tr>
+                                    <td>{{ empresa.codigo }}</td>
+                                    <td>{{ empresa.descripcion }}</td>
+                                    <td>
+                                        <a href="{% url 'access_control:empresa_editar' empresa.id %}" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </a>
+                                        <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar esta empresa?');">
+                                            <i class="bi bi-trash"></i> Eliminar
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#empresas-table').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            },
+            responsive: true,
+            autoWidth: false,
+        });
+    });
+</script>
+{% endblock content %}

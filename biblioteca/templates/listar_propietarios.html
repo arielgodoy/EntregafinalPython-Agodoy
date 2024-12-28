@@ -1,45 +1,67 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
+{% extends "partials/base.html" %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="text-light">Listado de Propietarios</h1>
-    <a href="{% url 'crear_propietario' %}" class="btn btn-success">Agregar Propietario</a>
+{% block title %}
+Listado de Propietarios
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Listado de Propietarios" pagetitle="Propietarios" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title">Listado de Propietarios</h5>
+                        <a href="{% url 'biblioteca:crear_propietario' %}" class="btn btn-success">Agregar Propietario</a>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table align-middle dt-responsive nowrap" id="propietarios-table" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>RUT</th>
+                                    <th>Teléfono</th>
+                                    <th>Rol</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for propietario in propietarios %}
+                                <tr>
+                                    <td>{{ propietario.nombre }}</td>
+                                    <td>{{ propietario.rut }}</td>
+                                    <td>{{ propietario.telefono }}</td>
+                                    <td>{{ propietario.get_rol_display }}</td>
+                                    <td>
+                                        <a href="{% url 'biblioteca:detalle_propietario' propietario.pk %}" class="btn btn-primary btn-sm">Ver detalles</a>
+                                        <a href="{% url 'biblioteca:eliminar_propietario' propietario.pk %}" class="btn btn-danger btn-sm">Eliminar</a>
+                                        <a href="{% url 'biblioteca:modificar_propietario' propietario.pk %}" class="btn btn-warning btn-sm">Modificar</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-
-<div class="table-responsive">
-    <table class="table table-dark table-striped" id="propietarios-table">
-        <thead>
-            <tr>
-                <th>Nombre</th>
-                <th>RUT</th>
-                <th>Teléfono</th>
-                <th>Rol</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for propietario in propietarios %}
-            <tr>
-                <td>{{ propietario.nombre }}</td>
-                <td>{{ propietario.rut }}</td>
-                <td>{{ propietario.telefono }}</td>
-                <td>{{ propietario.get_rol_display }}</td>
-                <td>
-                    <a href="{% url 'detalle_propietario' propietario.pk %}" class="btn btn-primary btn-sm">Ver detalles</a>
-                    <a href="{% url 'eliminar_propietario' propietario.pk %}" class="btn btn-danger btn-sm">Eliminar</a>
-                    <a href="{% url 'modificar_propietario' propietario.pk %}" class="btn btn-warning btn-sm">Modificar</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
 
 <script>
     $(document).ready(function() {
-        $('#propietarios-table').DataTable();
+        $('#propietarios-table').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            },
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>t<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+            buttons: ['copy', 'csv', 'excel', 'pdf', 'print'],
+        });
     });
 </script>
-
-{% endblock %}
+{% endblock content %}

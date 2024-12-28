@@ -1,11 +1,31 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<h1>Eliminar Empresa</h1>
-<p>¿Estás seguro de que deseas eliminar la empresa "{{ object.nombre }}"?</p>
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Eliminar</button>
-    <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
-</form>
-{% endblock %}
+{% block title %}
+Eliminar Empresa
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar Empresa" pagetitle="Empresas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Eliminar Empresa</h4>
+                    <p>¿Estás seguro de que deseas eliminar la empresa "<strong>{{ object.nombre }}</strong>"?</p>
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-danger me-2">Eliminar</button>
+                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
