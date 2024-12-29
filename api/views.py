@@ -1,8 +1,10 @@
 from rest_framework import viewsets
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from .models import Contratopublicidad,LmovimientosDetalle19
-from .serializers import ContratopublicidadSerializer,LmovimientosDetalle19Serializer
+from biblioteca.models import Propietario
+from .serializers import ContratopublicidadSerializer,LmovimientosDetalle19Serializer,PropietarioSerializer
 from django.conf import settings
 class ContratopublicidadViewSet(viewsets.ModelViewSet):
     serializer_class = ContratopublicidadSerializer
@@ -42,3 +44,9 @@ class LmovimientosDetalle19ViewSet(viewsets.ModelViewSet):
         # Filtra el queryset y especifica la base de datos con `using()`
         return LmovimientosDetalle19.objects.using(basedatos).all()    
 
+class PropietarioViewSet(ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Propietario.objects.all()
+    serializer_class = PropietarioSerializer
+    filter_backends = [SearchFilter]
+    search_fields = ['nombre', 'rut']

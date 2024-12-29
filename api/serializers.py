@@ -1,6 +1,12 @@
 from rest_framework import serializers
 from .models import Contratopublicidad,LmovimientosDetalle19
+from biblioteca.models import Propietario
 
+
+class PropietarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Propietario
+        fields = ['id', 'nombre', 'rut', 'telefono', 'rol']
 class ContratopublicidadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contratopublicidad

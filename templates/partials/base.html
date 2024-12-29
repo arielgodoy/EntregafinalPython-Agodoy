@@ -105,10 +105,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     </script>
     <!-- JAVASCRIPT -->
-    <script src="{% static 'libs/bootstrap/dist/js/bootstrap.bundle.min.js'%}"></script>
-    <script src="{% static 'libs/simplebar/dist/simplebar.min.js'%}"></script>
-    <script src="{% static 'libs/node-waves/dist/waves.min.js'%}"></script>
-    <script src="{% static 'libs/feather-icons/dist/feather.min.js'%}"></script>
+    <script src="{% static '/libs/bootstrap/js/bootstrap.bundle.min.js'%}"></script>
+    <script src="{% static '/libs/simplebar/simplebar.min.js'%}"></script>
+    <script src="{% static '/libs/node-waves/waves.min.js'%}"></script>
+    <script src="{% static '/libs/feather-icons/feather.min.js'%}"></script>
     <script src="{% static 'js/pages/plugins/lord-icon-2.1.0.js'%}"></script>
     <script src="{% static 'js/plugins.js'%}"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
@@ -116,6 +116,9 @@ document.addEventListener("DOMContentLoaded", function () {
     
 
     {% block extra_js %}
+
+
+
     {% endblock extra_js %}
 
     <!-- App js -->

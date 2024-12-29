@@ -1,5 +1,13 @@
 {% extends "partials/base.html" %}
 
+{% block extra_css %}
+    <!--datatable css-->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" />
+    <!--datatable responsive css-->
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
+{% endblock extra_css %}
+
 {% block title %}
 Detalle de Propiedad
 {% endblock title %}
@@ -9,7 +17,7 @@ Detalle de Propiedad
 {% endblock pagetitle %}
 
 {% block content %}
-<div class="main-content"> <!-- Contenedor principal ajustado -->
+<div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="row">
@@ -27,8 +35,9 @@ Detalle de Propiedad
                         <button class="btn btn-dark" onclick="copiarTodosLosEnlaces()">
                             <i class="bi bi-clipboard"></i> Copiar todos los enlaces
                         </button>
+                        <a href="{% url 'biblioteca:crear_documento' propiedad.pk %}" class="btn btn-success mt-3">Agregar nuevo documento</a>
                     </div>
-                    <table id="documentosTable" class="table table-bordered dt-responsive nowrap table-striped align-middle">
+                    <table id="documentosTable" class="table table-bordered dt-responsive nowrap table-striped align-middle" style="width:100%">
                         <thead>
                             <tr>
                                 <th>Tipo</th>
@@ -58,122 +67,92 @@ Detalle de Propiedad
                                     <button class="btn btn-sm btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')">
                                         <i class="bi bi-clipboard"></i> Copiar enlace
                                     </button>
-                                    <!-- <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a> -->
-                                    <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i></a>
+                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ documento.pk }}">
+                                        Eliminar
+                                    </button>
 
-                                    
-                                    
-
+                                    <!-- Modal de confirmación -->
+                                    <div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" aria-labelledby="confirmModalLabel-{{ documento.pk }}" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="confirmModalLabel-{{ documento.pk }}">Confirmar eliminación</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    ¿Estás seguro de que deseas eliminar este documento <strong>{{ documento.nombre_documento }}</strong>?
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <form method="post" action="{% url 'biblioteca:eliminar_documento' documento.pk %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-danger">Eliminar</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
-                    <a href="{% url 'biblioteca:crear_documento' propiedad.pk %}" class="btn btn-success mt-3">Agregar nuevo documento</a>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modales para eliminación -->
-<!-- Modal de confirmación de eliminación -->
-{% for documento in propiedad.documento_set.all %}
-<div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" role="dialog" aria-labelledby="confirmModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="confirmModalLabel">Confirmación de Eliminación</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p>¿Estás seguro de que deseas eliminar este documento?</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-        <a href="{% url 'biblioteca:eliminar_documento' documento.pk %}" class="btn btn-danger">Eliminar</a>
-      </div>
-    </div>
-  </div>
-</div>
-{% endfor %}
-
-  
-
-
 <script>
     function copiarenlace(url) {
-        try {
-            const full_url = `${window.location.origin}${url}`;
-            navigator.clipboard.writeText(full_url);
+        const full_url = `${window.location.origin}${url}`;
+        navigator.clipboard.writeText(full_url).then(() => {
             alert("Enlace copiado: " + full_url);
-        } catch (error) {
+        }).catch(error => {
             console.error("Error al copiar el enlace: ", error);
-            alert("No se pudo copiar el enlace. Por favor, copia manualmente.");
-        }
+        });
     }
 
     function copiarTodosLosEnlaces() {
-    const enlaces = Array.from(document.querySelectorAll("#documentosTable tbody tr")).map(row => {
-        const nombreDocumento = row.children[1].textContent.trim(); // Nombre del documento
-        const enlace = row.querySelector("a.btn-primary").href; // Enlace del documento
-        return `${nombreDocumento}:\n${enlace}\n`; // Eliminar concatenación con window.location.origin
-    });
+        const enlaces = Array.from(document.querySelectorAll("#documentosTable tbody tr")).map(row => {
+            const nombreDocumento = row.children[1].textContent.trim();
+            const enlace = row.querySelector("a.btn-primary").href;
+            return `${nombreDocumento}:\n${enlace}\n`;
+        });
 
-    const texto = enlaces.join("\n");
-
-    navigator.clipboard.writeText(texto).then(() => {
-        alert("Todos los enlaces han sido copiados al portapapeles con sus nombres.");
-    }).catch(err => {
-        console.error("Error al copiar todos los enlaces: ", err);
-        alert("No se pudieron copiar los enlaces.");
-    });
-}
-
-let documentoIdToDelete = null;
-
-function openDeleteModal(documentoId) {
-    documentoIdToDelete = documentoId; // Guarda el ID del documento a eliminar
-    const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
-    modal.show();
-}
-
-document.getElementById('confirmDeleteButton').addEventListener('click', function () {
-    if (documentoIdToDelete) {
-        const url = `/biblioteca/documentos/${documentoIdToDelete}/eliminar/`; // Ajusta según tu ruta
-        fetch(url, {
-            method: "POST", // Usa POST si no puedes usar DELETE directamente
-            headers: {
-                "X-CSRFToken": "{{ csrf_token }}"
-            }
-        })
-        .then(response => {
-            if (response.ok) {
-                alert("Documento eliminado con éxito.");
-                location.reload(); // Recarga la página para actualizar la lista
-            } else {
-                alert("No se pudo eliminar el documento. Inténtalo nuevamente.");
-            }
-        })
-        .catch(error => {
-            console.error("Error al eliminar el documento:", error);
-            alert("Ocurrió un error al intentar eliminar el documento.");
+        navigator.clipboard.writeText(enlaces.join("\n")).then(() => {
+            alert("Todos los enlaces han sido copiados al portapapeles con sus nombres.");
+        }).catch(err => {
+            console.error("Error al copiar todos los enlaces: ", err);
         });
     }
-});
-
-
-
-
 
     $(document).ready(function () {
         $('#documentosTable').DataTable({
             language: {
                 url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
-            }
+            },
+            responsive: true,
+            dom: 'Bfrtip',
+            buttons: [],
+            paging: true,
+            searching: true,
+            info: true,
         });
     });
 </script>
 {% endblock content %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<!--datatable js-->
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+{% endblock extra_js %}
