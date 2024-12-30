@@ -1,10 +1,27 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<div class="text-center">
-    <h1 class="display-1 text-danger">403</h1>
-    <p class="lead">No tienes permisos suficientes para acceder a esta página.</p>
-    <p>Intentaste acceder a la vista <strong>{{ vista_nombre }}</strong> de la empresa <strong>{{ empresa_nombre }}</strong>.</p>
-    <a href="javascript:history.back()" class="btn btn-primary">Volver</a>
+{% block title %}
+Error 403 - Acceso Denegado
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Acceso Denegado" pagetitle="Error 403" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="text-center">
+                <h1 class="display-1 text-danger">403</h1>
+                <p class="lead">No tienes permisos suficientes para acceder a esta página.</p>
+                <p>
+                    Intentaste acceder a la vista <strong>{{ vista_nombre }}</strong> 
+                    de la empresa <strong>{{ empresa_nombre }}</strong>.
+                </p>
+                <a href="javascript:history.back()" class="btn btn-primary">Volver</a>
+            </div>
+        </div>
+    </div>
 </div>
-{% endblock %}
+{% endblock content %}

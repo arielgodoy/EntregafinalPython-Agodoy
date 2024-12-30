@@ -1,21 +1,13 @@
 {% extends "partials/base.html" %}
 
 {% block extra_css %}
-
-
-
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<!-- Flatpickr JS -->
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
+<!-- Toastify CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-
-    
 {% endblock extra_css %}
-
-
 
 {% block title %}
 Ingresar Propiedad
@@ -56,8 +48,9 @@ Ingresar Propiedad
                                 <td style="width: 70%;">
                                     {% if field.name == "propietario" %}
                                     <div class="d-flex">
-                                        <input type="hidden" id="id_propietario" name="{{ field.html_name }}" value="{{ field.value }}">
-                                        <input type="text" id="id_propietario_display" class="form-control me-2" placeholder="Selecciona un propietario..." readonly>
+                                        <input type="hidden" id="id_propietario" name="{{ field.html_name }}" value="{{ propietario_id|default_if_none:'' }}">
+                                        <input type="text" id="id_propietario_display" class="form-control me-2" placeholder="Selecciona un propietario..."
+                                               value="{{ propietario_nombre|default_if_none:'' }}" readonly>
                                         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#propietarioModal">Buscar</button>
                                     </div>
                                     {% else %}
@@ -116,9 +109,7 @@ Ingresar Propiedad
     </div>
 </div>
 
-
 <script>
-
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('searchPropietario');
     const propietariosBody = document.getElementById('propietariosBody');
@@ -176,8 +167,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
-
-
 </script>
 
 {% endblock content %}

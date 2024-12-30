@@ -21,6 +21,10 @@ Detalle de Propietario
 
             <div class="card shadow-lg p-4 mt-4 rounded">
                 <h2 class="mb-4">Propiedades asociadas:</h2>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Listado de Propiedades</h5>
+                    <a href="{% url 'biblioteca:crear_propiedad' propietario.id %}" class="btn btn-success">Agregar Propiedad</a>
+                </div>
                 <div class="table-responsive">
                     <table id="tabla-propiedades" class="table table-bordered dt-responsive nowrap table-striped align-middle">
                         <thead>

@@ -21,6 +21,8 @@ urlpatterns = [
     path('propietarios/<int:pk>/modificar/', views.ModificarPropietarioView.as_view(), name='modificar_propietario'),
 
     path('ingresar_propiedad/', views.CrearPropiedadView.as_view(), name='crear_propiedad'),
+    path('ingresar_propiedad/<int:propietario_id>/', views.CrearPropiedadView.as_view(), name='crear_propiedad'),
+
     path('propiedades/<int:pk>/eliminar/', views.EliminarPropiedadView.as_view(), name='eliminar_propiedad'),
     path('propiedades/<int:pk>/modificar/', views.ModificarPropiedadView.as_view(), name='modificar_propiedad'),
 

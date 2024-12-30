@@ -1,34 +1,114 @@
-{% extends 'biblioteca/base.html' %}
-{% block contenido %}
-<div class="container">
-    <div class="card">
-        <div class="card-body">
-            <h2 class="card-title text-center">Registro de Usuario</h2>
-            <form method="post">
-                {% csrf_token %}
-                <div class="form-group">
-                    <label for="id_username">Usuario:</label>
-                    {{ form.username }}
-                    <small class="form-text text-muted">Elige un nombre de usuario único.</small>
+{% extends "partials/base.html" %}
+
+{% block title %}
+Registro de Usuario
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Registro de Usuario" pagetitle="Usuarios" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
+                <h2 class="text-center mb-4">Registro de Usuario</h2>
+                <form method="post" class="needs-validation" id="registrationForm" novalidate>
+                    {% csrf_token %}
+                    <table class="table table-bordered table-striped align-middle w-75 mx-auto">
+                        <tr>
+                            <td class="text-end align-middle" style="width: 30%;">
+                                <label for="id_username" class="form-label">Usuario:</label>
+                            </td>
+                            <td>
+                                {{ form.username }}
+                                <small class="form-text text-muted">Elige un nombre de usuario único.</small>
+                                {% if form.username.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.username.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-end align-middle">
+                                <label for="id_password1" class="form-label">Contraseña:</label>
+                            </td>
+                            <td>
+                                {{ form.password1 }}
+                                <small class="form-text text-muted">Debe tener al menos 8 caracteres, incluyendo letras y números.</small>
+                                <div id="passwordError" class="text-danger d-none">La contraseña no cumple los requisitos.</div>
+                                {% if form.password1.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.password1.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-end align-middle">
+                                <label for="id_password2" class="form-label">Confirmar contraseña:</label>
+                            </td>
+                            <td>
+                                {{ form.password2 }}
+                                <div id="confirmPasswordError" class="text-danger d-none">Las contraseñas no coinciden.</div>
+                                {% if form.password2.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.password2.errors %}
+                                    <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" class="text-center">
+                                <button type="submit" class="btn btn-primary w-50">Registrarse</button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+                <div class="text-center mt-4">
+                    <a href="{% url 'login' %}" class="btn btn-secondary">Iniciar sesión</a>
                 </div>
-                <div class="form-group">
-                    <label for="id_password1">Contraseña:</label>
-                    {{ form.password1 }}
-                    <small class="form-text text-muted">Debe tener al menos 8 caracteres.</small>
-                </div>
-                <div class="form-group">
-                    <label for="id_password2">Confirmar contraseña:</label>
-                    {{ form.password2 }}
-                </div>
-                <div class="text-center">
-                    <button type="submit" class="btn btn-primary">Registrarse</button>
-                </div>
-            </form>
-            <div class="text-center mt-3">
-                <a href="{% url 'login' %}" class="btn btn-secondary">Iniciar sesión</a>
             </div>
         </div>
     </div>
 </div>
 
-{% endblock %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('registrationForm');
+    const password1 = document.getElementById('id_password1');
+    const password2 = document.getElementById('id_password2');
+    const passwordError = document.getElementById('passwordError');
+    const confirmPasswordError = document.getElementById('confirmPasswordError');
+
+    form.addEventListener('submit', function (e) {
+        // Reset errors
+        passwordError.classList.add('d-none');
+        confirmPasswordError.classList.add('d-none');
+
+        // Validate password requirements
+        const passwordValue = password1.value;
+        if (passwordValue.length < 8 || !/\d/.test(passwordValue) || !/[a-zA-Z]/.test(passwordValue)) {
+            passwordError.classList.remove('d-none');
+            e.preventDefault();
+            return false;
+        }
+
+        // Validate passwords match
+        if (password1.value !== password2.value) {
+            confirmPasswordError.classList.remove('d-none');
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+{% endblock content %}

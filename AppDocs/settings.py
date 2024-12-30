@@ -235,7 +235,9 @@ LOGGING = {
     'loggers': {
         'django.db.backends': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            # poner en 'DEBUG' para ver los sql
+            # poner en 'WARNIG' para ver MODO development 
+            'level': 'WARNING',
         },
     },
 }

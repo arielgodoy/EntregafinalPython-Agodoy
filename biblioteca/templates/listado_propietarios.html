@@ -47,7 +47,7 @@ Listado de Propietarios
                                     <td>{{ propietario.telefono }}</td>
                                     <td>{{ propietario.get_rol_display }}</td>
                                     <td>
-                                        <a href="{% url 'biblioteca:detalle_propietario' propietario.pk %}" class="btn btn-primary btn-sm">Ver detalles</a>
+                                        <a href="{% url 'biblioteca:detalle_propietario' propietario.pk %}" class="btn btn-primary btn-sm">Ver Propiedades</a>
                                         <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ propietario.pk }}">Eliminar</button>
                                         <a href="{% url 'biblioteca:modificar_propietario' propietario.pk %}" class="btn btn-warning btn-sm">Modificar</a>
                                     </td>
