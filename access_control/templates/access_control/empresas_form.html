@@ -1,11 +1,9 @@
 {% extends "partials/base.html" %}
 
-{% block title %}
-{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}
-{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}" pagetitle="Empresas" %}
+
+{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}
 {% endblock pagetitle %}
 
 {% block content %}

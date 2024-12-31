@@ -113,31 +113,24 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'ATOMIC_REQUESTS': False,
     },
-    'eltit_gestion00': {
+    'dinamica': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'eltit_gestion00',
+        'NAME': 'eltit_remu',
         'USER': 'root',
         'PASSWORD': '123',
-        'HOST': 'localhost',
+        'HOST': '127.0.0.1',
         'PORT': '3306',
-    },    
-    'eltit_gestion01': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'eltit_gestion01',
-        'USER': 'root',
-        'PASSWORD': '123',
-        'HOST': 'localhost',
-        'PORT': '3306',
-    },
-    'eltit_gestion08': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'eltit_gestion08',
-        'USER': 'root',
-        'PASSWORD': '123',
-        'HOST': 'localhost',
-        'PORT': '3306',
-    },
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
+        'TIME_ZONE': 'UTC',
+        'CONN_HEALTH_CHECKS': False,
+        'CONN_MAX_AGE': 0,
+        'AUTOCOMMIT': True,
+        'ATOMIC_REQUESTS': False,  # Asegúrate de incluir esta clave
+    }
 }
 
 DATABASE_ROUTERS = ['api.Router_Databases.MultiDatabaseRouter']
