@@ -8,6 +8,7 @@ from django.conf.urls.static import static
 app_name = 'biblioteca'
 urlpatterns = [
     #path('acounts/',include('acounts.urls')),
+    path('modales-ejemplo/', views.ModalesEjemploView.as_view(), name='modales_ejemplo'),
     path('', views.ListarPropiedadesView.as_view(), name='listar_propiedades'),  # Redirigir a la lista de propiedades
     path('propiedades/<int:pk>/', views.DetallePropiedadView.as_view(), name='detalle_propiedad'),
     path('propiedades/<int:pk>/crear_documento/', views.CrearDocumentoView.as_view(), name='crear_documento'),

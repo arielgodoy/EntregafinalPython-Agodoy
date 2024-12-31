@@ -1,9 +1,10 @@
 # views.py
 from django.views.generic.edit import UpdateView
-from django.shortcuts import render, redirect,get_object_or_404
+from django.views.generic import TemplateView
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, FormView,FormMixin,DeleteView
+from django.shortcuts import render, redirect,get_object_or_404
 from .models import Propiedad, Documento,Propietario
 from .forms import DocumentoForm,PropietarioForm,PropiedadForm
 from django.urls import reverse
@@ -27,6 +28,8 @@ from django.utils.decorators import method_decorator
 from django.urls import reverse_lazy, reverse
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
+
+
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -40,6 +43,9 @@ class VerificarPermisoMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
+
+class ModalesEjemploView(LoginRequiredMixin, TemplateView):
+    template_name = 'modales_ejemplo.html'
 
 class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propiedad

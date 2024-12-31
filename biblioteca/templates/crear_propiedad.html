@@ -135,21 +135,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Define `selectPropietario` como una función global
     window.selectPropietario = function (id, nombre) {
-        document.getElementById('id_propietario').value = id;
-        document.getElementById('id_propietario_display').value = nombre;
+    propietarioInput.value = nombre;
+    const modalElement = document.getElementById('propietariosModal');
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+    if (modalInstance) {
+        modalInstance.hide();
+    }
 
-        const modalElement = document.getElementById('propietarioModal');
-        const modalInstance = bootstrap.Modal.getInstance(modalElement);
-        if (modalInstance) {
-            modalInstance.hide();
-        }
-
-        // Asegurarse de eliminar el fondo del modal
-        const modalBackdrop = document.querySelector('.modal-backdrop');
-        if (modalBackdrop) {
-            modalBackdrop.remove();
-        }
-    };
+    // Forzar la eliminación del backdrop si persiste
+    const modalBackdrop = document.querySelector('.modal-backdrop');
+    if (modalBackdrop) {
+        modalBackdrop.remove();
+    }
+};
 
     if (searchInput) {
         searchInput.addEventListener('input', function () {
