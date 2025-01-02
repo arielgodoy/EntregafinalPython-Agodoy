@@ -38,10 +38,90 @@
                     </div>
                     <ul class="navbar-nav" id="navbar-nav">
                             <!-- Menu Antiguo -->
-                        <li class="menu-title">
-                            <span data-key="t-old-menu">Menú Antiguo</span>
-                        </li>
-                        {% include "partials/old_navbar.html" %}
+                        <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="t-old-menu">Menú Antiguo</span></li>                                                
+                        <!-- INICIO MENU ANTOGUO O NUEVO-->
+                        <ul class="navbar-nav" id="navbar-nav">
+                            <!-- Menú Biblioteca Digital -->
+                            <li class="nav-item">
+                                <a class="nav-link menu-link" href="#sidebarBiblioteca" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarBiblioteca">
+                                    <i class="ri-folder-open-line"></i> <span data-key="t-digital-library">Biblioteca Digital</span>
+                                </a>
+                                <div class="collapse menu-dropdown" id="sidebarBiblioteca">
+                                    <ul class="nav nav-sm flex-column">
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="t-add-owner">Ingresar Propietario</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="t-add-property">Ingresar Propiedad</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="t-add-document-type">Ingresar Tipo Documento</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="t-list-owners">Listado de Propietarios</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="t-list-properties">Listado de Propiedades</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="t-list-document-types">Listado de Tipos de Documentos</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        
+                            <!-- Menú Control de Acceso -->
+                            <li class="nav-item">
+                                <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
+                                    <i class="ri-lock-line"></i> <span data-key="t-access-control">Control de Acceso</span>
+                                </a>
+                                <div class="collapse menu-dropdown" id="sidebarControlAcceso">
+                                    <ul class="nav nav-sm flex-column">
+                                        <li class="nav-item">
+                                            <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'access_control:empresas_lista' %}" class="nav-link" data-key="t-company-management">Gestión de Empresas</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'access_control:vistas_lista' %}" class="nav-link" data-key="t-view-management">Gestión de Vistas</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'access_control:permisos_lista' %}" class="nav-link" data-key="t-permission-management">Gestión de Permisos</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link" data-key="t-filter-permissions">Filtrar Permisos</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        
+                            <!-- Menú Cuentas -->
+                            <li class="nav-item">
+                                <a class="nav-link menu-link" href="#sidebarCuentas" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentas">
+                                    <i class="ri-user-line"></i> <span data-key="t-accounts">Cuentas</span>
+                                </a>
+                                <div class="collapse menu-dropdown" id="sidebarCuentas">
+                                    <ul class="nav nav-sm flex-column">
+                                        <li class="nav-item">
+                                            <a href="{% url 'login' %}" class="nav-link" data-key="t-login">Iniciar Sesión</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'registro_usuario' %}" class="nav-link" data-key="t-register">Registrar Usuario</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{% url 'logout' %}" class="nav-link" data-key="t-logout">Cerrar Sesión</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+
+                        <!-- FINE MENU ANTIGUO NUEVO-->
+
 
 
                         <li class="menu-title"><span data-key="t-menu">Menu</span></li>
