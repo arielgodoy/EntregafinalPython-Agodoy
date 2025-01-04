@@ -39,10 +39,29 @@ class UsuarioCrearForm(forms.ModelForm):
         widget=forms.PasswordInput(attrs={'class': 'form-control'}),
         label="Contraseña"
     )
+    password_confirm = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        label="Confirmar Contraseña"
+    )
 
     class Meta:
         model = User
         fields = ['username', 'email', 'password']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['username'].widget.attrs.update({'class': 'form-control'})
+        self.fields['email'].widget.attrs.update({'class': 'form-control'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get("password")
+        password_confirm = cleaned_data.get("password_confirm")
+
+        if password and password_confirm and password != password_confirm:
+            raise forms.ValidationError("Las contraseñas no coinciden.")
+
+        return cleaned_data
 
     def save(self, commit=True):
         user = super().save(commit=False)
