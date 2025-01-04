@@ -1,60 +1,3 @@
-{% extends "partials/base.html" %}
-{% load static %}
-
-{% block extra_css %}
-<!-- Flatpickr CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<!-- Toastify CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-{% endblock extra_css %}
-
-{% block title %}
-Modales Ejemplo
-{% endblock title %}
-
-{% block pagetitle %}
-{% include "partials/page-title.html" with title="Modales Ejemplo" pagetitle="Ejemplos de Modales" %}
-{% endblock pagetitle %}
-
-{% block content %}
-<div class="main-content">
-    <div class="page-content">
-        <div class="container-fluid">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">Ejemplo de Modales</h5>
-                </div>
-
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="propietarioInput" class="form-label">Propietario Seleccionado</label>
-                        <div class="d-flex">
-                            <input type="text" id="propietario_idInput" class="form-control me-1" style="width: 110px;" placeholder="Propietario id seleccionado..." readonly>
-                            <input type="text" id="propietarioInput" class="form-control me-2" style="width: 300px;" placeholder="Propietario seleccionado..." readonly>
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#AyudaPropietariosModal"><a data-key="btn-buscar">Buscar</a></button>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="trabajadorInput" class="form-label">Trabajador Seleccionado</label>
-                        <div class="d-flex">
-                            <input type="text" id="trabajador_rutInput" class="form-control me-1" style="width: 110px;" placeholder="Trabajador rut seleccionado..." readonly>
-                            <input type="text" id="trabajadorInput" class="form-control me-2" style="width: 300px;" placeholder="Trabajador seleccionado..." readonly>
-                            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#AyudaTrabajadoresModal"><a data-key="btn-buscar">Buscar</a></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% include "modalesayuda.html" %}
-
-
-<script>
     document.addEventListener('DOMContentLoaded', function () {
         const searchPropietario = document.getElementById('searchPropietario');
         const propietariosBody = document.getElementById('propietariosBody');
@@ -78,14 +21,14 @@ Modales Ejemplo
                 .then(data => {
                     propietariosBody.innerHTML = '';
                     data.forEach(propietario => {
-                        propietariosBody.innerHTML += `
+                        propietariosBody.innerHTML += 
                             <tr>
                                 <td>${escapeHTML(propietario.id)}</td>
                                 <td>${escapeHTML(propietario.nombre)}</td>
                                 <td>
                                     <button class="btn btn-primary btn-sm" onclick="selectPropietario('${escapeHTML(propietario.id)}', '${escapeHTML(propietario.nombre)}')">Seleccionar</button>
                                 </td>
-                            </tr>`;
+                            </tr>;
                     });
                 })
                 .catch(error => {
@@ -129,14 +72,14 @@ Modales Ejemplo
                 .then(data => {
                     trabajadoresBody.innerHTML = '';
                     data.data.forEach(trabajador => {
-                        trabajadoresBody.innerHTML += `
+                        trabajadoresBody.innerHTML += 
                             <tr>
                                 <td>${escapeHTML(trabajador.rut)}</td>
                                 <td>${escapeHTML(trabajador.nombre)}</td>
                                 <td>
                                     <button class="btn btn-secondary btn-sm" onclick="selectTrabajador('${escapeHTML(trabajador.rut)}', '${escapeHTML(trabajador.nombre)}')">Seleccionar</button>
                                 </td>
-                            </tr>`;
+                            </tr>;
                     });
                 })
                 .catch(error => {
@@ -177,60 +120,3 @@ Modales Ejemplo
             }, 200);
         });
     });
-</script>
-{% endblock content %}
-
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        feather.replace();
-    });
-</script>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const rutInput = document.getElementById('trabajador_rutInput');
-
-        function formatRut(value) {
-            value = value.replace(/[^0-9kK]/g, ''); // Permitir solo números y 'k'
-            let formattedRut = '';
-
-            if (value.length <= 7) {
-                if (value.length > 6) {
-                    formattedRut =
-                        value.slice(0, value.length - 6) + '.' +
-                        value.slice(value.length - 6, value.length - 3) + '.' +
-                        value.slice(value.length - 3);
-                } else if (value.length > 3) {
-                    formattedRut =
-                        value.slice(0, value.length - 3) + '.' +
-                        value.slice(value.length - 3);
-                } else {
-                    formattedRut = value;
-                }
-            } else {
-                formattedRut =
-                    value.slice(0, value.length - 7) + '.' +
-                    value.slice(value.length - 7, value.length - 4) + '.' +
-                    value.slice(value.length - 4, value.length - 1) + '-' +
-                    value.slice(value.length - 1);
-            }
-            return formattedRut;
-        }
-
-        // Evento `input` para formatear mientras se escribe
-        rutInput.addEventListener('input', function (e) {
-            e.target.value = formatRut(e.target.value);
-        });
-
-        // Evento `change` para aplicar formato al finalizar la edición
-        rutInput.addEventListener('change', function (e) {
-            e.target.value = formatRut(e.target.value);
-        });
-    });
-</script>
-
-
-{% endblock extra_js %}

@@ -229,5 +229,9 @@
     "t-register": "Register",
     "t-change-password": "Change Password",
     "t-logout": "Logout",
-    "t-old-menu":"Old Menú"    
+    "t-old-menu":"Old Menú",
+    "btn-eliminar":"Delete",
+    "btn-modificar":"Modify",
+    "btn-detalle":"Details",
+    "btn-buscar":"Search"
 }
