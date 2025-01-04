@@ -19,12 +19,15 @@ def crear_conexion(nombre_bd):
     db_config = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': f"{nombre_bd}",
-        # 'USER': 'sistema',
-        # 'PASSWORD': 'desarrollo_1990',
-        # 'HOST': '192.168.4.8',
-        'USER': 'root',
-        'PASSWORD': '123',
-        'HOST': '127.0.0.1',        
+        
+        'USER': 'sistema',
+        'PASSWORD': 'desarrollo_1990',
+        'HOST': '192.168.4.8',
+
+        # 'USER': 'root',
+        # 'PASSWORD': '123',
+        # 'HOST': '127.0.0.1',        
+
         'PORT': '3306',
         'OPTIONS': {
             # Intenta primero con utf8mb4; si falla, retrocede a utf8
