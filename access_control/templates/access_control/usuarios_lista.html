@@ -1,4 +1,12 @@
 {% extends "partials/base.html" %}
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
 
 {% block title %}
 Lista de Usuarios
@@ -37,9 +45,9 @@ Lista de Usuarios
                                         <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> Editar
                                         </a>
-                                        <a href="{% url 'access_control:usuario_eliminar' usuario.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este usuario?');">
+                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-usuario-id="{{ usuario.id }}" data-usuario-nombre="{{ usuario.username }}">
                                             <i class="bi bi-trash"></i> Eliminar
-                                        </a>
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -52,6 +60,54 @@ Lista de Usuarios
     </div>
 </div>
 
+<!-- Modal de Confirmación para Eliminar Usuario -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar al usuario <strong id="usuarioNombre"></strong>?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteForm" method="post" action="">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const deleteModal = document.getElementById("deleteModal");
+        const deleteForm = document.getElementById("deleteForm");
+        const usuarioNombre = document.getElementById("usuarioNombre");
+
+        deleteModal.addEventListener("show.bs.modal", function (event) {
+            const button = event.relatedTarget;
+            const usuarioId = button.getAttribute("data-usuario-id");
+            const usuarioNombreText = button.getAttribute("data-usuario-nombre");
+
+            usuarioNombre.textContent = usuarioNombreText;
+            deleteForm.action = "{% url 'access_control:usuario_eliminar' 0 %}".replace("0", usuarioId);
+        });
+    });
+</script>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
 <script>
     $(document).ready(function () {
         $('#usuarios-table').DataTable({
@@ -63,4 +119,4 @@ Lista de Usuarios
         });
     });
 </script>
-{% endblock content %}
+{% endblock extra_js %}
