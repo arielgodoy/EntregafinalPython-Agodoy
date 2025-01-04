@@ -17,7 +17,7 @@ class TrabajadoresViewSet(ReadOnlyModelViewSet):
         conexion = crear_conexion(basedatos)                
         
         search_query = self.request.query_params.get('search', '').strip()  # Obtener el parámetro `search`
-        filtro_base = 'año="2023" AND mes ="05"'
+        filtro_base = 'año="2025" AND mes ="01"'
         orderby = 'ORDER BY nombre'
         
         if search_query:

@@ -47,9 +47,9 @@ Listado de Propiedades
                                     <td>{{ propiedad.direccion }}</td>
                                     <td>{{ propiedad.propietario.nombre }}</td>
                                     <td>
-                                        <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> Ver</a>
-                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ propiedad.pk }}"><i class="bi bi-trash"></i> Eliminar</button>
-                                        <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm"><i class="bi bi-pencil"></i> Modificar</a>
+                                        <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm" data-key="btn-detalle" >Detalle</a>                                        
+                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ propiedad.pk }}"><a data-key="btn-eliminar">Eliminar</a> </button>
+                                        <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm" data-key="btn-modificar"> Modificar</a>
                                     </td>
                                 </tr>
 
