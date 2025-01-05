@@ -3,9 +3,6 @@
         const propietariosBody = document.getElementById('propietariosBody');
         const propietarioInput = document.getElementById('propietarioInput');
         const propietario_idInput = document.getElementById('propietario_idInput');
-
-
-
         function escapeHTML(text) {
             const div = document.createElement('div');
             div.innerText = text;
