@@ -20,13 +20,13 @@ def crear_conexion(nombre_bd):
         'ENGINE': 'django.db.backends.mysql',
         'NAME': f"{nombre_bd}",
         
-        'USER': 'sistema',
-        'PASSWORD': 'desarrollo_1990',
-        'HOST': '192.168.4.8',
+        # 'USER': 'sistema',
+        # 'PASSWORD': 'desarrollo_1990',
+        # 'HOST': '192.168.4.8',
 
-        # 'USER': 'root',
-        # 'PASSWORD': '123',
-        # 'HOST': '127.0.0.1',        
+         'USER': 'root',
+         'PASSWORD': '123',
+         'HOST': '127.0.0.1',        
 
         'PORT': '3306',
         'OPTIONS': {
