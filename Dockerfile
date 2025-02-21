@@ -1,5 +1,5 @@
 # Utiliza una imagen base de Python adecuada
-FROM python:3.10
+FROM python:3.8
 
 # Establece el directorio de trabajo en el contenedor
 WORKDIR /AppDocs
@@ -18,4 +18,3 @@ EXPOSE 8000
 
 # Comando para ejecutar la aplicación
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-
