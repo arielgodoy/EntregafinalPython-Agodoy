@@ -1,0 +1,299 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+    <!-- Flatpickr CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <!-- Flatpickr JS -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+    <!-- Toastify CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+{% block title %}
+Modificar Propiedad
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Modificar Propiedad" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Modificar Propiedad</h5>
+                </div>
+
+                <div class="card-body">
+                    <form method="post" action="{% url 'biblioteca:modificar_propiedad' propiedad.id %}" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        <table class="table table-bordered table-striped align-middle w-75 mx-auto">
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                    
+                            <!-- Campo ROL -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ form.rol.id_for_label }}" class="form-label">ROL</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {{ form.rol }}
+                                    {% if form.rol.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.rol.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Campo Descripción -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ form.descripcion.id_for_label }}" class="form-label">Descripción</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {{ form.descripcion }}
+                                    {% if form.descripcion.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.descripcion.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Campo Dirección -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ form.direccion.id_for_label }}" class="form-label">Dirección</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {{ form.direccion }}
+                                    {% if form.direccion.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.direccion.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Campo Ciudad -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ form.ciudad.id_for_label }}" class="form-label">Ciudad</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {{ form.ciudad }}
+                                    {% if form.ciudad.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.ciudad.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Campo Teléfono -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ form.telefono.id_for_label }}" class="form-label">Teléfono</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {{ form.telefono }}
+                                    {% if form.telefono.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.telefono.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Campo Propietario -->
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="id_propietario_display" class="form-label">Propietario</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    <div class="d-flex">
+                                        <input type="hidden" id="id_propietario" name="propietario" value="{{ propiedad.propietario.id }}">
+                                        <input type="text" id="id_propietario_display" class="form-control me-2"
+                                               value="{{ propiedad.propietario.nombre }}" readonly>
+                                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#propietarioModal">Buscar</button>
+                                    </div>
+                                    {% if form.propietario.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.propietario.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                    
+                            <!-- Botón Guardar -->
+                            <tr>
+                                <td colspan="2" class="text-center">
+                                    <button type="submit" class="btn btn-primary w-50">Guardar cambios</button>
+                                </td>
+                            </tr>
+                        </table>
+                    </form>
+                    
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para buscar propietario -->
+<div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title" id="propietarioModalLabel">Seleccionar Propietario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped" id="propietariosTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="propietariosBody">
+                            <!-- Datos cargados dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('searchPropietario');
+        const propietariosBody = document.getElementById('propietariosBody');
+
+        function fetchPropietarios(query = '') {
+            fetch(`/api/v1/propietarios/?search=${query}`)
+                .then(response => response.json())
+                .then(data => {
+                    propietariosBody.innerHTML = '';
+                    data.forEach(propietario => {
+                        propietariosBody.innerHTML += `
+                            <tr>
+                                <td>${propietario.id}</td>
+                                <td>${propietario.nombre}</td>
+                                <td>
+                                    <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
+                                </td>
+                            </tr>`;
+                    });
+                })
+                .catch(error => console.error('Error al cargar propietarios:', error));
+        }
+
+        // Define `selectPropietario` como una función global
+        window.selectPropietario = function (id, nombre) {
+            document.getElementById('id_propietario').value = id;
+            document.getElementById('id_propietario_display').value = nombre;
+
+            const modalElement = document.getElementById('propietarioModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+
+            // Asegurarse de eliminar el fondo del modal
+            const modalBackdrop = document.querySelector('.modal-backdrop');
+            if (modalBackdrop) {
+                modalBackdrop.remove();
+            }
+        };
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                fetchPropietarios(this.value);
+            });
+        }
+
+        fetchPropietarios(); // Inicializar al abrir la página
+
+        // Forzar eliminación del backdrop si queda visible
+        document.addEventListener('hidden.bs.modal', function (event) {
+            const modalBackdrop = document.querySelector('.modal-backdrop');
+            if (modalBackdrop) {
+                modalBackdrop.remove();
+            }
+        });
+    });
+</script>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        window.selectPropietario = function (id, nombre) {
+            document.getElementById('id_propietario').value = id;
+            document.getElementById('id_propietario_display').value = nombre;
+
+            const modalElement = document.getElementById('propietarioModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+
+            // Forzar eliminación del fondo del modal si queda visible
+            const modalBackdrop = document.querySelector('.modal-backdrop');
+            if (modalBackdrop) {
+                modalBackdrop.remove();
+            }
+        };
+
+        document.addEventListener('hidden.bs.modal', function () {
+            const modalBackdrop = document.querySelector('.modal-backdrop');
+            if (modalBackdrop) {
+                modalBackdrop.remove();
+            }
+        });
+    });
+</script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+
+{% endblock extra_js %}
+
+

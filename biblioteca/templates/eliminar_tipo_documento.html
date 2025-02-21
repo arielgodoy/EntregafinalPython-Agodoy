@@ -1,0 +1,43 @@
+{% extends "partials/base.html" %}
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+
+{% block title %}
+Eliminar Tipo de Documento
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar Tipo de Documento" pagetitle="Tipos de Documentos" %}
+{% endblock pagetitle %}
+
+
+{% block content %}
+
+<h1>Confirmar Eliminación</h1>
+<p>¿Estás seguro de que deseas eliminar este documento?</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a href="{% url 'biblioteca:detalle_propiedad' pk=documento.propiedad.pk %}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}
+
+{% endblock content %}
+
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

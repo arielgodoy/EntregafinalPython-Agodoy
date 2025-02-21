@@ -1,0 +1,237 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+{% load custom_tags %}
+
+{% block title %}
+Gestión de Permisos Filtrados
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Gestión de Permisos Filtrados" pagetitle="Permisos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 rounded text-light bg-mode">
+                <h1 class="mb-4 text-center">Gestión de Permisos Filtrados</h1>
+                <form method="post" class="mb-4 p-3 rounded shadow bg-mode" id="filtro-form">
+                    {% csrf_token %}
+                    <div class="form-group mb-3">
+                        <label for="usuario" class="form-label">{{ form.usuario.label }}</label>
+                        <select name="usuario" id="usuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.usuario.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="empresa" class="form-label">{{ form.empresa.label }}</label>
+                        <select name="empresa" id="empresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}" {% if option.id == form.initial.empresa.id %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3 w-100">Filtrar</button>
+                </form>
+
+                {% if permisos %}
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped align-middle" id="tabla-permisos">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Empresa</th>
+                                <th>Vista</th>
+                                <th>I</th>
+                                <th>C</th>
+                                <th>M</th>
+                                <th>E</th>
+                                <th>A</th>
+                                <th>S</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for permiso in permisos %}
+                            <tr>
+                                <td>{{ permiso.usuario.username }}</td>
+                                <td>{{ permiso.empresa.codigo }}</td>
+                                <td>{{ permiso.vista.nombre }}</td>
+                                {% for field in fields %}
+                                <td>
+                                    <input type="checkbox" class="permiso-checkbox"
+                                           data-permiso-id="{{ permiso.id }}" 
+                                           data-permiso-field="{{ field }}" 
+                                           {% if permiso|getattribute:field %}checked{% endif %}>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-end mb-3">
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#copyModal">Copiar Permisos</button>
+                </div>
+                {% else %}
+                <p>No hay permisos para mostrar.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modal para copiar permisos -->
+<div class="modal fade" id="copyModal" tabindex="-1" aria-labelledby="copyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="copyModalLabel">Copiar Permisos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="copyForm">
+                    <div class="form-group mb-3">
+                        <label for="origenUsuario" class="form-label">Usuario Origen</label>
+                        <select id="origenUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="origenEmpresa" class="form-label">Empresa Origen</label>
+                        <select id="origenEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoUsuario" class="form-label">Usuario Destino</label>
+                        <select id="destinoUsuario" class="form-select">
+                            {% for option in form.usuario.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="destinoEmpresa" class="form-label">Empresa Destino</label>
+                        <select id="destinoEmpresa" class="form-select">
+                            {% for option in form.empresa.field.queryset %}
+                            <option value="{{ option.id }}">{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="copyPermissionsButton">Copiar Permisos</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.getElementById("filtro-form");
+        const usuarioField = form.querySelector('select[name="usuario"]');
+        const empresaField = form.querySelector('select[name="empresa"]');
+
+        // Enviar el formulario automáticamente al cambiar "usuario" o "empresa"
+        usuarioField.addEventListener("change", function () {
+            form.submit();
+        });
+
+        empresaField.addEventListener("change", function () {
+            form.submit();
+        });
+
+        const checkboxes = document.querySelectorAll(".permiso-checkbox");
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener("change", function () {
+                const permisoId = this.getAttribute("data-permiso-id");
+                const permisoField = this.getAttribute("data-permiso-field");
+                const isChecked = this.checked;
+
+                fetch("{% url 'access_control:toggle_permiso' %}", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRFToken": "{{ csrf_token }}"
+                    },
+                    body: `permiso_id=${permisoId}&permiso_field=${permisoField}&value=${isChecked}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert(data.error || "Error al cambiar el permiso.");
+                        this.checked = !isChecked;
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    this.checked = !isChecked;
+                });
+            });
+        });
+
+        const copyButton = document.getElementById("copyPermissionsButton");
+        copyButton.addEventListener("click", function () {
+            const origenUsuario = document.getElementById("origenUsuario").value;
+            const origenEmpresa = document.getElementById("origenEmpresa").value;
+            const destinoUsuario = document.getElementById("destinoUsuario").value;
+            const destinoEmpresa = document.getElementById("destinoEmpresa").value;
+
+            fetch("{% url 'access_control:copy_permissions' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: `origen_usuario=${origenUsuario}&origen_empresa=${origenEmpresa}&destino_usuario=${destinoUsuario}&destino_empresa=${destinoEmpresa}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Permisos copiados con éxito.");
+                    location.reload();
+                } else {
+                    alert(data.error || "Error al copiar permisos.");
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("Error al copiar permisos.");
+            });
+        });
+    });
+</script>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}
