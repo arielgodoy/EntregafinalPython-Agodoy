@@ -1,9 +1,10 @@
 # views.py
 from django.views.generic.edit import UpdateView
-from django.shortcuts import render, redirect,get_object_or_404
+from django.views.generic import TemplateView
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, FormView,FormMixin,DeleteView
+from django.shortcuts import render, redirect,get_object_or_404
 from .models import Propiedad, Documento,Propietario
 from .forms import DocumentoForm,PropietarioForm,PropiedadForm
 from django.urls import reverse
@@ -24,6 +25,11 @@ from chat.forms import MensajeForm,ConversacionForm,EnviarMensajeForm
 from acounts.forms import AvatarForm
 from acounts.models import Avatar
 from django.utils.decorators import method_decorator
+from django.urls import reverse_lazy, reverse
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+
+
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -38,22 +44,25 @@ class VerificarPermisoMixin:
 
 
 
+class ModalesEjemploView(LoginRequiredMixin, TemplateView):
+    template_name = 'modales_ejemplo.html'
+
 class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propiedad
-    template_name = 'listar_propiedades.html'
+    template_name = 'listado_propiedades.html'
     context_object_name = 'propiedades'
     vista_nombre = "Maestro Propiedades"
     permiso_requerido = "ingresar"
 
 class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Propiedad
+    #template_name = 'detalle_propiedad.html'
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
     vista_nombre = "Maestro Propiedades"
     permiso_requerido = "ingresar"
 
-from django.urls import reverse_lazy, reverse
-from django.shortcuts import get_object_or_404
+
 
 class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Documento
@@ -78,7 +87,7 @@ class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         # Redirigir al detalle de la propiedad después de crear un nuevo documento
-        return reverse('detalle_propiedad', kwargs={'pk': self.kwargs['pk']})
+        return reverse('biblioteca:detalle_propiedad', kwargs={'pk': self.kwargs['pk']})
 
 
 #
@@ -89,13 +98,13 @@ class CrearPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'crear_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios"
     permiso_requerido="crear"
 
 class ListarPropietariosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):    
     model = Propietario
-    template_name = 'listar_propietarios.html'
+    template_name = 'listado_propietarios.html'
     context_object_name = 'propietarios'
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="ingresar"
@@ -110,7 +119,7 @@ class DetallePropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DetailView
 class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propietario
     template_name = 'eliminar_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="eliminar"
 
@@ -118,7 +127,7 @@ class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateVi
     model = Propietario
     form_class = PropietarioForm
     template_name = 'modificar_propietario.html'
-    success_url = reverse_lazy('listar_propietarios')
+    success_url = reverse_lazy('biblioteca:listar_propietarios')
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="modificar"
     
@@ -128,35 +137,90 @@ class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateVi
 #
 #MAESTRO DE PROPIEDADES
 #
+from django.urls import reverse, reverse_lazy
+from django.shortcuts import get_object_or_404
 
-class CrearPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
+class CrearPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
-    vista_nombre="Maestro Propiedades"
-    permiso_requerido="crear"
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "crear"
+
+    def get_success_url(self):
+        """
+        Redirige al detalle del propietario si `propietario_id` está presente,
+        de lo contrario, a la lista de propiedades.
+        """
+        # Usar self.object.propietario.id si el propietario ya está asociado
+        if hasattr(self, 'object') and self.object.propietario:
+            return reverse('biblioteca:detalle_propietario', kwargs={'pk': self.object.propietario.id})
+        # Si no, usa el propietario_id desde kwargs
+        propietario_id = self.kwargs.get('propietario_id', None)
+        if propietario_id:
+            return reverse('biblioteca:detalle_propietario', kwargs={'pk': propietario_id})
+        return reverse('biblioteca:listar_propiedades')
 
     def get_context_data(self, **kwargs):
+        """Agrega el propietario preseleccionado al contexto."""
         context = super().get_context_data(**kwargs)
-        context['propietarios'] = Propietario.objects.all()  # Agregamos los propietarios al contexto
+        context['propietarios'] = Propietario.objects.all()
+
+        # Verificar si se pasa `propietario_id` por la URL o el formulario
+        propietario_id = self.kwargs.get('propietario_id') or self.request.POST.get('propietario')
+        if propietario_id:
+            propietario = get_object_or_404(Propietario, id=propietario_id)
+            context['propietario_nombre'] = propietario.nombre
+            context['propietario_id'] = propietario.id
+        else:
+            context['propietario_nombre'] = None
+            context['propietario_id'] = None
+
         return context
 
+    def get_initial(self):
+        """Preselecciona el propietario si `propietario_id` está presente en la URL."""
+        initial = super().get_initial()
+        propietario_id = self.kwargs.get('propietario_id', None)
+        if propietario_id:
+            try:
+                propietario = Propietario.objects.get(id=propietario_id)
+                initial['propietario'] = propietario.id
+            except Propietario.DoesNotExist:
+                pass
+        return initial
+
     def form_valid(self, form):
-        print("Formulario válido, guardando propiedad...")
+        """Asocia la propiedad al propietario si `propietario_id` está presente."""
+        propietario_id = self.kwargs.get('propietario_id', None)
+        if propietario_id:
+            propietario = get_object_or_404(Propietario, id=propietario_id)
+            form.instance.propietario = propietario
+        # Asegura que self.object esté disponible para get_success_url
+        self.object = form.save()
         return super().form_valid(form)
 
     def form_invalid(self, form):
-        print("Formulario inválido:")
-        print(form.errors)  # Muestra los errores en la consola
-        return super().form_invalid(form)
+        """Maneja los errores del formulario y recupera el propietario."""
+        print("Formulario inválido:", form.errors)
+        propietario_id = self.request.POST.get('propietario', None)
+        propietario_nombre = None
+        if propietario_id:
+            try:
+                propietario_nombre = Propietario.objects.get(id=propietario_id).nombre
+            except Propietario.DoesNotExist:
+                pass
+        context = self.get_context_data(form=form)
+        context['propietario_nombre'] = propietario_nombre
+        return self.render_to_response(context)
+
 
 
 
 class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
     model = Propiedad
     template_name = 'eliminar_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
+    success_url = reverse_lazy('biblioteca:listar_propiedades')
     vista_nombre="Maestro Propiedades"
     permiso_requerido="eliminar"
 
@@ -167,23 +231,37 @@ class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView)
         propiedad.delete()
         return redirect(self.success_url)
 
-class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
+# class ModificarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
+#     model = Propiedad
+#     form_class = PropiedadForm
+#     template_name = 'modificar_propiedad.html'
+#     success_url = reverse_lazy('biblioteca:listar_propiedades')
+#     vista_nombre="Maestro Propiedades"
+#     permiso_requerido="modificar"
+
+#     def form_valid(self, form):
+#         # Guardar los cambios en la propiedad
+#         propiedad = form.save()
+#         return super().form_valid(form)
+
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+#         # Agregamos los propietarios al contexto para mostrarlos en el modal
+#         context['propietarios'] = Propietario.objects.all()
+#         return context
+
+class ModificarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
-    success_url = reverse_lazy('listar_propiedades')
-    vista_nombre="Maestro Propiedades"
-    permiso_requerido="modificar"
-
-    def form_valid(self, form):
-        # Guardar los cambios en la propiedad
-        propiedad = form.save()
-        return super().form_valid(form)
+    success_url = reverse_lazy('biblioteca:listar_propiedades')
+    vista_nombre = "Maestro Propiedades"
+    permiso_requerido = "modificar"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Agregamos los propietarios al contexto para mostrarlos en el modal
-        context['propietarios'] = Propietario.objects.all()
+        context['propiedad'] = self.object
+        context['propietario_nombre'] = self.object.propietario.nombre if self.object.propietario else ""
         return context
 
 class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
@@ -195,8 +273,7 @@ class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView
     def get_success_url(self):
         """Redirige a la página de detalle de la propiedad asociada."""
         documento = self.object
-        return reverse_lazy('detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
-
+        return reverse_lazy('biblioteca:detalle_propiedad', kwargs={'pk': documento.propiedad.pk})
 
 
 #
@@ -207,7 +284,7 @@ class CrearTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,CreateView
     model = TipoDocumento
     form_class = TipoDocumentoForm
     template_name = 'crear_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="crear"
 class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):
@@ -219,7 +296,7 @@ class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListVie
 
 class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'modificar_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="modificar"
 
@@ -238,7 +315,7 @@ class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
 
 class EliminarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
     template_name = 'eliminar_tipo_documento.html'
-    success_url = reverse_lazy('listar_tipos_documentos')
+    success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
     vista_nombre="Maestro Documentos"
     permiso_requerido="eliminar"
 

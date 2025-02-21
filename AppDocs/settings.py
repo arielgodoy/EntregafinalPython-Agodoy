@@ -17,6 +17,24 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+
+# # Redirige automáticamente a HTTPS
+# SECURE_SSL_REDIRECT = True
+# # Evita que el contenido se cargue en navegadores inseguros
+# SECURE_CONTENT_TYPE_NOSNIFF = True
+# # Habilita la protección XSS
+# SECURE_BROWSER_XSS_FILTER = True
+# # Configura HSTS (Strict-Transport-Security)
+# SECURE_HSTS_SECONDS = 31536000  # Un año en segundos
+# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# SECURE_HSTS_PRELOAD = True
+# # Marca las cookies como seguras (solo HTTPS)
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+
+
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -68,7 +86,8 @@ ROOT_URLCONF = 'AppDocs.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],        
+        #'DIRS': [os.path.join(BASE_DIR, 'biblioteca', 'templates')],        
+        'DIRS': [os.path.join(BASE_DIR,'templates')],        
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -94,23 +113,29 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'ATOMIC_REQUESTS': False,
+    },
+    'dinamica': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'eltit_remu',
+        'USER': 'root',
+        'PASSWORD': '123',
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        },
+        'TIME_ZONE': 'UTC',
+        'CONN_HEALTH_CHECKS': False,
+        'CONN_MAX_AGE': 0,
+        'AUTOCOMMIT': True,
+        'ATOMIC_REQUESTS': False,  # Asegúrate de incluir esta clave
     }
 }
 
+DATABASE_ROUTERS = ['api.Router_Databases.MultiDatabaseRouter']
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'HOST': 'localhost',
-#         'PORT': '3306',
-#         'USER': 'root',
-#         'PASSWORD': '123',
-#         'NAME': 'eltit_gestion',
-#         'OPTIONS': {
-#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
-#         }
-#     }
-# }
+
 
 
 # Password validation
@@ -144,17 +169,12 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-#STATIC_URL = 'static/'
 
 
-
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'biblioteca/static'),
+    os.path.join(BASE_DIR, 'static'),  # Sin barra inicial
 ]
 
 
@@ -187,7 +207,9 @@ AUTHENTICATION_BACKENDS = [
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 
-CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+CRISPY_TEMPLATE_PACK = 'bootstrap5'
+
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -195,3 +217,29 @@ REST_FRAMEWORK = {
     ]
 }
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['console'],
+            # poner en 'DEBUG' para ver los sql
+            # poner en 'WARNIG' para ver MODO development 
+            'level': 'WARNING',
+        },
+    },
+}
+
+
+# ... other settings ...
+
+CONFIGURACIONES = {
+    'CLIENTE_SISTEMA': 'eltit_',  # Example value
+    'APLICACION': 'My Application',  # Example value
+    # Add more configurations as needed
+}

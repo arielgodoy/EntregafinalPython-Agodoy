@@ -1,16 +1,111 @@
-{% extends 'biblioteca/base.html' %}
-
-{% block contenido %}
+{% extends "partials/base.html" %}
 {% load crispy_forms_tags %}
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
 
-<h1>ROL NRO : {{ propiedad.rol }}</h1>
-<h2>Descr. : {{ propiedad.descripcion }}</h2>
-<p>Dirección: {{ propiedad.direccion }}</p>
 
-<h1>Crear nuevo documento</h1>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form|crispy }}
-    <button type="submit" class="btn btn-primary">Guardar</button>
-</form>
-{% endblock %}
+{% block title %}
+Crear Nuevo Documento
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Crear Documento" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="mb-4 text-center">ROL NRO: {{ propiedad.rol }}</h1>
+                    <h2 class="text-center">Descripción: {{ propiedad.descripcion }}</h2>
+                    <p class="text-center">Dirección: {{ propiedad.direccion }}</p>
+                </div>
+            </div>
+
+            <div class="row justify-content-center mt-4">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-body">
+                            <h1 class="mb-4 text-center">Crear Nuevo Documento</h1>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="btn btn-success">Agregar Tipo de Documento</a>
+                            </div>
+
+                            <form method="post" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <table class="table table-borderless">
+                                    <tbody>
+                                        <tr>
+                                            <td><label for="tipo_documento" class="form-label">Tipo de Documento</label></td>
+                                            <td>{{ form.tipo_documento }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td><label for="archivo" class="form-label">Archivo</label></td>
+                                            <td><input type="file" id="archivo" name="archivo" class="form-control" required></td>
+                                        </tr>
+                                        <tr>
+                                            <td><label for="nombre_documento" class="form-label">Nombre del Documento</label></td>
+                                            <td><input type="text" id="nombre_documento" name="nombre_documento" class="form-control" readonly></td>
+                                        </tr>
+                                        <tr>
+                                            <td><label for="fecha_documento" class="form-label">Fecha del Documento</label></td>
+                                            <td><input type="date" id="fecha_documento" name="fecha_documento" class="form-control" readonly></td>
+                                        </tr>
+                                        <tr>
+                                            <td><label for="fecha_vencimiento" class="form-label">Fecha de Vencimiento</label></td>
+                                            <td>{{ form.fecha_vencimiento }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="text-center">
+                                    <button type="submit" class="btn btn-primary">Guardar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const archivoInput = document.getElementById("archivo");
+        const nombreDocumentoInput = document.getElementById("nombre_documento");
+        const fechaDocumentoInput = document.getElementById("fecha_documento");
+
+        archivoInput.addEventListener("change", function () {
+            const archivo = archivoInput.files[0];
+            if (archivo) {
+                // Establece el nombre del archivo (sin la extensión) como nombre del documento
+                const nombreSinExtension = archivo.name.split('.').slice(0, -1).join('.');
+                nombreDocumentoInput.value = nombreSinExtension;
+
+                // Establece la fecha actual como fecha del documento
+                const fechaActual = new Date().toISOString().split('T')[0];
+                fechaDocumentoInput.value = fechaActual;
+            }
+        });
+    });
+</script>
+{% endblock content %}
+
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

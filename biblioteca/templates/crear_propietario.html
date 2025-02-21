@@ -1,107 +1,136 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<div class="container mt-5">
-    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
-        <h1 class="my-4 text-center">Ingresar Propietario</h1>
-        <form method="post" class="needs-validation" novalidate>
-            {% csrf_token %}
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
 
-            <!-- Campo Nombre -->
-            <div class="mb-3">
-                <label for="id_nombre" class="form-label text-light">{{ form.nombre.label }}</label>
-                {{ form.nombre }}
-                {% if form.nombre.errors %}
-                    <div class="text-danger">
-                        {% for error in form.nombre.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
+
+{% block title %}
+Ingresar Propietario
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Ingresar Propietario" pagetitle="Propietarios" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content"> 
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card shadow-lg p-4 mb-5 rounded">
+                        <h1 class="my-4 text-center">Ingresar Propietario</h1>
+                        <form method="post" class="needs-validation" novalidate>
+                            {% csrf_token %}
+
+                            <!-- Campo Nombre -->
+                            <div class="mb-3">
+                                <label for="id_nombre" class="form-label">{{ form.nombre.label }}</label>
+                                {{ form.nombre }}
+                                {% if form.nombre.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.nombre.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Campo RUT -->
+                            <div class="mb-3">
+                                <label for="id_rut" class="form-label">RUT</label>
+                                <input type="text" id="id_rut" name="rut" class="form-control" value="{{ form.rut.value|default:'' }}">
+                                {% if form.rut.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.rut.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Campo Teléfono -->
+                            <div class="mb-3">
+                                <label for="id_telefono" class="form-label">{{ form.telefono.label }}</label>
+                                {{ form.telefono }}
+                                {% if form.telefono.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.telefono.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Campo Rol -->
+                            <div class="mb-3">
+                                <label for="id_rol" class="form-label">{{ form.rol.label }}</label>
+                                {{ form.rol }}
+                                {% if form.rol.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.rol.errors %}
+                                            <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Botón Guardar -->
+                            <button type="submit" class="btn btn-primary w-100">Guardar</button>
+                        </form>
                     </div>
-                {% endif %}
+                </div>
             </div>
-
-            <!-- Campo RUT -->
-            <div class="mb-3">
-                <label for="id_rut" class="form-label text-light">RUT</label>
-                <input type="text" id="id_rut" name="rut" class="form-control" value="{{ form.rut.value|default:'' }}">
-                {% if form.rut.errors %}
-                    <div class="text-danger">
-                        {% for error in form.rut.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-
-            <!-- Campo Teléfono -->
-            <div class="mb-3">
-                <label for="id_telefono" class="form-label text-light">{{ form.telefono.label }}</label>
-                {{ form.telefono }}
-                {% if form.telefono.errors %}
-                    <div class="text-danger">
-                        {% for error in form.telefono.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-
-            <!-- Campo Rol -->
-            <div class="mb-3">
-                <label for="id_rol" class="form-label text-light">{{ form.rol.label }}</label>
-                {{ form.rol }}
-                {% if form.rol.errors %}
-                    <div class="text-danger">
-                        {% for error in form.rol.errors %}
-                            <small>{{ error }}</small>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-
-            <!-- Botón Guardar -->
-            <button type="submit" class="btn btn-primary w-100">Guardar</button>
-        </form>
+        </div>
     </div>
 </div>
 
-<!-- vanilla script -->
 <script>
-    document.getElementById('id_rut').addEventListener('input', function (e) {
-        // Elimina cualquier carácter que no sea dígito o 'k'/'K'
-        let value = e.target.value.replace(/[^0-9kK]/g, '');
+    document.addEventListener('DOMContentLoaded', function () {
+        const rutInput = document.getElementById('id_rut');
+        rutInput.addEventListener('input', function (e) {
+            let value = e.target.value.replace(/[^0-9kK]/g, '');
+            let formattedRut = '';
 
-        // Aplica el formato dinámico para el RUT
-        let formattedRut = '';
-
-        // Caso para RUT con menos de 8 dígitos antes del dígito verificador
-        if (value.length <= 7) {
-            if (value.length > 6) {
-                formattedRut =
-                    value.slice(0, value.length - 6) + '.' +
-                    value.slice(value.length - 6, value.length - 3) + '.' +
-                    value.slice(value.length - 3);
-            } else if (value.length > 3) {
-                formattedRut =
-                    value.slice(0, value.length - 3) + '.' +
-                    value.slice(value.length - 3);
+            if (value.length <= 7) {
+                if (value.length > 6) {
+                    formattedRut =
+                        value.slice(0, value.length - 6) + '.' +
+                        value.slice(value.length - 6, value.length - 3) + '.' +
+                        value.slice(value.length - 3);
+                } else if (value.length > 3) {
+                    formattedRut =
+                        value.slice(0, value.length - 3) + '.' +
+                        value.slice(value.length - 3);
+                } else {
+                    formattedRut = value;
+                }
             } else {
-                formattedRut = value; // Sin puntos si hay menos de 4 dígitos
+                formattedRut =
+                    value.slice(0, value.length - 7) + '.' +
+                    value.slice(value.length - 7, value.length - 4) + '.' +
+                    value.slice(value.length - 4, value.length - 1) + '-' +
+                    value.slice(value.length - 1);
             }
-        } else {
-            // Caso para RUT con 8 o más dígitos antes del dígito verificador
-            formattedRut =
-                value.slice(0, value.length - 7) + '.' +
-                value.slice(value.length - 7, value.length - 4) + '.' +
-                value.slice(value.length - 4, value.length - 1) + '-' +
-                value.slice(value.length - 1);
-        }
-
-        // Actualiza el valor del campo con el RUT formateado
-        e.target.value = formattedRut;
+            e.target.value = formattedRut;
+        });
     });
 </script>
+{% endblock content %}
 
 
-
-{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

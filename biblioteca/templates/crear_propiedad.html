@@ -1,171 +1,123 @@
-{% extends 'biblioteca/base.html' %}
+{% extends "partials/base.html" %}
 
-{% block contenido %}
-<div class="container mt-5">
-    <div class="card shadow-lg p-4 mb-5 bg-dark rounded text-light">
-        <h1 class="my-4 text-center">Ingresar Propiedad</h1>
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
 
-        <form method="post" action="{% url 'crear_propiedad' %}" class="needs-validation" novalidate>
-            {% csrf_token %}
+{% block title %}
+Ingresar Propiedad
+{% endblock title %}
 
-            <table class="table table-dark table-striped">
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        <ul>
-                            {% for error in form.non_field_errors %}
-                                <li>{{ error }}</li>
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Ingresar Propiedad" pagetitle="Propiedades" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Ingresar Propiedad</h5>
+                </div>
+
+                <div class="card-body">
+                    <form method="post" action="{% url 'biblioteca:crear_propiedad' %}" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        <table class="table table-bordered table-striped align-middle w-75 mx-auto">
+                            {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+
+                            {% for field in form %}
+                            <tr>
+                                <td class="text-end align-middle" style="width: 30%;">
+                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                </td>
+                                <td style="width: 70%;">
+                                    {% if field.name == "propietario" %}
+                                    <div class="d-flex">
+                                        <input type="hidden" id="id_propietario" name="{{ field.html_name }}" value="{{ propietario_id|default_if_none:'' }}">
+                                        <input type="text" id="id_propietario_display" class="form-control me-2" placeholder="Selecciona un propietario..."
+                                               value="{{ propietario_nombre|default_if_none:'' }}" readonly>
+                                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#propietarioModal">Buscar</button>
+                                    </div>
+                                    {% else %}
+                                    {{ field }}
+                                    {% endif %}
+                                    {% if field.errors %}
+                                    <div class="text-danger">
+                                        {% for error in field.errors %}
+                                        <small>{{ error }}</small>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </ul>
-                    </div>
-                {% endif %}
 
-                <!-- Campo ROL -->
-                <tr>
-                    <td><label for="id_rol" class="form-label text-light">ROL</label></td>
-                    <td>
-                        {{ form.rol }}
-                        {% if form.rol.errors %}
-                            <div class="text-danger">
-                                {% for error in form.rol.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Descripción -->
-                <tr>
-                    <td><label for="id_descripcion" class="form-label text-light">Descripción</label></td>
-                    <td>
-                        {{ form.descripcion }}
-                        {% if form.descripcion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.descripcion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Dirección -->
-                <tr>
-                    <td><label for="id_direccion" class="form-label text-light">Dirección</label></td>
-                    <td>
-                        {{ form.direccion }}
-                        {% if form.direccion.errors %}
-                            <div class="text-danger">
-                                {% for error in form.direccion.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Ciudad -->
-                <tr>
-                    <td><label for="id_ciudad" class="form-label text-light">Ciudad</label></td>
-                    <td>
-                        {{ form.ciudad }}
-                        {% if form.ciudad.errors %}
-                            <div class="text-danger">
-                                {% for error in form.ciudad.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Teléfono -->
-                <tr>
-                    <td><label for="id_telefono" class="form-label text-light">Teléfono</label></td>
-                    <td>
-                        {{ form.telefono }}
-                        {% if form.telefono.errors %}
-                            <div class="text-danger">
-                                {% for error in form.telefono.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Campo Propietario -->
-                <tr>
-                    <td><label for="id_propietario_display" class="form-label text-light">Propietario</label></td>
-                    <td>
-                        <!-- Input visible para mostrar el nombre del propietario -->
-                        <input type="text" id="id_propietario_display" class="form-control" readonly>
-
-                        <!-- Input oculto para enviar el ID del propietario -->
-                        <input type="hidden" id="id_propietario" name="propietario">
-
-                        <button type="button" class="btn btn-secondary mt-2" onclick="openPropietarioModal()">Buscar Propietario</button>
-                        {% if form.propietario.errors %}
-                            <div class="text-danger">
-                                {% for error in form.propietario.errors %}
-                                    <small>{{ error }}</small>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </td>
-                </tr>
-
-                <!-- Botón Guardar -->
-                <tr>
-                    <td colspan="2" class="text-center">
-                        <button type="submit" class="btn btn-primary w-50">Guardar</button>
-                    </td>
-                </tr>
-            </table>
-        </form>
-    </div>
-</div>
-
-<!-- Modal Propietarios -->
-<div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content bg-dark text-light">
-            <div class="modal-header">
-                <h5 class="modal-title" id="propietarioModalLabel">Seleccionar Propietario</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
-                <table class="table table-striped table-dark" id="propietariosTable">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Nombre</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="propietariosBody">
-                        <!-- Este contenido se actualizará dinámicamente -->
-                    </tbody>
-                </table>
+                            <tr>
+                                <td colspan="2" class="text-center">|
+                                    <button type="submit" class="btn btn-primary w-50">Guardar</button>
+                                </td>
+                            </tr>
+                        </table>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Modal para buscar propietario -->
+<div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title" id="propietarioModalLabel">Seleccionar Propietario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped" id="propietariosTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="propietariosBody">
+                            <!-- Datos cargados dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-    function openPropietarioModal() {
-        const modal = new bootstrap.Modal(document.getElementById('propietarioModal'));
-        modal.show();
-        fetchPropietarios(); // Cargar datos al abrir el modal
-    }
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('searchPropietario');
+    const propietariosBody = document.getElementById('propietariosBody');
 
     function fetchPropietarios(query = '') {
         fetch(`/api/v1/propietarios/?search=${query}`)
             .then(response => response.json())
             .then(data => {
-                const propietariosBody = document.getElementById('propietariosBody');
                 propietariosBody.innerHTML = '';
                 data.forEach(propietario => {
                     propietariosBody.innerHTML += `
@@ -175,26 +127,54 @@
                             <td>
                                 <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
                             </td>
-                        </tr>
-                    `;
+                        </tr>`;
                 });
             })
             .catch(error => console.error('Error al cargar propietarios:', error));
     }
 
-    function selectPropietario(id, nombre) {
-        document.getElementById('id_propietario').value = id;
-        document.getElementById('id_propietario_display').value = nombre;
-        const modal = bootstrap.Modal.getInstance(document.getElementById('propietarioModal'));
-        modal.hide();
+    // Define `selectPropietario` como una función global
+    window.selectPropietario = function (id, nombre) {
+    propietarioInput.value = nombre;
+    const modalElement = document.getElementById('propietariosModal');
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+    if (modalInstance) {
+        modalInstance.hide();
     }
 
-    // Escuchar eventos del campo de búsqueda
-    document.getElementById('searchPropietario').addEventListener('input', function (e) {
-        const query = e.target.value;
-        fetchPropietarios(query); // Filtrar datos dinámicamente
+    // Forzar la eliminación del backdrop si persiste
+    const modalBackdrop = document.querySelector('.modal-backdrop');
+    if (modalBackdrop) {
+        modalBackdrop.remove();
+    }
+};
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            fetchPropietarios(this.value);
+        });
+    }
+
+    fetchPropietarios(); // Inicializar al abrir la página
+
+    // Forzar eliminación del backdrop si queda visible
+    document.addEventListener('hidden.bs.modal', function (event) {
+        const modalBackdrop = document.querySelector('.modal-backdrop');
+        if (modalBackdrop) {
+            modalBackdrop.remove();
+        }
     });
+});
 </script>
 
+{% endblock content %}
 
-{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

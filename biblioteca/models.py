@@ -4,6 +4,29 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
+import os
+from django.utils.timezone import now
+
+def archivo_documento_path(instance, filename):
+    """
+    Función para generar la ruta del archivo.
+    Reemplaza caracteres conflictivos como '/' en el rol de la propiedad.
+    """
+    # Reemplazar '/' por '-' en el rol de la propiedad
+    rol_sanitizado = instance.propiedad.rol.replace("/", "-")
+
+    # Extraer la extensión del archivo original
+    extension = os.path.splitext(filename)[1]
+
+    # Crear el nombre del archivo
+    nuevo_nombre = f"{rol_sanitizado}_{instance.tipo_documento}_{instance.nombre_documento}{extension}"
+
+    # Crear la ruta dentro de la carpeta `archivos_documentos`
+    return f"archivos_documentos/{nuevo_nombre}"
+
+def validate_file_extension(value):
+    if not value.name.lower().endswith(('.pdf', '.jpeg', '.jpg', '.png', '.dwg')):
+        raise ValidationError(_('Formato de archivo no admitido. Sube un PDF, JPEG, JPG, PNG o DWG.'))
 
 class TipoDocumento(models.Model):
     nombre = models.CharField(max_length=50)
@@ -34,9 +57,7 @@ class Propiedad(models.Model):
     def __str__(self):
         return self.rol
     
-def validate_file_extension(value):
-    if not value.name.lower().endswith(('.pdf', '.jpeg', '.jpg', '.png', '.dwg')):
-        raise ValidationError(_('Formato de archivo no admitido. Sube un PDF, JPEG, JPG, PNG o DWG.'))
+
 
 
 class Documento(models.Model):
@@ -48,8 +69,8 @@ class Documento(models.Model):
     tipo_documento = models.ForeignKey(TipoDocumento, on_delete=models.CASCADE)
     nombre_documento = models.CharField(max_length=50)
     propiedad = models.ForeignKey(Propiedad, on_delete=models.CASCADE)
-    archivo = models.FileField(upload_to='archivos_documentos/', validators=[validate_file_extension])
-    fecha_documento = models.DateField(default=timezone.now)
+    archivo = models.FileField(upload_to=archivo_documento_path, validators=[validate_file_extension])
+    fecha_documento = models.DateField(default=now)
     fecha_vencimiento = models.DateField(null=True, blank=True)  # Fecha de vencimiento puede ser nula
 
     def __str__(self):

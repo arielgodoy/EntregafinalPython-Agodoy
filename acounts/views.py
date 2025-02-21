@@ -17,12 +17,12 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect('listar_propiedades')  # Redirigir al usuario a la página de inicio después de un login exitoso
+            return redirect('biblioteca:listar_propiedades')  # Redirigir al usuario a la página de inicio después de un login exitoso
         else:
             # Mostrar mensaje de error si el login no es válido
             error_message = "Nombre de usuario o contraseña incorrectos."
-            return render(request, 'login.html', {'error_message': error_message})
-    return render(request, 'login.html')
+            return render(request, 'pages/authentication/auth-signin-basic.html', {'error_message': error_message})
+    return render(request, 'pages/authentication/auth-signin-basic.html')
 
 def logout_view(request):
     # Vista para realizar el logout (opcional)
