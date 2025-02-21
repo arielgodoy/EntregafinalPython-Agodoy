@@ -135,9 +135,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Define `selectPropietario` como una función global
     window.selectPropietario = function (id, nombre) {
-    propietarioInput.value = nombre;
-    const modalElement = document.getElementById('propietariosModal');
-    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+    document.getElementById('id_propietario').value = id;
+    document.getElementById('id_propietario_display').value = nombre;
+    
+    // Cerrar el modal correctamente
+    const modalElement = document.getElementById('propietarioModal');
+    const modalInstance = bootstrap.Modal.getInstance(modalElement);
     if (modalInstance) {
         modalInstance.hide();
     }
@@ -148,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
         modalBackdrop.remove();
     }
 };
+
 
     if (searchInput) {
         searchInput.addEventListener('input', function () {
