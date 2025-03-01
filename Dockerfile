@@ -1,5 +1,5 @@
 # Utiliza una imagen base de Python adecuada
-FROM python:3.8
+FROM python:3.10
 
 # Establece el directorio de trabajo en el contenedor
 WORKDIR /AppDocs
