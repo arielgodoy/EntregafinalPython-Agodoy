@@ -243,3 +243,6 @@ CONFIGURACIONES = {
     'APLICACION': 'My Application',  # Example value
     # Add more configurations as needed
 }
+CSRF_TRUSTED_ORIGINS = [
+    "https://biblioteca.eltit.cl"
+]
