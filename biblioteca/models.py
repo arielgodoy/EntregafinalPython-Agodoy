@@ -25,7 +25,7 @@ def archivo_documento_path(instance, filename):
     return f"archivos_documentos/{nuevo_nombre}"
 
 def validate_file_extension(value):
-    if not value.name.lower().endswith(('.pdf', '.jpeg', '.jpg', '.png', '.dwg')):
+    if not value.name.lower().endswith(('.pdf', '.jpeg', '.jpg', '.png', '.dwg', '.rar', '.zip')):
         raise ValidationError(_('Formato de archivo no admitido. Sube un PDF, JPEG, JPG, PNG o DWG.'))
 
 class TipoDocumento(models.Model):
