@@ -14,14 +14,17 @@
     {% endblock extra_css %}
 
     <script>
-// 👇 Esto sincroniza localStorage antes de que layout.js actúe
-(function syncThemeBeforeLayout() {
-    const localTheme = localStorage.getItem("theme");
-    if (localTheme) {
-        sessionStorage.setItem("data-bs-theme", localTheme);
+(function () {
+    const theme = localStorage.getItem("theme");
+    if (theme) {
+        console.log("📝 Cargando tema desde localStorage a sessionStorage:", theme);
+        sessionStorage.setItem("data-bs-theme", theme);
+    } else {
+        console.log("ℹ️ No hay tema en localStorage. Se usará el valor por defecto.");
     }
 })();
 </script>
+
     <!-- Layout config Js -->
     <script src="{% static 'js/layout.js'%}"></script>
     <!-- Bootstrap Css -->
@@ -116,46 +119,50 @@ document.addEventListener("DOMContentLoaded", function () {
 
     {% block extra_js %}
 
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const htmlTag = document.documentElement;
 
-            // Leer tema desde localStorage
-            const localTheme = localStorage.getItem("theme");
-            const sessionTheme = sessionStorage.getItem("data-bs-theme");
 
-            if (localTheme && localTheme !== sessionTheme) {
-                sessionStorage.setItem("data-bs-theme", localTheme);
-                htmlTag.setAttribute("data-bs-theme", localTheme);
-                console.log("🔁 Tema sincronizado desde localStorage → sessionStorage:", localTheme);
-            } else if (!localTheme && sessionTheme) {
-                localStorage.setItem("theme", sessionTheme);
-                console.log("💾 Tema sincronizado desde sessionStorage → localStorage:", sessionTheme);
-            } else {
-                console.log("✅ Tema actual:", htmlTag.getAttribute("data-bs-theme"));
-            }
 
-            // Delegación: capturamos clics incluso si el botón cambia dinámicamente
-            document.body.addEventListener("click", function (e) {
-                if (e.target.closest(".light-dark-mode")) {
-                    const currentTheme = htmlTag.getAttribute("data-bs-theme");
-                    const newTheme = currentTheme === "light" ? "dark" : "light";
 
-                    htmlTag.setAttribute("data-bs-theme", newTheme);
-                    localStorage.setItem("theme", newTheme);
-                    sessionStorage.setItem("data-bs-theme", newTheme);
 
-                    console.log("🌗 Tema cambiado a:", newTheme, "→ guardado en localStorage y sessionStorage.");
-                }
-            });
-        });
-    </script>
 
     {% endblock extra_js %}
 
     <!-- App js -->
     <script src="{% static 'js/app.js'%}"></script>
     {% endblock javascript %}
+
+
+    
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const htmlTag = document.documentElement;
+    const toggleBtn = document.getElementById("btn-toggle-theme");
+
+    if (!toggleBtn) {
+        console.warn("⚠️ No se encontró el botón de cambio de tema.");
+        return;
+    }
+
+    toggleBtn.addEventListener("click", function () {
+        const currentTheme = htmlTag.getAttribute("data-bs-theme");
+        const newTheme = currentTheme === "light" ? "dark" : "light";
+
+        htmlTag.setAttribute("data-bs-theme", newTheme);
+        localStorage.setItem("theme", newTheme);
+        sessionStorage.setItem("data-bs-theme", newTheme);
+
+        console.log(`🌗 Tema cambiado de ${currentTheme} → ${newTheme}`);
+        console.log("💾 Guardado en localStorage y sessionStorage:", newTheme);
+
+        // Cambiar icono
+        const icon = toggleBtn.querySelector("i");
+        if (icon) {
+            icon.classList.remove("bx-moon", "bx-sun");
+            icon.classList.add(newTheme === "dark" ? "bx-sun" : "bx-moon");
+        }
+    });
+});
+</script>
 
 
 
