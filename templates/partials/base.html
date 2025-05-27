@@ -9,20 +9,19 @@
     <meta content="Themesbrand" name="author" />
     <!-- App favicon -->
     <link rel="shortcut icon" href="{% static 'images/favicon.ico'%}">
-    <!-- <style>
-        body {
-            background: url("{% static 'background.webp' %}") no-repeat center center fixed;
-            background-size: cover; /* Ajusta el tamaño para que ocupe todo el fondo */
-            background-color: #121212; /* Fondo oscuro si la imagen no se carga */
-            color: #f5f5f5; /* Texto claro */
-        }
-    </style> -->
-
     {% block css %}
     {% block extra_css %}
     {% endblock extra_css %}
 
-
+    <script>
+// 👇 Esto sincroniza localStorage antes de que layout.js actúe
+(function syncThemeBeforeLayout() {
+    const localTheme = localStorage.getItem("theme");
+    if (localTheme) {
+        sessionStorage.setItem("data-bs-theme", localTheme);
+    }
+})();
+</script>
     <!-- Layout config Js -->
     <script src="{% static 'js/layout.js'%}"></script>
     <!-- Bootstrap Css -->
@@ -117,13 +116,48 @@ document.addEventListener("DOMContentLoaded", function () {
 
     {% block extra_js %}
 
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const htmlTag = document.documentElement;
 
+            // Leer tema desde localStorage
+            const localTheme = localStorage.getItem("theme");
+            const sessionTheme = sessionStorage.getItem("data-bs-theme");
+
+            if (localTheme && localTheme !== sessionTheme) {
+                sessionStorage.setItem("data-bs-theme", localTheme);
+                htmlTag.setAttribute("data-bs-theme", localTheme);
+                console.log("🔁 Tema sincronizado desde localStorage → sessionStorage:", localTheme);
+            } else if (!localTheme && sessionTheme) {
+                localStorage.setItem("theme", sessionTheme);
+                console.log("💾 Tema sincronizado desde sessionStorage → localStorage:", sessionTheme);
+            } else {
+                console.log("✅ Tema actual:", htmlTag.getAttribute("data-bs-theme"));
+            }
+
+            // Delegación: capturamos clics incluso si el botón cambia dinámicamente
+            document.body.addEventListener("click", function (e) {
+                if (e.target.closest(".light-dark-mode")) {
+                    const currentTheme = htmlTag.getAttribute("data-bs-theme");
+                    const newTheme = currentTheme === "light" ? "dark" : "light";
+
+                    htmlTag.setAttribute("data-bs-theme", newTheme);
+                    localStorage.setItem("theme", newTheme);
+                    sessionStorage.setItem("data-bs-theme", newTheme);
+
+                    console.log("🌗 Tema cambiado a:", newTheme, "→ guardado en localStorage y sessionStorage.");
+                }
+            });
+        });
+    </script>
 
     {% endblock extra_js %}
 
     <!-- App js -->
     <script src="{% static 'js/app.js'%}"></script>
     {% endblock javascript %}
+
+
 
 </body>
 
