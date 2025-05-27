@@ -44,8 +44,45 @@ class TrabajadoresViewSet(ReadOnlyModelViewSet):
     def list(self, request, *args, **kwargs):
         cliente_sistema = settings.CONFIGURACIONES['CLIENTE_SISTEMA']
         empresa_codigo = self.request.session.get("empresa_codigo", "00")  # Por defecto "00"
-        basedatos = f"{cliente_sistema}remu{empresa_codigo}"
+        basedatos = f"{cliente_sistema}remu{empresa_codigo}"        
+        # Obtener el parámetro `search`
+        search_query = self.request.query_params.get('search', '').strip()  
+        filtro_base = 'año="2023" AND mes="01"'
         
+        # Agregar filtro por búsqueda
+        if search_query:
+            filtro_base += f' AND (nombre LIKE "%%{search_query}%%" OR rut LIKE "%%{search_query}%%")'
+
+        # Definir la tabla y operación
+        tabla = "mt_fijo"
+        operacion = 0  # Leer
+        
+        try:
+            # Llamar a la función sql_sistema
+            resultado = sql_sistema(
+                operacion=operacion,
+                base_datos=basedatos,
+                tabla=tabla,
+                condicion=filtro_base,
+                objeto={}
+            )
+            
+            if resultado['status'] == 0:
+                trabajadores = resultado['resultado']
+                return Response({'status': 'success', 'data': trabajadores})
+            elif resultado['status'] == 4:
+                return Response({'status': 'error', 'message': 'No se encontraron resultados.'}, status=404)
+            else:
+                return Response({'status': 'error', 'message': 'Error al realizar la operación.'}, status=500)
+        
+        except Exception as e:
+            return Response({'status': 'error', 'message': str(e)}, status=500)
+        
+class MaestroempresasMRO(ReadOnlyModelViewSet):
+    def list(self, request, *args, **kwargs):
+        cliente_sistema = settings.CONFIGURACIONES['CLIENTE_SISTEMA']
+        empresa_codigo = self.request.session.get("empresa_codigo", "00")  # Por defecto "00"
+        basedatos = f"{cliente_sistema}remu{empresa_codigo}"        
         # Obtener el parámetro `search`
         search_query = self.request.query_params.get('search', '').strip()  
         filtro_base = 'año="2023" AND mes="01"'
