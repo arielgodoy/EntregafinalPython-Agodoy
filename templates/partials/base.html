@@ -13,18 +13,19 @@
     {% block extra_css %}
     {% endblock extra_css %}
 
-    <script>
-(function () {
-    const theme = localStorage.getItem("theme");
-    if (theme) {
-        console.log("📝 Cargando tema desde localStorage a sessionStorage:", theme);
-        sessionStorage.setItem("data-bs-theme", theme);
-    } else {
-        console.log("ℹ️ No hay tema en localStorage. Se usará el valor por defecto.");
-    }
-})();
-</script>
 
+    <!--Carga modo Claro/oscuro desde el localstoragestorage -->
+    <script>
+    (function () {
+        const theme = localStorage.getItem("theme");
+        if (theme) {
+            document.documentElement.setAttribute("data-bs-theme", theme);
+            console.log("✅ Tema aplicado directamente desde localStorage:", theme);
+        } else {
+            console.log("ℹ️ No hay tema en localStorage. Se usará el valor por defecto del HTML.");
+        }
+    })();
+    </script>
     <!-- Layout config Js -->
     <script src="{% static 'js/layout.js'%}"></script>
     <!-- Bootstrap Css -->
@@ -133,10 +134,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
     
-<script>
-document.addEventListener("DOMContentLoaded", function () {
+    <!--guarda  modo Claro/oscuro hacia  el localstoragestorage -->
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
     const htmlTag = document.documentElement;
-    const toggleBtn = document.getElementById("btn-toggle-theme");
+    const toggleBtn = document.querySelector(".light-dark-mode");
 
     if (!toggleBtn) {
         console.warn("⚠️ No se encontró el botón de cambio de tema.");
@@ -144,25 +146,18 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     toggleBtn.addEventListener("click", function () {
-        const currentTheme = htmlTag.getAttribute("data-bs-theme");
-        const newTheme = currentTheme === "light" ? "dark" : "light";
+        // Esperamos a que layout.js actualice el tema
+        setTimeout(() => {
+            const currentTheme = htmlTag.getAttribute("data-bs-theme");
+            localStorage.setItem("theme", currentTheme);
+            sessionStorage.setItem("data-bs-theme", currentTheme);
 
-        htmlTag.setAttribute("data-bs-theme", newTheme);
-        localStorage.setItem("theme", newTheme);
-        sessionStorage.setItem("data-bs-theme", newTheme);
-
-        console.log(`🌗 Tema cambiado de ${currentTheme} → ${newTheme}`);
-        console.log("💾 Guardado en localStorage y sessionStorage:", newTheme);
-
-        // Cambiar icono
-        const icon = toggleBtn.querySelector("i");
-        if (icon) {
-            icon.classList.remove("bx-moon", "bx-sun");
-            icon.classList.add(newTheme === "dark" ? "bx-sun" : "bx-moon");
-        }
+            console.log(`🌗 Tema cambiado a: ${currentTheme}`);
+            console.log("💾 Guardado correctamente en localStorage y sessionStorage.");
+        }, 100);
     });
-});
-</script>
+    });
+    </script>
 
 
 
