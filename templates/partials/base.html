@@ -15,17 +15,6 @@
 
 
     <!--Carga modo Claro/oscuro desde el localstoragestorage -->
-    <script>
-    (function () {
-        const theme = localStorage.getItem("theme");
-        if (theme) {
-            document.documentElement.setAttribute("data-bs-theme", theme);
-            console.log("✅ Tema aplicado directamente desde localStorage:", theme);
-        } else {
-            console.log("ℹ️ No hay tema en localStorage. Se usará el valor por defecto del HTML.");
-        }
-    })();
-    </script>
     <!-- Layout config Js -->
     <script src="{% static 'js/layout.js'%}"></script>
     <!-- Script que carga el tema desde el localStorage -->       
