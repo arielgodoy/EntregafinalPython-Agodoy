@@ -197,6 +197,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR,'media')
 
 #AUTH_USER_MODEL = 'biblioteca.Users'
 #AUTH_USER_MODEL = 'biblioteca.Users'  # Reemplaza 'myapp' con el nombre de tu aplicación donde se encuentra el modelo CustomUser
+#AUTH_USER_MODEL = 'acounts.CustomUser'
+
 
 
 AUTHENTICATION_BACKENDS = [

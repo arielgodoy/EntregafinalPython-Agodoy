@@ -1,8 +1,13 @@
 from django.db import models
-from django.contrib.auth.models import User
+#from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from settings.models import UserPreferences
+
 
 
 class CustomUser(AbstractUser):     
@@ -31,6 +36,7 @@ class Avatar(models.Model):
 def create_user_avatar(sender, instance, created, **kwargs):
     if created:
         Avatar.objects.create(user=instance)
+        UserPreferences.objects.create(user=instance)
 
     
 
