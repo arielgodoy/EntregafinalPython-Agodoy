@@ -28,6 +28,8 @@
     </script>
     <!-- Layout config Js -->
     <script src="{% static 'js/layout.js'%}"></script>
+    <!-- Script que carga el tema desde el localStorage -->       
+    <script src="{% static 'js/theme_config.js' %}"></script>
     <!-- Bootstrap Css -->
     <link href="{% static 'css/bootstrap.min.css'%}" id="bootstrap-style" rel="stylesheet" type="text/css" />
     <!-- Icons Css -->
@@ -115,50 +117,15 @@ document.addEventListener("DOMContentLoaded", function () {
     <script src="{% static 'js/pages/plugins/lord-icon-2.1.0.js'%}"></script>
     <script src="{% static 'js/plugins.js'%}"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-    
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>    
 
     {% block extra_js %}
-
-
-
-
-
-
 
     {% endblock extra_js %}
 
     <!-- App js -->
     <script src="{% static 'js/app.js'%}"></script>
     {% endblock javascript %}
-
-
-    
-    <!--guarda  modo Claro/oscuro hacia  el localstoragestorage -->
-    <script>
-    document.addEventListener("DOMContentLoaded", function () {
-    const htmlTag = document.documentElement;
-    const toggleBtn = document.querySelector(".light-dark-mode");
-
-    if (!toggleBtn) {
-        console.warn("⚠️ No se encontró el botón de cambio de tema.");
-        return;
-    }
-
-    toggleBtn.addEventListener("click", function () {
-        // Esperamos a que layout.js actualice el tema
-        setTimeout(() => {
-            const currentTheme = htmlTag.getAttribute("data-bs-theme");
-            localStorage.setItem("theme", currentTheme);
-            sessionStorage.setItem("data-bs-theme", currentTheme);
-
-            console.log(`🌗 Tema cambiado a: ${currentTheme}`);
-            console.log("💾 Guardado correctamente en localStorage y sessionStorage.");
-        }, 100);
-    });
-    });
-    </script>
-
 
 
 </body>
