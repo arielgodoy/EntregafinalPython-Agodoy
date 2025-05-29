@@ -4,9 +4,7 @@ from django.contrib.auth.models import User
 class UserPreferences(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
 
-    # 🖥️ Preferencias de tema/layout (valores por defecto del sistema)
-    
-    # Opciones de configuración posibles según layout.js
+    # 🖥️ Opciones para layout según layout.js
     LAYOUT_CHOICES = [
         ("vertical", "Vertical"),
         ("horizontal", "Horizontal"),
@@ -15,8 +13,8 @@ class UserPreferences(models.Model):
     ]
 
     THEME_CHOICES = [
-        ("light", "Light"),
-        ("dark", "Dark"),
+        ("light", "Claro"),
+        ("dark", "Oscuro"),
     ]
 
     SIDEBAR_VISIBILITY_CHOICES = [
@@ -70,17 +68,18 @@ class UserPreferences(models.Model):
         ("enable", "Activado"),
     ]
 
-    data_layout = models.CharField(max_length=50, blank=True, null=True, default="vertical")
-    data_bs_theme = models.CharField(max_length=50, blank=True, null=True, default="light")
-    data_sidebar_visibility = models.CharField(max_length=50, blank=True, null=True, default="show")
-    data_layout_width = models.CharField(max_length=50, blank=True, null=True, default="fluid")
-    data_layout_position = models.CharField(max_length=50, blank=True, null=True, default="fixed")
-    data_topbar = models.CharField(max_length=50, blank=True, null=True, default="light")
-    data_sidebar_size = models.CharField(max_length=50, blank=True, null=True, default="lg")
-    data_layout_style = models.CharField(max_length=50, blank=True, null=True, default="default")
-    data_sidebar = models.CharField(max_length=50, blank=True, null=True, default="dark")
-    data_sidebar_image = models.CharField(max_length=50, blank=True, null=True, default="none")
-    data_preloader = models.CharField(max_length=50, blank=True, null=True, default="disable")
+    # 🧩 Preferencias visuales
+    data_layout = models.CharField(max_length=50, choices=LAYOUT_CHOICES, default="vertical", blank=True, null=True)
+    data_bs_theme = models.CharField(max_length=50, choices=THEME_CHOICES, default="light", blank=True, null=True)
+    data_sidebar_visibility = models.CharField(max_length=50, choices=SIDEBAR_VISIBILITY_CHOICES, default="show", blank=True, null=True)
+    data_layout_width = models.CharField(max_length=50, choices=WIDTH_CHOICES, default="fluid", blank=True, null=True)
+    data_layout_position = models.CharField(max_length=50, choices=POSITION_CHOICES, default="fixed", blank=True, null=True)
+    data_topbar = models.CharField(max_length=50, choices=TOPBAR_CHOICES, default="light", blank=True, null=True)
+    data_sidebar_size = models.CharField(max_length=50, choices=SIDEBAR_SIZE_CHOICES, default="lg", blank=True, null=True)
+    data_layout_style = models.CharField(max_length=50, choices=LAYOUT_STYLE_CHOICES, default="default", blank=True, null=True)
+    data_sidebar = models.CharField(max_length=50, choices=SIDEBAR_COLOR_CHOICES, default="dark", blank=True, null=True)
+    data_sidebar_image = models.CharField(max_length=50, choices=SIDEBAR_IMAGE_CHOICES, default="none", blank=True, null=True)
+    data_preloader = models.CharField(max_length=50, choices=PRELOADER_CHOICES, default="disable", blank=True, null=True)
 
     # 📧 Configuración de correo electrónico
     email_enabled = models.BooleanField(default=False)
@@ -115,7 +114,7 @@ class UserPreferences(models.Model):
     smtp_username = models.CharField(max_length=255, blank=True, null=True)
     smtp_password = models.CharField(max_length=255, blank=True, null=True)
 
-    # Preferencias de notificación
+    # 🔔 Preferencias de notificación
     send_headers = models.BooleanField(default=False)
     send_documents = models.BooleanField(default=False)
 
