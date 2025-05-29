@@ -17,7 +17,7 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect('biblioteca:listar_propiedades')  # Redirigir al usuario a la página de inicio después de un login exitoso
+            return redirect('biblioteca:listar_propiedades')  # Redirigir al usuario a la página de inicio después de un login exitoso cambair a dashboard de aplicaciones
         else:
             # Mostrar mensaje de error si el login no es válido
             error_message = "Nombre de usuario o contraseña incorrectos."
