@@ -99,6 +99,7 @@ TEMPLATES = [
                 #global_conext para mostra nombre de la empresa activa
                 'access_control.context_processors.global_context',
                 'access_control.context_processors.empresas_disponibles',
+                'settings.context_processors.user_preferences_to_localstorage',
             ],
         },
     },
