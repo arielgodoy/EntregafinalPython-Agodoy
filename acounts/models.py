@@ -1,7 +1,5 @@
 from django.db import models
-#from django.contrib.auth.models import User
-from django.contrib.auth import get_user_model
-User = get_user_model()
+from django.contrib.auth.models import User
 
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db.models.signals import post_save
@@ -10,14 +8,14 @@ from settings.models import UserPreferences
 
 
 
-class CustomUser(AbstractUser):     
-     groups = models.ManyToManyField(Group, related_name='custom_users')
-     user_permissions = models.ManyToManyField(Permission, related_name='custom_users')    
-     def save(self, *args, **kwargs):
-        created = not self.pk  # Verificar si es un nuevo usuario
-        super().save(*args, **kwargs)
-        if created:
-            Avatar.objects.create(user=self)  # Crear un objeto Avatar para el nuevo usuario
+# class CustomUser(AbstractUser):     
+#      groups = models.ManyToManyField(Group, related_name='custom_users')
+#      user_permissions = models.ManyToManyField(Permission, related_name='custom_users')    
+#      def save(self, *args, **kwargs):
+#         created = not self.pk  # Verificar si es un nuevo usuario
+#         super().save(*args, **kwargs)
+#         if created:
+#             Avatar.objects.create(user=self)  # Crear un objeto Avatar para el nuevo usuario
 
 
 class Avatar(models.Model):
