@@ -5,7 +5,9 @@ __pycache__/
 
 
 
-media/
+media/archivos_documentos/
+media/avatares/
+
 
 # C extensions
 *.so

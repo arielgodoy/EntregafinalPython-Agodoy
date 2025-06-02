@@ -1,0 +1,7 @@
+### prueba de API
+GET https://empresaseltlit.buk.cl/api/v1/chile/employees
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer hAvgpSoxsShEEoeUH7bPpe7Z
+
+
