@@ -70,6 +70,7 @@
                                 </div>
                             </li>
                         
+                            {% if user.is_superuser %}
                             <!-- Menú Control de Acceso -->
                             <li class="nav-item">
                                 <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
@@ -78,7 +79,11 @@
                                 <div class="collapse menu-dropdown" id="sidebarControlAcceso">
                                     <ul class="nav nav-sm flex-column">
                                         <li class="nav-item">
-                                            <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
+                                            <a href="{% url 'crear_usuario_admin' %}" class="nav-link" data-key="t-create-user">Crear Usuario (Admin)</a>
+                                        </li>
+                                        
+                                        <li class="nav-item">
+                                           <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
                                         </li>
                                         <li class="nav-item">
                                             <a href="{% url 'access_control:empresas_lista' %}" class="nav-link" data-key="t-company-management">Gestión de Empresas</a>
@@ -95,30 +100,25 @@
                                     </ul>
                                 </div>
                             </li>
+                        {% endif %}
                         
-                            <!-- Menú Cuentas -->
-                            <li class="nav-item">
-                                <a class="nav-link menu-link" href="#sidebarCuentas" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentas">
-                                    <i class="ri-user-line"></i> <span data-key="t-accounts">Cuentas</span>
-                                </a>
-                                <div class="collapse menu-dropdown" id="sidebarCuentas">
-                                    <ul class="nav nav-sm flex-column">
-                                        <li class="nav-item">
-                                            <a href="{% url 'login' %}" class="nav-link" data-key="t-login">Iniciar Sesión</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'registro_usuario' %}" class="nav-link" data-key="t-register">Registrar Usuario</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'logout' %}" class="nav-link" data-key="t-logout">Cerrar Sesión</a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
+                        <!-- Menú Cuentas -->
+                        <li class="nav-item">
+                            <a class="nav-link menu-link" href="#sidebarCuentaUsuario" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentaUsuario">
+                                <i class="ri-user-settings-line"></i> <span data-key="t-user-account">Cuenta de Usuario</span>
+                            </a>
+                            <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
+                                <ul class="nav nav-sm flex-column">
+                                    <li class="nav-item">
+                                        <a href="{% url 'editar_perfil' %}" class="nav-link" data-key="t-edit-profile">Editar Perfil</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+
 
                         <!-- FINE MENU ANTIGUO NUEVO-->
 

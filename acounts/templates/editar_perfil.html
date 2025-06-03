@@ -1,0 +1,89 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+{% block title %}
+Editar Perfil
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Editar Perfil" pagetitle="Cuenta de Usuario" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
+                <h2 class="text-center mb-4">Editar Perfil</h2>
+                <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    <div class="table-responsive">
+                        <table class="table align-middle table-striped w-75 mx-auto">
+                            <tbody>
+                                <tr>
+                                    <td class="text-end align-middle">Nombre de Usuario:</td>
+                                    <td>{{ user_form.username }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Nombre:</td>
+                                    <td>{{ avatar_form.first_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Apellido:</td>
+                                    <td>{{ avatar_form.last_name }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Correo Electrónico:</td>
+                                    <td>{{ avatar_form.email }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Profesión:</td>
+                                    <td>{{ avatar_form.profesion }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">RUT/DNI:</td>
+                                    <td>{{ avatar_form.dni }}</td>
+                                </tr>
+                                <tr>
+    <td class="text-end align-middle">Avatar actual:</td>
+    <td>
+        {% if request.user.avatar.imagen %}
+            <img src="{{ request.user.avatar.imagen.url }}" alt="Avatar" class="rounded-circle" style="max-height: 80px; max-width: 80px; object-fit: cover; margin-bottom: 10px;">
+        {% else %}
+            <span class="text-muted">No hay avatar cargado.</span>
+        {% endif %}
+        <br>
+        {{ avatar_form.imagen }}
+    </td>
+</tr>
+
+                                <tr>
+                                    <td colspan="2" class="text-center">
+                                        <button type="submit" class="btn btn-success w-50">Guardar Cambios</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

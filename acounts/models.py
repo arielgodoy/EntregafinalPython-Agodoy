@@ -8,14 +8,6 @@ from settings.models import UserPreferences
 
 
 
-# class CustomUser(AbstractUser):     
-#      groups = models.ManyToManyField(Group, related_name='custom_users')
-#      user_permissions = models.ManyToManyField(Permission, related_name='custom_users')    
-#      def save(self, *args, **kwargs):
-#         created = not self.pk  # Verificar si es un nuevo usuario
-#         super().save(*args, **kwargs)
-#         if created:
-#             Avatar.objects.create(user=self)  # Crear un objeto Avatar para el nuevo usuario
 
 
 class Avatar(models.Model):

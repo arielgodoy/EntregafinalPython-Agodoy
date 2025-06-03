@@ -10,6 +10,8 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('registro/', views.registro_usuario, name='registro_usuario'),    
     path('subeavatar', views.subeAvatar, name='subeavatar'),
+    path('admin/crear_usuario/', views.crear_usuario_admin, name='crear_usuario_admin'),  # solo admins
+    path('perfil/', views.editar_perfil, name='editar_perfil'),
     path('cambiar-password/', views.cambiar_password, name='cambiar_password'),    
 ]
 

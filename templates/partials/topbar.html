@@ -661,7 +661,7 @@
     <span class="d-flex align-items-center">
         {% if request.user.is_authenticated %}
             {% if request.user.avatar.imagen.url %}
-                <a href="{% url 'subeavatar' %}">
+                <a href="{% url 'editar_perfil' %}">
     <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" alt="Avatar" style="max-width: 2em; margin-right: 10px;">
 </a>
 

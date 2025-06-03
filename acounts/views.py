@@ -6,9 +6,45 @@ from django.contrib import messages
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login,logout
 import time
+from acounts.forms import CustomUserForm
+from django.contrib.auth.decorators import user_passes_test
+#from django.contrib.auth.forms import UserCreationForm
 
-
+@user_passes_test(lambda u: u.is_superuser)
+def crear_usuario_admin(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Usuario creado exitosamente.")
+            return redirect('crear_usuario_admin')
+    else:
+        form = UserCreationForm()
+    return render(request, 'crear_usuario_admin.html', {'form': form})
 # Create your views here.
+
+@login_required
+def editar_perfil(request):
+    user = request.user
+    avatar = user.avatar
+    if request.method == 'POST':
+        user_form = CustomUserForm(request.POST, instance=user)
+        avatar_form = AvatarForm(request.POST, request.FILES, instance=avatar)
+        if user_form.is_valid() and avatar_form.is_valid():
+            user_form.save()
+            avatar_form.save()
+            messages.success(request, "Perfil actualizado correctamente.")
+            return redirect('editar_perfil')
+    else:
+        user_form = CustomUserForm(instance=user)
+        avatar_form = AvatarForm(instance=avatar)
+    
+    return render(request, 'editar_perfil.html', {
+        'user_form': user_form,
+        'avatar_form': avatar_form
+    })
+
+
 
 def login_view(request):
     if request.method == 'POST':
