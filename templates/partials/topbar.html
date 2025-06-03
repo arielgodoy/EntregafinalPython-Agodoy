@@ -656,22 +656,31 @@
                         </div>
 
                         <div class="dropdown ms-sm-3 header-item topbar-user">
+                            
                             <div>
-                                <span class="d-flex align-items-center">
-                                    <!-- <img class="rounded-circle header-profile-user" src="{% static 'images/users/avatar-1.jpg'%}" alt="Header Avatar"> -->
-                                    {% if request.user.is_authenticated %}
-                                    {% if request.user.avatar.imagen.url %}
-                                    <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" style="max-width: 2em; margin-right: 10px;">
-                                    {% endif %}
-                                    <span class="text-start ms-xl-2">
-                                        <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text">{{user.username}}</span>                                        
-                                        <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
-                                            Salir
-                                        </a>
-                                    </span>
-                                    {% endif %}
-                                </span>
-                            </div>
+    <span class="d-flex align-items-center">
+        {% if request.user.is_authenticated %}
+            {% if request.user.avatar.imagen.url %}
+                <a href="{% url 'subeavatar' %}">
+    <img class="rounded-circle" src="{{ request.user.avatar.imagen.url }}" alt="Avatar" style="max-width: 2em; margin-right: 10px;">
+</a>
+
+            {% endif %}
+            <span class="text-start ms-xl-2">
+                <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text">
+                    {{ user.username }}
+                </span>                
+                
+                <!-- Botón para salir -->
+                <a href="{% url 'logout' %}" class="btn btn-primary ms-2">
+                    Salir
+                </a>
+            </span>
+        {% endif %}
+    </span>
+</div>
+
+
                             <div class="dropdown-menu dropdown-menu-end">
                                 <!-- item-->
                                 <h6 class="dropdown-header">Welcome Anna!</h6>

@@ -1,7 +1,5 @@
-### prueba de API
-GET https://empresaseltlit.buk.cl/api/v1/chile/employees
+### prueba de API de buk
+GET https://empresaseltit.buk.cl/api/v1/chile/employees/active?date=2024-05-01&exclude_pending=true
 Accept: application/json
-Content-Type: application/json
-Authorization: Bearer hAvgpSoxsShEEoeUH7bPpe7Z
-
+auth_token: hjQD522SEjmiqLfNUSN5Qdhw
 
