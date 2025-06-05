@@ -1,0 +1,228 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+{% block title %}Configuración de Correo{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Configuración de Correo" pagetitle="Cuenta de Usuario" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
+                <h2 class="text-center mb-4">Configuración de Correo</h2>
+                <form method="post" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    <div class="table-responsive">
+                        <table class="table align-middle table-striped w-75 mx-auto">
+                            <tbody>
+                                <tr><td colspan="2"><strong>📨 Correo de Entrada</strong></td></tr>
+                                <tr>
+                                    <td class="text-end align-middle">Habilitar correo:</td>
+                                    <td>{{ form.email_enabled }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Protocolo:</td>
+                                    <td>{{ form.email_protocol }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Servidor:</td>
+                                    <td>{{ form.email_host }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Puerto:</td>
+                                    <td>{{ form.email_port }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Encriptación:</td>
+                                    <td>{{ form.email_encryption }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Usuario:</td>
+                                    <td>{{ form.email_username }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Contraseña:</td>
+                                    <td>{{ form.email_password }}</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" class="text-center">
+                                        <div class="d-flex justify-content-center gap-2">
+                                        <button type="button" class="btn btn-info w-10 mb-2" onclick="probarEntrada()">Probar Correo de Entrada</button>
+                                        <button type="button" class="btn btn-warning w-10 mb-2" onclick="recibirCorreo()">Recibir Correo de Prueba</button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <tr><td colspan="2"><strong>📤 Correo de Salida (SMTP)</strong></td></tr>
+                                <tr>
+                                    <td class="text-end align-middle">Servidor SMTP:</td>
+                                    <td>{{ form.smtp_host }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Puerto SMTP:</td>
+                                    <td>{{ form.smtp_port }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Encriptación SMTP:</td>
+                                    <td>{{ form.smtp_encryption }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Usuario SMTP:</td>
+                                    <td>{{ form.smtp_username }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Contraseña SMTP:</td>
+                                    <td>{{ form.smtp_password }}</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" class="text-center">
+                                        <div class="d-flex justify-content-center gap-2">
+                                        <button type="button" class="btn btn-info w-10 mb-4" onclick="probarSalida()">Probar Correo de Salida</button>
+                                        <button type="button" class="btn btn-warning w-10 mb-4" onclick="enviarCorreoPrueba()">Enviar Correo de Prueba</button>                                       
+                                        </div>
+                                    </td>
+                                </tr>                               
+                                
+                                <tr><td colspan="2"><strong>🔔 Notificaciones</strong></td></tr>
+                                <tr>
+                                    <td class="text-end align-middle">Enviar encabezados:</td>
+                                    <td>{{ form.send_headers }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end align-middle">Enviar documentos:</td>
+                                    <td>{{ form.send_documents }}</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" class="text-center">
+                                        <button type="submit" class="btn btn-success w-50">Guardar Configuración</button>                                         
+                                    </td>
+                                </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+<script>
+function mostrarToast(mensaje, success = true) {
+    Toastify({
+        text: mensaje,
+        duration: 5000,
+        gravity: "top",
+        position: "center",
+        backgroundColor: success ? "#28a745" : "#dc3545"
+    }).showToast();
+}
+
+function probarEntrada() {
+    const data = {
+        protocolo: document.getElementById("id_email_protocol").value,
+        servidor: document.getElementById("id_email_host").value,
+        puerto: document.getElementById("id_email_port").value,
+        encriptacion: document.getElementById("id_email_encryption").value,
+        usuario: document.getElementById("id_email_username").value,
+        contrasena: document.getElementById("id_email_password").value,
+        csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]').value
+    };
+
+    fetch("{% url 'probar_configuracion_entrada' %}", {
+        method: "POST",
+        headers: {"X-Requested-With": "XMLHttpRequest"},
+        body: new URLSearchParams(data)
+    })
+    .then(res => res.json())
+    .then(res => mostrarToast(res.success ? "✅ Entrada OK" : "❌ " + res.error, res.success));
+}
+
+function probarSalida() {
+    const data = {
+        smtp_host: document.getElementById("id_smtp_host").value,
+        smtp_port: document.getElementById("id_smtp_port").value,
+        smtp_encryption: document.getElementById("id_smtp_encryption").value,
+        smtp_username: document.getElementById("id_smtp_username").value,
+        smtp_password: document.getElementById("id_smtp_password").value,
+        csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]').value
+    };
+
+    fetch("{% url 'probar_configuracion_salida' %}", {
+        method: "POST",
+        headers: {"X-Requested-With": "XMLHttpRequest"},
+        body: new URLSearchParams(data)
+    })
+    .then(res => res.json())
+    .then(res => mostrarToast(res.success ? "✅ Salida OK" : "❌ " + res.error, res.success));
+}
+function enviarCorreoPrueba() {
+    fetch("{% url 'enviar_correo_prueba' %}", {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+            csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]').value
+        })
+    })
+    .then(res => res.json())
+    .then(res => mostrarToast(res.success ? "📧 Correo enviado con éxito" : "❌ Error: " + res.error, res.success));
+}
+
+function recibirCorreo() {
+    fetch("{% url 'recibir_correo_prueba' %}", {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+            csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]').value
+        })
+    })
+    .then(res => res.json())
+    .then(res => {
+        if (res.success) {
+            Toastify({
+                text: "📥 Último Asunto: " + res.subject,
+                duration: 6000,
+                gravity: "top",
+                position: "center",
+                backgroundColor: "#17a2b8"
+            }).showToast();
+        } else {
+            Toastify({
+                text: "❌ Error: " + res.error,
+                duration: 6000,
+                gravity: "top",
+                position: "center",
+                backgroundColor: "#dc3545"
+            }).showToast();
+        }
+    });
+}
+
+</script>
+
+
+{% endblock extra_js %}

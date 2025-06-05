@@ -25,5 +25,6 @@ urlpatterns = [
     path('api/v1/',include('api.urls')),
     #path('access-control/', include('access_control.urls')), 
     path('access-control/', include('access_control.urls', namespace='access_control')),
+     path('settings/', include('settings.urls')),
 
 ]
