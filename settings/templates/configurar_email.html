@@ -18,95 +18,100 @@
     <div class="page-content">
         <div class="container-fluid">
             <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
-                <h2 class="text-center mb-4">Configuración de Correo</h2>
+                <h2 class="text-center mb-4" data-key="title-email-settings">Configuración de Correo</h2>
                 <form method="post" class="needs-validation" novalidate>
                     {% csrf_token %}
                     <div class="table-responsive">
                         <table class="table align-middle table-striped w-75 mx-auto">
                             <tbody>
-                                <tr><td colspan="2"><strong>📨 Correo de Entrada</strong></td></tr>
+                                <tr><td colspan="2" data-key="label-incoming-email"><strong>📨 Correo de Entrada</strong></td></tr>
                                 <tr>
-                                    <td class="text-end align-middle">Habilitar correo:</td>
+                                    <td class="text-end align-middle" data-key="label-enable-email">Habilitar correo:</td>
                                     <td>{{ form.email_enabled }}</td>
                                 </tr>
+                            </tbody>
+
+                            <tbody id="email-config-section">
                                 <tr>
-                                    <td class="text-end align-middle">Protocolo:</td>
+                                    <td class="text-end align-middle" data-key="label-protocol">Protocolo:</td>
                                     <td>{{ form.email_protocol }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Servidor:</td>
+                                    <td class="text-end align-middle" data-key="label-server">Servidor:</td>
                                     <td>{{ form.email_host }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Puerto:</td>
+                                    <td class="text-end align-middle" data-key="label-port">Puerto:</td>
                                     <td>{{ form.email_port }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Encriptación:</td>
+                                    <td class="text-end align-middle" data-key="label-encryption">Encriptación:</td>
                                     <td>{{ form.email_encryption }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Usuario:</td>
+                                    <td class="text-end align-middle" data-key="label-username">Usuario:</td>
                                     <td>{{ form.email_username }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Contraseña:</td>
+                                    <td class="text-end align-middle" data-key="label-password">Contraseña:</td>
                                     <td>{{ form.email_password }}</td>
                                 </tr>
                                 <tr>
                                     <td colspan="2" class="text-center">
                                         <div class="d-flex justify-content-center gap-2">
-                                        <button type="button" class="btn btn-info w-10 mb-2" onclick="probarEntrada()">Probar Correo de Entrada</button>
-                                        <button type="button" class="btn btn-warning w-10 mb-2" onclick="recibirCorreo()">Recibir Correo de Prueba</button>
+                                            <button type="button" class="btn btn-info w-10 mb-2" onclick="probarEntrada()" data-key="btn-test-incoming">Probar Correo de Entrada</button>
+                                            <button type="button" class="btn btn-warning w-10 mb-2" onclick="recibirCorreo()" data-key="btn-receive-test">Recibir Correo de Prueba</button>
                                         </div>
                                     </td>
                                 </tr>
 
-                                <tr><td colspan="2"><strong>📤 Correo de Salida (SMTP)</strong></td></tr>
+                                <tr><td colspan="2" data-key="label-outgoing-email"><strong>📤 Correo de Salida (SMTP)</strong></td></tr>
                                 <tr>
-                                    <td class="text-end align-middle">Servidor SMTP:</td>
+                                    <td class="text-end align-middle" data-key="label-smtp-server">Servidor SMTP:</td>
                                     <td>{{ form.smtp_host }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Puerto SMTP:</td>
+                                    <td class="text-end align-middle" data-key="label-smtp-port">Puerto SMTP:</td>
                                     <td>{{ form.smtp_port }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Encriptación SMTP:</td>
+                                    <td class="text-end align-middle" data-key="label-smtp-encryption">Encriptación SMTP:</td>
                                     <td>{{ form.smtp_encryption }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Usuario SMTP:</td>
+                                    <td class="text-end align-middle" data-key="label-smtp-username">Usuario SMTP:</td>
                                     <td>{{ form.smtp_username }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Contraseña SMTP:</td>
+                                    <td class="text-end align-middle" data-key="label-smtp-password">Contraseña SMTP:</td>
                                     <td>{{ form.smtp_password }}</td>
                                 </tr>
                                 <tr>
                                     <td colspan="2" class="text-center">
                                         <div class="d-flex justify-content-center gap-2">
-                                        <button type="button" class="btn btn-info w-10 mb-4" onclick="probarSalida()">Probar Correo de Salida</button>
-                                        <button type="button" class="btn btn-warning w-10 mb-4" onclick="enviarCorreoPrueba()">Enviar Correo de Prueba</button>                                       
+                                            <button type="button" class="btn btn-info w-10 mb-4" onclick="probarSalida()" data-key="btn-test-outgoing">Probar Correo de Salida</button>
+                                            <button type="button" class="btn btn-warning w-10 mb-4" onclick="enviarCorreoPrueba()" data-key="btn-send-test">Enviar Correo de Prueba</button>
                                         </div>
                                     </td>
-                                </tr>                               
-                                
-                                <tr><td colspan="2"><strong>🔔 Notificaciones</strong></td></tr>
+                                </tr>  
+
+                                <tr><td colspan="2" data-key="label-notifications"><strong>🔔 Notificaciones</strong></td></tr>
                                 <tr>
-                                    <td class="text-end align-middle">Enviar encabezados:</td>
+                                    <td class="text-end align-middle" data-key="label-send-headers">Enviar encabezados:</td>
                                     <td>{{ form.send_headers }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-end align-middle">Enviar documentos:</td>
+                                    <td class="text-end align-middle" data-key="label-send-documents">Enviar documentos:</td>
                                     <td>{{ form.send_documents }}</td>
                                 </tr>
+                            </tbody>
+
+                            <tbody>
                                 <tr>
                                     <td colspan="2" class="text-center">
-                                        <button type="submit" class="btn btn-success w-50">Guardar Configuración</button>                                         
+                                        <button type="submit" class="btn btn-success w-50" data-key="btn-save-settings">Guardar Configuración</button>
                                     </td>
                                 </tr>
-
                             </tbody>
                         </table>
                     </div>
@@ -117,6 +122,7 @@
 </div>
 {% endblock content %}
 
+
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
@@ -126,15 +132,23 @@
     });
 </script>
 <script>
+
 function mostrarToast(mensaje, success = true) {
     Toastify({
         text: mensaje,
-        duration: 5000,
-        gravity: "top",
-        position: "center",
+        duration: 6000,
+        gravity: "top", // Para que se controle desde arriba
+        position: "right", // Aparece a la derecha
+        offset: {
+            x: 20,  // 20px desde el borde derecho
+            y: 100  // 100px desde arriba
+        },
+        stopOnFocus: true,
+        close: true,
         backgroundColor: success ? "#28a745" : "#dc3545"
     }).showToast();
 }
+
 
 function probarEntrada() {
     const data = {
@@ -222,6 +236,22 @@ function recibirCorreo() {
     });
 }
 
+
+function toggleEmailConfigSection() {
+    const checkbox = document.getElementById("id_email_enabled");
+    const section = document.getElementById("email-config-section");
+    if (checkbox && section) {
+        section.style.display = checkbox.checked ? "table-row-group" : "none";
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    const checkbox = document.getElementById("id_email_enabled");
+    if (checkbox) {
+        toggleEmailConfigSection(); // Mostrar/ocultar al cargar
+        checkbox.addEventListener("change", toggleEmailConfigSection); // Mostrar/ocultar al cambiar
+    }
+});
 </script>
 
 
