@@ -29,6 +29,63 @@ from django.urls import reverse_lazy, reverse
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 
+from django.core.mail import EmailMultiAlternatives, get_connection
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from settings.models import UserPreferences
+from biblioteca.models import Documento
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
+
+@csrf_exempt
+@require_POST
+@login_required
+def enviar_enlace_documento(request, documento_id):
+    try:
+        email_destino = request.POST.get('correo')
+        if not email_destino:
+            return JsonResponse({"success": False, "error": "Correo destino no proporcionado."})
+
+        documento = Documento.objects.get(pk=documento_id)
+        prefs = UserPreferences.objects.get(user=request.user)
+        enlace = request.build_absolute_uri(documento.archivo.url)
+        rol = documento.propiedad.rol
+
+        # Configuración segura del backend manual
+        connection = get_connection(
+            host=prefs.smtp_host,
+            port=prefs.smtp_port,
+            username=prefs.smtp_username,
+            password=prefs.smtp_password,
+            use_tls=(prefs.smtp_encryption == 'STARTTLS'),
+            use_ssl=(prefs.smtp_encryption == 'SSL')
+        )
+
+        subject = f"Enlace al documento solicitado {documento.nombre_documento}"
+        body_text = f"Hola,\n\nAquí tienes el enlace al documento:\n{enlace}"
+        body_html = f"""
+        <p>Se adjunta Link al documento solicitado asociado a la Propiedad <strong>ROL: {rol}</strong>:</p>        
+        <p><a href="{enlace}" target="_blank">{documento.nombre_documento}</a></p>
+        """
+
+        email = EmailMultiAlternatives(
+            subject,
+            body_text,
+            prefs.smtp_username,
+            [email_destino],
+            connection=connection
+        )
+        email.attach_alternative(body_html, "text/html")
+        email.send()
+
+        return JsonResponse({"success": True})
+
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
+
+
+
+
 
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:

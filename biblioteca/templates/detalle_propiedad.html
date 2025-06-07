@@ -1,16 +1,13 @@
 {% extends "partials/base.html" %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 
 {% block extra_css %}
-    <!--datatable css-->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" />
-    <!--datatable responsive css-->
-    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.bootstrap.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
 {% endblock extra_css %}
 
-{% block title %}
-Detalle de Propiedad
-{% endblock title %}
+{% block title %}Detalle de Propiedad{% endblock title %}
 
 {% block pagetitle %}
 {% include "partials/page-title.html" with title="Detalle de Propiedad" pagetitle="Propiedades" %}
@@ -22,21 +19,24 @@ Detalle de Propiedad
         <div class="container-fluid">
             <div class="row">
                 <div class="col-12">
-                    <h1 class="mb-4">ROL NRO: {{ propiedad.rol }}</h1>
-                    <h2>Descripción: {{ propiedad.descripcion }}</h2>
-                    <p>Dirección: {{ propiedad.direccion }}</p>
+                    <h1 class="mb-4" data-key="title-rol">ROL NRO: {{ propiedad.rol }}</h1>
+                    <h2 data-key="label-description">Descripción: {{ propiedad.descripcion }}</h2>
+                    <p data-key="label-address">Dirección: {{ propiedad.direccion }}</p>
                 </div>
             </div>
 
             <div class="row mt-4">
                 <div class="col-12">
-                    <h2>Documentos asociados:</h2>
+                    <h2 data-key="label-documents">Documentos asociados:</h2>
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <button class="btn btn-dark" onclick="copiarTodosLosEnlaces()">
+                        <button class="btn btn-dark" onclick="copiarTodosLosEnlaces()" data-key="btn-copy-all">
                             <i class="bi bi-clipboard"></i> Copiar todos los enlaces
                         </button>
-                        <a href="{% url 'biblioteca:crear_documento' propiedad.pk %}" class="btn btn-success mt-3">Agregar nuevo documento</a>
+                        <a href="{% url 'biblioteca:crear_documento' propiedad.pk %}" class="btn btn-success mt-3" data-key="btn-add-doc">Agregar nuevo documento</a>
                     </div>
+
+                    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
                     <table id="documentosTable" class="table table-bordered dt-responsive nowrap table-striped align-middle" style="width:100%">
                         <thead>
                             <tr>
@@ -53,45 +53,40 @@ Detalle de Propiedad
                                 <td>{{ documento.tipo_documento }}</td>
                                 <td>{{ documento.nombre_documento }}</td>
                                 <td>{{ documento.fecha_documento }}</td>
+                                <td>{{ documento.fecha_vencimiento|default:"Sin vencimiento" }}</td>
                                 <td>
-                                    {% if documento.fecha_vencimiento %}
-                                        {{ documento.fecha_vencimiento }}
-                                    {% else %}
-                                        Sin vencimiento
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <a href="{{ documento.archivo.url }}" class="btn btn-sm btn-primary" target="_blank">
-                                        <i class="bi bi-eye"></i> Ver
-                                    </a>
-                                    <button class="btn btn-sm btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')">
-                                        <i class="bi bi-clipboard"></i> Copiar enlace
-                                    </button>
-                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ documento.pk }}">
-                                        Eliminar
-                                    </button>
+                                    <a href="{{ documento.archivo.url }}" class="btn btn-sm btn-primary" target="_blank"><i class="bi bi-eye"></i> Ver</a>
 
-                                    <!-- Modal de confirmación -->
-                                    <div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1" aria-labelledby="confirmModalLabel-{{ documento.pk }}" aria-hidden="true">
+
+                                    {% if request.user.userpreferences.email_enabled %}
+                                        <button class="btn btn-sm btn-outline-info"
+                                                onclick="abrirModalCorreo(`{% url 'biblioteca:enviar_enlace_documento' documento.pk %}`)"
+                                                data-key="btn-enviarcorreo">
+                                            <i class="bi bi-envelope"></i> Enviar por Correo
+                                        </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-dark" onclick="copiarenlace('{{ documento.archivo.url }}')"><i class="bi bi-clipboard"></i> Copiar enlace</button>
+                                    {% endif %}
+                                    
+                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ documento.pk }}"><i class="bi bi-trash"></i> Eliminar</button>
+                                    <div class="modal fade" id="confirmModal-{{ documento.pk }}" tabindex="-1">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title" id="confirmModalLabel-{{ documento.pk }}">Confirmar eliminación</h5>
+                                                <div class="modal-header"><h5 class="modal-title">Confirmar eliminación</h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
-                                                <div class="modal-body">
-                                                    ¿Estás seguro de que deseas eliminar este documento <strong>{{ documento.nombre_documento }}</strong>?
-                                                </div>
+                                                <div class="modal-body">¿Deseas eliminar <strong>{{ documento.nombre_documento }}</strong>?</div>
                                                 <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                                                     <form method="post" action="{% url 'biblioteca:eliminar_documento' documento.pk %}">
                                                         {% csrf_token %}
                                                         <button type="submit" class="btn btn-danger">Eliminar</button>
                                                     </form>
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+
                                 </td>
                             </tr>
                             {% endfor %}
@@ -103,91 +98,107 @@ Detalle de Propiedad
     </div>
 </div>
 
-<script>
-    
+<!-- Modal -->
+<div class="modal fade" id="modalCorreoDestino" tabindex="-1" aria-labelledby="modalCorreoLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalCorreoLabel">Enviar documento por correo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="formEnviarCorreo">
+          <input type="hidden" id="urlEnvioCorreo">
+          <div class="mb-3">
+            <label for="correoDestino" class="form-label">Correo destino:</label>
+            <input type="email" class="form-control" id="correoDestino" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Enviar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
 
-    function copiarTextoAlternativo(texto) {
-    let inputTemp = document.createElement("textarea");
-    inputTemp.value = texto;
-    document.body.appendChild(inputTemp);
-    inputTemp.select();
-    document.execCommand("copy");
-    document.body.removeChild(inputTemp);
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    feather.replace();
+
+    $('#documentosTable').DataTable({
+        language: { url: "/static/lang/es-ES.json" },
+        responsive: true,
+        paging: true,
+        searching: true,
+        info: true
+    });
+
+    document.getElementById("formEnviarCorreo").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const url = document.getElementById("urlEnvioCorreo").value;
+        const correo = document.getElementById("correoDestino").value;
+        fetch(url, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: new URLSearchParams({ correo })
+        })
+        .then(res => res.json())
+        .then(res => {
+            Toastify({
+                text: res.success ? "📧 Correo enviado con éxito" : "❌ " + res.error,
+                duration: 5000,
+                gravity: "top",
+                position: "right",
+                backgroundColor: res.success ? "#28a745" : "#dc3545"
+            }).showToast();
+            bootstrap.Modal.getInstance(document.getElementById("modalCorreoDestino")).hide();
+        })
+        .catch(() => {
+            Toastify({
+                text: "❌ Error inesperado al enviar",
+                duration: 5000,
+                gravity: "top",
+                position: "right",
+                backgroundColor: "#dc3545"
+            }).showToast();
+        });
+    });
+});
+
+function abrirModalCorreo(urlEnvio) {
+    document.getElementById("urlEnvioCorreo").value = urlEnvio;
+    const modal = new bootstrap.Modal(document.getElementById("modalCorreoDestino"));
+    modal.show();
 }
 
 function copiarenlace(url) {
     const full_url = `${window.location.origin}${url}`;
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(full_url).then(() => {
-            alert("Enlace copiado: " + full_url);
-        }).catch(() => {
-            copiarTextoAlternativo(full_url);
-            alert("Enlace copiado manualmente.");
-        });
-    } else {
-        copiarTextoAlternativo(full_url);
-        alert("Enlace copiado manualmente.");
-    }
+    navigator.clipboard.writeText(full_url).then(() => {
+        Toastify({ text: "📋 Enlace copiado", duration: 3000, backgroundColor: "#0d6efd" }).showToast();
+    });
 }
 
 function copiarTodosLosEnlaces() {
     const enlaces = Array.from(document.querySelectorAll("#documentosTable tbody tr")).map(row => {
-        const nombreDocumento = row.children[1].textContent.trim();
+        const doc = row.children[1].textContent.trim();
         const enlace = row.querySelector("a.btn-primary")?.href || "#";
-        return `${nombreDocumento}:\n${enlace}\n`;
+        return `${doc}:\n${enlace}\n`;
+    }).join("\n");
+    navigator.clipboard.writeText(enlaces).then(() => {
+        Toastify({ text: "📋 Todos los enlaces copiados", duration: 4000, backgroundColor: "#0d6efd" }).showToast();
     });
-
-    const textoCompleto = enlaces.join("\n");
-
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(textoCompleto).then(() => {
-            alert("Todos los enlaces han sido copiados al portapapeles.");
-        }).catch(() => {
-            copiarTextoAlternativo(textoCompleto);
-            alert("Los enlaces fueron copiados manualmente.");
-        });
-    } else {
-        copiarTextoAlternativo(textoCompleto);
-        alert("Los enlaces fueron copiados manualmente.");
-    }
 }
-
-
-    $(document).ready(function () {
-        $('#documentosTable').DataTable({
-            language: {
-                url: "/static/lang/es-ES.json"
-            },
-            responsive: true,
-            dom: 'Bfrtip',
-            buttons: [],
-            paging: true,
-            searching: true,
-            info: true,
-        });
-    });
-</script>
-{% endblock content %}
-
-{% block extra_js %}
-<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
-<!--datatable js-->
-<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        feather.replace();
-    });
 </script>
 {% endblock extra_js %}
-
-
