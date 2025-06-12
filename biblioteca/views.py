@@ -99,7 +99,16 @@ class VerificarPermisoMixin:
             return vista_decorada(request, *args, **kwargs)
         return super().dispatch(request, *args, **kwargs)
 
+class ListadoDocumentosView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
+    model = Documento
+    template_name = 'listado_documentos.html'
+    context_object_name = 'documentos'
+    vista_nombre = "Listado General de Documentos"  # Puedes ajustarlo según tu tabla VistaPermiso
+    permiso_requerido = "ingresar"
 
+    def get_queryset(self):
+        return Documento.objects.select_related('propiedad', 'tipo_documento')
+    
 
 class ModalesEjemploView(LoginRequiredMixin, TemplateView):
     template_name = 'modales_ejemplo.html'

@@ -3,6 +3,7 @@ from django.urls import path,include
 from . import views
 from django.conf import settings
 from django.conf.urls.static import static
+from .views import ListadoDocumentosView
 
 
 
@@ -35,6 +36,8 @@ urlpatterns = [
     path('eliminar_tipo_documento/<int:pk>/', views.EliminarTipoDocumentoView.as_view(), name='eliminar_tipo_documento'),
     
     path('enviar-enlace/<int:documento_id>/', views.enviar_enlace_documento, name='enviar_enlace_documento'),
+
+    path('documentos/listado/', ListadoDocumentosView.as_view(), name='listado_documentos'),
 
 
     

@@ -216,7 +216,8 @@
     "t-add-document-type": "Ingresar Tipo Documento",
     "t-list-owners": "Listado de Propietarios",
     "t-list-properties": "Listado de Propiedades",
-    "t-list-document-types": "Listado de Tipos de Documentos",
+    "t-list-document-types": "Listado de Tipos de Documentos",    
+    "t-list-documents": "Listado General de Documentos",
     "t-access-control": "Control de Acceso",
     "t-user-management": "Gestión de Usuarios",
     "t-company-management": "Gestión de Empresas",
@@ -270,7 +271,12 @@
     "label-notifications": "🔔 Notificaciones",
     "label-send-headers": "Enviar encabezados:",
     "label-send-documents": "Enviar documentos:",
-    "btn-save-settings": "Guardar Configuración"
-
+    "btn-save-settings": "Guardar Configuración",
+     "t-type": "Tipo",
+    "t-name": "Nombre",
+    "t-rol": "ROL",
+    "t-description": "Descripción",
+    "t-date": "Fecha",
+    "t-actions": "Acciones"
 
 }

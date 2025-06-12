@@ -271,5 +271,12 @@
     "label-notifications": "🔔 Notifications",
     "label-send-headers": "Send headers:",
     "label-send-documents": "Send documents:",
-    "btn-save-settings": "Save Settings"
+    "btn-save-settings": "Save Settings",
+    "t-list-documents": "General Document List",
+    "t-type": "Type",
+    "t-name": "Name",
+    "t-rol": "ROL",
+    "t-description": "Description",
+    "t-date": "Date",
+    "t-actions": "Actions"
 }
