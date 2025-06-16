@@ -110,16 +110,55 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     feather.replace();
-    $('#documentosTable').DataTable({
-        language: { url: "/static/lang/es-ES.json" },
-        responsive: true,
-        paging: true,
-        searching: true,
-        info: true
-    });
+$('#documentosTable').DataTable({
+    language: { url: "/static/lang/es-ES.json" },
+    responsive: true,
+    paging: true,
+    searching: true,
+    info: true,
+    dom: 'Bfrtip',
+    buttons: [
+        {
+            extend: 'print',
+            text: '🖨️ Imprimir',
+            title: '',
+            customize: function (win) {
+                const empresa = `{{ empresa.nombre }} - {{ empresa.direccion }} - RUT: {{ empresa.rut }}`;
+                const titulo = `<h2 style="text-align:center; margin-top:10px;">Listado General de Documentos</h2>`;
+                const datosExtra = `
+                    <p><strong>Ciudad:</strong> {{ empresa.ciudad }}</p>
+                    <p><strong>Teléfono:</strong> {{ empresa.telefono }}</p>
+                    <p><strong>Usuario:</strong> {{ request.user.username }}</p>
+                    <p><strong>Fecha de impresión:</strong> {{ fecha_actual|date:"d/m/Y H:i" }}</p>
+                `;
+                const separador = `<hr style="border:1px solid black;margin:20px 0;">`;
+                const piePagina = `<p style="text-align:right;"><em>Impreso por {{ request.user.username }} el {{ fecha_actual|date:"d/m/Y H:i" }}</em></p>`;
+
+                $(win.document.body)
+                    .prepend(titulo)
+                    .prepend(separador)
+                    .prepend(datosExtra)
+                    .prepend(`<p><strong>${empresa}</strong></p>`);
+
+                $(win.document.body).append(piePagina);
+
+                $(win.document.body).find('table')
+                    .addClass('compact')
+                    .css('font-size', '10pt');
+            }
+        }
+    ]
+});
+
+
+
     document.getElementById("formEnviarCorreo").addEventListener("submit", function (e) {
         e.preventDefault();
         const url = document.getElementById("urlEnvioCorreo").value;

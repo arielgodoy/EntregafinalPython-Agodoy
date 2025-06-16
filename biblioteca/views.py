@@ -36,6 +36,7 @@ from settings.models import UserPreferences
 from biblioteca.models import Documento
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
+from django.utils.timezone import now
 
 @csrf_exempt
 @require_POST
@@ -105,6 +106,12 @@ class ListadoDocumentosView(VerificarPermisoMixin, LoginRequiredMixin, ListView)
     context_object_name = 'documentos'
     vista_nombre = "Listado General de Documentos"  # Puedes ajustarlo según tu tabla VistaPermiso
     permiso_requerido = "ingresar"
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)        
+        context["empresa"] = Empresa.objects.get(pk=self.request.session.get("empresa_id"))
+        context["fecha_actual"] = now()
+        return context
 
     def get_queryset(self):
         return Documento.objects.select_related('propiedad', 'tipo_documento')
