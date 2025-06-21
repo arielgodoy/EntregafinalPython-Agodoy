@@ -1,1 +1,60 @@
-!function(){"use strict";var t,a,e;sessionStorage.getItem("defaultAttribute")&&(t=document.documentElement.attributes,a={},Object.entries(t).forEach(function(t){var e;t[1]&&t[1].nodeName&&"undefined"!=t[1].nodeName&&(e=t[1].nodeName,a[e]=t[1].nodeValue)}),sessionStorage.getItem("defaultAttribute")!==JSON.stringify(a)?(sessionStorage.clear(),window.location.reload()):((e={})["data-layout"]=sessionStorage.getItem("data-layout"),e["data-sidebar-size"]=sessionStorage.getItem("data-sidebar-size"),e["data-bs-theme"]=sessionStorage.getItem("data-bs-theme"),e["data-layout-width"]=sessionStorage.getItem("data-layout-width"),e["data-sidebar"]=sessionStorage.getItem("data-sidebar"),e["data-sidebar-image"]=sessionStorage.getItem("data-sidebar-image"),e["data-layout-direction"]=sessionStorage.getItem("data-layout-direction"),e["data-layout-position"]=sessionStorage.getItem("data-layout-position"),e["data-layout-style"]=sessionStorage.getItem("data-layout-style"),e["data-topbar"]=sessionStorage.getItem("data-topbar"),e["data-preloader"]=sessionStorage.getItem("data-preloader"),e["data-body-image"]=sessionStorage.getItem("data-body-image"),Object.keys(e).forEach(function(t){e[t]&&document.documentElement.setAttribute(t,e[t])})))}();
+!function(){
+  "use strict";
+
+  const htmlTag = document.documentElement;
+  const layoutOptions = [
+    "data-layout",
+    "data-sidebar-size",
+    "data-bs-theme",
+    "data-layout-width",
+    "data-sidebar",
+    "data-sidebar-image",
+    "data-layout-direction",
+    "data-layout-position",
+    "data-layout-style",
+    "data-topbar",
+    "data-preloader",
+    "data-body-image"
+  ];
+
+  // Guardar los atributos por defecto si no están guardados
+  if (!localStorage.getItem("defaultAttribute")) {
+    const attrs = htmlTag.attributes;
+    const defaults = {};
+    for (let attr of attrs) {
+      if (attr && attr.nodeName && attr.nodeValue) {
+        defaults[attr.nodeName] = attr.nodeValue;
+      }
+    }
+    localStorage.setItem("defaultAttribute", JSON.stringify(defaults));
+    console.log("💾 Preferencias por defecto guardadas en localStorage:", defaults);
+  }
+
+  // Comprobar si han cambiado los atributos por defecto (opcional)
+  const currentDefaults = {};
+  for (let attr of htmlTag.attributes) {
+    if (attr && attr.nodeName && attr.nodeValue) {
+      currentDefaults[attr.nodeName] = attr.nodeValue;
+    }
+  }
+
+  const storedDefaults = localStorage.getItem("defaultAttribute");
+
+  if (storedDefaults && storedDefaults !== JSON.stringify(currentDefaults)) {
+    console.warn("⚠️ Preferencias cambiaron respecto a los valores iniciales.");
+    // localStorage.clear(); // Si quieres reiniciar, puedes descomentar esto
+    // location.reload();
+  }
+
+  // Aplicar preferencias guardadas
+  const layoutSettings = {};
+  layoutOptions.forEach(attr => {
+    const saved = localStorage.getItem(attr);
+    if (saved) {
+      layoutSettings[attr] = saved;
+      htmlTag.setAttribute(attr, saved);
+    }
+  });
+
+  console.log("✅ Preferencias cargadas desde localStorage:", layoutSettings);
+}();
