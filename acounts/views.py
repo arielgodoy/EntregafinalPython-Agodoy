@@ -48,7 +48,7 @@ def editar_perfil(request):
 
 def login_view(request):
     if request.method == 'POST':
-        username = request.POST['username']
+        username = request.POST['username'].lower()
         password = request.POST['password']
         user = authenticate(username=username, password=password)
         if user is not None:
