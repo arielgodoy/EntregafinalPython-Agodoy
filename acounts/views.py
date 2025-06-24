@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate, login,logout
 import time
 from acounts.forms import CustomUserForm
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth import update_session_auth_hash
 #from django.contrib.auth.forms import UserCreationForm
 
 @user_passes_test(lambda u: u.is_superuser)
@@ -98,14 +99,16 @@ def subeAvatar(request):
 @login_required
 def cambiar_password(request):
     if request.method == 'POST':
+        print(request.POST) 
         form = PasswordChangeForm(request.user, request.POST)
         if form.is_valid():
             user = form.save()
+            update_session_auth_hash(request, user)  # 🔐 Esta línea es la clave
             messages.success(request, 'Tu contraseña ha sido cambiada con éxito.')
-            return redirect('login')
+            return redirect('editar_perfil')  # O donde desees redirigir
         else:
-            messages.error(request, 'Por favor corrige el error abajo.')
+            print("Errores del formulario:", form.errors)
+            messages.error(request, 'Por favor corrige los errores abajo.')
     else:
         form = PasswordChangeForm(request.user)
     return render(request, 'cambiar_password.html', {'form': form})
-

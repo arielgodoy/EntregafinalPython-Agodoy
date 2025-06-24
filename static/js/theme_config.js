@@ -15,7 +15,6 @@
         "data-preloader"
     ];
 
-    // Valores por defecto (ajústalos si necesitas otro estilo base)
     const defaultLayout = {
         "data-layout": "vertical",
         "data-bs-theme": "light",
@@ -30,27 +29,31 @@
         "data-preloader": "disable"
     };
 
-    // ✅ 1. Aplicar configuración desde localStorage
+    // ✅ 1. Aplicar configuración desde localStorage antes del render CSS
+    const appliedPrefs = {};
     layoutOptions.forEach(attr => {
         const savedValue = localStorage.getItem(attr);
         if (savedValue) {
             htmlTag.setAttribute(attr, savedValue);
-            const input = document.querySelector(`input[name='${attr}'][value='${savedValue}']`);
-            if (input) input.checked = true;
-            //console.log(`🔄 ${attr} desde localStorage:`, savedValue);
+            appliedPrefs[attr] = savedValue;
         }
     });
+    console.log("✅ Preferencias cargadas desde localStorage:", appliedPrefs);
 
-    // ✅ 2. Observar cambios dinámicos y guardar en localStorage
+    // ✅ 2. Observar cambios y guardar en localStorage
     const observer = new MutationObserver(mutations => {
+        let storedPrefs = {};
         mutations.forEach(mutation => {
             const attr = mutation.attributeName;
             const value = htmlTag.getAttribute(attr);
             if (layoutOptions.includes(attr) && value) {
                 localStorage.setItem(attr, value);
-                //console.log(`💾 ${attr} actualizado y guardado:`, value);
+                storedPrefs[attr] = value;
             }
         });
+        if (Object.keys(storedPrefs).length > 0) {
+            console.log("💾 Preferencias guardadas en localStorage:", storedPrefs);
+        }
     });
 
     observer.observe(htmlTag, {
@@ -58,21 +61,37 @@
         attributeFilter: layoutOptions
     });
 
-    // ✅ 3. Alternar tema manual con botón
+    // ✅ 3. Configurar íconos y botones al cargar el DOM
     document.addEventListener("DOMContentLoaded", function () {
-        const toggleBtn = document.getElementById("btn-toggle-theme");
-        if (toggleBtn) {
-            toggleBtn.addEventListener("click", function () {
+        const buttons = document.querySelectorAll(".btn-toggle-theme");
+
+        buttons.forEach(btn => {
+            const icon = btn.querySelector("i");
+
+            // Establecer ícono inicial correctamente
+            const currentTheme = htmlTag.getAttribute("data-bs-theme") || "light";
+            if (icon) {
+                icon.classList.remove("bx-moon", "bx-sun");
+                icon.classList.add(currentTheme === "light" ? "bx-moon" : "bx-sun");
+            }
+
+            // Evento para cambiar tema
+            btn.addEventListener("click", function () {
                 const currentTheme = htmlTag.getAttribute("data-bs-theme") || "light";
                 const newTheme = currentTheme === "light" ? "dark" : "light";
                 htmlTag.setAttribute("data-bs-theme", newTheme);
-                // console.log(`🌗 Tema cambiado manualmente: ${newTheme}`);
-            });
-        }
+                localStorage.setItem("data-bs-theme", newTheme);
+                console.log(`🌗 Tema cambiado manualmente: ${newTheme} y guardado en localStorage`);
 
-        // ✅ 4. Reset total del layout a valores por defecto
+                if (icon) {
+                    icon.classList.remove("bx-moon", "bx-sun");
+                    icon.classList.add(newTheme === "light" ? "bx-moon" : "bx-sun");
+                }
+            });
+        });
+
+        // 🔁 Botón de reset
         const resetBtn = document.getElementById("reset-layout");
-        // console.log("🧪 resetBtn encontrado:", resetBtn);
         if (resetBtn) {
             resetBtn.addEventListener("click", function () {
                 layoutOptions.forEach(attr => {
@@ -83,7 +102,6 @@
                         htmlTag.removeAttribute(attr);
                     }
                 });
-
                 console.log("🔁 Layout reseteado a valores por defecto. Recargando en 150ms...");
                 setTimeout(() => {
                     window.location.reload();
