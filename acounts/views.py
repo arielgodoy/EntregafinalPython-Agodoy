@@ -73,7 +73,7 @@ def registro_usuario(request):
         form = UserCreationForm(request.POST)
         if form.is_valid():
             form.save()
-            username = form.cleaned_data.get('username')
+            username = form.cleaned_data.get('username').lower()
             messages.success(request, f'Usuario {username} creado con éxito. Por favor, inicia sesión.')
             #time.sleep(5)
             return redirect('login')

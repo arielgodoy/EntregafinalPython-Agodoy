@@ -4,7 +4,8 @@ from . import views
 from django.conf import settings
 from django.conf.urls.static import static
 from .views import ListadoDocumentosView
-
+from .views import respaldo_biblioteca_zip
+from .views import descargar_documentos_propiedad_zip
 
 
 app_name = 'biblioteca'
@@ -37,7 +38,10 @@ urlpatterns = [
     
     path('enviar-enlace/<int:documento_id>/', views.enviar_enlace_documento, name='enviar_enlace_documento'),
 
-    path('documentos/listado/', ListadoDocumentosView.as_view(), name='listado_documentos'),
+    path('documentos/listado/', ListadoDocumentosView.as_view(), name='listado_documentos'),    
+    path('respaldo/descargar-zip/', respaldo_biblioteca_zip, name='respaldo_biblioteca_zip'),
+    path('descargar/rol/<int:propiedad_id>/zip/', descargar_documentos_propiedad_zip, name='descargar_documentos_rol'),
+
 
 
     

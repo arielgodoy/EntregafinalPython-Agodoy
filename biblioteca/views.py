@@ -31,6 +31,13 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils.timezone import now
 
+import os
+import zipfile
+from io import BytesIO
+from django.http import HttpResponse
+from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from datetime import date
 
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
@@ -48,6 +55,48 @@ class VerificarPermisoMixin:
 class ModalesEjemploView(LoginRequiredMixin, TemplateView):
     template_name = 'modales_ejemplo.html'
 
+### respaldo biblioteca completa ###
+@login_required
+def respaldo_biblioteca_zip(request):
+    # Ruta absoluta al directorio de archivos
+    carpeta_archivos = os.path.join(settings.MEDIA_ROOT, 'archivos_documentos')
+    fecha_str = date.today().strftime("%Y%m%d")
+    nombre_zip = f"respaldo_Biblioteca{fecha_str}.zip"
+
+    # Comprimir todo el contenido de la carpeta
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(carpeta_archivos):
+            for file in files:
+                ruta_absoluta = os.path.join(root, file)
+                ruta_relativa = os.path.relpath(ruta_absoluta, settings.MEDIA_ROOT)
+                zip_file.write(ruta_absoluta, arcname=ruta_relativa)
+
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{nombre_zip}"'
+    return response
+### respaldo por rol ###
+@login_required
+def descargar_documentos_propiedad_zip(request, propiedad_id):
+    propiedad = get_object_or_404(Propiedad, pk=propiedad_id)
+    documentos = Documento.objects.filter(propiedad=propiedad)
+
+    fecha_str = date.today().strftime("%Y%m%d")
+    nombre_zip = f"respaldo_rol_{propiedad.rol}_{fecha_str}.zip"
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for doc in documentos:
+            if doc.archivo and os.path.isfile(doc.archivo.path):
+                ruta_archivo = doc.archivo.path
+                nombre_archivo = os.path.basename(ruta_archivo)
+                zip_file.write(ruta_archivo, arcname=nombre_archivo)
+
+    buffer.seek(0)
+    response = HttpResponse(buffer, content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{nombre_zip}"'
+    return response
 
 
 ###########################################################################

@@ -92,6 +92,10 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    <a href="{% url 'biblioteca:descargar_documentos_rol' propiedad.id %}" class="btn btn-secondary">
+                        Descargar documentos del ROL en ZIP
+                    </a>
+
                 </div>
             </div>
         </div>
