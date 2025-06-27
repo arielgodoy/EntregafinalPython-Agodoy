@@ -1,17 +1,11 @@
 {% extends "partials/base.html" %}
 
 {% block extra_css %}
-<!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<!-- Toastify CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 {% endblock extra_css %}
 
-{% block title %}
-Ingresar Propiedad
-{% endblock title %}
+{% block title %}Ingresar Propiedad{% endblock title %}
 
 {% block pagetitle %}
 {% include "partials/page-title.html" with title="Ingresar Propiedad" pagetitle="Propiedades" %}
@@ -30,16 +24,6 @@ Ingresar Propiedad
                     <form method="post" action="{% url 'biblioteca:crear_propiedad' %}" class="needs-validation" novalidate>
                         {% csrf_token %}
                         <table class="table table-bordered table-striped align-middle w-75 mx-auto">
-                            {% if form.non_field_errors %}
-                            <div class="alert alert-danger">
-                                <ul>
-                                    {% for error in form.non_field_errors %}
-                                    <li>{{ error }}</li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                            {% endif %}
-
                             {% for field in form %}
                             <tr>
                                 <td class="text-end align-middle" style="width: 30%;">
@@ -49,8 +33,7 @@ Ingresar Propiedad
                                     {% if field.name == "propietario" %}
                                     <div class="d-flex">
                                         <input type="hidden" id="id_propietario" name="{{ field.html_name }}" value="{{ propietario_id|default_if_none:'' }}">
-                                        <input type="text" id="id_propietario_display" class="form-control me-2" placeholder="Selecciona un propietario..."
-                                               value="{{ propietario_nombre|default_if_none:'' }}" readonly>
+                                        <input type="text" id="id_propietario_display" class="form-control me-2" placeholder="Selecciona un propietario..." value="{{ propietario_nombre|default_if_none:'' }}" readonly>
                                         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#propietarioModal">Buscar</button>
                                     </div>
                                     {% else %}
@@ -66,9 +49,8 @@ Ingresar Propiedad
                                 </td>
                             </tr>
                             {% endfor %}
-
                             <tr>
-                                <td colspan="2" class="text-center">|
+                                <td colspan="2" class="text-center">
                                     <button type="submit" class="btn btn-primary w-50">Guardar</button>
                                 </td>
                             </tr>
@@ -80,18 +62,51 @@ Ingresar Propiedad
     </div>
 </div>
 
-<!-- Modal para buscar propietario -->
+<!-- Modal Propietario -->
 <div class="modal fade" id="propietarioModal" tabindex="-1" aria-labelledby="propietarioModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-light">
             <div class="modal-header">
                 <h5 class="modal-title" id="propietarioModalLabel">Seleccionar Propietario</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
                 <input type="text" id="searchPropietario" class="form-control mb-3" placeholder="Buscar propietario...">
+
+                <button class="btn btn-outline-light mb-3" data-bs-toggle="collapse" data-bs-target="#nuevoPropietarioForm" aria-expanded="false">
+                    <i class="bi bi-person-plus"></i> Nuevo Propietario
+                </button>
+
+                <div class="collapse mb-3" id="nuevoPropietarioForm">
+                    <form id="formNuevoPropietario" class="bg-light text-dark p-3 rounded">
+                        <div class="mb-2">
+                            <label for="nombreNuevoPropietario" class="form-label">Nombre:</label>
+                            <input type="text" class="form-control" id="nombreNuevoPropietario" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="rutNuevoPropietario" class="form-label">RUT:</label>
+                            <input type="text" class="form-control" id="rutNuevoPropietario" placeholder="Ej: 12.345.678-9" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="telefonoNuevoPropietario" class="form-label">Teléfono:</label>
+                            <input type="text" class="form-control" id="telefonoNuevoPropietario" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="rolNuevoPropietario" class="form-label">Rol:</label>
+                            <select id="rolNuevoPropietario" class="form-select" required>
+                                <option value="">---------</option>
+                                <option value="persona">Persona Natural</option>
+                                <option value="sociedad">Sociedad</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm">Guardar</button>
+                    </form>
+                </div>
+
+
+
                 <div class="table-responsive">
-                    <table class="table table-dark table-striped" id="propietariosTable">
+                    <table class="table table-dark table-striped">
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -99,86 +114,123 @@ Ingresar Propiedad
                                 <th>Acción</th>
                             </tr>
                         </thead>
-                        <tbody id="propietariosBody">
-                            <!-- Datos cargados dinámicamente -->
-                        </tbody>
+                        <tbody id="propietariosBody"></tbody>
                     </table>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const searchInput = document.getElementById('searchPropietario');
-    const propietariosBody = document.getElementById('propietariosBody');
-
-    function fetchPropietarios(query = '') {
-        fetch(`/api/v1/propietarios/?search=${query}`)
-            .then(response => response.json())
-            .then(data => {
-                propietariosBody.innerHTML = '';
-                data.forEach(propietario => {
-                    propietariosBody.innerHTML += `
-                        <tr>
-                            <td>${propietario.id}</td>
-                            <td>${propietario.nombre}</td>
-                            <td>
-                                <button class="btn btn-primary btn-sm" onclick="selectPropietario('${propietario.id}', '${propietario.nombre}')">Seleccionar</button>
-                            </td>
-                        </tr>`;
-                });
-            })
-            .catch(error => console.error('Error al cargar propietarios:', error));
-    }
-
-    // Define `selectPropietario` como una función global
-    window.selectPropietario = function (id, nombre) {
-    document.getElementById('id_propietario').value = id;
-    document.getElementById('id_propietario_display').value = nombre;
-    
-    // Cerrar el modal correctamente
-    const modalElement = document.getElementById('propietarioModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalElement);
-    if (modalInstance) {
-        modalInstance.hide();
-    }
-
-    // Forzar la eliminación del backdrop si persiste
-    const modalBackdrop = document.querySelector('.modal-backdrop');
-    if (modalBackdrop) {
-        modalBackdrop.remove();
-    }
-};
-
-
-    if (searchInput) {
-        searchInput.addEventListener('input', function () {
-            fetchPropietarios(this.value);
-        });
-    }
-
-    fetchPropietarios(); // Inicializar al abrir la página
-
-    // Forzar eliminación del backdrop si queda visible
-    document.addEventListener('hidden.bs.modal', function (event) {
-        const modalBackdrop = document.querySelector('.modal-backdrop');
-        if (modalBackdrop) {
-            modalBackdrop.remove();
-        }
-    });
-});
-</script>
-
 {% endblock content %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        feather.replace();
+document.addEventListener('DOMContentLoaded', function () {
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    const modalElement = document.getElementById('propietarioModal');
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+    function selectPropietario(id, nombre) {
+        document.getElementById('id_propietario').value = id;
+        document.getElementById('id_propietario_display').value = nombre;
+        cerrarModalPropietario();
+    }
+
+    function fetchPropietarios(query = '') {
+        fetch(`/api/v1/propietarios/?search=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('propietariosBody');
+                tbody.innerHTML = '';
+                data.forEach(p => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${p.id}</td>
+                        <td>${p.nombre}</td>
+                        <td><button class="btn btn-primary btn-sm btn-select" data-id="${p.id}" data-nombre="${p.nombre}">Seleccionar</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            });
+    }
+
+    // Delegación del botón "Seleccionar"
+    document.getElementById('propietariosBody').addEventListener('click', function (e) {
+        if (e.target && e.target.classList.contains('btn-select')) {
+            const id = e.target.dataset.id;
+            const nombre = e.target.dataset.nombre;
+            selectPropietario(id, nombre);
+        }
     });
+
+    // Crear nuevo propietario
+    document.getElementById('formNuevoPropietario').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const nombre = document.getElementById('nombreNuevoPropietario').value.trim();
+    const rut = document.getElementById('rutNuevoPropietario').value.trim();    
+    const telefono = document.getElementById('telefonoNuevoPropietario').value.trim();
+    const rol = document.getElementById('rolNuevoPropietario').value.trim();
+
+    if (!nombre || !rut || !telefono || !rol) {
+        Toastify({ text: "❌ Todos los campos son obligatorios", duration: 3000, gravity: "top", position: "right", backgroundColor: "#dc3545" }).showToast();
+        return;
+    }
+
+    fetch("{% url 'biblioteca:crear_propietario_modal' %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf, "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, rut, telefono, rol })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error);
+        Toastify({ text: "✅ Propietario creado", duration: 3000, gravity: "top", position: "right", backgroundColor: "#28a745" }).showToast();
+        this.reset();
+        fetchPropietarios();
+
+        const collapseElement = document.getElementById("nuevoPropietarioForm");
+        const collapseInstance = bootstrap.Collapse.getOrCreateInstance(collapseElement);
+        collapseInstance.hide();
+    })
+    .catch(err => {
+        Toastify({ text: `❌ ${err.message}`, duration: 4000, gravity: "top", position: "right", backgroundColor: "#dc3545" }).showToast();
+    });
+});
+
+    
+    // Input buscar
+    document.getElementById('searchPropietario').addEventListener('input', function () {
+        fetchPropietarios(this.value);
+    });
+
+    // Al cerrar modal eliminar backdrop manualmente si queda pegado
+    modalElement.addEventListener('hidden.bs.modal', () => {
+        const backdrop = document.querySelector('.modal-backdrop');
+        if (backdrop) backdrop.remove();
+    });
+
+    // Inicializar tabla
+    fetchPropietarios();
+});
+
+function cerrarModalPropietario() {
+    const modal = document.getElementById('propietarioModal');
+    const instance = bootstrap.Modal.getInstance(modal);
+    if (instance) instance.hide();
+
+    // 🧹 Eliminar backdrop si persiste
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.remove();
+
+    // 🧹 Resetear scroll-lock o estilos aplicados al <body>
+    document.body.classList.remove('modal-open');
+    document.body.style = '';
+}
+
 </script>
 {% endblock extra_js %}

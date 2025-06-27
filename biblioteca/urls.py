@@ -23,6 +23,8 @@ urlpatterns = [
     path('propietarios/<int:pk>/', views.DetallePropietarioView.as_view(), name='detalle_propietario'),
     path('propietarios/<int:pk>/eliminar/', views.EliminarPropietarioView.as_view(), name='eliminar_propietario'),
     path('propietarios/<int:pk>/modificar/', views.ModificarPropietarioView.as_view(), name='modificar_propietario'),
+    path('propietario/nuevo/modal/', views.crear_propietario_modal, name='crear_propietario_modal'),
+
 
     path('ingresar_propiedad/', views.CrearPropiedadView.as_view(), name='crear_propiedad'),
     path('ingresar_propiedad/<int:propietario_id>/', views.CrearPropiedadView.as_view(), name='crear_propiedad'),

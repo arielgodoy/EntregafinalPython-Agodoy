@@ -30,6 +30,10 @@ from biblioteca.models import Documento
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils.timezone import now
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+import json
 
 import os
 import zipfile
@@ -266,6 +270,30 @@ class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteVie
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="eliminar"
 
+@require_POST
+@login_required
+def crear_propietario_modal(request):
+    try:
+        data = json.loads(request.body)
+
+        # Crear una instancia del formulario con los datos del modal
+        form = PropietarioForm(data)
+
+        if form.is_valid():
+            propietario = form.save()
+            return JsonResponse({
+                "success": True,
+                "id": propietario.id,
+                "nombre": propietario.nombre
+            })
+        else:
+            # Devolver errores de validación del formulario
+            errors = form.errors.get_json_data()
+            error_messages = [e['message'] for field in errors.values() for e in field]
+            return JsonResponse({"success": False, "error": " | ".join(error_messages)})
+
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
     
 ###########################################################################    
