@@ -7,6 +7,17 @@ from django.utils.translation import gettext_lazy as _
 import os
 from django.utils.timezone import now
 
+def validar_rut(rut):
+    rut = rut.upper().replace(".", "").replace("-", "")
+    cuerpo, dv = rut[:-1], rut[-1]
+
+    suma = sum(int(cuerpo[::-1][i]) * (2 + i % 6) for i in range(len(cuerpo)))
+    dv_esperado = 11 - (suma % 11)
+    dv_esperado = '0' if dv_esperado == 11 else 'K' if dv_esperado == 10 else str(dv_esperado)
+
+    if dv != dv_esperado:
+        raise ValidationError(_("RUT inválido: dígito verificador incorrecto"))
+
 def archivo_documento_path(instance, filename):
     """
     Función para generar la ruta del archivo.
@@ -41,7 +52,7 @@ class Propietario(models.Model):
         ('sociedad', 'Sociedad'),
     )
     nombre = models.CharField(max_length=50)
-    rut = models.CharField(max_length=20, unique=True)
+    rut = models.CharField(max_length=20, unique=True, validators=[validar_rut])
     telefono = models.CharField(max_length=20)
     rol = models.CharField(max_length=20, choices=ROL_CHOICES)
     def __str__(self):

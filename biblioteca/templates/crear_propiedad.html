@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+{% load static %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -85,7 +86,7 @@
                         </div>
                         <div class="mb-2">
                             <label for="rutNuevoPropietario" class="form-label">RUT:</label>
-                            <input type="text" class="form-control" id="rutNuevoPropietario" placeholder="Ej: 12.345.678-9" required>
+                            <input data-inputingreso="camporut" maxlength="12" type="text" class="form-control" id="rutNuevoPropietario" placeholder="Ej: 12.345.678-9" required>
                         </div>
                         <div class="mb-2">
                             <label for="telefonoNuevoPropietario" class="form-label">Teléfono:</label>
@@ -234,35 +235,6 @@ function cerrarModalPropietario() {
 
 </script>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const rutInput = document.getElementById('rutNuevoPropietario');
-        rutInput.addEventListener('input', function (e) {
-            let value = e.target.value.replace(/[^0-9kK]/g, '');
-            let formattedRut = '';
+<script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
 
-            if (value.length <= 7) {
-                if (value.length > 6) {
-                    formattedRut =
-                        value.slice(0, value.length - 6) + '.' +
-                        value.slice(value.length - 6, value.length - 3) + '.' +
-                        value.slice(value.length - 3);
-                } else if (value.length > 3) {
-                    formattedRut =
-                        value.slice(0, value.length - 3) + '.' +
-                        value.slice(value.length - 3);
-                } else {
-                    formattedRut = value;
-                }
-            } else {
-                formattedRut =
-                    value.slice(0, value.length - 7) + '.' +
-                    value.slice(value.length - 7, value.length - 4) + '.' +
-                    value.slice(value.length - 4, value.length - 1) + '-' +
-                    value.slice(value.length - 1);
-            }
-            e.target.value = formattedRut;
-        });
-    });
-</script>
 {% endblock extra_js %}
