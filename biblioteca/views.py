@@ -21,7 +21,7 @@ from access_control.decorators import verificar_permiso
 from access_control.models import Empresa
 from django.urls import reverse_lazy, reverse
 from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse,HttpResponseForbidden
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -44,6 +44,7 @@ from django.contrib.auth.decorators import login_required
 from datetime import date
 
 #Decorador generar para verificar permispo por mixim
+from access_control.decorators import PermisoDenegadoJson
 class VerificarPermisoMixin:
     vista_nombre = None
     permiso_requerido = None
@@ -51,9 +52,44 @@ class VerificarPermisoMixin:
     def dispatch(self, request, *args, **kwargs):
         if self.vista_nombre and self.permiso_requerido:
             decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
-            vista_decorada = decorador(super().dispatch)
-            return vista_decorada(request, *args, **kwargs)
+            try:
+                return decorador(super().dispatch)(request, *args, **kwargs)
+            except PermisoDenegadoJson as e:
+                return self.handle_no_permission(request, str(e))
         return super().dispatch(request, *args, **kwargs)
+
+
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+            return JsonResponse({"success": False, "error": mensaje}, status=403)
+        return render(request, '403.html', status=403)
+
+class CrearPropietarioModalView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    model = Propietario
+    vista_nombre = "Maestro Propietarios Modal"
+    permiso_requerido = "crear"
+
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+
+            form = PropietarioForm(data)
+            if form.is_valid():
+                propietario = form.save()
+                return JsonResponse({
+                    "success": True,
+                    "id": propietario.id,
+                    "nombre": propietario.nombre
+                })
+            else:
+                errors = form.errors.get_json_data()
+                error_messages = [e['message'] for field in errors.values() for e in field]
+                return JsonResponse({"success": False, "error": " | ".join(error_messages)})
+
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+        
+
 
 
 class ModalesEjemploView(LoginRequiredMixin, TemplateView):
@@ -270,30 +306,9 @@ class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteVie
     vista_nombre="Maestro Propietarios" 
     permiso_requerido="eliminar"
 
-@require_POST
-@login_required
-def crear_propietario_modal(request):
-    try:
-        data = json.loads(request.body)
 
-        # Crear una instancia del formulario con los datos del modal
-        form = PropietarioForm(data)
 
-        if form.is_valid():
-            propietario = form.save()
-            return JsonResponse({
-                "success": True,
-                "id": propietario.id,
-                "nombre": propietario.nombre
-            })
-        else:
-            # Devolver errores de validación del formulario
-            errors = form.errors.get_json_data()
-            error_messages = [e['message'] for field in errors.values() for e in field]
-            return JsonResponse({"success": False, "error": " | ".join(error_messages)})
 
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)})
 
     
 ###########################################################################    

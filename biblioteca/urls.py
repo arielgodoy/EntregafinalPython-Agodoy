@@ -6,6 +6,7 @@ from django.conf.urls.static import static
 from .views import ListadoDocumentosView
 from .views import respaldo_biblioteca_zip
 from .views import descargar_documentos_propiedad_zip
+from .views import CrearPropietarioModalView
 
 
 app_name = 'biblioteca'
@@ -23,7 +24,8 @@ urlpatterns = [
     path('propietarios/<int:pk>/', views.DetallePropietarioView.as_view(), name='detalle_propietario'),
     path('propietarios/<int:pk>/eliminar/', views.EliminarPropietarioView.as_view(), name='eliminar_propietario'),
     path('propietarios/<int:pk>/modificar/', views.ModificarPropietarioView.as_view(), name='modificar_propietario'),
-    path('propietario/nuevo/modal/', views.crear_propietario_modal, name='crear_propietario_modal'),
+    #path('propietario/nuevo/modal/', views.crear_propietario_modal, name='crear_propietario_modal'),
+    path('crear-propietario-modal/', CrearPropietarioModalView.as_view(), name='crear_propietario_modal'),
 
 
     path('ingresar_propiedad/', views.CrearPropiedadView.as_view(), name='crear_propiedad'),

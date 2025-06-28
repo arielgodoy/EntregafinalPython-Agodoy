@@ -1,33 +1,29 @@
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden,JsonResponse
 from django.shortcuts import redirect, render
 from .models import Vista, Permiso, Empresa
+
+
+# access_control/exceptions.py
+class PermisoDenegadoJson(Exception):
+    def __init__(self, mensaje="No tienes permiso para esta acción."):
+        self.mensaje = mensaje
+        super().__init__(self.mensaje)
+
 
 def verificar_permiso(vista_nombre, permiso_requerido):
     def decorator(view_func):
         def _wrapped_view(request, *args, **kwargs):
             empresa_id = request.session.get("empresa_id")
             if not empresa_id:
-                return redirect("access_control:seleccionar_empresa")  # Redirige si no hay empresa seleccionada
-            
-            # Verificar si la vista existe en el modelo Vista
-            vista, created = Vista.objects.get_or_create(nombre=vista_nombre)
-            if created:
-                vista.descripcion = f"Vista : {vista_nombre}"
-                vista.save()
-            print(f"Verificando permisos para la vista: {vista_nombre}")
+                raise PermisoDenegadoJson("Debes seleccionar una empresa para continuar.")
 
-            # Obtener la empresa asociada al ID
+            vista, _ = Vista.objects.get_or_create(nombre=vista_nombre)
+
             try:
                 empresa = Empresa.objects.get(id=empresa_id)
             except Empresa.DoesNotExist:
-                return render(
-                    request,
-                    'access_control/403_forbidden.html',
-                    {'vista_nombre': vista_nombre, 'empresa_nombre': "Empresa desconocida"},
-                    status=403
-                )
+                raise PermisoDenegadoJson(f"No se encontró la empresa con ID {empresa_id}.")
 
-            # Verificar si el permiso existe
             permiso = Permiso.objects.filter(
                 usuario=request.user,
                 empresa=empresa,
@@ -35,7 +31,6 @@ def verificar_permiso(vista_nombre, permiso_requerido):
             ).first()
 
             if not permiso:
-                # Crear un permiso inicial con todos los accesos en False
                 permiso = Permiso.objects.create(
                     usuario=request.user,
                     empresa=empresa,
@@ -47,22 +42,12 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                     autorizar=False,
                     supervisor=False
                 )
-                print(f"Permiso creado para la vista {vista_nombre} y empresa {empresa.codigo} - {empresa.descripcion or 'Sin descripción'}")
 
-            # Verificar si el usuario es supervisor
             if permiso.supervisor:
-                print(f"El usuario {request.user.username} tiene permisos de supervisor.")
                 return view_func(request, *args, **kwargs)
 
-            # Verificar si el usuario tiene el permiso requerido
             if not getattr(permiso, permiso_requerido, False):
-                empresa_nombre = f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}"
-                return render(
-                    request,
-                    'access_control/403_forbidden.html',
-                    {'vista_nombre': vista_nombre, 'empresa_nombre': empresa_nombre},
-                    status=403
-                )
+                raise PermisoDenegadoJson(f"No tienes permiso para '{permiso_requerido}' en {vista_nombre}.")
 
             return view_func(request, *args, **kwargs)
         return _wrapped_view
