@@ -48,7 +48,6 @@ from access_control.decorators import PermisoDenegadoJson
 class VerificarPermisoMixin:
     vista_nombre = None
     permiso_requerido = None
-
     def dispatch(self, request, *args, **kwargs):
         if self.vista_nombre and self.permiso_requerido:
             decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
