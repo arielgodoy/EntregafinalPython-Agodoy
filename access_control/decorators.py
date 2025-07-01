@@ -3,24 +3,26 @@ from django.shortcuts import redirect, render
 from .models import Vista, Permiso, Empresa
 
 
-# access_control/exceptions.py
+
 class PermisoDenegadoJson(Exception):
     def __init__(self, mensaje="No tienes permiso para esta acción."):
         self.mensaje = mensaje
         super().__init__(self.mensaje)
-
 
 def verificar_permiso(vista_nombre, permiso_requerido):
     def decorator(view_func):
         def _wrapped_view(request, *args, **kwargs):
             empresa_id = request.session.get("empresa_id")
             if not empresa_id:
-                raise PermisoDenegadoJson("Debes seleccionar una empresa para continuar.")
+                #raise PermisoDenegadoJson("Debes seleccionar una empresa para continuar.")
+                return redirect("access_control:seleccionar_empresa")
 
             vista, _ = Vista.objects.get_or_create(nombre=vista_nombre)
 
             try:
                 empresa = Empresa.objects.get(id=empresa_id)
+                # 💾 Guardar nombre en sesión para usarlo luego
+                request.session["empresa_nombre"] = f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}"
             except Empresa.DoesNotExist:
                 raise PermisoDenegadoJson(f"No se encontró la empresa con ID {empresa_id}.")
 

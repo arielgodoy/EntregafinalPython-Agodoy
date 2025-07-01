@@ -52,17 +52,29 @@ class VerificarPermisoMixin:
     def dispatch(self, request, *args, **kwargs):
         if self.vista_nombre and self.permiso_requerido:
             decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+
+            @decorador
+            def view_func(req, *a, **kw):
+                return super(VerificarPermisoMixin, self).dispatch(req, *a, **kw)
+
             try:
-                return decorador(super().dispatch)(request, *args, **kwargs)
+                return view_func(request, *args, **kwargs)
             except PermisoDenegadoJson as e:
                 return self.handle_no_permission(request, str(e))
-        return super().dispatch(request, *args, **kwargs)
 
+        return super().dispatch(request, *args, **kwargs)
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
         if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
             return JsonResponse({"success": False, "error": mensaje}, status=403)
-        return render(request, '403.html', status=403)
+
+        contexto = {
+            "mensaje": mensaje,
+            "vista_nombre": getattr(self, "vista_nombre", "Desconocida"),
+            "empresa_nombre": request.session.get("empresa_nombre", "No definida"),
+        }
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+
 
 class CrearPropietarioModalView(VerificarPermisoMixin, LoginRequiredMixin, View):
     model = Propietario
