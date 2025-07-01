@@ -4,14 +4,10 @@ __pycache__/
 *$py.class
 
 
-# Ignorar carpeta de documentos
-media/archivos_documentos/
-
-# NO ignorar el resto del contenido de media/
+media/*
 !media/avatares/
-!media/otro_directorio/
-!media/*.jpg
-!media/*.png
+!media/.gitkeep
+media/archivos_documentos/
 
 
 
