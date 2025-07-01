@@ -86,7 +86,7 @@
                         </div>
                         <div class="mb-2">
                             <label for="rutNuevoPropietario" class="form-label">RUT:</label>
-                            <input data-inputingreso="camporut" maxlength="12" type="text" class="form-control" id="rutNuevoPropietario" placeholder="Ej: 12.345.678-9" required>
+                            <input data-inputingreso="camporut" maxlength="12" placeholder="Ej: 12.345.678-9" type="text" class="form-control" id="rutNuevoPropietario" required>
                         </div>
                         <div class="mb-2">
                             <label for="telefonoNuevoPropietario" class="form-label">Teléfono:</label>
@@ -237,7 +237,7 @@ function cerrarModalPropietario() {
 
 <!-- 
 Agregar al input
-data-inputingreso="camporut" para validar rut 
+para Validar rut agregar al input : data-inputingreso="camporut" maxlength="12" placeholder="Ej: 12.345.678-9"
 -->
 <script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
 
