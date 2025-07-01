@@ -4,9 +4,15 @@ __pycache__/
 *$py.class
 
 
-
+# Ignorar carpeta de documentos
 media/archivos_documentos/
-media/avatares/
+
+# NO ignorar el resto del contenido de media/
+!media/avatares/
+!media/otro_directorio/
+!media/*.jpg
+!media/*.png
+
 
 
 # C extensions
