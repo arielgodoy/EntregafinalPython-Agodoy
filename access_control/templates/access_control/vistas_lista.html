@@ -17,22 +17,23 @@ Lista de Vistas
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h1 class="text-light">Lista de Vistas</h1>
-                    <a href="{% url 'access_control:vista_crear' %}" class="btn btn-success">Crear Nueva Vista</a>
+                    <h1 class="text-light" data-key="t-view-list-title">Lista de Vistas</h1>
+                    <a href="{% url 'access_control:vista_crear' %}" class="btn btn-success" data-key="t-create-new-view">Crear Nueva Vista</a>
                 </div>
 
                 <div class="table-responsive">
                     <table class="table align-middle dt-responsive nowrap" id="vistas-table">
                         <thead>
                             <tr>
-                                <th>Nombre</th>
-                                <th>Descripción</th>
-                                <th>Acciones</th>
+                                <th data-key="t-name-label">Nombre</th>
+                                <th data-key="t-description-label">Descripción</th>
+                                <th data-key="t-actions">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -41,10 +42,10 @@ Lista de Vistas
                                 <td>{{ vista.nombre }}</td>
                                 <td>{{ vista.descripcion }}</td>
                                 <td>
-                                    <a href="{% url 'access_control:vista_editar' vista.id %}" class="btn btn-primary btn-sm">
+                                    <a href="{% url 'access_control:vista_editar' vista.id %}" class="btn btn-primary btn-sm" data-key="t-edit">
                                         <i class="bi bi-pencil"></i> Editar
                                     </a>
-                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-vista-id="{{ vista.id }}" data-vista-nombre="{{ vista.nombre }}">
+                                    <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-vista-id="{{ vista.id }}" data-vista-nombre="{{ vista.nombre }}" data-key="t-delete">
                                         <i class="bi bi-trash"></i> Eliminar
                                     </button>
                                 </td>
@@ -63,17 +64,17 @@ Lista de Vistas
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="deleteModalLabel">Confirmar Eliminación</h5>
+                <h5 class="modal-title" id="deleteModalLabel" data-key="t-confirm-delete-title">Confirmar Eliminación</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>¿Estás seguro de que deseas eliminar la vista <strong id="vistaNombre"></strong>?</p>
+                <p data-key="t-delete-view-confirm">¿Estás seguro de que deseas eliminar la vista <strong id="vistaNombre"></strong>?</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="t-cancel">Cancelar</button>
                 <form id="deleteForm" method="post" action="">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                    <button type="submit" class="btn btn-danger" data-key="t-delete">Eliminar</button>
                 </form>
             </div>
         </div>

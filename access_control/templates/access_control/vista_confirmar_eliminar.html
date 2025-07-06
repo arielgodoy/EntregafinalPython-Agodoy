@@ -1,11 +1,12 @@
 {% extends 'biblioteca/base.html' %}
 {% block contenido %}
-<h1>Eliminar Vista</h1>
-<p>¿Estás seguro de que deseas eliminar esta vista?</p>
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+<h1 data-key="t-delete-view-title">Eliminar Vista</h1>
+<p data-key="t-delete-view-confirm">¿Estás seguro de que deseas eliminar esta vista?</p>
 <p><strong>{{ object.nombre }}</strong></p>
 <form method="post">
     {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Eliminar</button>
-    <a href="{% url 'access_control:vistas_lista' %}" class="btn btn-secondary">Cancelar</a>
+    <button type="submit" class="btn btn-danger" data-key="t-delete">Eliminar</button>
+    <a href="{% url 'access_control:vistas_lista' %}" class="btn btn-secondary" data-key="t-cancel">Cancelar</a>
 </form>
 {% endblock %}

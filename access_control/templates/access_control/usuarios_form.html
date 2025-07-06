@@ -10,36 +10,37 @@
 {% endblock extra_css %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
-                <h1 class="mb-4 text-center">Crear Nuevo Usuario</h1>
+                <h1 class="mb-4 text-center" data-key="create_new_user">Crear Nuevo Usuario</h1>
                 <form method="post" class="p-3">
                     {% csrf_token %}
                     <div class="form-group mb-3">
-                        <label for="{{ form.username.id_for_label }}" class="form-label">{{ form.username.label }}</label>
+                        <label for="{{ form.username.id_for_label }}" class="form-label" data-key="username">{{ form.username.label }}</label>
                         {{ form.username }}
                         {% for error in form.username.errors %}
                         <div class="text-danger">{{ error }}</div>
                         {% endfor %}
                     </div>
                     <div class="form-group mb-3">
-                        <label for="{{ form.email.id_for_label }}" class="form-label">{{ form.email.label }}</label>
+                        <label for="{{ form.email.id_for_label }}" class="form-label" data-key="email">{{ form.email.label }}</label>
                         {{ form.email }}
                         {% for error in form.email.errors %}
                         <div class="text-danger">{{ error }}</div>
                         {% endfor %}
                     </div>
                     <div class="form-group mb-3">
-                        <label for="{{ form.password.id_for_label }}" class="form-label">{{ form.password.label }}</label>
+                        <label for="{{ form.password.id_for_label }}" class="form-label" data-key="password">{{ form.password.label }}</label>
                         {{ form.password }}
                         {% for error in form.password.errors %}
                         <div class="text-danger">{{ error }}</div>
                         {% endfor %}
                     </div>
                     <div class="form-group mb-3">
-                        <label for="{{ form.password_confirm.id_for_label }}" class="form-label">{{ form.password_confirm.label }}</label>
+                        <label for="{{ form.password_confirm.id_for_label }}" class="form-label" data-key="confirm_password">{{ form.password_confirm.label }}</label>
                         {{ form.password_confirm }}
                         {% for error in form.password_confirm.errors %}
                         <div class="text-danger">{{ error }}</div>
@@ -53,8 +54,8 @@
                     </div>
                     {% endif %}
                     <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-success w-50 me-2">Guardar</button>
-                        <a href="{% url 'access_control:usuarios_lista' %}" class="btn btn-secondary w-50">Cancelar</a>
+                        <button type="submit" class="btn btn-success w-50 me-2" data-key="save">Guardar</button>
+                        <a href="{% url 'access_control:usuarios_lista' %}" class="btn btn-secondary w-50" data-key="cancel">Cancelar</a>
                     </div>
                 </form>
             </div>

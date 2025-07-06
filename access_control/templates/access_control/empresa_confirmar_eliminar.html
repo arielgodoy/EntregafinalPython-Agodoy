@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -8,9 +9,8 @@
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 {% endblock extra_css %}
 
-
 {% block title %}
-Eliminar Empresa
+<span data-key="delete_company_title">Eliminar Empresa</span>
 {% endblock title %}
 
 {% block pagetitle %}
@@ -18,18 +18,19 @@ Eliminar Empresa
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
-                    <h4 class="card-title">Eliminar Empresa</h4>
-                    <p>¿Estás seguro de que deseas eliminar la empresa "<strong>{{ object.nombre }}</strong>"?</p>
+                    <h4 class="card-title" data-key="delete_company_title">Eliminar Empresa</h4>
+                    <p data-key="delete_company_confirm">¿Estás seguro de que deseas eliminar la empresa "<strong>{{ object.nombre }}</strong>"?</p>
                     <form method="post" class="mt-4">
                         {% csrf_token %}
                         <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-danger me-2">Eliminar</button>
-                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-danger me-2" data-key="btn_delete">Eliminar</button>
+                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary" data-key="btn_cancel">Cancelar</a>
                         </div>
                     </form>
                 </div>
@@ -38,6 +39,7 @@ Eliminar Empresa
     </div>
 </div>
 {% endblock content %}
+
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>

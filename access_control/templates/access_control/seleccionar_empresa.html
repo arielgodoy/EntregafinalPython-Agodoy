@@ -10,7 +10,7 @@
 {% endblock extra_css %}
 
 {% block title %}
-Seleccionar Empresa
+<span data-key="select_company">Seleccionar Empresa</span>
 {% endblock title %}
 
 {% block pagetitle %}
@@ -18,6 +18,7 @@ Seleccionar Empresa
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
@@ -26,25 +27,25 @@ Seleccionar Empresa
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
                         <div class="modal-header bg-mode">
-                            <h5 class="modal-title" id="empresaModalLabel">Seleccionar Empresa</h5>
+                            <h5 class="modal-title" id="empresaModalLabel" data-key="select_company">Seleccionar Empresa</h5>
                         </div>
                         <div class="modal-body">
                             <form method="post" id="empresaForm">
                                 {% csrf_token %}
                                 <div class="mb-3">
-                                    <label for="empresa" class="form-label">Selecciona una empresa:</label>
+                                    <label for="empresa" class="form-label" data-key="choose_company">Selecciona una empresa:</label>
                                     <select name="empresa_id" id="empresa" class="form-select" required>
-                                        <option value="" selected disabled>Seleccione una empresa</option>
+                                        <option value="" selected disabled data-key="option_select_company">Seleccione una empresa</option>
                                         {% for empresa in empresas %}
                                         <option value="{{ empresa.id }}">{{ empresa.codigo }} - {{ empresa.descripcion }}</option>
                                         {% endfor %}
                                     </select>
-                                    <div class="invalid-feedback">
+                                    <div class="invalid-feedback" data-key="validation_select_company">
                                         Por favor, selecciona una empresa.
                                     </div>
                                 </div>
                                 <div class="text-end">
-                                    <button type="submit" class="btn btn-primary mt-2">Confirmar</button>
+                                    <button type="submit" class="btn btn-primary mt-2" data-key="confirm">Confirmar</button>
                                 </div>
                             </form>
                         </div>
@@ -58,11 +59,9 @@ Seleccionar Empresa
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Mostrar el modal automáticamente al cargar la página
         const empresaModal = new bootstrap.Modal(document.getElementById('empresaModal'));
         empresaModal.show();
 
-        // Validación del formulario antes de cerrar el modal
         const empresaForm = document.getElementById('empresaForm');
         empresaForm.addEventListener('submit', function (e) {
             const empresaSelect = document.getElementById('empresa');

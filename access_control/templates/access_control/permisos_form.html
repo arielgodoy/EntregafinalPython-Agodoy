@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -9,7 +10,11 @@
 {% endblock extra_css %}
 
 {% block title %}
-{% if object %}Editar{% else %}Crear{% endif %} Permiso
+{% if object %}
+<span data-key="edit_permission">Editar Permiso</span>
+{% else %}
+<span data-key="create_permission">Crear Permiso</span>
+{% endif %}
 {% endblock title %}
 
 {% block pagetitle %}
@@ -21,63 +26,70 @@
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
-                    <h4 class="card-title text-center mb-4">{% if object %}Editar{% else %}Crear{% endif %} Permiso</h4>
+                    <h4 class="card-title text-center mb-4">
+                        {% if object %}
+                        <span data-key="edit_permission">Editar Permiso</span>
+                        {% else %}
+                        <span data-key="create_permission">Crear Permiso</span>
+                        {% endif %}
+                    </h4>
                     <form method="post" class="needs-validation" novalidate>
                         {% csrf_token %}
                         <table class="table table-bordered table-striped">
                             <thead>
                                 <tr>
-                                    <th>Campo</th>
-                                    <th>Valor</th>
+                                    <th data-key="field">Campo</th>
+                                    <th data-key="value">Valor</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td><label for="{{ form.usuario.id_for_label }}" class="form-label">Usuario</label></td>
+                                    <td><label for="{{ form.usuario.id_for_label }}" class="form-label" data-key="user">Usuario</label></td>
                                     <td>{{ form.usuario }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.empresa.id_for_label }}" class="form-label">Empresa</label></td>
+                                    <td><label for="{{ form.empresa.id_for_label }}" class="form-label" data-key="company">Empresa</label></td>
                                     <td>{{ form.empresa }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.vista.id_for_label }}" class="form-label">Vista</label></td>
+                                    <td><label for="{{ form.vista.id_for_label }}" class="form-label" data-key="view">Vista</label></td>
                                     <td>{{ form.vista }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.ingresar.id_for_label }}" class="form-label">Ingresar</label></td>
+                                    <td><label for="{{ form.ingresar.id_for_label }}" class="form-label" data-key="insert">Ingresar</label></td>
                                     <td>{{ form.ingresar }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.crear.id_for_label }}" class="form-label">Crear</label></td>
+                                    <td><label for="{{ form.crear.id_for_label }}" class="form-label" data-key="create">Crear</label></td>
                                     <td>{{ form.crear }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.modificar.id_for_label }}" class="form-label">Modificar</label></td>
+                                    <td><label for="{{ form.modificar.id_for_label }}" class="form-label" data-key="update">Modificar</label></td>
                                     <td>{{ form.modificar }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.eliminar.id_for_label }}" class="form-label">Eliminar</label></td>
+                                    <td><label for="{{ form.eliminar.id_for_label }}" class="form-label" data-key="delete">Eliminar</label></td>
                                     <td>{{ form.eliminar }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.autorizar.id_for_label }}" class="form-label">Autorizar</label></td>
+                                    <td><label for="{{ form.autorizar.id_for_label }}" class="form-label" data-key="authorize">Autorizar</label></td>
                                     <td>{{ form.autorizar }}</td>
                                 </tr>
                                 <tr>
-                                    <td><label for="{{ form.supervisor.id_for_label }}" class="form-label">Supervisor</label></td>
+                                    <td><label for="{{ form.supervisor.id_for_label }}" class="form-label" data-key="supervisor">Supervisor</label></td>
                                     <td>{{ form.supervisor }}</td>
                                 </tr>
                             </tbody>
                         </table>
                         <div class="d-flex justify-content-end mt-4">
-                            <button type="submit" class="btn btn-success me-2">Guardar</button>
-                            <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-success me-2" data-key="save">Guardar</button>
+                            <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary" data-key="cancel">Cancelar</a>
                         </div>
                     </form>
                 </div>

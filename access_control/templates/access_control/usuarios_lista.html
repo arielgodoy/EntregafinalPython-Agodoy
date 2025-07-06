@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -9,7 +10,7 @@
 {% endblock extra_css %}
 
 {% block title %}
-Lista de Usuarios
+<span data-key="user_list_title">Lista de Usuarios</span>
 {% endblock title %}
 
 {% block pagetitle %}
@@ -17,23 +18,24 @@ Lista de Usuarios
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h1 class="card-title">Lista de Usuarios</h1>
-                        <a href="{% url 'access_control:usuario_crear' %}" class="btn btn-success">Crear Nuevo Usuario</a>
+                        <h1 class="card-title" data-key="user_list_title">Lista de Usuarios</h1>
+                        <a href="{% url 'access_control:usuario_crear' %}" class="btn btn-success" data-key="create_new_user">Crear Nuevo Usuario</a>
                     </div>
                     
                     <div class="table-responsive">
                         <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="usuarios-table">
                             <thead>
                                 <tr>
-                                    <th>Nombre</th>
-                                    <th>Email</th>
-                                    <th>Acciones</th>
+                                    <th data-key="name">Nombre</th>
+                                    <th data-key="email">Email</th>
+                                    <th data-key="actions">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -43,10 +45,10 @@ Lista de Usuarios
                                     <td>{{ usuario.email }}</td>
                                     <td>
                                         <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">
-                                            <i class="bi bi-pencil"></i> Editar
+                                            <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
                                         </a>
                                         <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-usuario-id="{{ usuario.id }}" data-usuario-nombre="{{ usuario.username }}">
-                                            <i class="bi bi-trash"></i> Eliminar
+                                            <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
                                         </button>
                                     </td>
                                 </tr>
@@ -65,17 +67,17 @@ Lista de Usuarios
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="deleteModalLabel">Confirmar Eliminación</h5>
+                <h5 class="modal-title" id="deleteModalLabel" data-key="confirm_delete">Confirmar Eliminación</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>¿Estás seguro de que deseas eliminar al usuario <strong id="usuarioNombre"></strong>?</p>
+                <p data-key="delete_confirmation">¿Estás seguro de que deseas eliminar al usuario <strong id="usuarioNombre"></strong>?</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="cancel">Cancelar</button>
                 <form id="deleteForm" method="post" action="">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                    <button type="submit" class="btn btn-danger" data-key="delete">Eliminar</button>
                 </form>
             </div>
         </div>

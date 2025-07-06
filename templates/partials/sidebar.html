@@ -1,145 +1,134 @@
 {% load static %}
 
-
 {% block sidebar %}
-        <!-- ========== App Menu ========== -->
-        <div class="app-menu navbar-menu">
-            <!-- LOGO -->
-            <div class="navbar-brand-box">
-                <!-- Dark Logo-->
-                <a href="{% url 'biblioteca:listar_propiedades'%}" class="logo logo-dark">
-                    <span class="logo-sm">
-                        <img src="{% static 'images/logo-sm.png'%}" alt="" height="22">
-                    </span>
-                    <span class="logo-lg">
-                        <img src="{% static 'images/logo-dark.png'%}" alt="" height="17">
-                    </span>
-                </a>
-                <!-- Light Logo-->
-                <a href="{% url 'biblioteca:listar_propiedades'%}" class="logo logo-light">
-                    <span class="logo-sm">
-                        <img src="{% static 'images/logo-sm.png'%}" alt="" height="22">
-                    </span>
-                    <span class="logo-lg">
-                        <img src="{% static 'images/logo-light.png'%}" alt="" height="17">
-                    </span>
-                </a>
-                <button type="button" class="btn btn-sm p-0 fs-20 header-item float-end btn-vertical-sm-hover" id="vertical-hover">
-                    <i class="ri-record-circle-line"></i>
-                </button>
-            </div>
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+<!-- ========== App Menu ========== -->
+<div class="app-menu navbar-menu">
+    <!-- LOGO -->
+    <div class="navbar-brand-box">
+        <!-- Dark Logo-->
+        <a href="{% url 'biblioteca:listar_propiedades'%}" class="logo logo-dark">
+            <span class="logo-sm">
+                <img src="{% static 'images/logo-sm.png'%}" alt="" height="22">
+            </span>
+            <span class="logo-lg">
+                <img src="{% static 'images/logo-dark.png'%}" alt="" height="17">
+            </span>
+        </a>
+        <!-- Light Logo-->
+        <a href="{% url 'biblioteca:listar_propiedades'%}" class="logo logo-light">
+            <span class="logo-sm">
+                <img src="{% static 'images/logo-sm.png'%}" alt="" height="22">
+            </span>
+            <span class="logo-lg">
+                <img src="{% static 'images/logo-light.png'%}" alt="" height="17">
+            </span>
+        </a>
+        <button type="button" class="btn btn-sm p-0 fs-20 header-item float-end btn-vertical-sm-hover" id="vertical-hover">
+            <i class="ri-record-circle-line"></i>
+        </button>
+    </div>
 
- 
+    <div id="scrollbar">
+        <div class="container-fluid">
 
-            <div id="scrollbar">
-                <div class="container-fluid">
-                    
-                    <div id="two-column-menu">
-                    </div>
-                    <ul class="navbar-nav" id="navbar-nav">
-                            <!-- Menu Antiguo -->
-                        <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="t-old-menu">Menú Antiguo</span></li>                                                
-                        <!-- INICIO MENU ANTOGUO O NUEVO-->
-                        <ul class="navbar-nav" id="navbar-nav">
-                            <!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+            <div id="two-column-menu"></div>
+            <ul class="navbar-nav" id="navbar-nav">
 
-                        <!-- Menú Biblioteca Digital -->
-                        <li class="nav-item">
-                            <a class="nav-link menu-link" href="#sidebarBiblioteca" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarBiblioteca">
-                                <i class="ri-folder-open-line"></i> <span data-key="t-digital-library">Biblioteca Digital</span>
-                            </a>
-                            <div class="collapse menu-dropdown" id="sidebarBiblioteca">
-                                <ul class="nav nav-sm flex-column">
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="t-add-owner">Ingresar Propietario</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="t-add-property">Ingresar Propiedad</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="t-add-document-type">Ingresar Tipo Documento</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="t-list-owners">Listado de Propietarios</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="t-list-properties">Listado de Propiedades</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="t-list-document-types">Listado de Tipos de Documentos</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="t-list-documents">Listado General de Documentos</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </li>
+                <!-- Menu Antiguo -->
+                <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="t-old-menu">Menú Antiguo</span></li>
 
-                        
-                            {% if user.is_superuser %}
-                            <!-- Menú Control de Acceso -->
+                <!-- Menú Biblioteca Digital -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarBiblioteca" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarBiblioteca">
+                        <i class="ri-folder-open-line"></i> <span data-key="t-digital-library">Biblioteca Digital</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarBiblioteca">
+                        <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
-                                    <i class="ri-lock-line"></i> <span data-key="t-access-control">Control de Acceso</span>
-                                </a>
-                                <div class="collapse menu-dropdown" id="sidebarControlAcceso">
-                                    <ul class="nav nav-sm flex-column">
-                                        <li class="nav-item">
-                                            <a href="{% url 'crear_usuario_admin' %}" class="nav-link" data-key="t-create-user">Crear Usuario (Admin)</a>
-                                        </li>
-                                        
-                                        <li class="nav-item">
-                                           <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'access_control:empresas_lista' %}" class="nav-link" data-key="t-company-management">Gestión de Empresas</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'access_control:vistas_lista' %}" class="nav-link" data-key="t-view-management">Gestión de Vistas</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'access_control:permisos_lista' %}" class="nav-link" data-key="t-permission-management">Gestión de Permisos</a>
-                                        </li>
-                                        <li class="nav-item">
-                                            <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link" data-key="t-filter-permissions">Filtrar Permisos</a>
-                                        </li>
-                                    </ul>
-                                </div>
+                                <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="t-add-owner">Ingresar Propietario</a>
                             </li>
-                        {% endif %}
-                        
-                        <!-- Menú Cuentas -->
-                        <li class="nav-item">
-                            <a class="nav-link menu-link" href="#sidebarCuentaUsuario" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentaUsuario">
-                                <i class="ri-user-settings-line"></i> <span data-key="t-user-account">Cuenta de Usuario</span>
-                            </a>
-                            <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
-                                <ul class="nav nav-sm flex-column">
-                                    <li class="nav-item">
-                                        <a href="{% url 'editar_perfil' %}" class="nav-link" data-key="t-edit-profile">Editar Perfil</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{% url 'configurar_email' %}" class="nav-link" data-key="t-email-settings">Configurar Correo</a>
-                                    </li>
-                                </ul>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="t-add-property">Ingresar Propiedad</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="t-add-document-type">Ingresar Tipo Documento</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="t-list-owners">Listado de Propietarios</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="t-list-properties">Listado de Propiedades</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="t-list-document-types">Listado de Tipos de Documentos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="t-list-documents">Listado General de Documentos</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
 
-                            </div>
-                        </li>
+                {% if user.is_superuser %}
+                <!-- Menú Control de Acceso -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
+                        <i class="ri-lock-line"></i> <span data-key="t-access-control">Control de Acceso</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarControlAcceso">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'crear_usuario_admin' %}" class="nav-link" data-key="t-create-user">Crear Usuario (Admin)</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link" data-key="t-company-management">Gestión de Empresas</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link" data-key="t-view-management">Gestión de Vistas</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link" data-key="t-permission-management">Gestión de Permisos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link" data-key="t-filter-permissions">Filtrar Permisos</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                {% endif %}
 
+                <!-- Menú Cuentas -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarCuentaUsuario" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentaUsuario">
+                        <i class="ri-user-settings-line"></i> <span data-key="t-user-account">Cuenta de Usuario</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'editar_perfil' %}" class="nav-link" data-key="t-edit-profile">Editar Perfil</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'configurar_email' %}" class="nav-link" data-key="t-email-settings">Configurar Correo</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
 
-                        <!-- FINE MENU ANTIGUO NUEVO-->
-
-                    </ul>
-                </div>
-                <!-- Sidebar -->
-            </div>
-            <div class="sidebar-background"></div>
+            </ul>
         </div>
-        <!-- Left Sidebar End -->
-        <!-- Vertical Overlay-->
-        <div class="vertical-overlay"></div>
+        <!-- Sidebar -->
+    </div>
+    <div class="sidebar-background"></div>
+</div>
+<!-- Left Sidebar End -->
+
+<!-- Vertical Overlay-->
+<div class="vertical-overlay"></div>
 {% endblock sidebar %}
-    

@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -10,7 +11,7 @@
 {% endblock extra_css %}
 
 {% block title %}
-Gestión de Permisos
+<span data-key="permissions_management">Gestión de Permisos</span>
 {% endblock title %}
 
 {% block pagetitle %}
@@ -18,30 +19,31 @@ Gestión de Permisos
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="card-title">Gestión de Permisos</h4>
-                        <a href="{% url 'access_control:permiso_crear' %}" class="btn btn-success">Crear Nuevo Permiso</a>
+                        <h4 class="card-title" data-key="permissions_management">Gestión de Permisos</h4>
+                        <a href="{% url 'access_control:permiso_crear' %}" class="btn btn-success" data-key="create_new_permission">Crear Nuevo Permiso</a>
                     </div>
 
                     <div class="table-responsive">
                         <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="permisos-table">
                             <thead>
                                 <tr>
-                                    <th>Usuario</th>
-                                    <th>Empresa</th>
-                                    <th>Vista</th>
-                                    <th class="text-center">I</th> <!-- Ingresar -->
-                                    <th class="text-center">C</th> <!-- Crear -->
-                                    <th class="text-center">M</th> <!-- Modificar -->
-                                    <th class="text-center">E</th> <!-- Eliminar -->
-                                    <th class="text-center">A</th> <!-- Autorizar -->
-                                    <th class="text-center">S</th> <!-- Supervisor -->
-                                    <th>Acciones</th>
+                                    <th data-key="user">Usuario</th>
+                                    <th data-key="company">Empresa</th>
+                                    <th data-key="view">Vista</th>
+                                    <th class="text-center" data-key="perm_i">I</th>
+                                    <th class="text-center" data-key="perm_c">C</th>
+                                    <th class="text-center" data-key="perm_m">M</th>
+                                    <th class="text-center" data-key="perm_e">E</th>
+                                    <th class="text-center" data-key="perm_a">A</th>
+                                    <th class="text-center" data-key="perm_s">S</th>
+                                    <th data-key="actions">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -70,10 +72,10 @@ Gestión de Permisos
                                     </td>
                                     <td>
                                         <a href="{% url 'access_control:permiso_editar' permiso.id %}" class="btn btn-primary btn-sm">
-                                            <i class="bi bi-pencil"></i> Editar
+                                            <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
                                         </a>
                                         <a href="{% url 'access_control:permiso_eliminar' permiso.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este permiso?');">
-                                            <i class="bi bi-trash"></i> Eliminar
+                                            <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
                                         </a>
                                     </td>
                                 </tr>

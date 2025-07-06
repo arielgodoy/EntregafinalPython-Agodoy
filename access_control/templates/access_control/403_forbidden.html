@@ -8,9 +8,8 @@
 <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 {% endblock extra_css %}
 
-
 {% block title %}
-Error 403 - Acceso Denegado
+<span data-key="error_403_title">Error 403 - Acceso Denegado</span>
 {% endblock title %}
 
 {% block pagetitle %}
@@ -18,22 +17,26 @@ Error 403 - Acceso Denegado
 {% endblock pagetitle %}
 
 {% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="text-center">
-                <h1 class="display-1 text-danger">403</h1>
-                <p class="lead">No tienes permisos suficientes para acceder a esta página.</p>
+                <h1 class="display-1 text-danger" data-key="error_403">403</h1>
+                <p class="lead" data-key="error_403_message">No tienes permisos suficientes para acceder a esta página.</p>
                 <p>
-                    Intentaste acceder a la vista <strong>{{ vista_nombre }}</strong> 
-                    de la empresa <strong>{{ empresa_nombre }}</strong>.
+                    <span data-key="error_403_attempt">Intentaste acceder a la vista</span>
+                    <strong>{{ vista_nombre }}</strong>
+                    <span data-key="error_403_company">de la empresa</span>
+                    <strong>{{ empresa_nombre }}</strong>.
                 </p>
-                <a href="javascript:history.back()" class="btn btn-primary">Volver</a>
+                <a href="javascript:history.back()" class="btn btn-primary" data-key="go_back">Volver</a>
             </div>
         </div>
     </div>
 </div>
 {% endblock content %}
+
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
