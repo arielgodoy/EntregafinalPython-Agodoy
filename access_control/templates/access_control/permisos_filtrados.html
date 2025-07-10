@@ -12,7 +12,7 @@
 {% load custom_tags %}
 
 {% block title %}
-<span data-key="title_filtered_permission">Gestión de Permisos Filtrados</span>
+Gestión de Permisos Filtrados
 {% endblock title %}
 
 {% block pagetitle %}
@@ -154,4 +154,104 @@
         feather.replace();
     });
 </script>
+
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    feather.replace();
+
+    document.querySelectorAll('.permiso-checkbox').forEach(function (checkbox) {
+        checkbox.addEventListener('change', function () {
+            const permisoId = this.dataset.permisoId;
+            const permisoField = this.dataset.permisoField;
+            const value = this.checked;
+
+            fetch("{% url 'access_control:toggle_permiso' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: new URLSearchParams({
+                    permiso_id: permisoId,
+                    permiso_field: permisoField,
+                    value: value
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert("Error al actualizar permiso: " + (data.error || "Error desconocido"));
+                }
+            })
+            .catch(error => {
+                console.error("Error en la solicitud:", error);
+                alert("Error en la solicitud");
+            });
+        });
+    });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('copyPermissionsButton').addEventListener('click', function () {
+        const origenUsuario = document.getElementById('origenUsuario').value;
+        const origenEmpresa = document.getElementById('origenEmpresa').value;
+        const destinoUsuario = document.getElementById('destinoUsuario').value;
+        const destinoEmpresa = document.getElementById('destinoEmpresa').value;
+
+        fetch("{% url 'access_control:copy_permissions' %}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: new URLSearchParams({
+                origen_usuario: origenUsuario,
+                origen_empresa: origenEmpresa,
+                destino_usuario: destinoUsuario,
+                destino_empresa: destinoEmpresa
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                // 🔴 Si el servidor no responde 200 OK, asumimos que no hay permisos
+                throw new Error("SE REQUIERE PERMISO SUPERVISOR");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                Toastify({
+                    text: "Permisos copiados exitosamente.",
+                    duration: 3000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#28a745",
+                }).showToast();
+                location.reload();
+            } else {
+                Toastify({
+                    text: "Error: " + data.error,
+                    duration: 5000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#dc3545",
+                }).showToast();
+            }
+        })
+        .catch(error => {
+            Toastify({
+                text: error.message || "Error inesperado",
+                duration: 5000,
+                gravity: "top",
+                position: "right",
+                backgroundColor: "#dc3545",
+            }).showToast();
+        });
+    });
+});
+</script>
+
 {% endblock extra_js %}

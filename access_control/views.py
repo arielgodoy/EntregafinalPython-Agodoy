@@ -42,13 +42,9 @@ class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         Obtiene los valores iniciales para los campos del formulario.
         Si se enviaron datos en la solicitud GET o POST, los usa para mantener la selección del usuario.
         """
-        initial = super().get_initial()
-        
-        # Intenta usar los valores enviados en GET o POST
+        initial = super().get_initial()                
         usuario_id = self.request.GET.get('usuario') or self.request.POST.get('usuario')
-        empresa_id = self.request.GET.get('empresa') or self.request.POST.get('empresa')
-        
-        # Si no hay valores enviados, usa valores predeterminados
+        empresa_id = self.request.GET.get('empresa') or self.request.POST.get('empresa')                
         if usuario_id:
             try:
                 initial['usuario'] = User.objects.get(id=usuario_id)
