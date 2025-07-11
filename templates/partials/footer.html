@@ -1,4 +1,4 @@
-{% block footer %}
+{% load static %}
 <!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <footer class="footer">
     <div class="container-fluid">
@@ -14,4 +14,13 @@
         </div>
     </div>
 </footer>
-{% endblock footer %}
+
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Código específico del carrito
+    console.log("Cargando Footer...");
+});
+</script>
+{% endblock extra_js %}
