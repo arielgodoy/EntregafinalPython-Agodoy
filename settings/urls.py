@@ -15,6 +15,8 @@ urlpatterns = [
     path('probar-configuracion-salida/', probar_configuracion_salida, name='probar_configuracion_salida'),
     path('enviar-correo-prueba/', enviar_correo_prueba, name='enviar_correo_prueba'),
     path('recibir-correo-prueba/', recibir_correo_prueba, name='recibir_correo_prueba'),
+
+    
 ]
 
 

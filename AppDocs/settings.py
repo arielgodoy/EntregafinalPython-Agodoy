@@ -70,6 +70,7 @@ INSTALLED_APPS = [
      'api',
      'access_control',
      'settings',
+     'evaluaciones',
 ]
 
 MIDDLEWARE = [

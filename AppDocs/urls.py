@@ -26,5 +26,6 @@ urlpatterns = [
     #path('access-control/', include('access_control.urls')), 
     path('access-control/', include('access_control.urls', namespace='access_control')),
      path('settings/', include('settings.urls')),
+     path('evaluaciones/', include('evaluaciones.urls')),
 
 ]
