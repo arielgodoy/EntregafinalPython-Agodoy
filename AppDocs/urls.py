@@ -15,7 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path,include
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("", include("biblioteca.urls")),
@@ -23,9 +25,15 @@ urlpatterns = [
     path('chat/',include('chat.urls')),
     path('admin/', admin.site.urls),
     path('api/v1/',include('api.urls')),
+    path('api/v1/control-proyectos/', include('control_de_proyectos.api_urls')),
     #path('access-control/', include('access_control.urls')), 
     path('access-control/', include('access_control.urls', namespace='access_control')),
-     path('settings/', include('settings.urls')),
-     path('evaluaciones/', include('evaluaciones.urls')),
+    path('control-proyectos/', include('control_de_proyectos.urls', namespace='control_de_proyectos')),
+    path('settings/', include('settings.urls')),
+    path('evaluaciones/', include('evaluaciones.urls')),
 
 ]
+
+# Servir archivos multimedia en desarrollo
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

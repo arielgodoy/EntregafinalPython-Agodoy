@@ -1,3 +1,13 @@
+## ⚠️ Reglas de desarrollo asistido por IA
+
+Este proyecto utiliza reglas estrictas para el uso de GitHub Copilot.
+ANTES de generar o modificar código, revisa el archivo:
+
+➡️ **COPILOT_RULES.md**
+
+Copilot debe seguir esas reglas en todas las respuestas.
+
+
 # EntregafinalPython-Agodoy
 Repo entrega Final  Python junio 2023
 DEMO YOUTUBE : https://www.youtube.com/watch?v=OmSHo9eKn-o

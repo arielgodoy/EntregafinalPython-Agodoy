@@ -1,0 +1,87 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}
+Proyectos
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Proyectos" pagetitle="Control de Proyectos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h4 class="fw-bold">Proyectos</h4>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="btn btn-primary">
+                        <i class="bx bx-plus"></i> Nuevo Proyecto
+                    </a>
+                </div>
+            </div>
+
+            {% if proyectos %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="card shadow-lg mb-5 rounded">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Cliente</th>
+                                        <th>Tipo</th>
+                                        <th>Estado</th>
+                                        <th>Empresa</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for proyecto in proyectos %}
+                                    <tr>
+                                        <td><strong>{{ proyecto.nombre }}</strong></td>
+                                        <td>{{ proyecto.cliente.nombre }}</td>
+                                        <td><span class="badge bg-info">{{ proyecto.tipo_ref.nombre }}</span></td>
+                                        <td>
+                                            <span class="badge bg-{% if proyecto.estado == 'TERMINADO' %}success{% elif proyecto.estado == 'EN_EJECUCION' %}warning{% elif proyecto.estado == 'EN_COTIZACION' %}primary{% else %}secondary{% endif %}">
+                                                {{ proyecto.get_estado_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ proyecto.empresa_interna.codigo }}</td>
+                                        <td>
+                                            <a href="{% url 'control_de_proyectos:detalle_proyecto' proyecto.pk %}" class="btn btn-sm btn-info" title="Ver">
+                                                <i class="bx bx-eye"></i>
+                                            </a>
+                                            <a href="{% url 'control_de_proyectos:editar_proyecto' proyecto.pk %}" class="btn btn-sm btn-warning" title="Editar">
+                                                <i class="bx bx-edit"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">No hay proyectos registrados.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

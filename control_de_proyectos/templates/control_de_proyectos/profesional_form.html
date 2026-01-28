@@ -1,0 +1,59 @@
+{% extends "partials/base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+{% if form.instance.pk %}Editar Profesional{% else %}Crear Profesional{% endif %}
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Profesional" pagetitle="Profesionales" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card shadow-lg p-4 mb-5 rounded">
+                        <h1 class="my-4 text-center">{% if form.instance.pk %}Editar Profesional{% else %}Crear Profesional{% endif %}</h1>
+                        <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                            {% csrf_token %}
+                            {{ form|crispy }}
+                            
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bx bx-save"></i> Guardar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+        
+        // Autocomplete para especialidad_texto
+        const especialidadInput = document.querySelector('input[name="especialidad_texto"]');
+        if (especialidadInput) {
+            especialidadInput.addEventListener('input', function(e) {
+                const query = e.target.value;
+                if (query.length > 2) {
+                    fetch(`{% url 'control_de_proyectos:sugerir_especialidades' %}?query=${encodeURIComponent(query)}`)
+                        .then(r => r.json())
+                        .then(data => console.log('Sugerencias especialidades:', data.sugerencias))
+                        .catch(err => console.error('Error:', err));
+                }
+            });
+        }
+    });
+</script>
+{% endblock extra_js %}

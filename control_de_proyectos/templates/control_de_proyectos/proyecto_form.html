@@ -1,0 +1,475 @@
+{% extends "partials/base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+{% if form.instance.pk %}Editar Proyecto{% else %}Crear Proyecto{% endif %}
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Proyecto" pagetitle="Proyectos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card shadow-lg p-4 mb-5 rounded">
+                        <h1 class="my-4 text-center">{% if form.instance.pk %}Editar Proyecto{% else %}Crear Proyecto{% endif %}</h1>
+                        
+                        {% if request.session.empresa_nombre %}
+                        <div class="alert alert-info mb-3">
+                            <strong>Empresa Interna:</strong> {{ request.session.empresa_nombre }} ({{ request.session.empresa_codigo }})
+                        </div>
+                        {% endif %}
+                        
+                        <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="formProyecto">
+                            {% csrf_token %}
+                            {{ form|crispy }}
+                            
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bx bx-save"></i> Guardar Proyecto
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Cliente -->
+<div class="modal fade" id="modalCrearCliente" tabindex="-1" aria-labelledby="modalCrearClienteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCrearClienteLabel">
+                    <i class="bx bx-building"></i> Crear Nuevo Cliente
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearCliente">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="cliente_nombre" name="nombre" required>
+                            <div id="error_formcrearcliente_nombre"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_rut" class="form-label">RUT <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="cliente_rut" name="rut" data-inputingreso="camporut" maxlength="12" placeholder="XX.XXX.XXX-X" required>
+                            <div id="error_formcrearcliente_rut"></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="cliente_email" name="email">
+                            <div id="error_formcrearcliente_email"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_telefono" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="cliente_telefono" name="telefono">
+                            <div id="error_formcrearcliente_telefono"></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_ciudad" class="form-label">Ciudad</label>
+                            <input type="text" class="form-control" id="cliente_ciudad" name="ciudad">
+                            <div id="error_formcrearcliente_ciudad"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="cliente_contacto_nombre" class="form-label">Nombre Contacto</label>
+                            <input type="text" class="form-control" id="cliente_contacto_nombre" name="contacto_nombre">
+                            <div id="error_formcrearcliente_contacto_nombre"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cliente_direccion" class="form-label">Dirección</label>
+                        <textarea class="form-control" id="cliente_direccion" name="direccion" rows="2"></textarea>
+                        <div id="error_formcrearcliente_direccion"></div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="cliente_activo" name="activo" checked>
+                        <label class="form-check-label" for="cliente_activo">
+                            Activo
+                        </label>
+                    </div>
+                </form>
+                <div id="alertCliente" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bx bx-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="guardarCliente()">
+                    <i class="bx bx-save"></i> Guardar Cliente
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Profesional -->
+<div class="modal fade" id="modalCrearProfesional" tabindex="-1" aria-labelledby="modalCrearProfesionalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCrearProfesionalLabel">
+                    <i class="bx bx-user"></i> Crear Nuevo Profesional
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearProfesional">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="profesional_nombre" name="nombre" required>
+                            <div id="error_profesional_nombre"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_rut" class="form-label">RUT <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="profesional_rut" name="rut" data-inputingreso="camporut" maxlength="12" placeholder="XX.XXX.XXX-X" required>
+                            <div id="error_profesional_rut"></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="profesional_email" name="email" required>
+                            <div id="error_profesional_email"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_telefono" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="profesional_telefono" name="telefono">
+                            <div id="error_profesional_telefono"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="profesional_especialidad" class="form-label">Especialidad</label>
+                        <input type="text" class="form-control" id="profesional_especialidad" name="especialidad_texto" placeholder="ej: Ingeniero Civil">
+                        <div id="error_profesional_especialidad_texto"></div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="profesional_activo" name="activo" checked>
+                        <label class="form-check-label" for="profesional_activo">
+                            Activo
+                        </label>
+                    </div>
+                </form>
+                <div id="alertProfesional" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bx bx-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" onclick="guardarProfesional()">
+                    <i class="bx bx-save"></i> Guardar Profesional
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+        
+        const form = document.querySelector('#formProyecto');
+        if (form) {
+            console.log('Formulario cargado correctamente');
+        }
+        
+        // Agregar botón de Nuevo Cliente al lado del select de cliente
+        const selectCliente = document.querySelector('select[name="cliente"]');
+        if (selectCliente) {
+            const clienteWrapper = selectCliente.closest('.mb-3') || selectCliente.closest('.form-group');
+            if (clienteWrapper) {
+                // Crear contenedor con display flex
+                const selectWrapper = document.createElement('div');
+                selectWrapper.className = 'd-flex gap-2 align-items-start';
+                
+                // Mover el select al nuevo wrapper
+                selectCliente.parentNode.insertBefore(selectWrapper, selectCliente);
+                selectWrapper.appendChild(selectCliente);
+                selectCliente.style.flex = '1';
+                
+                // Crear botón
+                const btnNuevoCliente = document.createElement('button');
+                btnNuevoCliente.type = 'button';
+                btnNuevoCliente.className = 'btn btn-outline-primary btn-sm';
+                btnNuevoCliente.setAttribute('data-bs-toggle', 'modal');
+                btnNuevoCliente.setAttribute('data-bs-target', '#modalCrearCliente');
+                btnNuevoCliente.innerHTML = '<i class="bx bx-plus"></i>';
+                btnNuevoCliente.title = 'Nuevo Cliente';
+                
+                selectWrapper.appendChild(btnNuevoCliente);
+            }
+        }
+        
+        // Agregar botón de Nuevo Profesional al lado del select/checkboxes de profesionales
+        const profesionalesDiv = document.querySelector('div[id*="profesionales"]') || 
+                                 document.querySelector('input[name="profesionales"]')?.closest('.mb-3') ||
+                                 document.querySelector('input[name="profesionales"]')?.closest('.form-group');
+        
+        if (profesionalesDiv) {
+            const label = profesionalesDiv.querySelector('label');
+            if (label) {
+                // Crear contenedor flex para el label y el botón
+                const labelWrapper = document.createElement('div');
+                labelWrapper.className = 'd-flex justify-content-between align-items-center mb-2';
+                
+                label.parentNode.insertBefore(labelWrapper, label);
+                labelWrapper.appendChild(label);
+                label.classList.remove('mb-2', 'mb-3');
+                
+                // Crear botón
+                const btnNuevoProfesional = document.createElement('button');
+                btnNuevoProfesional.type = 'button';
+                btnNuevoProfesional.className = 'btn btn-outline-success btn-sm';
+                btnNuevoProfesional.setAttribute('data-bs-toggle', 'modal');
+                btnNuevoProfesional.setAttribute('data-bs-target', '#modalCrearProfesional');
+                btnNuevoProfesional.innerHTML = '<i class="bx bx-plus"></i> Nuevo';
+                btnNuevoProfesional.title = 'Nuevo Profesional';
+                
+                labelWrapper.appendChild(btnNuevoProfesional);
+            }
+        }
+        
+        // Autocomplete para tipo_texto
+        const tipoInput = document.querySelector('input[name="tipo_texto"]');
+        if (tipoInput) {
+            tipoInput.addEventListener('input', function(e) {
+                const query = e.target.value;
+                if (query.length > 2) {
+                    fetch(`{% url 'control_de_proyectos:sugerir_tipos' %}?query=${encodeURIComponent(query)}`)
+                        .then(r => r.json())
+                        .then(data => console.log('Sugerencias tipos:', data.sugerencias))
+                        .catch(err => console.error('Error:', err));
+                }
+            });
+        }
+    });
+
+    // Función para mostrar errores en campos específicos
+    function mostrarErroresCampos(formId, errores) {
+        const form = document.getElementById(formId);
+        
+        // Limpiar errores previos
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => el.remove());
+        
+        // Mostrar nuevos errores
+        for (const [campo, mensajes] of Object.entries(errores)) {
+            // Buscar el input por nombre
+            const input = form.querySelector(`[name="${campo}"]`);
+            if (input) {
+                input.classList.add('is-invalid');
+                
+                // Buscar el div de error correspondiente
+                const errorDiv = document.getElementById(`error_${formId.replace('Crear', '').toLowerCase()}_${campo}`);
+                if (errorDiv) {
+                    errorDiv.className = 'invalid-feedback d-block';
+                    errorDiv.innerHTML = mensajes.map(msg => `<small>• ${msg}</small>`).join('<br>');
+                } else {
+                    // Si no existe el div, crear uno dinámicamente
+                    const newErrorDiv = document.createElement('div');
+                    newErrorDiv.className = 'invalid-feedback d-block';
+                    newErrorDiv.innerHTML = mensajes.map(msg => `<small>• ${msg}</small>`).join('<br>');
+                    input.parentNode.insertBefore(newErrorDiv, input.nextSibling);
+                }
+            }
+        }
+    }
+
+    // Función para limpiar errores de campos
+    function limpiarErroresCampos(formId) {
+        const form = document.getElementById(formId);
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => {
+            el.innerHTML = '';
+            el.className = 'invalid-feedback';
+        });
+    }
+
+    // Función para mostrar alertas
+    function mostrarAlerta(elementId, mensaje, tipo) {
+        const alertDiv = document.getElementById(elementId);
+        alertDiv.className = `alert alert-${tipo}`;
+        alertDiv.textContent = mensaje;
+        alertDiv.classList.remove('d-none');
+        
+        setTimeout(() => {
+            alertDiv.classList.add('d-none');
+        }, 5000);
+    }
+
+    // Función para cerrar modal correctamente
+    function cerrarModal(modalId) {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            } else {
+                // Si no hay instancia, crear una nueva y cerrar
+                const nuevoModal = new bootstrap.Modal(modalElement);
+                nuevoModal.hide();
+            }
+            
+            // Remover el backdrop manualmente y restaurar la página
+            setTimeout(() => {
+                // Remover todos los backdrops
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                
+                // Remover la clase modal-open del body
+                document.body.classList.remove('modal-open');
+                
+                // Restaurar el overflow del body
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                
+                // Asegurar que el modal esté oculto
+                modalElement.style.display = 'none';
+                modalElement.classList.remove('show');
+                
+                // Limpiar atributos de aria
+                modalElement.removeAttribute('aria-modal');
+                modalElement.removeAttribute('role');
+            }, 300);
+        }
+    }
+
+    // Función para guardar cliente
+    function guardarCliente() {
+        const form = document.getElementById('formCrearCliente');
+        const formData = new FormData(form);
+        
+        // Validación básica
+        const nombre = formData.get('nombre');
+        const rut = formData.get('rut');
+        
+        if (!nombre || !rut) {
+            mostrarAlerta('alertCliente', 'Por favor complete los campos obligatorios (Nombre y RUT)', 'warning');
+            return;
+        }
+        
+        // Limpiar errores previos
+        limpiarErroresCampos('formCrearCliente');
+        
+        fetch("{% url 'control_de_proyectos:crear_cliente' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarAlerta('alertCliente', 'Cliente creado exitosamente', 'success');
+                
+                // Actualizar el select de clientes
+                const selectCliente = document.querySelector('select[name="cliente"]');
+                if (selectCliente && data.cliente_id) {
+                    const option = new Option(data.cliente_nombre, data.cliente_id, true, true);
+                    selectCliente.add(option);
+                }
+                
+                // Cerrar modal correctamente
+                setTimeout(() => {
+                    cerrarModal('modalCrearCliente');
+                    form.reset();
+                    limpiarErroresCampos('formCrearCliente');
+                }, 500);
+            } else {
+                // Mostrar errores en los campos
+                if (data.errors) {
+                    mostrarErroresCampos('formCrearCliente', data.errors);
+                    mostrarAlerta('alertCliente', 'Por favor corrija los errores en el formulario', 'danger');
+                } else {
+                    mostrarAlerta('alertCliente', data.error || 'Error al crear el cliente', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarAlerta('alertCliente', 'Error al procesar la solicitud', 'danger');
+        });
+    }
+
+    // Función para guardar profesional
+    function guardarProfesional() {
+        const form = document.getElementById('formCrearProfesional');
+        const formData = new FormData(form);
+        
+        // Validación básica
+        const nombre = formData.get('nombre');
+        const rut = formData.get('rut');
+        const email = formData.get('email');
+        
+        if (!nombre || !rut || !email) {
+            mostrarAlerta('alertProfesional', 'Por favor complete los campos obligatorios (Nombre, RUT y Email)', 'warning');
+            return;
+        }
+        
+        // Limpiar errores previos
+        limpiarErroresCampos('formCrearProfesional');
+        
+        fetch("{% url 'control_de_proyectos:crear_profesional' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarAlerta('alertProfesional', 'Profesional creado exitosamente', 'success');
+                
+                // Actualizar el select de profesionales (si existe checkboxes)
+                const profesionalesContainer = document.querySelector('div[id*="profesionales"]');
+                if (profesionalesContainer && data.profesional_id) {
+                    console.log('Profesional creado con ID:', data.profesional_id);
+                }
+                
+                // Cerrar modal correctamente
+                setTimeout(() => {
+                    cerrarModal('modalCrearProfesional');
+                    form.reset();
+                    limpiarErroresCampos('formCrearProfesional');
+                    // Recargar la página para actualizar la lista de profesionales
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                }, 500);
+            } else {
+                // Mostrar errores en los campos
+                if (data.errors) {
+                    mostrarErroresCampos('formCrearProfesional', data.errors);
+                    mostrarAlerta('alertProfesional', 'Por favor corrija los errores en el formulario', 'danger');
+                } else {
+                    mostrarAlerta('alertProfesional', data.error || 'Error al crear el profesional', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarAlerta('alertProfesional', 'Error al procesar la solicitud', 'danger');
+        });
+    }
+</script>
+{% endblock extra_js %}

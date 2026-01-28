@@ -71,6 +71,7 @@ INSTALLED_APPS = [
      'access_control',
      'settings',
      'evaluaciones',
+     'control_de_proyectos',
 ]
 
 MIDDLEWARE = [

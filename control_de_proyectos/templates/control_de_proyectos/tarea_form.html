@@ -1,0 +1,865 @@
+{% extends "partials/base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}
+{% if form.instance.pk %}Editar Tarea{% else %}Crear Tarea{% endif %}
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tarea" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card shadow-lg p-4 mb-5 rounded">
+                        <h1 class="my-4 text-center">{% if form.instance.pk %}Editar Tarea{% else %}Crear Tarea{% endif %}</h1>
+                        
+                        {% if proyecto %}
+                        <div class="alert alert-info mb-3">
+                            <strong>Proyecto:</strong> {{ proyecto.nombre }}
+                        </div>
+                        {% endif %}
+                        
+                        <form method="post" class="needs-validation" novalidate id="formTarea">
+                            {% csrf_token %}
+                            {{ form|crispy }}
+                            
+                            <!-- Sección de Documentos (solo si la tarea ya existe) -->
+                            {% if form.instance.pk %}
+                            <hr class="my-4">
+                            <div class="card p-3 mb-4 bg-light">
+                                <h5 class="card-title mb-3">
+                                    <i class="bx bx-file"></i> Gestión de Documentos
+                                </h5>
+                                
+                                {% if form.instance.tipo_tarea %}
+                                    <!-- Documentos de Entrada -->
+                                    <div class="mb-4">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="text-muted mb-0">
+                                                <i class="bx bx-download"></i> Documentos de Entrada (Requeridos)
+                                            </h6>
+                                            <button type="button" class="btn btn-sm btn-success" onclick="abrirModalSubirDocumento()">
+                                                <i class="bx bx-cloud-upload"></i> Cargar
+                                            </button>
+                                        </div>
+                                        <div id="documentosEntrada" class="row g-2">
+                                            <p class="text-muted small">Cargando documentos...</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr>
+                                    
+                                    <!-- Documentos de Salida -->
+                                    <div>
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="text-muted mb-0">
+                                                <i class="bx bx-upload"></i> Documentos de Salida (Entregables)
+                                            </h6>
+                                            <button type="button" class="btn btn-sm btn-success" onclick="abrirModalSubirDocumento()">
+                                                <i class="bx bx-cloud-upload"></i> Cargar
+                                            </button>
+                                        </div>
+                                        <div id="documentosSalida" class="row g-2">
+                                            <p class="text-muted small">Cargando documentos...</p>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info mb-0">
+                                        <i class="bx bx-info-circle"></i> <strong>Selecciona un Tipo de Tarea</strong> en el formulario anterior para ver los documentos requeridos
+                                    </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bx bx-save"></i> Guardar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Profesional -->
+<div class="modal fade" id="modalCrearProfesional" tabindex="-1" aria-labelledby="modalCrearProfesionalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCrearProfesionalLabel">
+                    <i class="bx bx-user"></i> Crear Nuevo Profesional
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearProfesional">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="profesional_nombre" name="nombre" required>
+                            <div id="error_formcrearprofe_nombre"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_rut" class="form-label">RUT <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="profesional_rut" name="rut" data-inputingreso="camporut" maxlength="12" placeholder="XX.XXX.XXX-X" required>
+                            <div id="error_formcrearprofe_rut"></div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="profesional_email" name="email" required>
+                            <div id="error_formcrearprofe_email"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="profesional_telefono" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="profesional_telefono" name="telefono">
+                            <div id="error_formcrearprofe_telefono"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="profesional_especialidad" class="form-label">Especialidad</label>
+                        <input type="text" class="form-control" id="profesional_especialidad" name="especialidad_texto" placeholder="ej: Ingeniero Civil">
+                        <div id="error_formcrearprofe_especialidad_texto"></div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="profesional_activo" name="activo" checked>
+                        <label class="form-check-label" for="profesional_activo">
+                            Activo
+                        </label>
+                    </div>
+                </form>
+                <div id="alertProfesional" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bx bx-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" onclick="guardarProfesional()">
+                    <i class="bx bx-save"></i> Guardar Profesional
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Tipo Tarea -->
+<div class="modal fade" id="modalCrearTipoTarea" tabindex="-1" aria-labelledby="modalCrearTipoTareaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCrearTipoTareaLabel">
+                    <i class="bx bx-list-check"></i> Crear Nuevo Tipo de Tarea
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCrearTipoTarea">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="tipotarea_nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tipotarea_nombre" name="nombre" required>
+                        <div id="error_formcreartipotarea_nombre"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tipotarea_descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="tipotarea_descripcion" name="descripcion" rows="3"></textarea>
+                        <div id="error_formcreartipotarea_descripcion"></div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="tipotarea_activo" name="activo" checked>
+                        <label class="form-check-label" for="tipotarea_activo">
+                            Activo
+                        </label>
+                    </div>
+                </form>
+                <div id="alertTipoTarea" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bx bx-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" onclick="guardarTipoTarea()">
+                    <i class="bx bx-save"></i> Guardar Tipo de Tarea
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Subir Documento -->
+<div class="modal fade" id="modalSubirDocumento" tabindex="-1" aria-labelledby="modalSubirDocumentoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalSubirDocumentoLabel">
+                    <i class="bx bx-upload"></i> Cargar Documento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formSubirDocumento" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="nombre_documento" class="form-label">Nombre del Documento <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre_documento" name="nombre_documento" placeholder="ej: Especificación técnica" required>
+                        <small class="text-muted">Nombre descriptivo del documento</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="tipo_doc" class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
+                        <select class="form-select" id="tipo_doc" name="tipo_doc" required>
+                            <option value="">-- Seleccionar tipo --</option>
+                            <option value="ENTRADA">Documento de Entrada (Requerido)</option>
+                            <option value="SALIDA">Documento de Salida (Entregable)</option>
+                        </select>
+                        <small class="text-muted">¿Es un documento que necesitas recibir o que entregarás?</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="documento_archivo" class="form-label">Archivo</label>
+                        <input type="file" class="form-control" id="documento_archivo" name="archivo"
+                               accept=".pdf,.doc,.docx,.xlsx,.xls,.jpg,.jpeg,.png,.gif,.zip,.rar">
+                        <small class="text-muted">PDF, DOC, DOCX, XLSX, XLS, JPG, PNG, ZIP, RAR (Máx. 50MB)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="documento_url" class="form-label">O URL del Documento</label>
+                        <input type="url" class="form-control" id="documento_url" name="url_documento" 
+                               placeholder="https://ejemplo.com/documento">
+                        <small class="text-muted">Si prefieres compartir un enlace en lugar de cargar un archivo</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="observaciones" name="observaciones" rows="2" 
+                                  placeholder="Información adicional sobre el documento..."></textarea>
+                    </div>
+                </form>
+                <div id="alertSubirDocumento" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bx bx-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" onclick="guardarDocumento()">
+                    <i class="bx bx-save"></i> Cargar Documento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
+<script>
+    const tareaId = {{ form.instance.pk|default:'null' }};
+    const apiBaseUrl = '/api/v1/control-proyectos/documentos-tarea/';
+
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+        
+        const form = document.querySelector('#formTarea');
+        if (form) {
+            console.log('Formulario de tarea cargado correctamente');
+        }
+        
+        // Si la tarea existe, cargar documentos
+        if (tareaId) {
+            cargarDocumentos();
+        }
+        
+        // Agregar botón de Nuevo Profesional al lado del select de profesional_asignado
+        const selectProfesional = document.querySelector('select[name="profesional_asignado"]');
+        if (selectProfesional) {
+            const profesionalWrapper = selectProfesional.closest('.mb-3') || selectProfesional.closest('.form-group');
+            if (profesionalWrapper) {
+                // Crear contenedor con display flex
+                const selectWrapper = document.createElement('div');
+                selectWrapper.className = 'd-flex gap-2 align-items-start';
+                
+                // Mover el select al nuevo wrapper
+                selectProfesional.parentNode.insertBefore(selectWrapper, selectProfesional);
+                selectWrapper.appendChild(selectProfesional);
+                selectProfesional.style.flex = '1';
+                
+                // Crear botón
+                const btnNuevoProfesional = document.createElement('button');
+                btnNuevoProfesional.type = 'button';
+                btnNuevoProfesional.className = 'btn btn-outline-success btn-sm';
+                btnNuevoProfesional.setAttribute('data-bs-toggle', 'modal');
+                btnNuevoProfesional.setAttribute('data-bs-target', '#modalCrearProfesional');
+                btnNuevoProfesional.innerHTML = '<i class="bx bx-plus"></i>';
+                btnNuevoProfesional.title = 'Nuevo Profesional';
+                
+                selectWrapper.appendChild(btnNuevoProfesional);
+            }
+        }
+
+        // Agregar botón de Nuevo Tipo Tarea al lado del select de tipo_tarea
+        const selectTipoTarea = document.querySelector('select[name="tipo_tarea"]');
+        if (selectTipoTarea) {
+            const tipoTareaWrapper = selectTipoTarea.closest('.mb-3') || selectTipoTarea.closest('.form-group');
+            if (tipoTareaWrapper) {
+                // Crear contenedor con display flex
+                const selectWrapper = document.createElement('div');
+                selectWrapper.className = 'd-flex gap-2 align-items-start';
+                
+                // Mover el select al nuevo wrapper
+                selectTipoTarea.parentNode.insertBefore(selectWrapper, selectTipoTarea);
+                selectWrapper.appendChild(selectTipoTarea);
+                selectTipoTarea.style.flex = '1';
+                
+                // Crear botón
+                const btnNuevoTipoTarea = document.createElement('button');
+                btnNuevoTipoTarea.type = 'button';
+                btnNuevoTipoTarea.className = 'btn btn-outline-success btn-sm';
+                btnNuevoTipoTarea.setAttribute('data-bs-toggle', 'modal');
+                btnNuevoTipoTarea.setAttribute('data-bs-target', '#modalCrearTipoTarea');
+                btnNuevoTipoTarea.innerHTML = '<i class="bx bx-plus"></i>';
+                btnNuevoTipoTarea.title = 'Nuevo Tipo de Tarea';
+                
+                selectWrapper.appendChild(btnNuevoTipoTarea);
+            }
+        }
+    });
+
+    // Función para cargar documentos de la tarea
+    function cargarDocumentos() {
+        if (!tareaId) return;
+        
+        fetch(`${apiBaseUrl}?tarea_id=${tareaId}`)
+            .then(response => response.json())
+            .then(data => {
+                const documentosEntrada = data.filter(d => d.tipo_doc === 'ENTRADA');
+                const documentosSalida = data.filter(d => d.tipo_doc === 'SALIDA');
+                
+                mostrarDocumentos('documentosEntrada', documentosEntrada, 'ENTRADA');
+                mostrarDocumentos('documentosSalida', documentosSalida, 'SALIDA');
+            })
+            .catch(error => {
+                console.error('Error al cargar documentos:', error);
+                document.getElementById('documentosEntrada').innerHTML = '<p class="text-danger">Error al cargar los documentos</p>';
+            });
+    }
+
+    // Función para mostrar documentos organizados
+    function mostrarDocumentos(containerId, documentos, tipo) {
+        const container = document.getElementById(containerId);
+        
+        if (!documentos || documentos.length === 0) {
+            container.innerHTML = '<p class="text-muted small col-12">No hay documentos de este tipo</p>';
+            return;
+        }
+        
+        let html = '';
+        documentos.forEach(doc => {
+            const estadoColor = obtenerColorEstado(doc.estado);
+            const esObligatorio = doc.es_obligatorio ? '<span class="badge bg-danger ms-2">Obligatorio</span>' : '';
+            const iconoTipo = tipo === 'ENTRADA' ? 'bx-download' : 'bx-upload';
+            
+            html += `
+                <div class="col-md-6">
+                    <div class="card border-left-${estadoColor} h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0">
+                                    <i class="bx ${iconoTipo}"></i> ${doc.nombre_documento}
+                                </h6>
+                                <span class="badge bg-${estadoColor}">${doc.estado}</span>
+                            </div>
+                            ${esObligatorio}
+                            ${doc.descripcion ? `<p class="small text-muted">${doc.descripcion}</p>` : ''}
+                            <div class="mt-3">
+                                ${doc.estado === 'PENDIENTE' ? `
+                                    <button class="btn btn-sm btn-outline-primary" onclick="abrirModalSubirDocumento()">
+                                        <i class="bx bx-cloud-upload"></i> Cargar
+                                    </button>
+                                ` : ''}
+                                ${doc.archivo || doc.url_documento ? `
+                                    <a href="${doc.archivo || doc.url_documento}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bx bx-download"></i> Ver
+                                    </a>
+                                ` : ''}
+                                <button class="btn btn-sm btn-outline-danger" onclick="eliminarDocumento(${doc.id}, '${doc.nombre_documento}')">
+                                    <i class="bx bx-trash"></i> Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+
+    // Función para obtener color según estado
+    function obtenerColorEstado(estado) {
+        const colores = {
+            'PENDIENTE': 'secondary',
+            'ENVIADO': 'info',
+            'RECIBIDO': 'warning',
+            'APROBADO': 'success',
+            'RECHAZADO': 'danger',
+            'ENTREGADO': 'success'
+        };
+        return colores[estado] || 'secondary';
+    }
+
+    // Función para abrir modal de subir documento
+    function abrirModalSubirDocumento() {
+        const form = document.getElementById('formSubirDocumento');
+        
+        // Limpiar todos los campos
+        form.reset();
+        
+        // Limpiar explícitamente el input file
+        const fileInput = document.getElementById('documento_archivo');
+        if (fileInput) {
+            fileInput.value = '';
+            fileInput.type = 'text';
+            fileInput.type = 'file'; // Resettea el tipo de input
+        }
+        
+        // Limpiar alertas
+        document.getElementById('alertSubirDocumento').className = 'alert d-none';
+        
+        // Limpiar errores previos
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => {
+            el.innerHTML = '';
+            el.className = 'invalid-feedback';
+        });
+        
+        // Abrir modal
+        const modal = new bootstrap.Modal(document.getElementById('modalSubirDocumento'));
+        modal.show();
+    }
+
+    // Función para obtener el CSRF token
+    function obtenerCSRFToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Función para guardar documento
+    function guardarDocumento() {
+        const form = document.getElementById('formSubirDocumento');
+        const tareaId = {{ form.instance.pk|default:'null' }};
+        
+        if (!tareaId) {
+            mostrarAlerta('alertSubirDocumento', 'Debe guardar la tarea primero', 'warning');
+            return;
+        }
+        
+        const nombre = document.getElementById('nombre_documento').value;
+        const tipoDoc = document.getElementById('tipo_doc').value;
+        const archivo = document.getElementById('documento_archivo').files[0];
+        const url = document.getElementById('documento_url').value;
+        
+        if (!nombre) {
+            mostrarAlerta('alertSubirDocumento', 'Por favor ingrese el nombre del documento', 'warning');
+            return;
+        }
+        
+        if (!tipoDoc) {
+            mostrarAlerta('alertSubirDocumento', 'Por favor seleccione el tipo de documento', 'warning');
+            return;
+        }
+        
+        if (!archivo && !url) {
+            mostrarAlerta('alertSubirDocumento', 'Debe proporcionar un archivo o URL', 'warning');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('nombre_documento', nombre);
+        formData.append('tipo_doc', tipoDoc);
+        if (archivo) formData.append('archivo', archivo);
+        if (url) formData.append('url_documento', url);
+        formData.append('observaciones', document.getElementById('observaciones').value || '');
+        formData.append('csrfmiddlewaretoken', obtenerCSRFToken());
+        
+        fetch(`/control-proyectos/tareas/${tareaId}/documentos/subir/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => {
+            // Verificar si la respuesta es válida
+            if (!response.ok && response.status !== 400) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                mostrarAlerta('alertSubirDocumento', data.message, 'success');
+                
+                // Agregar documento a la tabla
+                agregarDocumentoATabla(data);
+                
+                setTimeout(() => {
+                    cerrarModal('modalSubirDocumento');
+                    form.reset();
+                    cargarDocumentos();
+                }, 1500);
+            } else {
+                // Mostrar errores detallados
+                let mensajeError = data.error || 'Error al cargar el documento';
+                
+                // Si hay errores detallados en campos específicos
+                if (data.errors && Object.keys(data.errors).length > 0) {
+                    mostrarErroresCampos('formSubirDocumento', data.errors);
+                    
+                    // Mostrar mensaje con todos los errores
+                    if (data.error_detalle) {
+                        mensajeError = data.error_detalle;
+                    } else {
+                        // Construir mensaje de errores
+                        const erroresTexto = Object.entries(data.errors)
+                            .map(([campo, msgs]) => `${campo}: ${msgs.join(', ')}`)
+                            .join(' | ');
+                        mensajeError = erroresTexto;
+                    }
+                }
+                
+                console.error('Error al guardar documento:', data);
+                mostrarAlerta('alertSubirDocumento', mensajeError, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error en la solicitud:', error);
+            mostrarAlerta('alertSubirDocumento', 'Error de conexión: ' + error.message, 'danger');
+        });
+    }
+
+    function agregarDocumentoATabla(data) {
+        const containerId = data.tipo_doc === 'ENTRADA' ? 'documentosEntrada' : 'documentosSalida';
+        const container = document.getElementById(containerId);
+        
+        if (!container) return;
+        
+        const iconoTipo = data.tipo_doc === 'ENTRADA' ? 'bx-download' : 'bx-upload';
+        
+        // Determinar la URL a usar
+        const urlAcceso = data.archivo_url || data.url_documento;
+        
+        const nuevoHTML = `
+            <div class="col-md-6">
+                <div class="card border-left-info h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-0">
+                                <i class="bx ${iconoTipo}"></i> ${data.nombre}
+                            </h6>
+                            <span class="badge bg-info">${data.estado}</span>
+                        </div>
+                        <div class="mt-3">
+                            ${urlAcceso ? `
+                                <a href="${urlAcceso}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bx bx-download"></i> Descargar
+                                </a>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', nuevoHTML);
+    }
+
+    // Función para eliminar documento
+    function eliminarDocumento(documentoId, nombreDocumento) {
+        // Solicitar confirmación
+        if (!confirm(`¿Está seguro de que desea eliminar el documento "${nombreDocumento}"? Se eliminará del servidor.`)) {
+            return;
+        }
+
+        // Realizar solicitud DELETE a la API
+        fetch(`${apiBaseUrl}${documentoId}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': obtenerCSRFToken(),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => {
+            if (response.ok || response.status === 204) {
+                // Recarga los documentos después de eliminar
+                cargarDocumentos();
+                
+                // Mostrar mensaje de éxito
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <strong>✓ Éxito:</strong> Documento eliminado correctamente
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+                
+                setTimeout(() => alertDiv.remove(), 3000);
+            } else {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Error al eliminar documento');
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error al eliminar documento:', error);
+            alert('Error al eliminar: ' + error.message);
+        });
+    }
+
+    // Función para mostrar errores en campos específicos
+    function mostrarErroresCampos(formId, errores) {
+        const form = document.getElementById(formId);
+        
+        // Limpiar errores previos
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => {
+            el.innerHTML = '';
+            el.className = 'invalid-feedback';
+        });
+        
+        // Mostrar nuevos errores
+        for (const [campo, mensajes] of Object.entries(errores)) {
+            // Mapeo de nombres de campos a selectores
+            let selector = `[name="${campo}"]`;
+            
+            // Buscar el input por nombre
+            let input = form.querySelector(selector);
+            if (input) {
+                input.classList.add('is-invalid');
+                
+                // Crear un div de error si no existe
+                let errorDiv = input.parentNode.querySelector('.invalid-feedback');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.className = 'invalid-feedback d-block';
+                    input.parentNode.appendChild(errorDiv);
+                } else {
+                    errorDiv.className = 'invalid-feedback d-block';
+                }
+                
+                // Mostrar todos los mensajes de error
+                const mensajesHTML = mensajes
+                    .map(msg => `<small class="d-block text-danger">• ${msg}</small>`)
+                    .join('');
+                errorDiv.innerHTML = mensajesHTML;
+            }
+        }
+    }
+
+    // Función para limpiar errores de campos
+    function limpiarErroresCampos(formId) {
+        const form = document.getElementById(formId);
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => {
+            el.innerHTML = '';
+            el.className = 'invalid-feedback';
+        });
+    }
+
+    // Función para mostrar alertas con soporte para textos largos
+    function mostrarAlerta(elementId, mensaje, tipo) {
+        const alertDiv = document.getElementById(elementId);
+        alertDiv.className = `alert alert-${tipo}`;
+        
+        // Si el mensaje es muy largo, permitir que se envuelva
+        alertDiv.style.whiteSpace = 'normal';
+        alertDiv.style.wordWrap = 'break-word';
+        alertDiv.style.overflowWrap = 'break-word';
+        
+        // Usar textContent para evitar inyección de HTML
+        alertDiv.textContent = mensaje;
+        alertDiv.classList.remove('d-none');
+        
+        // El tiempo depende de la longitud del mensaje
+        const tiempo = Math.max(5000, mensaje.length * 50);
+        
+        setTimeout(() => {
+            alertDiv.classList.add('d-none');
+        }, tiempo);
+    }
+
+    // Función para cerrar modal correctamente
+    function cerrarModal(modalId) {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            } else {
+                // Si no hay instancia, crear una nueva y cerrar
+                const nuevoModal = new bootstrap.Modal(modalElement);
+                nuevoModal.hide();
+            }
+            
+            // Remover el backdrop manualmente y restaurar la página
+            setTimeout(() => {
+                // Remover todos los backdrops
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                
+                // Remover la clase modal-open del body
+                document.body.classList.remove('modal-open');
+                
+                // Restaurar el overflow del body
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                
+                // Asegurar que el modal esté oculto
+                modalElement.style.display = 'none';
+                modalElement.classList.remove('show');
+                
+                // Limpiar atributos de aria
+                modalElement.removeAttribute('aria-modal');
+                modalElement.removeAttribute('role');
+            }, 300);
+        }
+    }
+
+    // Función para guardar profesional
+    function guardarProfesional() {
+        const form = document.getElementById('formCrearProfesional');
+        const formData = new FormData(form);
+        
+        // Validación básica
+        const nombre = formData.get('nombre');
+        const rut = formData.get('rut');
+        const email = formData.get('email');
+        
+        if (!nombre || !rut || !email) {
+            mostrarAlerta('alertProfesional', 'Por favor complete los campos obligatorios (Nombre, RUT y Email)', 'warning');
+            return;
+        }
+        
+        // Limpiar errores previos
+        limpiarErroresCampos('formCrearProfesional');
+        
+        fetch("{% url 'control_de_proyectos:crear_profesional' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarAlerta('alertProfesional', 'Profesional creado exitosamente', 'success');
+                
+                // Actualizar el select de profesionales
+                const selectProfesional = document.querySelector('select[name="profesional_asignado"]');
+                if (selectProfesional && data.profesional_id) {
+                    const option = new Option(data.profesional_nombre, data.profesional_id, true, true);
+                    selectProfesional.add(option);
+                }
+                
+                // Cerrar modal correctamente
+                setTimeout(() => {
+                    cerrarModal('modalCrearProfesional');
+                    form.reset();
+                    limpiarErroresCampos('formCrearProfesional');
+                }, 500);
+            } else {
+                // Mostrar errores en los campos
+                if (data.errors) {
+                    mostrarErroresCampos('formCrearProfesional', data.errors);
+                    mostrarAlerta('alertProfesional', 'Por favor corrija los errores en el formulario', 'danger');
+                } else {
+                    mostrarAlerta('alertProfesional', data.error || 'Error al crear el profesional', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarAlerta('alertProfesional', 'Error al procesar la solicitud', 'danger');
+        });
+    }
+
+    // Función para guardar tipo de tarea
+    function guardarTipoTarea() {
+        const form = document.getElementById('formCrearTipoTarea');
+        const formData = new FormData(form);
+        
+        // Validación básica
+        const nombre = formData.get('nombre');
+        
+        if (!nombre) {
+            mostrarAlerta('alertTipoTarea', 'Por favor complete el campo nombre', 'warning');
+            return;
+        }
+        
+        // Limpiar errores previos
+        limpiarErroresCampos('formCrearTipoTarea');
+        
+        fetch("{% url 'control_de_proyectos:crear_tipo_tarea' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarAlerta('alertTipoTarea', 'Tipo de Tarea creado exitosamente', 'success');
+                
+                // Actualizar el select de tipos de tarea
+                const selectTipoTarea = document.querySelector('select[name="tipo_tarea"]');
+                if (selectTipoTarea && data.tipotarea_id) {
+                    const option = new Option(data.tipotarea_nombre, data.tipotarea_id, true, true);
+                    selectTipoTarea.add(option);
+                }
+                
+                // Cerrar modal correctamente
+                setTimeout(() => {
+                    cerrarModal('modalCrearTipoTarea');
+                    form.reset();
+                    limpiarErroresCampos('formCrearTipoTarea');
+                }, 500);
+            } else {
+                // Mostrar errores en los campos
+                if (data.errors) {
+                    mostrarErroresCampos('formCrearTipoTarea', data.errors);
+                    mostrarAlerta('alertTipoTarea', 'Por favor corrija los errores en el formulario', 'danger');
+                } else {
+                    mostrarAlerta('alertTipoTarea', data.error || 'Error al crear el tipo de tarea', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarAlerta('alertTipoTarea', 'Error al procesar la solicitud', 'danger');
+        });
+    }
+</script>
+{% endblock extra_js %}

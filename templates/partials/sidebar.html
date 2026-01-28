@@ -86,6 +86,35 @@
                 </li>
 
                 {% if user.is_superuser %}
+                <!-- Menú Gestión de Proyectos -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarGestionProyectos" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarGestionProyectos">
+                        <i class="ri-folder-chart-2-line"></i> <span data-key="t-project-management">Gestión de Proyectos</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarGestionProyectos">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link" data-key="t-list-projects">Listado de Proyectos</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link" data-key="t-create-project">Crear Proyecto</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link" data-key="t-list-clients">Listado de Clientes</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link" data-key="t-create-client">Crear Cliente</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link" data-key="t-list-professionals">Listado de Profesionales</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link" data-key="t-create-professional">Crear Profesional</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+
                 <!-- Menú Control de Acceso -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
