@@ -33,13 +33,14 @@ def verificar_permiso(vista_nombre, permiso_requerido):
             ).first()
 
             if not permiso:
+                auto_ingresar = vista_nombre == "preferencias_tema"
                 permiso = Permiso.objects.create(
                     usuario=request.user,
                     empresa=empresa,
                     vista=vista,
-                    ingresar=False,
+                    ingresar=auto_ingresar,
                     crear=False,
-                    modificar=False,
+                    modificar=auto_ingresar,
                     eliminar=False,
                     autorizar=False,
                     supervisor=False

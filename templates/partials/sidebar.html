@@ -78,7 +78,7 @@
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
                                 
-                                <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link" data-key="t-import-persons">Importar Personas</a>
+                                <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="t-import-persons">Importar Personas</span></a>
                                 
                             </li>
                         </ul>
@@ -94,22 +94,22 @@
                     <div class="collapse menu-dropdown" id="sidebarGestionProyectos">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link" data-key="t-list-projects">Listado de Proyectos</a>
+                                <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link"><span data-key="t-list-projects">Listado de Proyectos</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link" data-key="t-create-project">Crear Proyecto</a>
+                                <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link"><span data-key="t-create-project">Crear Proyecto</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link" data-key="t-list-clients">Listado de Clientes</a>
+                                <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link"><span data-key="t-list-clients">Listado de Clientes</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link" data-key="t-create-client">Crear Cliente</a>
+                                <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link"><span data-key="t-create-client">Crear Cliente</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link" data-key="t-list-professionals">Listado de Profesionales</a>
+                                <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link"><span data-key="t-list-professionals">Listado de Profesionales</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link" data-key="t-create-professional">Crear Profesional</a>
+                                <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link"><span data-key="t-create-professional">Crear Profesional</span></a>
                             </li>
                         </ul>
                     </div>
@@ -123,22 +123,22 @@
                     <div class="collapse menu-dropdown" id="sidebarControlAcceso">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'crear_usuario_admin' %}" class="nav-link" data-key="t-create-user">Crear Usuario (Admin)</a>
+                                <a href="{% url 'crear_usuario_admin' %}" class="nav-link"><span data-key="t-create-user-admin">Crear Usuario (Admin)</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link" data-key="t-user-management">Gestión de Usuarios</a>
+                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="t-user-management">Gestión de Usuarios</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link" data-key="t-company-management">Gestión de Empresas</a>
+                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="t-company-management">Gestión de Empresas</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link" data-key="t-view-management">Gestión de Vistas</a>
+                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="t-view-management">Gestión de Vistas</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link" data-key="t-permission-management">Gestión de Permisos</a>
+                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="t-permission-management">Gestión de Permisos</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link" data-key="t-filter-permissions">Filtrar Permisos</a>
+                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="t-filter-permissions">Filtrar Permisos</span></a>
                             </li>
                         </ul>
                     </div>
@@ -153,13 +153,13 @@
                     <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'editar_perfil' %}" class="nav-link" data-key="t-edit-profile">Editar Perfil</a>
+                                <a href="{% url 'editar_perfil' %}" class="nav-link"><span data-key="t-edit-profile">Editar Perfil</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'cambiar_password' %}" class="nav-link" data-key="t-change-password">Cambiar Contraseña</a>
+                                <a href="{% url 'cambiar_password' %}" class="nav-link"><span data-key="t-change-password">Cambiar Contraseña</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'configurar_email' %}" class="nav-link" data-key="t-email-settings">Configurar Correo</a>
+                                <a href="{% url 'configurar_email' %}" class="nav-link"><span data-key="t-email-settings">Configurar Correo</span></a>
                             </li>
                         </ul>
                     </div>

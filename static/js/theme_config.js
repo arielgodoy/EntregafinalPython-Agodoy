@@ -1,5 +1,15 @@
 (function () {
     const htmlTag = document.documentElement;
+    const prefsScript = document.getElementById("theme-preferences");
+    const savePrefsUrl = window.__THEME_PREFS_URL__ || "";
+    let serverPrefs = {};
+    if (prefsScript) {
+        try {
+            serverPrefs = JSON.parse(prefsScript.textContent || "{}");
+        } catch (error) {
+            console.warn("⚠️ No se pudo leer preferencias del servidor.");
+        }
+    }
 
     const layoutOptions = [
         "data-layout",
@@ -32,15 +42,55 @@
     // ✅ 1. Aplicar configuración desde localStorage antes del render CSS
     const appliedPrefs = {};
     layoutOptions.forEach(attr => {
-        const savedValue = localStorage.getItem(attr);
+        const savedValue = localStorage.getItem(attr) || sessionStorage.getItem(attr);
         if (savedValue) {
             htmlTag.setAttribute(attr, savedValue);
+            sessionStorage.setItem(attr, savedValue);
             appliedPrefs[attr] = savedValue;
+            return;
+        }
+
+        const serverValue = serverPrefs[attr];
+        if (serverValue) {
+            htmlTag.setAttribute(attr, serverValue);
+            localStorage.setItem(attr, serverValue);
+            sessionStorage.setItem(attr, serverValue);
+            appliedPrefs[attr] = serverValue;
         }
     });
     console.log("✅ Preferencias cargadas desde localStorage:", appliedPrefs);
 
     // ✅ 2. Observar cambios y guardar en localStorage
+    let saveTimer = null;
+    const queueSave = () => {
+        if (!savePrefsUrl) return;
+
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+        }
+
+        saveTimer = setTimeout(() => {
+            const payload = {};
+            layoutOptions.forEach(attr => {
+                const value = htmlTag.getAttribute(attr);
+                if (value) {
+                    payload[attr] = value;
+                }
+            });
+
+            fetch(savePrefsUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken")
+                },
+                body: JSON.stringify(payload)
+            }).catch(() => {
+                console.warn("⚠️ No se pudo guardar preferencias en el servidor.");
+            });
+        }, 300);
+    };
+
     const observer = new MutationObserver(mutations => {
         let storedPrefs = {};
         mutations.forEach(mutation => {
@@ -48,11 +98,13 @@
             const value = htmlTag.getAttribute(attr);
             if (layoutOptions.includes(attr) && value) {
                 localStorage.setItem(attr, value);
+                sessionStorage.setItem(attr, value);
                 storedPrefs[attr] = value;
             }
         });
         if (Object.keys(storedPrefs).length > 0) {
             console.log("💾 Preferencias guardadas en localStorage:", storedPrefs);
+            queueSave();
         }
     });
 
@@ -81,6 +133,7 @@
                 const newTheme = currentTheme === "light" ? "dark" : "light";
                 htmlTag.setAttribute("data-bs-theme", newTheme);
                 localStorage.setItem("data-bs-theme", newTheme);
+                sessionStorage.setItem("data-bs-theme", newTheme);
                 console.log(`🌗 Tema cambiado manualmente: ${newTheme} y guardado en localStorage`);
 
                 if (icon) {
@@ -109,4 +162,13 @@
             });
         }
     });
+
+    function getCookie(name) {
+        const cookieValue = document.cookie
+            .split(";")
+            .map(cookie => cookie.trim())
+            .find(cookie => cookie.startsWith(`${name}=`));
+
+        return cookieValue ? decodeURIComponent(cookieValue.split("=")[1]) : "";
+    }
 })();

@@ -59,15 +59,23 @@
                     <div class="card shadow-lg mb-5 rounded">
                         <div class="card-header d-flex align-items-center justify-content-between">
                             <h5 class="card-title mb-0">Tareas ({{ tareas.count }})</h5>
-                            <a href="{% url 'control_de_proyectos:crear_tarea' proyecto.pk %}" class="btn btn-primary btn-sm">
-                                <i class="bx bx-plus"></i> Nueva Tarea
-                            </a>
+                            <div class="d-flex align-items-center gap-2">
+                                <select id="ordenTareas" class="form-select form-select-sm" aria-label="Ordenar tareas">
+                                    <option value="">Ordenar por...</option>
+                                    <option value="prioridad">Prioridad</option>
+                                    <option value="fecha">Fecha</option>
+                                    <option value="estado">Estatus</option>
+                                </select>
+                                <a href="{% url 'control_de_proyectos:crear_tarea' proyecto.pk %}" class="btn btn-primary btn-sm">
+                                    <i class="bx bx-plus"></i> Nueva Tarea
+                                </a>
+                            </div>
                         </div>
                         <div class="accordion" id="acordeonTareas">
                             {% for tarea in tareas %}
-                            <div class="accordion-item">
+                            <div class="accordion-item" data-prioridad="{{ tarea.prioridad }}" data-fecha="{{ tarea.fecha_termino_estimada|date:'Y-m-d' }}" data-estado="{{ tarea.get_estado_display|default:'' }}">
                                 <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tarea{{ tarea.id }}" aria-expanded="false" aria-controls="tarea{{ tarea.id }}">
+                                    <button class="accordion-button collapsed" type="button" data-bs-target="#tarea{{ tarea.id }}" aria-expanded="false" aria-controls="tarea{{ tarea.id }}">
                                         <div class="w-100">
                                             <div class="d-flex justify-content-between align-items-center w-100">
                                                 <span class="fw-bold">{{ tarea.nombre }}</span>
@@ -80,7 +88,7 @@
                                         </div>
                                     </button>
                                 </h2>
-                                <div id="tarea{{ tarea.id }}" class="accordion-collapse collapse" data-bs-parent="#acordeonTareas">
+                                <div id="tarea{{ tarea.id }}" class="accordion-collapse collapse">
                                     <div class="accordion-body p-0">
                                         <div class="card-body">
                                             <div class="row mb-3">
@@ -138,33 +146,24 @@
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script>
     const apiBaseUrl = '/api/v1/control-proyectos/documentos-tarea/';
-    const tareasCargadas = new Set();
 
     // Función para cargar documentos
     function cargarDocumentosAlAbrir(e) {
         const collapseElement = e.target;
-        const tareaId = collapseElement.id;
-        
-        // Debounce: evitar cargar dos veces la misma tarea
-        if (tareasCargadas.has(tareaId)) {
+
+        if (collapseElement.dataset.loaded === 'true') {
             return;
         }
-        tareasCargadas.add(tareaId);
-        
+        collapseElement.dataset.loaded = 'true';
+
         const documentosEntrada = collapseElement.querySelector('.documentos-entrada');
         const documentosSalida = collapseElement.querySelector('.documentos-salida');
-        
+
         if (documentosEntrada && documentosSalida) {
             const tareaIdData = documentosEntrada.dataset.tareaId;
             cargarDocumentosPorTipo(tareaIdData, 'ENTRADA', documentosEntrada);
             cargarDocumentosPorTipo(tareaIdData, 'SALIDA', documentosSalida);
         }
-    }
-    
-    // Función para limpiar cuando se cierra
-    function limpiarAlCerrar(e) {
-        const tareaId = e.target.id;
-        tareasCargadas.delete(tareaId);
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -174,11 +173,70 @@
         const collapseElements = document.querySelectorAll('.accordion-collapse');
         collapseElements.forEach(element => {
             element.removeEventListener('shown.bs.collapse', cargarDocumentosAlAbrir);
-            element.removeEventListener('hidden.bs.collapse', limpiarAlCerrar);
-            
             element.addEventListener('shown.bs.collapse', cargarDocumentosAlAbrir);
-            element.addEventListener('hidden.bs.collapse', limpiarAlCerrar);
         });
+
+        const accordionButtons = document.querySelectorAll('.accordion-button');
+        accordionButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const targetSelector = button.getAttribute('data-bs-target');
+                if (!targetSelector) return;
+
+                const targetElement = document.querySelector(targetSelector);
+                if (!targetElement) return;
+
+                const isOpen = targetElement.classList.contains('show');
+                if (!isOpen) {
+                    const allCollapses = document.querySelectorAll('.accordion-collapse.show');
+                    allCollapses.forEach(openEl => {
+                        if (openEl === targetElement) return;
+                        openEl.classList.remove('show');
+                        const openButton = document.querySelector(`[data-bs-target="#${openEl.id}"]`);
+                        if (openButton) {
+                            openButton.classList.add('collapsed');
+                            openButton.setAttribute('aria-expanded', 'false');
+                        }
+                    });
+                }
+                targetElement.classList.toggle('show', !isOpen);
+                button.classList.toggle('collapsed', isOpen);
+                button.setAttribute('aria-expanded', String(!isOpen));
+
+                if (!isOpen) {
+                    cargarDocumentosAlAbrir({ target: targetElement });
+                }
+            });
+        });
+
+        const ordenSelect = document.getElementById('ordenTareas');
+        const acordeon = document.getElementById('acordeonTareas');
+        if (ordenSelect && acordeon) {
+            ordenSelect.addEventListener('change', function() {
+                const criterio = ordenSelect.value;
+                if (!criterio) return;
+
+                const items = Array.from(acordeon.querySelectorAll('.accordion-item'));
+                items.sort((a, b) => {
+                    if (criterio === 'fecha') {
+                        const aFecha = a.dataset.fecha || '';
+                        const bFecha = b.dataset.fecha || '';
+                        return aFecha.localeCompare(bFecha);
+                    }
+                    if (criterio === 'estado') {
+                        const aEstado = (a.dataset.estado || '').toLowerCase();
+                        const bEstado = (b.dataset.estado || '').toLowerCase();
+                        return aEstado.localeCompare(bEstado);
+                    }
+
+                    const prioridadOrden = { 'URGENTE': 1, 'ALTA': 2, 'MEDIA': 3, 'BAJA': 4 };
+                    const aPrioridad = prioridadOrden[a.dataset.prioridad] || 99;
+                    const bPrioridad = prioridadOrden[b.dataset.prioridad] || 99;
+                    return aPrioridad - bPrioridad;
+                });
+
+                items.forEach(item => acordeon.appendChild(item));
+            });
+        }
     });
 
     // Cargar documentos de una tarea por tipo

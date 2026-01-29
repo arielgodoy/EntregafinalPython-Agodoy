@@ -1,6 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from .models import UserPreferences
+from .models import UserPreferences, ThemePreferences
 from django.contrib import messages
 from django import forms
 
@@ -13,6 +13,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from email.utils import formatdate, make_msgid
+import json
+from access_control.decorators import verificar_permiso
 
 
 @csrf_exempt
@@ -209,3 +211,46 @@ def configurar_email(request):
     else:
         form = EmailSettingsForm(instance=preferencias)
     return render(request, 'configurar_email.html', {'form': form})
+
+
+@login_required
+@require_POST
+@verificar_permiso("preferencias_tema", "modificar")
+def guardar_preferencias(request):
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "JSON inválido"}, status=400)
+
+    empresa_id = request.session.get("empresa_id")
+    if not empresa_id:
+        return JsonResponse({"success": False, "error": "Empresa no seleccionada"}, status=400)
+
+    prefs, _ = ThemePreferences.objects.get_or_create(user=request.user, empresa_id=empresa_id)
+
+    field_map = {
+        "data-layout": "data_layout",
+        "data-bs-theme": "data_bs_theme",
+        "data-sidebar-visibility": "data_sidebar_visibility",
+        "data-layout-width": "data_layout_width",
+        "data-layout-position": "data_layout_position",
+        "data-topbar": "data_topbar",
+        "data-sidebar-size": "data_sidebar_size",
+        "data-layout-style": "data_layout_style",
+        "data-sidebar": "data_sidebar",
+        "data-sidebar-image": "data_sidebar_image",
+        "data-preloader": "data_preloader",
+    }
+
+    updated = {}
+    for key, field in field_map.items():
+        if key in data:
+            value = data.get(key)
+            if value is not None and value != "":
+                setattr(prefs, field, value)
+                updated[key] = value
+
+    if updated:
+        prefs.save(update_fields=[field_map[key] for key in updated])
+
+    return JsonResponse({"success": True, "updated": updated})

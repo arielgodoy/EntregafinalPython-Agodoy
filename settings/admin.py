@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserPreferences
+from .models import UserPreferences, ThemePreferences
 
 @admin.register(UserPreferences)
 class UserPreferencesAdmin(admin.ModelAdmin):
@@ -28,5 +28,24 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         }),
         ('🔔 Notificaciones', {
             'fields': ('send_headers', 'send_documents')
+        }),
+    )
+
+
+@admin.register(ThemePreferences)
+class ThemePreferencesAdmin(admin.ModelAdmin):
+    list_display = ('user', 'empresa', 'data_layout', 'data_bs_theme')
+    list_filter = ('data_bs_theme', 'data_layout', 'empresa')
+    search_fields = ('user__username', 'user__email', 'empresa__codigo')
+
+    fieldsets = (
+        ('🖥️ Preferencias de Tema/Layout', {
+            'fields': (
+                'user', 'empresa',
+                'data_layout', 'data_bs_theme', 'data_sidebar_visibility',
+                'data_layout_width', 'data_layout_position', 'data_topbar',
+                'data_sidebar_size', 'data_layout_style', 'data_sidebar',
+                'data_sidebar_image', 'data_preloader'
+            )
         }),
     )

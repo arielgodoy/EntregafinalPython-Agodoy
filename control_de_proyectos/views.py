@@ -49,7 +49,7 @@ class ListarProyectosView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
         empresa_id = self.request.session.get("empresa_id")
         return Proyecto.objects.filter(empresa_interna_id=empresa_id).select_related(
             'empresa_interna', 'cliente', 'tipo_ref'
-        )
+        ).prefetch_related('tareas')
 
 
 class DetalleProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):

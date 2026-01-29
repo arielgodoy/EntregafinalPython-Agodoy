@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from access_control.models import Empresa
 
 class UserPreferences(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -120,3 +121,27 @@ class UserPreferences(models.Model):
 
     def __str__(self):
         return f"Preferences for {self.user.username}"
+
+
+class ThemePreferences(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+
+    # 🧩 Preferencias visuales
+    data_layout = models.CharField(max_length=50, choices=UserPreferences.LAYOUT_CHOICES, default="vertical", blank=True, null=True)
+    data_bs_theme = models.CharField(max_length=50, choices=UserPreferences.THEME_CHOICES, default="light", blank=True, null=True)
+    data_sidebar_visibility = models.CharField(max_length=50, choices=UserPreferences.SIDEBAR_VISIBILITY_CHOICES, default="show", blank=True, null=True)
+    data_layout_width = models.CharField(max_length=50, choices=UserPreferences.WIDTH_CHOICES, default="fluid", blank=True, null=True)
+    data_layout_position = models.CharField(max_length=50, choices=UserPreferences.POSITION_CHOICES, default="fixed", blank=True, null=True)
+    data_topbar = models.CharField(max_length=50, choices=UserPreferences.TOPBAR_CHOICES, default="light", blank=True, null=True)
+    data_sidebar_size = models.CharField(max_length=50, choices=UserPreferences.SIDEBAR_SIZE_CHOICES, default="lg", blank=True, null=True)
+    data_layout_style = models.CharField(max_length=50, choices=UserPreferences.LAYOUT_STYLE_CHOICES, default="default", blank=True, null=True)
+    data_sidebar = models.CharField(max_length=50, choices=UserPreferences.SIDEBAR_COLOR_CHOICES, default="dark", blank=True, null=True)
+    data_sidebar_image = models.CharField(max_length=50, choices=UserPreferences.SIDEBAR_IMAGE_CHOICES, default="none", blank=True, null=True)
+    data_preloader = models.CharField(max_length=50, choices=UserPreferences.PRELOADER_CHOICES, default="disable", blank=True, null=True)
+
+    class Meta:
+        unique_together = ("user", "empresa")
+
+    def __str__(self):
+        return f"ThemePreferences for {self.user.username} @ {self.empresa.codigo}"
