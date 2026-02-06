@@ -83,6 +83,13 @@ class CrearProyectoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
             context['error'] = "No hay empresa seleccionada. Por favor, selecciona una empresa en el menú."
         return context
 
+    def get_form_kwargs(self):
+        """Pasar empresa_interna_id al formulario para validación de duplicados"""
+        kwargs = super().get_form_kwargs()
+        empresa_id = self.request.session.get("empresa_id")
+        kwargs['empresa_interna_id'] = empresa_id
+        return kwargs
+
     def form_valid(self, form):
         empresa_id = self.request.session.get("empresa_id")
         if not empresa_id:
@@ -105,6 +112,13 @@ class EditarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     def get_queryset(self):
         empresa_id = self.request.session.get("empresa_id")
         return Proyecto.objects.filter(empresa_interna_id=empresa_id)
+
+    def get_form_kwargs(self):
+        """Pasar empresa_interna_id al formulario para validación de duplicados"""
+        kwargs = super().get_form_kwargs()
+        empresa_id = self.request.session.get("empresa_id")
+        kwargs['empresa_interna_id'] = empresa_id
+        return kwargs
 
     def get_initial(self):
         """Asegurar que las fechas se cargan correctamente"""
@@ -138,12 +152,23 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     permiso_requerido = "crear"
 
     def get_form_kwargs(self):
+        """Pasar proyecto_id al formulario para filtración de campos"""
         kwargs = super().get_form_kwargs()
         proyecto_id = self.kwargs.get('proyecto_id')
         if proyecto_id:
-            proyecto = Proyecto.objects.get(pk=proyecto_id)
-            kwargs['initial'] = {'proyecto': proyecto_id}
+            kwargs['proyecto_id'] = proyecto_id
         return kwargs
+
+    def get_initial(self):
+        """Preseleccionar proyecto si viene en URL"""
+        initial = super().get_initial()
+        proyecto_id = self.kwargs.get('proyecto_id')
+        if proyecto_id:
+            try:
+                initial['proyecto'] = Proyecto.objects.get(pk=proyecto_id)
+            except Proyecto.DoesNotExist:
+                pass
+        return initial
 
     def form_valid(self, form):
         proyecto_id = self.kwargs.get('proyecto_id')
@@ -168,6 +193,14 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     template_name = 'control_de_proyectos/tarea_form.html'
     vista_nombre = "Modificar Tarea"
     permiso_requerido = "modificar"
+
+    def get_form_kwargs(self):
+        """Pasar proyecto_id al formulario para filtración de campos"""
+        kwargs = super().get_form_kwargs()
+        # El proyecto_id viene del objeto tarea que se está editando
+        if self.object and self.object.proyecto_id:
+            kwargs['proyecto_id'] = self.object.proyecto_id
+        return kwargs
 
     def get_success_url(self):
         return reverse_lazy('control_de_proyectos:detalle_proyecto', kwargs={'pk': self.object.proyecto.pk})

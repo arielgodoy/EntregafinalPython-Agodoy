@@ -1,4 +1,5 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from .models import (
     Proyecto, Tarea, ClienteEmpresa, Profesional, 
     TipoTarea, DocumentoRequeridoTipoTarea, TareaDocumento
@@ -27,6 +28,8 @@ class ProyectoForm(forms.ModelForm):
         }
     
     def __init__(self, *args, **kwargs):
+        # Guardar empresa_interna_id para validación (pasada por la vista)
+        self.empresa_interna_id = kwargs.pop('empresa_interna_id', None)
         super().__init__(*args, **kwargs)
         # Asegurar que los campos de fecha tengan el formato correcto para el input type="date"
         if self.instance.pk:
@@ -34,6 +37,33 @@ class ProyectoForm(forms.ModelForm):
                 self.fields['fecha_inicio_estimada'].initial = self.instance.fecha_inicio_estimada
             if self.instance.fecha_termino_estimada:
                 self.fields['fecha_termino_estimada'].initial = self.instance.fecha_termino_estimada
+    
+    def clean_nombre(self):
+        """Valida que no haya duplicados (nombre, empresa, cliente)"""
+        nombre = self.cleaned_data.get('nombre', '').strip()
+        cliente = self.cleaned_data.get('cliente')
+        
+        if not nombre or not cliente or not self.empresa_interna_id:
+            return nombre
+        
+        # Buscar proyectos duplicados
+        query = Proyecto.objects.filter(
+            nombre=nombre,
+            cliente=cliente,
+            empresa_interna_id=self.empresa_interna_id
+        )
+        
+        # Si editando, excluir el proyecto actual
+        if self.instance.pk:
+            query = query.exclude(pk=self.instance.pk)
+        
+        if query.exists():
+            raise ValidationError(
+                f'Ya existe un proyecto con el nombre "{nombre}" '
+                f'para el cliente "{cliente.nombre}" en esta empresa.'
+            )
+        
+        return nombre
 
 
 class TareaForm(forms.ModelForm):
@@ -65,9 +95,52 @@ class TareaForm(forms.ModelForm):
             'depende_de': forms.CheckboxSelectMultiple(),
         }
     
+    def __init__(self, *args, **kwargs):
+        # Guardar proyecto_id para filtración (pasado por la vista)
+        self.proyecto_id_filtro = kwargs.pop('proyecto_id', None)
+        super().__init__(*args, **kwargs)
+        
+        # Si el formulario tiene proyecto pre-asignado, filtrar basado en ello
+        proyecto_para_filtro = self.proyecto_id_filtro or (
+            self.instance.proyecto_id if self.instance.pk else None
+        )
+        
+        if proyecto_para_filtro:
+            try:
+                proyecto = Proyecto.objects.get(pk=proyecto_para_filtro)
+                
+                # 1. FILTRAR "depende_de": Solo tareas del MISMO proyecto
+                self.fields['depende_de'].queryset = Tarea.objects.filter(
+                    proyecto_id=proyecto_para_filtro
+                ).exclude(pk=self.instance.pk if self.instance.pk else None)
+                
+                # NOTA: "profesional_asignado" NO se filtra porque Profesionales son GLOBALES
+                # (no están organizados por proyecto, sino a nivel de sistema)
+                
+                # 3. FILTRAR "proyecto": Solo el proyecto actual (no permitir cambio)
+                self.fields['proyecto'].queryset = Proyecto.objects.filter(
+                    pk=proyecto_para_filtro
+                )
+                self.fields['proyecto'].initial = proyecto  # ← NUEVO: Setear inicial
+                self.fields['proyecto'].disabled = True  # Evitar cambio accidental
+                
+            except Proyecto.DoesNotExist:
+                pass  # Si el proyecto no existe, dejar queryset default
+    
     def clean(self):
         cleaned_data = super().clean()
         estado = cleaned_data.get('estado')
+        proyecto = cleaned_data.get('proyecto')
+        depende_de = cleaned_data.get('depende_de')
+        
+        # Validar que "depende_de" solo contenga tareas del MISMO proyecto
+        if proyecto and depende_de:
+            for tarea_dep in depende_de:
+                if tarea_dep.proyecto_id != proyecto.id:
+                    raise ValidationError(
+                        f'La tarea "{tarea_dep.nombre}" pertenece a otro proyecto. '
+                        f'Solo se permiten dependencias dentro del mismo proyecto.'
+                    )
         
         # Validar transiciones de estado
         if estado == 'TERMINADA':
