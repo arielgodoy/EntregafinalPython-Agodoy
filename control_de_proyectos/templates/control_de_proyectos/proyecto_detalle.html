@@ -6,49 +6,39 @@
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title=proyecto.nombre pagetitle="Proyectos" %}
+{% include "partials/page-title.html" with title="Proyecto" pagetitle=proyecto.nombre %}
 {% endblock pagetitle %}
 
 {% block content %}
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="row mb-3">
-                <div class="col-md-8">
-                    <h4 class="fw-bold">{{ proyecto.nombre }}</h4>
-                    <p class="text-muted">{{ proyecto.cliente.nombre }} | {{ proyecto.get_estado_display }}</p>
-                </div>
-                <div class="col-md-4 text-end">
-                    <a href="{% url 'control_de_proyectos:editar_proyecto' proyecto.pk %}" class="btn btn-warning btn-sm">
-                        <i class="bx bx-edit"></i> Editar
-                    </a>
-                    <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="btn btn-secondary btn-sm">
-                        <i class="bx bx-arrow-back"></i> Volver
-                    </a>
-                </div>
-            </div>
-
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="card shadow-lg mb-3 rounded">
-                        <div class="card-body">
-                            <h5 class="card-title">Información General</h5>
-                            <p><strong>Descripción:</strong> {{ proyecto.descripcion|default:"No especificada" }}</p>
-                            <p><strong>Tipo:</strong> <span class="badge bg-info">{{ proyecto.tipo_ref.nombre }}</span></p>
-                            <p><strong>Cliente RUT:</strong> {{ proyecto.cliente.rut }}</p>
-                            <p><strong>Estado:</strong> {{ proyecto.get_estado_display }}</p>
-                            <p><strong>Presupuesto:</strong> ${{ proyecto.presupuesto|default:"No especificado" }}</p>
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card shadow">
+                        <div class="card-header bg-primary">
+                            <h4 class="mb-0 text-white">{{ proyecto.nombre }}</h4>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card shadow-lg mb-3 rounded">
                         <div class="card-body">
-                            <h5 class="card-title">Fechas</h5>
-                            <p><strong>Inicio Estimado:</strong> {{ proyecto.fecha_inicio_estimada|default:"No definida" }}</p>
-                            <p><strong>Término Estimado:</strong> {{ proyecto.fecha_termino_estimada|default:"No definida" }}</p>
-                            <p><strong>Inicio Real:</strong> {{ proyecto.fecha_inicio_real|default:"No iniciado" }}</p>
-                            <p><strong>Término Real:</strong> {{ proyecto.fecha_termino_real|default:"No terminado" }}</p>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <p><strong>Cliente:</strong> {{ proyecto.cliente.nombre }}</p>
+                                </div>
+                                <div class="col-md-3">
+                                    <p><strong>Estado:</strong> <span class="badge bg-info">{{ proyecto.get_estado_display }}</span></p>
+                                </div>
+                                <div class="col-md-3">
+                                    <p><strong>Inicio:</strong> {{ proyecto.fecha_inicio_estimada|date:"d/m/Y" }}</p>
+                                </div>
+                                <div class="col-md-3">
+                                    <p><strong>Término:</strong> {{ proyecto.fecha_termino_estimada|date:"d/m/Y" }}</p>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <p><strong>Descripción:</strong> {{ proyecto.descripcion|default:"Sin descripción" }}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -56,83 +46,23 @@
 
             <div class="row">
                 <div class="col-12">
-                    <div class="card shadow-lg mb-5 rounded">
-                        <div class="card-header d-flex align-items-center justify-content-between">
-                            <h5 class="card-title mb-0">Tareas ({{ tareas.count }})</h5>
-                            <div class="d-flex align-items-center gap-2">
-                                <select id="ordenTareas" class="form-select form-select-sm" aria-label="Ordenar tareas">
+                    <div class="card shadow">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Tareas</h5>
+                            <div>
+                                <select id="ordenTareas" class="form-select form-select-sm" style="width: 150px; display: inline-block;">
                                     <option value="">Ordenar por...</option>
                                     <option value="prioridad">Prioridad</option>
                                     <option value="fecha">Fecha</option>
-                                    <option value="estado">Estatus</option>
+                                    <option value="estado">Estado</option>
                                 </select>
-                                <a href="{% url 'control_de_proyectos:crear_tarea' proyecto.pk %}" class="btn btn-primary btn-sm">
+                                <a href="{% url 'control_de_proyectos:crear_tarea' proyecto.id %}" class="btn btn-sm btn-success ms-2">
                                     <i class="bx bx-plus"></i> Nueva Tarea
                                 </a>
                             </div>
                         </div>
-                        <div class="accordion" id="acordeonTareas">
-                            {% for tarea in tareas %}
-                            <div class="accordion-item" data-prioridad="{{ tarea.prioridad }}" data-fecha="{{ tarea.fecha_termino_estimada|date:'Y-m-d' }}" data-estado="{{ tarea.get_estado_display|default:'' }}">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-target="#tarea{{ tarea.id }}" aria-expanded="false" aria-controls="tarea{{ tarea.id }}">
-                                        <div class="w-100">
-                                            <div class="d-flex justify-content-between align-items-center w-100">
-                                                <span class="fw-bold">{{ tarea.nombre }}</span>
-                                                <div class="ms-auto d-flex gap-2 align-items-center">
-                                                    <span class="badge bg-secondary">{{ tarea.get_estado_display }}</span>
-                                                    <span class="badge bg-{% if tarea.prioridad == 'URGENTE' %}danger{% elif tarea.prioridad == 'ALTA' %}warning{% else %}info{% endif %}">{{ tarea.get_prioridad_display }}</span>
-                                                    <small class="text-muted">{{ tarea.fecha_termino_estimada|default:"-" }}</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </h2>
-                                <div id="tarea{{ tarea.id }}" class="accordion-collapse collapse">
-                                    <div class="accordion-body p-0">
-                                        <div class="card-body">
-                                            <div class="row mb-3">
-                                                <div class="col-md-6">
-                                                    <p><strong>Profesional:</strong> {{ tarea.profesional_asignado.nombre|default:"Sin asignar" }}</p>
-                                                    <p><strong>Descripción:</strong> {{ tarea.descripcion|default:"Sin descripción" }}</p>
-                                                </div>
-                                                <div class="col-md-6 text-end">
-                                                    <a href="{% url 'control_de_proyectos:editar_tarea' tarea.pk %}" class="btn btn-sm btn-warning">
-                                                        <i class="bx bx-edit"></i> Editar
-                                                    </a>
-                                                </div>
-                                            </div>
-
-                                            <hr>
-
-                                            <!-- Documentos de Entrada y Salida -->
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <h6 class="fw-bold mb-3">
-                                                        <i class="bx bx-download text-info"></i> Documentos de Entrada
-                                                    </h6>
-                                                    <div class="documentos-entrada" data-tarea-id="{{ tarea.id }}">
-                                                        <p class="text-muted small">Cargando...</p>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <h6 class="fw-bold mb-3">
-                                                        <i class="bx bx-upload text-success"></i> Documentos de Salida
-                                                    </h6>
-                                                    <div class="documentos-salida" data-tarea-id="{{ tarea.id }}">
-                                                        <p class="text-muted small">Cargando...</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% empty %}
-                            <div class="text-center text-muted p-4">
-                                <p>No hay tareas registradas</p>
-                            </div>
-                            {% endfor %}
+                        <div class="card-body p-0">
+                            {% include "control_de_proyectos/partials/tareas_accordion.html" with tareas=tareas acordeon_id="acordeonTareas-proyecto-"|add:proyecto.id collapse_prefix="proyecto-"|add:proyecto.id|add:"-tarea-" %}
                         </div>
                     </div>
                 </div>
@@ -144,154 +74,5 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-<script>
-    const apiBaseUrl = '/api/v1/control-proyectos/documentos-tarea/';
-
-    // Función para cargar documentos
-    function cargarDocumentosAlAbrir(e) {
-        const collapseElement = e.target;
-
-        if (collapseElement.dataset.loaded === 'true') {
-            return;
-        }
-        collapseElement.dataset.loaded = 'true';
-
-        const documentosEntrada = collapseElement.querySelector('.documentos-entrada');
-        const documentosSalida = collapseElement.querySelector('.documentos-salida');
-
-        if (documentosEntrada && documentosSalida) {
-            const tareaIdData = documentosEntrada.dataset.tareaId;
-            cargarDocumentosPorTipo(tareaIdData, 'ENTRADA', documentosEntrada);
-            cargarDocumentosPorTipo(tareaIdData, 'SALIDA', documentosSalida);
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        feather.replace();
-        
-        // Agregar listeners en cada .accordion-collapse
-        const collapseElements = document.querySelectorAll('.accordion-collapse');
-        collapseElements.forEach(element => {
-            element.removeEventListener('shown.bs.collapse', cargarDocumentosAlAbrir);
-            element.addEventListener('shown.bs.collapse', cargarDocumentosAlAbrir);
-        });
-
-        const accordionButtons = document.querySelectorAll('.accordion-button');
-        accordionButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const targetSelector = button.getAttribute('data-bs-target');
-                if (!targetSelector) return;
-
-                const targetElement = document.querySelector(targetSelector);
-                if (!targetElement) return;
-
-                const isOpen = targetElement.classList.contains('show');
-                if (!isOpen) {
-                    const allCollapses = document.querySelectorAll('.accordion-collapse.show');
-                    allCollapses.forEach(openEl => {
-                        if (openEl === targetElement) return;
-                        openEl.classList.remove('show');
-                        const openButton = document.querySelector(`[data-bs-target="#${openEl.id}"]`);
-                        if (openButton) {
-                            openButton.classList.add('collapsed');
-                            openButton.setAttribute('aria-expanded', 'false');
-                        }
-                    });
-                }
-                targetElement.classList.toggle('show', !isOpen);
-                button.classList.toggle('collapsed', isOpen);
-                button.setAttribute('aria-expanded', String(!isOpen));
-
-                if (!isOpen) {
-                    cargarDocumentosAlAbrir({ target: targetElement });
-                }
-            });
-        });
-
-        const ordenSelect = document.getElementById('ordenTareas');
-        const acordeon = document.getElementById('acordeonTareas');
-        if (ordenSelect && acordeon) {
-            ordenSelect.addEventListener('change', function() {
-                const criterio = ordenSelect.value;
-                if (!criterio) return;
-
-                const items = Array.from(acordeon.querySelectorAll('.accordion-item'));
-                items.sort((a, b) => {
-                    if (criterio === 'fecha') {
-                        const aFecha = a.dataset.fecha || '';
-                        const bFecha = b.dataset.fecha || '';
-                        return aFecha.localeCompare(bFecha);
-                    }
-                    if (criterio === 'estado') {
-                        const aEstado = (a.dataset.estado || '').toLowerCase();
-                        const bEstado = (b.dataset.estado || '').toLowerCase();
-                        return aEstado.localeCompare(bEstado);
-                    }
-
-                    const prioridadOrden = { 'URGENTE': 1, 'ALTA': 2, 'MEDIA': 3, 'BAJA': 4 };
-                    const aPrioridad = prioridadOrden[a.dataset.prioridad] || 99;
-                    const bPrioridad = prioridadOrden[b.dataset.prioridad] || 99;
-                    return aPrioridad - bPrioridad;
-                });
-
-                items.forEach(item => acordeon.appendChild(item));
-            });
-        }
-    });
-
-    // Cargar documentos de una tarea por tipo
-    function cargarDocumentosPorTipo(tareaId, tipo, contenedor) {
-        if (!tareaId) return;
-
-        fetch(`${apiBaseUrl}?tarea_id=${tareaId}&tipo_doc=${tipo}`)
-            .then(response => response.json())
-            .then(documentos => {
-                if (documentos.length === 0) {
-                    contenedor.innerHTML = '<p class="text-muted small">Sin documentos de este tipo</p>';
-                } else {
-                    contenedor.innerHTML = documentos
-                        .map(doc => `
-                            <div class="card border-start-3 border-start-${obtenerColorEstado(doc.estado)} mb-2">
-                                <div class="card-body p-3">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div class="flex-grow-1">
-                                            <h6 class="mb-1">
-                                                <i class="bx bx-file"></i> ${doc.nombre_documento}
-                                            </h6>
-                                            <small class="text-muted d-block">${doc.tipo_doc}</small>
-                                            <span class="badge bg-${obtenerColorEstado(doc.estado)} mt-2">${doc.estado}</span>
-                                        </div>
-                                        <div class="ms-2">
-                                            ${doc.archivo || doc.url_documento ? `
-                                                <a href="${doc.archivo || doc.url_documento}" target="_blank" class="btn btn-xs btn-outline-secondary" title="Descargar">
-                                                    <i class="bx bx-download"></i>
-                                                </a>
-                                            ` : '<span class="text-muted">-</span>'}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `)
-                        .join('');
-                }
-            })
-            .catch(error => {
-                console.error('Error al cargar documentos:', error);
-                contenedor.innerHTML = '<p class="text-danger small">Error al cargar documentos</p>';
-            });
-    }
-
-    // Función para obtener color según estado
-    function obtenerColorEstado(estado) {
-        const colores = {
-            'PENDIENTE': 'secondary',
-            'ENVIADO': 'info',
-            'RECIBIDO': 'warning',
-            'APROBADO': 'success',
-            'RECHAZADO': 'danger',
-            'ENTREGADO': 'success'
-        };
-        return colores[estado] || 'secondary';
-    }
-</script>
+{% include "control_de_proyectos/partials/tareas_accordion_js.html" %}
 {% endblock extra_js %}

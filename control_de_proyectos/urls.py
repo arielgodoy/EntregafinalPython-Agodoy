@@ -16,6 +16,7 @@ urlpatterns = [
     path('tareas/<int:pk>/editar/', views.EditarTareaView.as_view(), name='editar_tarea'),
     path('tareas/<int:pk>/eliminar/', views.EliminarTareaView.as_view(), name='eliminar_tarea'),
     path('tareas/<int:tarea_id>/documentos/subir/', views.SubirDocumentoTareaView.as_view(), name='subir_documento_tarea'),
+    path('tareas/<int:tarea_id>/avance/', views.actualizar_avance_tarea, name='actualizar_avance_tarea'),
 
     # Clientes
     path('clientes/', views.ListarClientesView.as_view(), name='listar_clientes'),

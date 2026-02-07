@@ -1,13 +1,18 @@
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, View
 from django.views.generic.edit import FormMixin
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import models
+from django.db.models import Avg
 from django.urls import reverse_lazy
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from access_control.decorators import verificar_permiso, PermisoDenegadoJson
 from .models import Proyecto, Tarea, ClienteEmpresa, Profesional, TipoProyecto, EspecialidadProfesional, TipoTarea, TareaDocumento
 from .forms import ProyectoForm, TareaForm, ClienteEmpresaForm, ProfesionalForm, TipoTareaForm, TareaDocumentoForm
+import json
 
 
 class VerificarPermisoMixin:
@@ -47,11 +52,55 @@ class ListarProyectosView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         empresa_id = self.request.session.get("empresa_id")
-        return Proyecto.objects.filter(empresa_interna_id=empresa_id).select_related(
+        proyectos = Proyecto.objects.filter(empresa_interna_id=empresa_id).select_related(
             'empresa_interna', 'cliente', 'tipo_ref'
-        ).prefetch_related('tareas')
+        ).annotate(
+            avance_promedio=Avg('tareas__porcentaje_avance')
+        ).prefetch_related(
+            models.Prefetch(
+                'tareas',
+                queryset=Tarea.objects.only(
+                    'id',
+                    'proyecto_id',
+                    'porcentaje_avance',
+                    'fecha_inicio_plan',
+                    'fecha_inicio_real',
+                    'fecha_fin_plan',
+                    'fecha_fin_real'
+                )
+            )
+        )
+
+        for proyecto in proyectos:
+            tareas = list(proyecto.tareas.all())
+            if not tareas:
+                proyecto.avance_promedio = None
+                proyecto.plazo_promedio = None
+                proyecto.plazo_estado = None
+                continue
+
+            if proyecto.avance_promedio is not None:
+                proyecto.avance_promedio = round(proyecto.avance_promedio)
+
+            plazos_raw = [t.plazo_porcentaje for t in tareas if t.plazo_porcentaje is not None]
+            if not plazos_raw:
+                proyecto.plazo_promedio = None
+                proyecto.plazo_estado = None
+            else:
+                plazos_display = [min(100, p) for p in plazos_raw]
+                proyecto.plazo_promedio = round(sum(plazos_display) / len(plazos_display))
+                promedio_raw = sum(plazos_raw) / len(plazos_raw)
+                if promedio_raw <= 75:
+                    proyecto.plazo_estado = "EN_TIEMPO"
+                elif promedio_raw <= 100:
+                    proyecto.plazo_estado = "EN_RIESGO"
+                else:
+                    proyecto.plazo_estado = "ATRASADO"
+
+        return proyectos
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class DetalleProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Proyecto
     template_name = 'control_de_proyectos/proyecto_detalle.html'
@@ -470,3 +519,124 @@ class SubirDocumentoTareaView(LoginRequiredMixin, View):
                 'success': False,
                 'error': f'Error al procesar la solicitud: {str(e)}'
             }, status=500)
+
+
+@login_required
+def actualizar_avance_tarea(request, tarea_id):
+    """
+    Endpoint AJAX para actualizar el porcentaje de avance de una tarea.
+    Sigue el patrón estándar de COPILOT_RULES: aplicar @verificar_permiso con try/except.
+    
+    POST /control-proyectos/tareas/<id>/avance/
+    Body JSON: {"porcentaje_avance": 0-100}
+    
+    Respuestas:
+        - 200 OK: {'success': true, 'porcentaje_avance': int, 'mensaje': str}
+        - 400 Bad Request: {'success': false, 'error': str}
+        - 403 Forbidden: {'success': false, 'error': str} (permisos o empresa)
+        - 404 Not Found: {'success': false, 'error': str}
+        - 405 Method Not Allowed: {'success': false, 'error': str}
+    """
+    # Aplicar validación de permisos usando @verificar_permiso (patrón VerificarPermisoMixin)
+    vista_nombre = "Modificar Tarea"
+    permiso_requerido = "modificar"
+    
+    try:
+        decorador = verificar_permiso(vista_nombre, permiso_requerido)
+        
+        @decorador
+        def view_func(req, *args, **kwargs):
+            # Dummy function - el decorador validará permisos aquí
+            return None
+        
+        # Llamar para validar permisos (puede lanzar PermisoDenegadoJson)
+        view_func(request, tarea_id)
+        
+    except PermisoDenegadoJson as e:
+        return JsonResponse(
+            {'success': False, 'error': str(e.mensaje)},
+            status=403
+        )
+    
+    # Si llegó aquí, tiene permisos válidos
+    if request.method != 'POST':
+        return JsonResponse(
+            {'success': False, 'error': 'Solo se permite POST'},
+            status=405
+        )
+    
+    try:
+        # Obtener tarea con relación a proyecto
+        tarea = Tarea.objects.select_related('proyecto').get(pk=tarea_id)
+        
+        # Validación multiempresa adicional: tarea debe pertenecer a empresa activa
+        empresa_id = request.session.get("empresa_id")
+        if not empresa_id:
+            return JsonResponse(
+                {'success': False, 'error': 'No hay empresa activa en la sesión'},
+                status=403
+            )
+
+        try:
+            empresa_id = int(empresa_id)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'success': False, 'error': 'Empresa activa inválida en la sesión'},
+                status=403
+            )
+
+        if tarea.proyecto.empresa_interna_id != empresa_id:
+            return JsonResponse(
+                {'success': False, 'error': 'La tarea no pertenece a tu empresa activa'},
+                status=403
+            )
+        
+        # Parsear JSON del cuerpo de la solicitud
+        datos = json.loads(request.body)
+        porcentaje_avance = datos.get('porcentaje_avance')
+        
+        # Validar presencia del campo
+        if porcentaje_avance is None:
+            return JsonResponse(
+                {'success': False, 'error': 'El campo porcentaje_avance es requerido'},
+                status=400
+            )
+        
+        # Validar tipo y rango (0-100)
+        porcentaje_avance = int(porcentaje_avance)
+        if not (0 <= porcentaje_avance <= 100):
+            return JsonResponse(
+                {'success': False, 'error': 'El porcentaje debe estar entre 0 y 100'},
+                status=400
+            )
+        
+        # Actualizar el modelo
+        tarea.porcentaje_avance = porcentaje_avance
+        tarea.save(update_fields=['porcentaje_avance'])
+        
+        return JsonResponse({
+            'success': True,
+            'porcentaje_avance': tarea.porcentaje_avance,
+            'mensaje': f'Avance actualizado a {porcentaje_avance}%'
+        }, status=200)
+    
+    except Tarea.DoesNotExist:
+        return JsonResponse(
+            {'success': False, 'error': 'La tarea no existe'},
+            status=404
+        )
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {'success': False, 'error': 'Body inválido (JSON esperado)'},
+            status=400
+        )
+    except (ValueError, TypeError):
+        return JsonResponse(
+            {'success': False, 'error': 'Datos inválidos: porcentaje_avance debe ser un número entre 0 y 100'},
+            status=400
+        )
+    except Exception as e:
+        return JsonResponse(
+            {'success': False, 'error': f'Error interno del servidor: {str(e)}'},
+            status=500
+        )

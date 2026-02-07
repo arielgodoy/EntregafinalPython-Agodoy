@@ -248,7 +248,11 @@ CONFIGURACIONES = {
     # Add more configurations as needed
 }
 CSRF_TRUSTED_ORIGINS = [
-    "https://biblioteca.eltit.cl"
+    "https://biblioteca.eltit.cl",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000:*",
+    "http://127.0.0.1:8000:*"
 ]
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB

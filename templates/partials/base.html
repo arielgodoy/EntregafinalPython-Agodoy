@@ -31,7 +31,6 @@
     <link href="{% static 'css/icons.min.css'%}" rel="stylesheet" type="text/css" />
     <link href="{% static 'css/app.min.css'%}" id="app-style" rel="stylesheet" type="text/css" />
     <link href="{% static 'css/custom.min.css'%}" id="app-style" rel="stylesheet" type="text/css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -106,14 +105,125 @@
       });
     </script>
 
+    <script>
+      function sanitizeCollapseTrigger(trigger) {
+        if (!trigger || !trigger.hasAttribute('data-bs-toggle')) return;
+        const targetSelector = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+        if (!targetSelector || targetSelector.trim() === '' || targetSelector.trim() === '#') {
+          const ariaControls = trigger.getAttribute('aria-controls');
+          if (ariaControls && ariaControls.trim() !== '') {
+            const fixedTarget = ariaControls.startsWith('#') ? ariaControls : `#${ariaControls}`;
+            trigger.setAttribute('data-bs-target', fixedTarget);
+            console.warn('Collapse corregido: data-bs-target/href vacío o "#" →', fixedTarget, trigger);
+            return;
+          }
+          console.warn('Collapse inválido sin aria-controls: data-bs-target/href vacío o "#"', trigger);
+          trigger.removeAttribute('data-bs-toggle');
+          trigger.removeAttribute('data-bs-target');
+          trigger.removeAttribute('aria-controls');
+        }
+      }
+
+      const originalSetAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function (name, value) {
+        if (name === 'data-bs-target' || name === 'href') {
+          if (value === '#' || value === '' || value == null) {
+            const ariaControls = this.getAttribute('aria-controls');
+            if (ariaControls && ariaControls.trim() !== '') {
+              const fixedTarget = ariaControls.startsWith('#') ? ariaControls : `#${ariaControls}`;
+              return originalSetAttribute.call(this, name, fixedTarget);
+            }
+            if (this.getAttribute('data-bs-toggle') === 'collapse') {
+              this.removeAttribute('data-bs-toggle');
+              this.removeAttribute('data-bs-target');
+              this.removeAttribute('aria-controls');
+              return;
+            }
+          }
+        }
+        return originalSetAttribute.call(this, name, value);
+      };
+
+      const originalDocumentQuerySelector = Document.prototype.querySelector;
+      Document.prototype.querySelector = function (selector) {
+        if (selector === '#') {
+          console.warn('querySelector ignorado para selector inválido "#"');
+          return null;
+        }
+        return originalDocumentQuerySelector.call(this, selector);
+      };
+
+      const originalElementQuerySelector = Element.prototype.querySelector;
+      Element.prototype.querySelector = function (selector) {
+        if (selector === '#') {
+          console.warn('querySelector ignorado para selector inválido "#"');
+          return null;
+        }
+        return originalElementQuerySelector.call(this, selector);
+      };
+
+      function sanitizeAllCollapseTriggers(root) {
+        const scope = root || document;
+        const collapseTriggers = scope.querySelectorAll('[data-bs-toggle="collapse"]');
+        collapseTriggers.forEach(trigger => sanitizeCollapseTrigger(trigger));
+      }
+
+      const runInitialSanitize = function () {
+        sanitizeAllCollapseTriggers(document);
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runInitialSanitize);
+      } else {
+        runInitialSanitize();
+      }
+
+      document.addEventListener('click', function (e) {
+        const trigger = e.target.closest('[data-bs-toggle="collapse"]');
+        if (!trigger) return;
+        const targetSelector = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+        if (!targetSelector || targetSelector.trim() === '' || targetSelector.trim() === '#') {
+          console.warn('Click en collapse inválido: data-bs-target/href vacío o "#"', trigger);
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+
+      const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+          if (mutation.type === 'attributes') {
+            const target = mutation.target;
+            if (target && target.nodeType === 1) {
+              sanitizeCollapseTrigger(target);
+            }
+            return;
+          }
+
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType !== 1) return;
+            if (node.matches && node.matches('[data-bs-toggle="collapse"]')) {
+              sanitizeCollapseTrigger(node);
+            }
+            if (node.querySelectorAll) {
+              sanitizeAllCollapseTriggers(node);
+            }
+          });
+        });
+      });
+
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-bs-toggle', 'data-bs-target', 'href']
+      });
+    </script>
     <script src="{% static '/libs/bootstrap/js/bootstrap.bundle.min.js'%}"></script>
     <script src="{% static '/libs/simplebar/simplebar.min.js'%}"></script>
     <script src="{% static '/libs/node-waves/waves.min.js'%}"></script>
     <script src="{% static '/libs/feather-icons/feather.min.js'%}"></script>
     <script src="{% static 'js/pages/plugins/lord-icon-2.1.0.js'%}"></script>
     <script src="{% static 'js/plugins.js'%}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     {% block extra_js %}
     {% endblock extra_js %}

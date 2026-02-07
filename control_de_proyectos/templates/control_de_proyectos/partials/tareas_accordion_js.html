@@ -1,0 +1,323 @@
+<script>
+    const apiBaseUrl = '/api/v1/control-proyectos/documentos-tarea/';
+
+    function cargarDocumentosAlAbrir(e) {
+        const collapseElement = e.target;
+
+        if (collapseElement.dataset.loaded === 'true') {
+            return;
+        }
+        collapseElement.dataset.loaded = 'true';
+
+        const documentosEntrada = collapseElement.querySelector('.documentos-entrada');
+        const documentosSalida = collapseElement.querySelector('.documentos-salida');
+
+        if (documentosEntrada && documentosSalida) {
+            const tareaIdData = documentosEntrada.dataset.tareaId;
+            cargarDocumentosPorTipo(tareaIdData, 'ENTRADA', documentosEntrada);
+            cargarDocumentosPorTipo(tareaIdData, 'SALIDA', documentosSalida);
+        }
+    }
+
+    // Función reutilizable para inicializar acordeón de tareas (child rows dinámicos)
+    function initTareasAccordion(rootElement) {
+        if (!rootElement) rootElement = document;
+        
+        // Re-inicializar feather icons
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+
+        // Registrar listeners SOLO para colapsos de tareas (no documentos internos)
+        const tareaCollapseElements = rootElement.querySelectorAll('[data-tarea-collapse="true"]');
+        tareaCollapseElements.forEach(element => {
+            if (element.dataset.listenerIniciado === 'true') return;
+            element.dataset.listenerIniciado = 'true';
+            element.addEventListener('shown.bs.collapse', cargarDocumentosAlAbrir);
+        });
+
+        // Inicializar explícitamente Bootstrap Collapse para documentos internos
+        const docsToggleButtons = rootElement.querySelectorAll('[data-docs-toggle="true"][data-bs-target]');
+        docsToggleButtons.forEach(button => {
+            const targetSelector = button.getAttribute('data-bs-target');
+            if (!targetSelector || targetSelector === '#') return;
+
+            const targetElement = rootElement.querySelector(targetSelector);
+            if (!targetElement) return;
+
+            if (targetElement.dataset.bsCollapseIniciado !== 'true') {
+                if (window.bootstrap && typeof bootstrap.Collapse === 'function') {
+                    new bootstrap.Collapse(targetElement, { toggle: false });
+                }
+                targetElement.dataset.bsCollapseIniciado = 'true';
+            }
+
+            if (button.dataset.docsClickHandler !== 'true') {
+                button.dataset.docsClickHandler = 'true';
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.bootstrap && typeof bootstrap.Collapse === 'function') {
+                        const instance = bootstrap.Collapse.getOrCreateInstance(targetElement, { toggle: false });
+                        instance.toggle();
+                    }
+                    console.log('CLICK collapse', targetSelector);
+                });
+            }
+        });
+
+        // Sanitizar triggers inválidos dentro del rootElement (evita selector '#')
+        const collapseTriggers = rootElement.querySelectorAll('[data-bs-toggle="collapse"]');
+        collapseTriggers.forEach(trigger => {
+            const targetSelector = trigger.getAttribute('data-bs-target') || trigger.getAttribute('href');
+            if (targetSelector === '#') {
+                trigger.removeAttribute('data-bs-toggle');
+            }
+        });
+
+        // Bootstrap Collapse maneja automáticamente el toggle con data-bs-toggle="collapse"
+        // Solo necesitamos asegurar que los sliders tengan sus listeners
+        const sliders = rootElement.querySelectorAll('.slider-avance');
+        sliders.forEach(slider => {
+            if (slider.dataset.listenerIniciado === 'true') return;
+            slider.dataset.listenerIniciado = 'true';
+        });
+
+        // Ordenamiento de tareas (solo si existe el select)
+        const ordenSelect = rootElement.querySelector('#ordenTareas');
+        const acordeon = rootElement.querySelector('[id^="acordeonTareas"]');
+        if (ordenSelect && acordeon && ordenSelect.dataset.listenerIniciado !== 'true') {
+            ordenSelect.dataset.listenerIniciado = 'true';
+            ordenSelect.addEventListener('change', function() {
+                const criterio = ordenSelect.value;
+                if (!criterio) return;
+
+                const items = Array.from(acordeon.querySelectorAll('.accordion-item'));
+                items.sort((a, b) => {
+                    if (criterio === 'fecha') {
+                        const aFecha = a.dataset.fecha || '';
+                        const bFecha = b.dataset.fecha || '';
+                        return aFecha.localeCompare(bFecha);
+                    }
+                    if (criterio === 'estado') {
+                        const aEstado = (a.dataset.estado || '').toLowerCase();
+                        const bEstado = (b.dataset.estado || '').toLowerCase();
+                        return aEstado.localeCompare(bEstado);
+                    }
+
+                    const prioridadOrden = { 'URGENTE': 1, 'ALTA': 2, 'MEDIA': 3, 'BAJA': 4 };
+                    const aPrioridad = prioridadOrden[a.dataset.prioridad] || 99;
+                    const bPrioridad = prioridadOrden[b.dataset.prioridad] || 99;
+                    return aPrioridad - bPrioridad;
+                });
+
+                items.forEach(item => acordeon.appendChild(item));
+            });
+        }
+    }
+
+    // Inicializar en DOMContentLoaded para vistas estáticas
+    document.addEventListener('DOMContentLoaded', function() {
+        initTareasAccordion();
+    });
+
+    function cargarDocumentosPorTipo(tareaId, tipo, contenedor) {
+        if (!tareaId) return;
+
+        fetch(`${apiBaseUrl}?tarea_id=${tareaId}&tipo_doc=${tipo}`)
+            .then(response => response.json())
+            .then(documentos => {
+                if (documentos.length === 0) {
+                    contenedor.innerHTML = '<p class="text-muted small">Sin documentos de este tipo</p>';
+                } else {
+                    contenedor.innerHTML = documentos
+                        .map(doc => `
+                            <div class="card border-start-3 border-start-${obtenerColorEstado(doc.estado)} mb-2">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">
+                                                <i class="bx bx-file"></i> ${doc.nombre_documento}
+                                            </h6>
+                                            <p class="small text-muted mb-0">${doc.descripcion || ''}</p>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="badge bg-${obtenerColorEstado(doc.estado)}">${doc.estado}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `)
+                        .join('');
+                }
+            });
+    }
+
+    function obtenerColorEstado(estado) {
+        const colores = {
+            'PENDIENTE': 'secondary',
+            'ENVIADO': 'info',
+            'RECIBIDO': 'warning',
+            'APROBADO': 'success',
+            'RECHAZADO': 'danger',
+            'ENTREGADO': 'success'
+        };
+        return colores[estado] || 'secondary';
+    }
+
+    const guardarAvanceDebounced = debounce(function(slider) {
+        const tareaId = slider.getAttribute('data-tarea-id');
+        const url = slider.getAttribute('data-url');
+        const nuevoValor = parseInt(slider.value, 10);
+        const valorOriginal = parseInt(slider.getAttribute('data-valor-original'), 10);
+
+        const displaySpan = slider.closest('.d-flex').querySelector('.porcentaje-display');
+        if (displaySpan) {
+            displaySpan.style.opacity = '0.6';
+        }
+
+        const csrfToken = obtenerCSRFToken();
+        const payload = { porcentaje_avance: nuevoValor };
+        console.log('🔄 Enviando POST a avance:', {
+            url: url,
+            tareaId: tareaId,
+            payload: payload,
+            csrfToken: csrfToken ? csrfToken.substring(0, 20) + '...' : 'FALTANTE',
+            contentType: 'application/json'
+        });
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => {
+            console.log('📬 Response recibido:', {
+                status: response.status,
+                statusText: response.statusText,
+                contentType: response.headers.get('content-type')
+            });
+
+            if (!response.ok) {
+                console.error('❌ HTTP Error:', response.status);
+                return response.text().then(text => {
+                    console.error('Response body:', text);
+                    throw new Error(`HTTP ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('✅ JSON parseado:', data);
+            if (data.success) {
+                slider.setAttribute('data-valor-original', nuevoValor);
+                actualizarBarraProgreso(tareaId, nuevoValor);
+
+                if (displaySpan) {
+                    displaySpan.style.opacity = '1';
+                }
+
+                console.log('✓ Avance actualizado:', data.mensaje);
+            } else {
+                console.error('⚠️ Error en respuesta:', data.error);
+                revertirSlider(slider, valorOriginal);
+                mostrarErrorAvance(slider, data.error || 'Error desconocido');
+            }
+        })
+        .catch(error => {
+            console.error('Error al actualizar avance:', error);
+            revertirSlider(slider, valorOriginal);
+            mostrarErrorAvance(slider, `Error: ${error.message}`);
+        });
+    }, 300);
+
+    function revertirSlider(slider, valorOriginal) {
+        slider.value = valorOriginal;
+        const displaySpan = slider.closest('.d-flex').querySelector('.porcentaje-display');
+        if (displaySpan) {
+            displaySpan.textContent = `${valorOriginal}%`;
+            displaySpan.style.opacity = '1';
+        }
+        actualizarBarraProgreso(slider.getAttribute('data-tarea-id'), valorOriginal);
+    }
+
+    function mostrarErrorAvance(slider, mensaje) {
+        if (window.Toastify) {
+            Toastify({
+                text: mensaje,
+                duration: 3000,
+                gravity: 'top',
+                position: 'right',
+                backgroundColor: '#dc3545'
+            }).showToast();
+        }
+    }
+
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    function obtenerCSRFToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function actualizarBarraProgreso(tareaId, nuevoValor) {
+        const progressDiv = document.querySelector(`.progress-avance-${tareaId}`);
+        if (!progressDiv) return;
+
+        const progressBar = progressDiv.querySelector('.progress-bar');
+        if (!progressBar) return;
+
+        progressBar.style.width = `${nuevoValor}%`;
+        progressBar.textContent = `${nuevoValor}%`;
+
+        progressDiv.setAttribute('aria-valuenow', nuevoValor);
+
+        progressBar.className = 'progress-bar';
+        if (nuevoValor <= 25) {
+            progressBar.classList.add('bg-secondary');
+        } else if (nuevoValor <= 50) {
+            progressBar.classList.add('bg-info');
+        } else if (nuevoValor <= 75) {
+            progressBar.classList.add('bg-warning');
+        } else {
+            progressBar.classList.add('bg-success');
+        }
+
+        const tareaItem = document.querySelector(`[data-tarea-id="${tareaId}"]`).closest('.accordion-item');
+        const estado = tareaItem?.getAttribute('data-estado') || '';
+        if (estado.includes('En Curso')) {
+            progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
+        }
+    }
+
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.classList.contains('slider-avance')) {
+            const slider = e.target;
+            const displaySpan = slider.closest('.d-flex').querySelector('.porcentaje-display');
+            if (displaySpan) {
+                displaySpan.textContent = `${slider.value}%`;
+            }
+            guardarAvanceDebounced(slider);
+        }
+    });
+</script>

@@ -2,6 +2,7 @@ from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 from django.contrib.auth.models import User
 from access_control.models import Empresa
 import os
@@ -403,6 +404,47 @@ class Tarea(models.Model):
             estado__in=['RECIBIDO', 'APROBADO']
         )
         return not docs_entrada_obligatorios.exists()
+
+    @property
+    def plazo_porcentaje(self):
+        """Porcentaje de plazo consumido según fechas plan/real."""
+        fecha_inicio = self.fecha_inicio_plan or self.fecha_inicio_real
+        fecha_fin = self.fecha_fin_plan or self.fecha_fin_real
+        if not fecha_inicio or not fecha_fin:
+            return None
+
+        hoy = timezone.localdate()
+
+        if hoy < fecha_inicio:
+            return 0
+        total_dias = (fecha_fin - fecha_inicio).days
+        if total_dias <= 0:
+            return 0
+
+        dias_transcurridos = (hoy - fecha_inicio).days
+        porcentaje = round((dias_transcurridos / total_dias) * 100)
+        return max(0, min(999, porcentaje))
+
+    @property
+    def plazo_estado(self):
+        """Estado del plazo basado en porcentaje consumido."""
+        porcentaje_plazo = self.plazo_porcentaje
+        if porcentaje_plazo is None:
+            return None
+        if porcentaje_plazo <= 75:
+            return "EN_TIEMPO"
+        if porcentaje_plazo <= 100:
+            return "EN_RIESGO"
+        return "ATRASADO"
+
+    @property
+    def esta_atrasada(self):
+        """Indica si el avance real va por debajo del plazo consumido."""
+        porcentaje_plazo = self.plazo_porcentaje
+        if porcentaje_plazo is None:
+            return False
+        avance = self.porcentaje_avance or 0
+        return avance < porcentaje_plazo
 
 
 class TipoTarea(models.Model):

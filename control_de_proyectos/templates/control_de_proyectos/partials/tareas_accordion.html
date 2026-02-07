@@ -1,0 +1,190 @@
+<div class="accordion" id="{{ acordeon_id }}">
+    {% for tarea in tareas %}
+    <div class="accordion-item" data-prioridad="{{ tarea.prioridad }}" data-fecha="{{ tarea.fecha_termino_estimada|date:'Y-m-d' }}" data-estado="{{ tarea.get_estado_display|default:'' }}">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ collapse_prefix }}{{ tarea.id }}" aria-expanded="false" aria-controls="{{ collapse_prefix }}{{ tarea.id }}">
+                <div class="w-100">
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="fw-bold">{{ tarea.nombre }}</span>
+                            <div class="d-flex align-items-center gap-2" style="min-width: 200px;">
+                                <div class="progress" style="height:6px; width:160px;">
+                                    {% if tarea.plazo_porcentaje is None %}
+                                        <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="999"></div>
+                                    {% else %}
+                                        <div class="progress-bar
+                                            {% if tarea.plazo_estado == 'EN_TIEMPO' %}bg-success
+                                            {% elif tarea.plazo_estado == 'EN_RIESGO' %}bg-warning
+                                            {% else %}bg-danger{% endif %}"
+                                            role="progressbar"
+                                            style="width: {% if tarea.plazo_porcentaje > 100 %}100{% else %}{{ tarea.plazo_porcentaje }}{% endif %}%"
+                                            aria-valuenow="{{ tarea.plazo_porcentaje }}"
+                                            aria-valuemin="0"
+                                            aria-valuemax="999"></div>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">
+                                    {% if tarea.plazo_porcentaje is None %}
+                                        —
+                                    {% else %}
+                                        {{ tarea.plazo_porcentaje }}%
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="ms-auto d-flex gap-2 align-items-center">
+                            <span class="badge bg-secondary">{{ tarea.get_estado_display }}</span>
+                            <span class="badge bg-{% if tarea.prioridad == 'URGENTE' %}danger{% elif tarea.prioridad == 'ALTA' %}warning{% else %}info{% endif %}">{{ tarea.get_prioridad_display }}</span>
+                            <small class="text-muted">{{ tarea.fecha_termino_estimada|default:"-" }}</small>
+                        </div>
+                    </div>
+                </div>
+            </button>
+        </h2>
+        <div id="{{ collapse_prefix }}{{ tarea.id }}" class="accordion-collapse collapse" data-bs-parent="#{{ acordeon_id }}" data-tarea-collapse="true">
+            <div class="accordion-body p-0">
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>Profesional:</strong> {{ tarea.profesional_asignado.nombre|default:"Sin asignar" }}</p>
+                            <p><strong>Descripción:</strong> {{ tarea.descripcion|default:"Sin descripción" }}</p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <a href="{% url 'control_de_proyectos:editar_tarea' tarea.pk %}" class="btn btn-sm btn-warning">
+                                <i class="bx bx-edit"></i> Editar
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <div class="mt-2">
+                                <strong>Avance:</strong>
+                                {% if tarea.estado == 'TERMINADA' %}
+                                    {% with porcentaje=100 %}
+                                        <div class="d-flex align-items-center gap-2 mt-2">
+                                            <input type="range" class="form-range" min="0" max="100" value="{{ porcentaje }}" disabled
+                                                data-tarea-id="{{ tarea.id }}" data-url="{% url 'control_de_proyectos:actualizar_avance_tarea' tarea.id %}">
+                                            <span class="porcentaje-display" style="min-width: 45px; text-align: right;">{{ porcentaje }}%</span>
+                                        </div>
+                                        <div class="progress mt-1" role="progressbar" aria-valuenow="{{ porcentaje }}" aria-valuemin="0" aria-valuemax="100">
+                                            <div class="progress-bar bg-success" style="width: {{ porcentaje }}%">
+                                                {{ porcentaje }}%
+                                            </div>
+                                        </div>
+                                    {% endwith %}
+                                {% else %}
+                                    {% with porcentaje=tarea.porcentaje_avance|default:0 %}
+                                        <div class="d-flex align-items-center gap-2 mt-2">
+                                            <input type="range" class="form-range slider-avance" min="0" max="100" value="{{ porcentaje }}"
+                                                data-tarea-id="{{ tarea.id }}" data-url="{% url 'control_de_proyectos:actualizar_avance_tarea' tarea.id %}"
+                                                data-valor-original="{{ porcentaje }}">
+                                            <span class="porcentaje-display" style="min-width: 45px; text-align: right;">{{ porcentaje }}%</span>
+                                        </div>
+                                        <div class="progress mt-1 progress-avance-{{ tarea.id }}" role="progressbar" aria-valuenow="{{ porcentaje }}" aria-valuemin="0" aria-valuemax="100">
+                                            <div class="progress-bar
+                                                {% if porcentaje <= 25 %}bg-secondary
+                                                {% elif porcentaje <= 50 %}bg-info
+                                                {% elif porcentaje <= 75 %}bg-warning
+                                                {% else %}bg-success{% endif %}
+                                                {% if tarea.estado == 'EN_CURSO' %} progress-bar-striped progress-bar-animated{% endif %}"
+                                                style="width: {{ porcentaje }}%">
+                                                {{ porcentaje }}%
+                                            </div>
+                                        </div>
+                                    {% endwith %}
+                                {% endif %}
+                            </div>
+                            <div class="mt-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <strong>Plazo:</strong>
+                                    {% if tarea.plazo_porcentaje is None %}
+                                        <span class="text-muted small">Sin fechas</span>
+                                    {% else %}
+                                        {% if tarea.esta_atrasada %}
+                                            <span class="badge bg-danger">ATRASADO</span>
+                                        {% else %}
+                                            <span class="badge bg-success">EN TIEMPO</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                                {% if tarea.plazo_porcentaje is not None %}
+                                    {% with porcentaje_plazo=tarea.plazo_porcentaje %}
+                                        <div class="progress mt-1" role="progressbar" aria-valuenow="{{ porcentaje_plazo }}" aria-valuemin="0" aria-valuemax="100">
+                                            <div class="progress-bar
+                                                {% if porcentaje_plazo <= 25 %}bg-secondary
+                                                {% elif porcentaje_plazo <= 50 %}bg-info
+                                                {% elif porcentaje_plazo <= 75 %}bg-warning
+                                                {% else %}bg-danger{% endif %}"
+                                                style="width: {% if porcentaje_plazo > 100 %}100{% else %}{{ porcentaje_plazo }}{% endif %}%">
+                                                {{ porcentaje_plazo }}% del plazo consumido
+                                            </div>
+                                        </div>
+                                    {% endwith %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="accordion accordion-flush" id="{{ collapse_prefix }}{{ tarea.id }}-docs-accordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="{{ collapse_prefix }}{{ tarea.id }}-docs-entrada-heading">
+                                        <button class="accordion-button collapsed py-2" type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#{{ collapse_prefix }}{{ tarea.id }}-docs-entrada"
+                                            aria-expanded="false"
+                                            aria-controls="{{ collapse_prefix }}{{ tarea.id }}-docs-entrada"
+                                            data-docs-toggle="true">
+                                            <i class="bx bx-download text-info me-2"></i> Documentos de Entrada
+                                        </button>
+                                    </h2>
+                                    <div id="{{ collapse_prefix }}{{ tarea.id }}-docs-entrada"
+                                        class="accordion-collapse collapse"
+                                        data-bs-parent="#{{ collapse_prefix }}{{ tarea.id }}-docs-accordion"
+                                        data-docs-collapse="true">
+                                        <div class="accordion-body pt-2">
+                                            <div class="documentos-entrada" data-tarea-id="{{ tarea.id }}">
+                                                <p class="text-muted small">Cargando...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="{{ collapse_prefix }}{{ tarea.id }}-docs-salida-heading">
+                                        <button class="accordion-button collapsed py-2" type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#{{ collapse_prefix }}{{ tarea.id }}-docs-salida"
+                                            aria-expanded="false"
+                                            aria-controls="{{ collapse_prefix }}{{ tarea.id }}-docs-salida"
+                                            data-docs-toggle="true">
+                                            <i class="bx bx-upload text-success me-2"></i> Documentos de Salida
+                                        </button>
+                                    </h2>
+                                    <div id="{{ collapse_prefix }}{{ tarea.id }}-docs-salida"
+                                        class="accordion-collapse collapse"
+                                        data-bs-parent="#{{ collapse_prefix }}{{ tarea.id }}-docs-accordion"
+                                        data-docs-collapse="true">
+                                        <div class="accordion-body pt-2">
+                                            <div class="documentos-salida" data-tarea-id="{{ tarea.id }}">
+                                                <p class="text-muted small">Cargando...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="text-center text-muted p-4">
+        <p>No hay tareas registradas</p>
+    </div>
+    {% endfor %}
+</div>
