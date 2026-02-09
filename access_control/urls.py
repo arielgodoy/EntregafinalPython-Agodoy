@@ -1,6 +1,9 @@
 from django.urls import path
 from . import views
-from .views import UsuariosListaView,UsuarioEditarView, UsuarioEliminarView,UsuarioCrearView
+from .views import UsuariosListaView,UsuarioEditarView, UsuarioEliminarView,UsuarioCrearView, UsuarioInvitarView, SystemConfigUpdateView
+from .views import EmailAccountListView, EmailAccountCreateView, EmailAccountUpdateView
+from .views import CompanyConfigListView, CompanyConfigUpdateView
+from .views import SystemEmailTestOutgoingView, SystemEmailSendTestView
 from .views import EmpresaListaView,EmpresaCrearView,EmpresaEditarView,EmpresaEliminarView
 from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEliminarView
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
@@ -36,8 +39,18 @@ urlpatterns = [
 
     path('usuarios/', UsuariosListaView.as_view(), name='usuarios_lista'),
     path('usuarios/crear/', UsuarioCrearView.as_view(), name='usuario_crear'),
+    path('usuarios/invitar/', UsuarioInvitarView.as_view(), name='usuario_invitar'),
     path('usuarios/editar/<int:pk>/', UsuarioEditarView.as_view(), name='usuario_editar'),
     path('usuarios/eliminar/<int:pk>/', UsuarioEliminarView.as_view(), name='usuario_eliminar'),
+
+    path('settings/system/', SystemConfigUpdateView.as_view(), name='system_config'),
+    path('settings/system/test-outgoing/', SystemEmailTestOutgoingView.as_view(), name='system_config_test_outgoing'),
+    path('settings/system/send-test/', SystemEmailSendTestView.as_view(), name='system_config_send_test'),
+    path('settings/email-accounts/', EmailAccountListView.as_view(), name='email_accounts_list'),
+    path('settings/email-accounts/crear/', EmailAccountCreateView.as_view(), name='email_accounts_create'),
+    path('settings/email-accounts/<int:pk>/editar/', EmailAccountUpdateView.as_view(), name='email_accounts_update'),
+    path('settings/company/', CompanyConfigListView.as_view(), name='company_config_list'),
+    path('settings/company/<int:empresa_id>/', CompanyConfigUpdateView.as_view(), name='company_config_edit'),
 
 
     path('empresas/', EmpresaListaView.as_view(), name='empresas_lista'),

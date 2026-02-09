@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Activar cuenta</title>
+</head>
+<body>
+    <h1>Activar cuenta</h1>
+    {% if form.errors %}
+        <div>
+            <p>Corrige los errores indicados.</p>
+        </div>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Guardar contraseña</button>
+    </form>
+</body>
+</html>

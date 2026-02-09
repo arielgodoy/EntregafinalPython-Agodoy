@@ -1,0 +1,107 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Toastify CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+{% endblock extra_css %}
+
+{% block title %}
+Email Accounts
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Email Accounts" pagetitle="Settings" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h1 class="card-title" data-key="email_accounts_title">Email Accounts</h1>
+                        {% if puede_crear %}
+                        <a href="{% url 'access_control:email_accounts_create' %}" class="btn btn-success" data-key="email_accounts_create">Crear</a>
+                        {% endif %}
+                    </div>
+
+                    {% if messages %}
+                    <div class="mb-3">
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="email-accounts-table">
+                            <thead>
+                                <tr>
+                                    <th data-key="email_accounts_name">Nombre</th>
+                                    <th data-key="email_accounts_email">Email</th>
+                                    <th data-key="email_accounts_host">SMTP Host</th>
+                                    <th data-key="email_accounts_active">Activo</th>
+                                    <th data-key="email_accounts_actions">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in email_accounts %}
+                                <tr>
+                                    <td>{{ account.name }}</td>
+                                    <td>{{ account.from_email }}</td>
+                                    <td>{{ account.smtp_host }}</td>
+                                    <td>
+                                        {% if account.is_active %}
+                                        <span class="badge bg-success" data-key="active">Sí</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary" data-key="inactive">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if puede_modificar %}
+                                        <a href="{% url 'access_control:email_accounts_update' account.id %}" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted" data-key="no_actions">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $('#email-accounts-table').DataTable({
+            language: {
+                url: "/static/lang/es-ES.json"
+            },
+            responsive: true,
+            autoWidth: false,
+        });
+    });
+</script>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

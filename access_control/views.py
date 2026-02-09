@@ -3,21 +3,28 @@ from django.urls import reverse_lazy
 from django.contrib.auth.models import User
 from django.contrib.auth.models import User as Usuario
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.shortcuts import render, redirect, get_object_or_404
 
 from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView,FormView
 from django.shortcuts import render
 
+from acounts.models import SystemConfig, EmailAccount, CompanyConfig
 from .models import Empresa,Permiso,Vista
-from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioEditarForm
+from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioInvitacionForm,UsuarioEditarForm, SystemConfigForm, EmailAccountForm, CompanyConfigForm
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
+from django.conf import settings as django_settings
+import logging
 
-from .decorators import verificar_permiso
+from .decorators import verificar_permiso, PermisoDenegadoJson
 from django.utils.decorators import method_decorator
+from acounts.services.config import get_effective_company_config
+from acounts.services.email_service import send_security_email, send_email_via_account
+from acounts.services.tokens import generate_token
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -28,6 +35,57 @@ class VerificarPermisoMixin:
             decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
             vista_decorada = decorador(super().dispatch)
             return vista_decorada(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class VerificarPermisoSafeMixin(VerificarPermisoMixin):
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except PermisoDenegadoJson as e:
+            return self.handle_no_permission(request, str(e))
+
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+            return JsonResponse({"success": False, "error": mensaje}, status=403)
+
+        contexto = {
+            "mensaje": mensaje,
+            "vista_nombre": getattr(self, "vista_nombre", "Desconocida"),
+            "empresa_nombre": request.session.get("empresa_nombre", "No definida"),
+        }
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+
+
+class EmailAccountVistaRequiredMixin:
+    vista_nombre = 'email_accounts'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre=self.vista_nombre).exists():
+            messages.error(request, f'NO ENCONTRADO: Vista {self.vista_nombre}')
+            if hasattr(self, 'get_form'):
+                form = self.get_form()
+                context = self.get_context_data(form=form)
+            else:
+                self.object_list = []
+                context = self.get_context_data(object_list=self.object_list)
+            return self.render_to_response(context, status=400)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class CompanyConfigVistaRequiredMixin:
+    vista_nombre = 'company_config'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre=self.vista_nombre).exists():
+            messages.error(request, f'NO ENCONTRADO: Vista {self.vista_nombre}')
+            if hasattr(self, 'get_form'):
+                form = self.get_form()
+                context = self.get_context_data(form=form)
+            else:
+                self.object_list = []
+                context = self.get_context_data(object_list=self.object_list)
+            return self.render_to_response(context, status=400)
         return super().dispatch(request, *args, **kwargs)
 
 class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
@@ -264,6 +322,222 @@ class EmpresaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     permiso_requerido = "eliminar"
 
 
+class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
+    model = SystemConfig
+    form_class = SystemConfigForm
+    template_name = 'access_control/settings_system.html'
+    success_url = reverse_lazy('access_control:system_config')
+    vista_nombre = 'system_config'
+    permiso_requerido = 'modificar'
+
+    def _get_or_create_active_config(self):
+        config = SystemConfig.objects.filter(is_active=True).first()
+        if not config:
+            config = SystemConfig.objects.create(
+                is_active=True,
+                public_base_url='',
+                default_from_email='',
+                default_from_name='',
+            )
+        return config
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre='system_config').exists():
+            messages.error(request, 'NO ENCONTRADO: Vista system_config')
+            config = self._get_or_create_active_config()
+            form = self.get_form_class()(instance=config)
+            return render(request, self.template_name, {'form': form}, status=400)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return self._get_or_create_active_config()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        empresa_id = self.request.session.get("empresa_id")
+        permiso = None
+        if empresa_id:
+            permiso = Permiso.objects.filter(
+                usuario=self.request.user,
+                empresa_id=empresa_id,
+                vista__nombre=self.vista_nombre
+            ).first()
+        context['puede_probar_email'] = bool(permiso and (permiso.supervisor or permiso.crear))
+        return context
+
+
+class EmailAccountListView(EmailAccountVistaRequiredMixin, VerificarPermisoSafeMixin, LoginRequiredMixin, ListView):
+    model = EmailAccount
+    template_name = 'access_control/settings_email_accounts_list.html'
+    context_object_name = 'email_accounts'
+    vista_nombre = 'email_accounts'
+    permiso_requerido = 'ingresar'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        empresa_id = self.request.session.get("empresa_id")
+        permiso = None
+        if empresa_id:
+            permiso = Permiso.objects.filter(
+                usuario=self.request.user,
+                empresa_id=empresa_id,
+                vista__nombre=self.vista_nombre
+            ).first()
+        context['puede_crear'] = bool(permiso and (permiso.supervisor or permiso.crear))
+        context['puede_modificar'] = bool(permiso and (permiso.supervisor or permiso.modificar))
+        return context
+
+
+class EmailAccountCreateView(EmailAccountVistaRequiredMixin, VerificarPermisoSafeMixin, LoginRequiredMixin, CreateView):
+    model = EmailAccount
+    form_class = EmailAccountForm
+    template_name = 'access_control/settings_email_accounts_form.html'
+    success_url = reverse_lazy('access_control:email_accounts_list')
+    vista_nombre = 'email_accounts'
+    permiso_requerido = 'crear'
+
+
+class EmailAccountUpdateView(EmailAccountVistaRequiredMixin, VerificarPermisoSafeMixin, LoginRequiredMixin, UpdateView):
+    model = EmailAccount
+    form_class = EmailAccountForm
+    template_name = 'access_control/settings_email_accounts_form.html'
+    success_url = reverse_lazy('access_control:email_accounts_list')
+    vista_nombre = 'email_accounts'
+    permiso_requerido = 'modificar'
+
+
+class CompanyConfigListView(CompanyConfigVistaRequiredMixin, VerificarPermisoSafeMixin, LoginRequiredMixin, ListView):
+    model = Empresa
+    template_name = 'access_control/settings_company_list.html'
+    context_object_name = 'empresas'
+    vista_nombre = 'company_config'
+    permiso_requerido = 'modificar'
+
+
+class CompanyConfigUpdateView(CompanyConfigVistaRequiredMixin, VerificarPermisoSafeMixin, LoginRequiredMixin, UpdateView):
+    model = CompanyConfig
+    form_class = CompanyConfigForm
+    template_name = 'access_control/settings_company_form.html'
+    success_url = reverse_lazy('access_control:company_config_list')
+    vista_nombre = 'company_config'
+    permiso_requerido = 'modificar'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.empresa = get_object_or_404(Empresa, id=kwargs.get('empresa_id'))
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        config, _ = CompanyConfig.objects.get_or_create(empresa=self.empresa)
+        return config
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['empresa'] = self.empresa
+        return context
+
+
+class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
+    vista_nombre = 'system_config'
+    permiso_requerido = 'crear'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre='system_config').exists():
+            return JsonResponse({
+                'detail': 'NO ENCONTRADO: Vista system_config',
+            }, status=400)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return _send_system_test_email(request, subject='Prueba SMTP', body_text='Prueba de salida SMTP.')
+
+
+class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
+    vista_nombre = 'system_config'
+    permiso_requerido = 'crear'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre='system_config').exists():
+            return JsonResponse({
+                'detail': 'NO ENCONTRADO: Vista system_config',
+            }, status=400)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return _send_system_test_email(request, subject='Correo de prueba', body_text='Correo de prueba enviado desde SystemConfig.')
+
+
+def _send_system_test_email(request, subject, body_text):
+    logger = logging.getLogger(__name__)
+    if not Vista.objects.filter(nombre='system_config').exists():
+        return JsonResponse({
+            'detail': 'NO ENCONTRADO: Vista system_config',
+        }, status=400)
+
+    config = SystemConfig.objects.filter(is_active=True).select_related(
+        'security_email_account'
+    ).first()
+    if not config:
+        return JsonResponse({
+            'detail': 'No existe una configuración activa del sistema.',
+        }, status=400)
+
+    email_account = config.security_email_account
+    if not email_account or not email_account.is_active:
+        return JsonResponse({
+            'detail': 'Falta security_email_account en SystemConfig.',
+        }, status=400)
+
+    missing_fields = _validate_email_account_for_smtp(email_account)
+    if missing_fields:
+        return JsonResponse({
+            'detail': f"El EmailAccount no tiene {', '.join(missing_fields)} configurado",
+        }, status=400)
+
+    to_email = (request.user.email or '').strip()
+    if not to_email:
+        return JsonResponse({
+            'detail': 'El usuario no tiene email configurado.',
+        }, status=400)
+
+    if django_settings.DEBUG:
+        logger.info(
+            "System email test: host=%s port=%s user=%s from_email=%s tls=%s ssl=%s reply_to=%s to=%s",
+            email_account.smtp_host,
+            email_account.smtp_port,
+            email_account.smtp_user,
+            email_account.from_email,
+            email_account.use_tls,
+            email_account.use_ssl,
+            email_account.reply_to,
+            to_email,
+        )
+
+    try:
+        send_email_via_account(
+            email_account=email_account,
+            subject=subject,
+            body_text=body_text,
+            to_emails=[to_email],
+        )
+    except Exception:
+        return JsonResponse({
+            'detail': 'Error enviando correo de prueba.',
+        }, status=400)
+
+    return JsonResponse({'status': 'ok'})
+
+
+def _validate_email_account_for_smtp(email_account):
+    missing = []
+    if not (email_account.smtp_host or '').strip():
+        missing.append('smtp_host')
+    if not email_account.smtp_port:
+        missing.append('smtp_port')
+    if not (email_account.smtp_user or '').strip():
+        missing.append('smtp_user')
+    return missing
+
+
 
 
 class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
@@ -278,6 +552,7 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
         print(context['usuarios'])
         return super().render_to_response(context, **response_kwargs)
     
+@method_decorator(verificar_permiso('auth_invite', 'crear'), name='dispatch')
 class UsuarioCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     model = User
     form_class = UsuarioCrearForm
@@ -288,6 +563,108 @@ class UsuarioCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         return super().form_valid(form)
+
+
+class UsuarioInvitarView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
+    form_class = UsuarioInvitacionForm
+    template_name = 'access_control/usuarios_invitacion_form.html'
+    success_url = reverse_lazy('access_control:usuarios_lista')
+    vista_nombre = 'auth_invite'
+    permiso_requerido = 'crear'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        empresa_id = self.request.session.get('empresa_id')
+        empresa = None
+        if empresa_id:
+            empresa = Empresa.objects.filter(pk=empresa_id).first()
+        kwargs['empresa_in_session'] = empresa
+        return kwargs
+
+    def form_valid(self, form):
+        email = form.cleaned_data['email']
+        empresa = form.cleaned_data.get('empresa')
+
+        if empresa is None:
+            empresa_id = self.request.session.get('empresa_id')
+            if empresa_id:
+                empresa = Empresa.objects.filter(pk=empresa_id).first()
+
+        if empresa is None:
+            form.add_error('empresa', 'Debes seleccionar una empresa.')
+            return self.form_invalid(form)
+
+        user = User.objects.filter(username=email).first()
+        if not user:
+            user = User.objects.filter(email__iexact=email).first()
+
+        if user and user.is_active:
+            form.add_error(None, 'Usuario ya activo')
+            return self.form_invalid(form)
+
+        if not user:
+            user = User(username=email, email=email, is_active=False)
+            user.set_unusable_password()
+
+        if form.cleaned_data.get('first_name') and not user.first_name:
+            user.first_name = form.cleaned_data['first_name']
+        if form.cleaned_data.get('last_name') and not user.last_name:
+            user.last_name = form.cleaned_data['last_name']
+
+        user.save()
+
+        vista_base = Vista.objects.filter(nombre='Maestro Usuarios').first()
+        if not vista_base:
+            form.add_error(None, 'Falta ejecutar seed_access_control para crear la Vista base "Maestro Usuarios".')
+            return self.form_invalid(form)
+
+        Permiso.objects.get_or_create(
+            usuario=user,
+            empresa=empresa,
+            vista=vista_base,
+            defaults={
+                'ingresar': True,
+                'crear': False,
+                'modificar': False,
+                'eliminar': False,
+                'autorizar': False,
+                'supervisor': False,
+            },
+        )
+
+        token_plain = generate_token(user, meta={'empresa_id': empresa.id}, created_by=self.request.user)
+
+        config = get_effective_company_config(empresa)
+        public_base_url = config.get('public_base_url') if config else None
+        if not public_base_url:
+            form.add_error(None, 'Falta public_base_url en la configuración de la empresa.')
+            return self.form_invalid(form)
+
+        activation_link = f"{public_base_url.rstrip('/')}/auth/activate/{token_plain}/"
+        subject = 'Activación de cuenta'
+        body_text = (
+            'Has sido invitado a la plataforma.\n\n'
+            f'Activa tu cuenta aquí: {activation_link}\n'
+        )
+        body_html = (
+            '<p>Has sido invitado a la plataforma.</p>'
+            f'<p><a href="{activation_link}">Activar cuenta</a></p>'
+        )
+
+        try:
+            send_security_email(
+                empresa=empresa,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html,
+                to_emails=[email],
+            )
+        except Exception:
+            form.add_error(None, 'No se pudo enviar el correo de invitación.')
+            return self.form_invalid(form)
+
+        messages.success(self.request, f'Invitación enviada a {email}.')
+        return redirect(self.success_url)
 
 class UsuarioEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = User

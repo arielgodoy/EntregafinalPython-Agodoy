@@ -123,7 +123,7 @@
                     <div class="collapse menu-dropdown" id="sidebarControlAcceso">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'crear_usuario_admin' %}" class="nav-link"><span data-key="t-create-user-admin">Crear Usuario (Admin)</span></a>
+                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="t-create-user-admin">Invitar Usuario</span></a>
                             </li>
                             <li class="nav-item">
                                 <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="t-user-management">Gestión de Usuarios</span></a>
@@ -164,6 +164,27 @@
                         </ul>
                     </div>
                 </li>
+
+                {% if user.is_authenticated and user.is_staff %}
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarSettings" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarSettings">
+                        <i class="ri-settings-3-line"></i> <span data-key="t-settings">Settings</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarSettings">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:system_config' %}" class="nav-link" data-key="t-settings-system">System Config</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:company_config_list' %}" class="nav-link" data-key="t-settings-company">Company Settings</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:email_accounts_list' %}" class="nav-link" data-key="t-settings-email-accounts">Email Accounts</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                {% endif %}
 
             </ul>
         </div>
