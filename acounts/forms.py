@@ -40,8 +40,8 @@ class CustomLoginForm(AuthenticationForm):
 
 
 class ActivationPasswordForm(forms.Form):
-    password1 = forms.CharField(widget=forms.PasswordInput)
-    password2 = forms.CharField(widget=forms.PasswordInput)
+    password1 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
+    password2 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
 
     def clean(self):
         cleaned_data = super().clean()

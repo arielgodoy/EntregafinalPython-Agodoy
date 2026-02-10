@@ -36,35 +36,35 @@
             <ul class="navbar-nav" id="navbar-nav">
 
                 <!-- Menu Antiguo -->
-                <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="t-old-menu">Menú Antiguo</span></li>
+                <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="menu.old">Menú Antiguo</span></li>
 
                 <!-- Menú Biblioteca Digital -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarBiblioteca" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarBiblioteca">
-                        <i class="ri-folder-open-line"></i> <span data-key="t-digital-library">Biblioteca Digital</span>
+                        <i class="ri-folder-open-line"></i> <span data-key="menu.library">Biblioteca Digital</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarBiblioteca">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="t-add-owner">Ingresar Propietario</a>
+                                <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="menu.library.add_owner">Ingresar Propietario</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="t-add-property">Ingresar Propiedad</a>
+                                <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="menu.library.add_property">Ingresar Propiedad</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="t-add-document-type">Ingresar Tipo Documento</a>
+                                <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="menu.library.add_document_type">Ingresar Tipo Documento</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="t-list-owners">Listado de Propietarios</a>
+                                <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="menu.library.list_owners">Listado de Propietarios</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="t-list-properties">Listado de Propiedades</a>
+                                <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="menu.library.list_properties">Listado de Propiedades</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="t-list-document-types">Listado de Tipos de Documentos</a>
+                                <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="menu.library.list_document_types">Listado de Tipos de Documentos</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="t-list-documents">Listado General de Documentos</a>
+                                <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="menu.library.list_documents">Listado General de Documentos</a>
                             </li>
                         </ul>
                     </div>
@@ -72,13 +72,13 @@
 
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarEvaluaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarEvaluaciones">
-                        <i class="ri-file-list-3-line"></i> <span data-key="t-evaluations">Evaluaciones</span>
+                        <i class="ri-file-list-3-line"></i> <span data-key="menu.evaluations">Evaluaciones</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarEvaluaciones">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
                                 
-                                <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="t-import-persons">Importar Personas</span></a>
+                                <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="menu.evaluations.import_people">Importar Personas</span></a>
                                 
                             </li>
                         </ul>
@@ -89,27 +89,27 @@
                 <!-- Menú Gestión de Proyectos -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarGestionProyectos" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarGestionProyectos">
-                        <i class="ri-folder-chart-2-line"></i> <span data-key="t-project-management">Gestión de Proyectos</span>
+                        <i class="ri-folder-chart-2-line"></i> <span data-key="menu.projects">Gestión de Proyectos</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarGestionProyectos">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link"><span data-key="t-list-projects">Listado de Proyectos</span></a>
+                                <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link"><span data-key="menu.projects.list">Listado de Proyectos</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link"><span data-key="t-create-project">Crear Proyecto</span></a>
+                                <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link"><span data-key="menu.projects.create">Crear Proyecto</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link"><span data-key="t-list-clients">Listado de Clientes</span></a>
+                                <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link"><span data-key="menu.projects.list_clients">Listado de Clientes</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link"><span data-key="t-create-client">Crear Cliente</span></a>
+                                <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link"><span data-key="menu.projects.create_client">Crear Cliente</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link"><span data-key="t-list-professionals">Listado de Profesionales</span></a>
+                                <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link"><span data-key="menu.projects.list_professionals">Listado de Profesionales</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link"><span data-key="t-create-professional">Crear Profesional</span></a>
+                                <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link"><span data-key="menu.projects.create_professional">Crear Profesional</span></a>
                             </li>
                         </ul>
                     </div>
@@ -118,27 +118,32 @@
                 <!-- Menú Control de Acceso -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
-                        <i class="ri-lock-line"></i> <span data-key="t-access-control">Control de Acceso</span>
+                        <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarControlAcceso">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="t-create-user-admin">Invitar Usuario</span></a>
+                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="menu.access_control.invite_user">Invitar Usuario</span></a>
+                            </li>
+                            {% if user.is_staff %}
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:invitaciones_lista' %}" class="nav-link"><span data-key="menu.access_control.invitations">Gestión de Invitaciones</span></a>
+                            </li>
+                            {% endif %}
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="menu.access_control.user_management">Gestión de Usuarios</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="t-user-management">Gestión de Usuarios</span></a>
+                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="menu.access_control.company_management">Gestión de Empresas</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="t-company-management">Gestión de Empresas</span></a>
+                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="menu.access_control.view_management">Gestión de Vistas</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="t-view-management">Gestión de Vistas</span></a>
+                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="menu.access_control.permission_management">Gestión de Permisos</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="t-permission-management">Gestión de Permisos</span></a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="t-filter-permissions">Filtrar Permisos</span></a>
+                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="menu.access_control.filter_permissions">Filtrar Permisos</span></a>
                             </li>
                         </ul>
                     </div>
@@ -148,18 +153,18 @@
                 <!-- Menú Cuentas -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarCuentaUsuario" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentaUsuario">
-                        <i class="ri-user-settings-line"></i> <span data-key="t-user-account">Cuenta de Usuario</span>
+                        <i class="ri-user-settings-line"></i> <span data-key="menu.user_account">Cuenta de Usuario</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'editar_perfil' %}" class="nav-link"><span data-key="t-edit-profile">Editar Perfil</span></a>
+                                <a href="{% url 'editar_perfil' %}" class="nav-link"><span data-key="menu.user_account.edit_profile">Editar Perfil</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'cambiar_password' %}" class="nav-link"><span data-key="t-change-password">Cambiar Contraseña</span></a>
+                                <a href="{% url 'cambiar_password' %}" class="nav-link"><span data-key="menu.user_account.change_password">Cambiar Contraseña</span></a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'configurar_email' %}" class="nav-link"><span data-key="t-email-settings">Configurar Correo</span></a>
+                                <a href="{% url 'configurar_email' %}" class="nav-link"><span data-key="menu.user_account.email_settings">Configurar Correo</span></a>
                             </li>
                         </ul>
                     </div>
@@ -168,18 +173,18 @@
                 {% if user.is_authenticated and user.is_staff %}
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarSettings" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarSettings">
-                        <i class="ri-settings-3-line"></i> <span data-key="t-settings">Settings</span>
+                        <i class="ri-settings-3-line"></i> <span data-key="menu.settings">Settings</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarSettings">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'access_control:system_config' %}" class="nav-link" data-key="t-settings-system">System Config</a>
+                                <a href="{% url 'access_control:system_config' %}" class="nav-link" data-key="menu.settings.system_config">System Config</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:company_config_list' %}" class="nav-link" data-key="t-settings-company">Company Settings</a>
+                                <a href="{% url 'access_control:company_config_list' %}" class="nav-link" data-key="menu.settings.company_settings">Company Settings</a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'access_control:email_accounts_list' %}" class="nav-link" data-key="t-settings-email-accounts">Email Accounts</a>
+                                <a href="{% url 'access_control:email_accounts_list' %}" class="nav-link" data-key="menu.settings.email_accounts">Email Accounts</a>
                             </li>
                         </ul>
                     </div>

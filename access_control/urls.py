@@ -1,12 +1,14 @@
 from django.urls import path
 from . import views
 from .views import UsuariosListaView,UsuarioEditarView, UsuarioEliminarView,UsuarioCrearView, UsuarioInvitarView, SystemConfigUpdateView
+from .views import UsuariosPorEmpresasJsonView
 from .views import EmailAccountListView, EmailAccountCreateView, EmailAccountUpdateView
 from .views import CompanyConfigListView, CompanyConfigUpdateView
 from .views import SystemEmailTestOutgoingView, SystemEmailSendTestView
 from .views import EmpresaListaView,EmpresaCrearView,EmpresaEditarView,EmpresaEliminarView
 from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEliminarView
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
+from .views import InvitacionesListView, InvitacionEliminarView
 from .views import toggle_permiso,PermisosFiltradosView, CopyPermisosView, seleccionar_empresa
 
 
@@ -40,8 +42,12 @@ urlpatterns = [
     path('usuarios/', UsuariosListaView.as_view(), name='usuarios_lista'),
     path('usuarios/crear/', UsuarioCrearView.as_view(), name='usuario_crear'),
     path('usuarios/invitar/', UsuarioInvitarView.as_view(), name='usuario_invitar'),
+    path('usuarios/por-empresas/', UsuariosPorEmpresasJsonView.as_view(), name='usuarios_por_empresas_json'),
     path('usuarios/editar/<int:pk>/', UsuarioEditarView.as_view(), name='usuario_editar'),
     path('usuarios/eliminar/<int:pk>/', UsuarioEliminarView.as_view(), name='usuario_eliminar'),
+
+    path('invitaciones/', InvitacionesListView.as_view(), name='invitaciones_lista'),
+    path('invitaciones/<int:pk>/eliminar/', InvitacionEliminarView.as_view(), name='invitaciones_eliminar'),
 
     path('settings/system/', SystemConfigUpdateView.as_view(), name='system_config'),
     path('settings/system/test-outgoing/', SystemEmailTestOutgoingView.as_view(), name='system_config_test_outgoing'),

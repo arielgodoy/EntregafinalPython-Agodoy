@@ -10,10 +10,12 @@ from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView,FormView
 from django.shortcuts import render
+from django.utils import timezone
+from django.db import transaction
 
-from acounts.models import SystemConfig, EmailAccount, CompanyConfig
-from .models import Empresa,Permiso,Vista
-from .forms import PermisoForm,PermisoFiltroForm,UsuarioCrearForm,UsuarioInvitacionForm,UsuarioEditarForm, SystemConfigForm, EmailAccountForm, CompanyConfigForm
+from acounts.models import SystemConfig, EmailAccount, CompanyConfig, UserEmailToken, UserEmailTokenPurpose
+from .models import Empresa, Permiso, Vista, UsuarioPerfilEmpresa
+from .forms import PermisoForm,PermisoFiltroForm,UsuarioInvitacionForm,UsuarioEditarForm, SystemConfigForm, EmailAccountForm, CompanyConfigForm
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
@@ -22,9 +24,8 @@ import logging
 
 from .decorators import verificar_permiso, PermisoDenegadoJson
 from django.utils.decorators import method_decorator
-from acounts.services.config import get_effective_company_config
-from acounts.services.email_service import send_security_email, send_email_via_account
-from acounts.services.tokens import generate_token
+from acounts.services.email_service import send_email_via_account
+from access_control.services.invite import invite_user_flow
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -551,26 +552,199 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
         # Imprime el contexto para verificar los datos
         print(context['usuarios'])
         return super().render_to_response(context, **response_kwargs)
-    
-@method_decorator(verificar_permiso('auth_invite', 'crear'), name='dispatch')
-class UsuarioCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
-    model = User
-    form_class = UsuarioCrearForm
-    template_name = 'access_control/usuarios_form.html'
-    success_url = reverse_lazy('access_control:usuarios_lista')
+
+
+class InvitacionesListView(VerificarPermisoSafeMixin, LoginRequiredMixin, ListView):
+    template_name = 'access_control/invitaciones_list.html'
+    context_object_name = 'invitaciones'
+    vista_nombre = 'invitaciones'
+    permiso_requerido = 'ingresar'
+
+    def _resolve_empresa_ids(self, token):
+        meta = token.meta or {}
+        empresa_ids = meta.get('empresa_ids')
+        if empresa_ids:
+            return [int(item) for item in empresa_ids if str(item).isdigit()]
+        empresa_id = meta.get('empresa_id')
+        if empresa_id and str(empresa_id).isdigit():
+            return [int(empresa_id)]
+        return []
+
+    def _status_key(self, token):
+        now = timezone.now()
+        if token.used_at:
+            return 'invitations.status.used'
+        if token.expires_at < now:
+            return 'invitations.status.expired'
+        return 'invitations.status.active'
+
+    def get_queryset(self):
+        tokens = UserEmailToken.objects.filter(
+            purpose=UserEmailTokenPurpose.ACTIVATE,
+        ).select_related('user').order_by('expires_at')
+
+        status_filter = (self.request.GET.get('estado') or 'active').lower()
+        empresa_filter = (self.request.GET.get('empresa') or 'activa').lower()
+        empresa_activa_id = self.request.session.get('empresa_id')
+
+        if not self.request.user.is_staff:
+            empresa_filter = 'activa'
+
+        items = []
+        empresa_ids_map = {}
+        for token in tokens:
+            empresa_ids = self._resolve_empresa_ids(token)
+            empresa_ids_map[token.id] = empresa_ids
+
+        empresas = Empresa.objects.filter(id__in={
+            empresa_id for ids in empresa_ids_map.values() for empresa_id in ids
+        })
+        empresas_lookup = {empresa.id: empresa for empresa in empresas}
+
+        for token in tokens:
+            empresa_ids = empresa_ids_map.get(token.id, [])
+            is_global = not empresa_ids
+
+            if is_global and not self.request.user.is_staff:
+                continue
+
+            if empresa_filter == 'activa':
+                if empresa_activa_id:
+                    if not is_global and empresa_activa_id not in empresa_ids:
+                        continue
+                elif not self.request.user.is_staff:
+                    continue
+
+            status_key = self._status_key(token)
+            if status_filter != 'all' and status_key.split('.')[-1] != status_filter:
+                continue
+
+            empresas_labels = []
+            for empresa_id in empresa_ids:
+                empresa = empresas_lookup.get(empresa_id)
+                if empresa:
+                    empresas_labels.append(f"{empresa.codigo} - {empresa.descripcion or ''}".strip())
+
+            items.append({
+                'token': token,
+                'status_key': status_key,
+                'empresas_labels': empresas_labels,
+                'is_global': is_global,
+            })
+
+        status_priority = {
+            'invitations.status.active': 0,
+            'invitations.status.expired': 1,
+            'invitations.status.used': 2,
+        }
+        items.sort(key=lambda item: (
+            status_priority.get(item['status_key'], 99),
+            item['token'].expires_at,
+        ))
+        return items
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['estado'] = (self.request.GET.get('estado') or 'active').lower()
+        context['empresa_filtro'] = (self.request.GET.get('empresa') or 'activa').lower()
+        context['empresa_activa'] = self.request.session.get('empresa_id')
+        return context
+
+
+class InvitacionEliminarView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
+    vista_nombre = 'invitaciones'
+    permiso_requerido = 'eliminar'
+
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        messages.error(request, 'invitations.delete.forbidden')
+        return redirect('access_control:invitaciones_lista')
+
+    def post(self, request, pk, *args, **kwargs):
+        token = UserEmailToken.objects.filter(pk=pk).select_related('user').first()
+        if not token:
+            messages.error(request, 'invitations.delete.not_found')
+            return redirect('access_control:invitaciones_lista')
+
+        empresa_ids = []
+        meta = token.meta or {}
+        empresa_ids_meta = meta.get('empresa_ids')
+        if empresa_ids_meta:
+            empresa_ids = [int(item) for item in empresa_ids_meta if str(item).isdigit()]
+        else:
+            empresa_id = meta.get('empresa_id')
+            if empresa_id and str(empresa_id).isdigit():
+                empresa_ids = [int(empresa_id)]
+
+        if empresa_ids and not request.user.is_staff:
+            empresa_activa_id = request.session.get('empresa_id')
+            if empresa_activa_id not in empresa_ids:
+                return self.handle_no_permission(request)
+
+        if not empresa_ids and not request.user.is_staff:
+            return self.handle_no_permission(request)
+
+        token.delete()
+        messages.success(request, 'invitations.delete.success')
+        return redirect('access_control:invitaciones_lista')
+
+
+class UsuariosPorEmpresasJsonView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
     vista_nombre = "Maestro Usuarios"
-    permiso_requerido = "crear"
+    permiso_requerido = "ingresar"
 
-    def form_valid(self, form):
-        return super().form_valid(form)
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        return JsonResponse({"detail": mensaje}, status=403)
 
+    def get(self, request, *args, **kwargs):
+        empresa_ids = request.GET.get('empresa_ids', '')
+        ids = [item for item in empresa_ids.split(',') if item.isdigit()]
 
-class UsuarioInvitarView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
+        if not ids:
+            empresa_id = request.session.get('empresa_id')
+            if empresa_id:
+                ids = [str(empresa_id)]
+
+        if not ids:
+            return JsonResponse({"users": []})
+
+        users = User.objects.filter(
+            permiso__empresa_id__in=ids,
+            is_active=True,
+        ).distinct().order_by('username')
+
+        data = [
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email or "",
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+            }
+            for user in users
+        ]
+
+        return JsonResponse({"users": data})
+    
+class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
     form_class = UsuarioInvitacionForm
-    template_name = 'access_control/usuarios_invitacion_form.html'
+    template_name = 'access_control/usuarios_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
     vista_nombre = 'auth_invite'
     permiso_requerido = 'crear'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Vista.objects.filter(nombre='auth_invite').exists():
+            form = self.get_form()
+            form.add_error(None, 'Falta ejecutar seed_access_control para crear la Vista base "auth_invite".')
+            context = self.get_context_data(form=form)
+            return self.render_to_response(context, status=400)
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except PermisoDenegadoJson as e:
+            return self.handle_no_permission(request, str(e))
+
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        return render(request, "access_control/403_forbidden.html", {"mensaje": mensaje}, status=403)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -581,90 +755,49 @@ class UsuarioInvitarView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
         kwargs['empresa_in_session'] = empresa
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = context.get('form') or self.get_form()
+        referencia_field = form.fields.get('usuario_referencia') if form else None
+        context['usuarios_referencia_vacios'] = not bool(
+            referencia_field and referencia_field.queryset.exists()
+        )
+        return context
+
     def form_valid(self, form):
         email = form.cleaned_data['email']
-        empresa = form.cleaned_data.get('empresa')
-
-        if empresa is None:
-            empresa_id = self.request.session.get('empresa_id')
-            if empresa_id:
-                empresa = Empresa.objects.filter(pk=empresa_id).first()
-
-        if empresa is None:
-            form.add_error('empresa', 'Debes seleccionar una empresa.')
-            return self.form_invalid(form)
-
-        user = User.objects.filter(username=email).first()
-        if not user:
-            user = User.objects.filter(email__iexact=email).first()
-
-        if user and user.is_active:
-            form.add_error(None, 'Usuario ya activo')
-            return self.form_invalid(form)
-
-        if not user:
-            user = User(username=email, email=email, is_active=False)
-            user.set_unusable_password()
-
-        if form.cleaned_data.get('first_name') and not user.first_name:
-            user.first_name = form.cleaned_data['first_name']
-        if form.cleaned_data.get('last_name') and not user.last_name:
-            user.last_name = form.cleaned_data['last_name']
-
-        user.save()
-
-        vista_base = Vista.objects.filter(nombre='Maestro Usuarios').first()
-        if not vista_base:
-            form.add_error(None, 'Falta ejecutar seed_access_control para crear la Vista base "Maestro Usuarios".')
-            return self.form_invalid(form)
-
-        Permiso.objects.get_or_create(
-            usuario=user,
-            empresa=empresa,
-            vista=vista_base,
-            defaults={
-                'ingresar': True,
-                'crear': False,
-                'modificar': False,
-                'eliminar': False,
-                'autorizar': False,
-                'supervisor': False,
-            },
-        )
-
-        token_plain = generate_token(user, meta={'empresa_id': empresa.id}, created_by=self.request.user)
-
-        config = get_effective_company_config(empresa)
-        public_base_url = config.get('public_base_url') if config else None
-        if not public_base_url:
-            form.add_error(None, 'Falta public_base_url en la configuración de la empresa.')
-            return self.form_invalid(form)
-
-        activation_link = f"{public_base_url.rstrip('/')}/auth/activate/{token_plain}/"
-        subject = 'Activación de cuenta'
-        body_text = (
-            'Has sido invitado a la plataforma.\n\n'
-            f'Activa tu cuenta aquí: {activation_link}\n'
-        )
-        body_html = (
-            '<p>Has sido invitado a la plataforma.</p>'
-            f'<p><a href="{activation_link}">Activar cuenta</a></p>'
-        )
+        empresas = form.cleaned_data.get('empresas')
+        tipo_usuario = form.cleaned_data.get('tipo_usuario')
+        usuario_referencia = form.cleaned_data.get('usuario_referencia')
 
         try:
-            send_security_email(
-                empresa=empresa,
-                subject=subject,
-                body_text=body_text,
-                body_html=body_html,
-                to_emails=[email],
+            result = invite_user_flow(
+                email=email,
+                first_name=form.cleaned_data.get('first_name'),
+                last_name=form.cleaned_data.get('last_name'),
+                empresas=empresas,
+                tipo_usuario=tipo_usuario,
+                usuario_referencia=usuario_referencia,
+                created_by=self.request.user,
             )
         except Exception:
             form.add_error(None, 'No se pudo enviar el correo de invitación.')
             return self.form_invalid(form)
 
+        if not result.get('ok'):
+            form.add_error(None, result.get('error'))
+            return self.form_invalid(form)
+
         messages.success(self.request, f'Invitación enviada a {email}.')
         return redirect(self.success_url)
+
+
+class UsuarioCrearView(BaseUsuarioInviteView):
+    pass
+
+
+class UsuarioInvitarView(BaseUsuarioInviteView):
+    pass
 
 class UsuarioEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = User
@@ -681,6 +814,16 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('access_control:usuarios_lista')
     vista_nombre = "Maestro Usuarios"
     permiso_requerido = "eliminar"
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        with transaction.atomic():
+            Permiso.objects.filter(usuario=self.object).delete()
+            UsuarioPerfilEmpresa.objects.filter(usuario=self.object).delete()
+            UserEmailToken.objects.filter(user=self.object).delete()
+            self.object.delete()
+        messages.success(request, 'users.delete.success')
+        return redirect(self.success_url)
 
 
 # class SeleccionarEmpresaView(VerificarPermisoMixin,LoginRequiredMixin, View):

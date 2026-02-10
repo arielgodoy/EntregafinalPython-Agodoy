@@ -87,3 +87,83 @@
 - Multiempresa: validar que listados/creación/edición respetan empresa activa.
 - UI: acordeones/collapses funcionan (abrir/cerrar) y no hay IDs duplicados.
 
+REGLA OBLIGATORIA – SISTEMA MULTILENGUAJE (i18n)
+
+Este proyecto es MULTILENGUAJE (ES / EN).
+
+REGLAS ESTRICTAS:
+
+1. TODO TEXTO VISIBLE AL USUARIO DEBE TENER EL ATRIBUTO:
+   data-key="clave.traduccion"
+
+   Esto incluye, SIN EXCEPCIÓN:
+   - Títulos (h1–h6)
+   - Labels
+   - Botones
+   - Links
+   - Placeholders
+   - Mensajes de error / éxito
+   - Textos dentro de modales
+   - Textos de tablas
+   - Textos condicionales renderizados por lógica
+   - Menús y submenús
+   - Tooltips y ayudas visuales
+
+2. NO se deben dejar textos hardcodeados visibles al usuario sin data-key.
+
+3. Las claves de traducción deben:
+   - Usar lowercase
+   - Usar puntos como separador
+   - Ser descriptivas y estables
+   Ejemplo:
+     data-key="users.invite.title"
+     data-key="buttons.send_invitation"
+
+4. El sistema utiliza los archivos:
+   /static/lang/en.json
+   /static/lang/sp.json
+
+   Toda nueva clave agregada en templates DEBE:
+   - Ser incluida en AMBOS archivos JSON
+   - Mantener equivalencia semántica entre idiomas
+
+5. Si se modifica un template existente:
+   - Se deben agregar data-key a TODOS los textos visibles nuevos o existentes
+   - No se permite mezclar textos con y sin data-key
+
+6. No romper funcionalidad existente:
+   - Solo se agrega data-key
+   - No se cambia lógica ni comportamiento salvo que se solicite explícitamente
+
+7. Si falta una traducción:
+   - Se debe crear la clave
+   - Se deben agregar los valores en en.json y sp.json
+   - No se deja texto sin traducir como “temporal”
+   - Textos generados dinámicamente por JavaScript (innerHTML, alerts, toasts)deben usar claves i18n (data-key o lookup en lang JSON).
+   - Placeholders de <input>, <textarea> y <select> también requieren data-key.
+   - En vistas nuevas, se recomienda al menos 1 test que valide presencia de data-key
+  en textos críticos (títulos, botones principales).
+
+
+
+
+
+ESTA REGLA ES OBLIGATORIA PARA TODO HTML, TEMPLATE, MODAL O COMPONENTE UI.
+
+
+FORMATO DE RESPUESTA
+- TODA respuesta DEBE entregarse en UN SOLO BLOQUE DE TEXTO, completamente COPIABLE.
+- PROHIBIDO dividir la salida en múltiples bloques.
+- PROHIBIDO agregar explicaciones, comentarios, resúmenes o instrucciones fuera del bloque.
+- TODO el contenido (contexto, decisiones, pasos, código, validaciones, notas técnicas) DEBE estar dentro del MISMO bloque.
+
+COMPORTAMIENTO
+- NO pedir confirmaciones intermedias.
+- NO dejar pasos “para después”.
+- NO detenerse por supuestos faltantes; documentarlos dentro del bloque y continuar.
+- NO modificar login/logout ni UserPreferences salvo instrucción explícita.
+- RESPETAR estrictamente la arquitectura existente del proyecto.
+- NO introducir dependencias nuevas sin justificar dentro del mismo bloque.
+
+INCUMPLIMIENTO
+- CUALQUIER RESPUESTA QUE NO CUMPLA ESTE FORMATO SE CONSIDERA INVÁLIDA.

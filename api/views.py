@@ -12,11 +12,8 @@ from biblioteca.models import Propietario
 from .serializers import PropietarioSerializer
 from django.conf import settings
 from common.utils import crear_conexion,sql_sistema
-from access_control.decorators import verificar_permiso
 from access_control.models import Empresa, Permiso, Vista
-from acounts.services.config import get_effective_company_config
-from acounts.services.email_service import send_security_email
-from acounts.services.tokens import generate_token
+from access_control.services.invite import invite_user_flow
 
 
 # class TrabajadoresViewSet(ReadOnlyModelViewSet):
@@ -135,7 +132,6 @@ class PropietarioViewSet(ReadOnlyModelViewSet):
     search_fields = ['nombre', 'rut']
 
 
-@verificar_permiso('auth_invite', 'crear')
 @require_POST
 def invite_user(request):
     if request.content_type != 'application/json':
@@ -151,6 +147,7 @@ def invite_user(request):
 
     email = (payload.get('email') or '').strip().lower()
     empresa_id = payload.get('empresa_id')
+    tipo_usuario = payload.get('tipo_usuario') or 'PROFESIONAL'
 
     if not email or not empresa_id:
         return JsonResponse(
@@ -166,71 +163,32 @@ def invite_user(request):
             status=404,
         )
 
-    user = User.objects.filter(username=email).first()
-    if not user:
-        user = User.objects.filter(email__iexact=email).first()
-
-    if user and user.is_active:
-        return JsonResponse({'detail': 'Usuario ya activo'}, status=400)
-
-    if not user:
-        user = User(username=email, email=email, is_active=False)
-        user.set_unusable_password()
-        user.save()
-
-    # Requiere seed de access_control: Vista base "Maestro Usuarios".
-    vista_base = Vista.objects.filter(nombre='Maestro Usuarios').first()
-    if not vista_base:
+    vista_auth = Vista.objects.filter(nombre='auth_invite').first()
+    if not vista_auth:
         return JsonResponse(
-            {
-                'detail': 'NO ENCONTRADO: Vista base requerida para permisos no está configurada. Debe definirse por seed.'
-            },
+            {'detail': 'NO ENCONTRADO: Vista base requerida auth_invite no está configurada. Debe definirse por seed.'},
             status=400,
         )
 
-    # Si el permiso ya existe, no se modifica para no pisar configuraciones manuales.
-    Permiso.objects.get_or_create(
-        usuario=user,
-        empresa=empresa,
-        vista=vista_base,
-        defaults={
-            'ingresar': True,
-            'crear': False,
-            'modificar': False,
-            'eliminar': False,
-            'autorizar': False,
-            'supervisor': False,
-        },
-    )
+    permiso = Permiso.objects.filter(usuario=request.user, empresa=empresa, vista=vista_auth).first()
+    if not permiso or not permiso.crear:
+        return JsonResponse({'detail': 'No tienes permiso para esta acción.'}, status=403)
 
-    token = generate_token(user, meta={'empresa_id': empresa.id}, created_by=request.user)
-
-    config = get_effective_company_config(empresa)
-    public_base_url = config.get('public_base_url') if config else None
-    if not public_base_url:
-        return JsonResponse(
-            {'detail': 'No hay public_base_url configurada para la empresa.'},
-            status=400,
+    try:
+        result = invite_user_flow(
+            email=email,
+            first_name=payload.get('first_name'),
+            last_name=payload.get('last_name'),
+            empresas=[empresa],
+            tipo_usuario=tipo_usuario,
+            usuario_referencia=None,
+            created_by=request.user,
         )
+    except Exception:
+        return JsonResponse({'detail': 'No se pudo enviar el correo de invitación.'}, status=400)
 
-    activation_link = f"{public_base_url.rstrip('/')}/auth/activate/{token}/"
-    subject = 'Activación de cuenta'
-    body_text = (
-        'Has sido invitado a la plataforma.\n\n'
-        f'Activa tu cuenta aquí: {activation_link}\n'
-    )
-    body_html = (
-        '<p>Has sido invitado a la plataforma.</p>'
-        f'<p><a href="{activation_link}">Activar cuenta</a></p>'
-    )
+    if not result.get('ok'):
+        return JsonResponse({'detail': result.get('error')}, status=400)
 
-    send_security_email(
-        empresa=empresa,
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
-        to_emails=[email],
-    )
-
-    return JsonResponse({'status': 'ok'})
+    return JsonResponse({'status': 'ok', 'message': f"Invitación enviada a {email}."})
 

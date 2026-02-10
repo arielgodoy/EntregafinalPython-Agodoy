@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig
-from .models import Permiso,Empresa
+from .models import Permiso, Empresa
 from django.contrib.auth.models import User
 
 class PermisoForm(forms.ModelForm):
@@ -75,28 +75,98 @@ class UsuarioCrearForm(forms.ModelForm):
 
 
 class UsuarioInvitacionForm(forms.Form):
-    email = forms.EmailField(label="Email")
+    TIPO_USUARIO_CHOICES = [
+        ('PROFESIONAL', 'Profesional'),
+        ('USUARIO', 'Usuario'),
+    ]
+
+    email = forms.EmailField(
+        label="Email",
+        error_messages={
+            'required': 'validation.email_required',
+            'invalid': 'validation.email_invalid',
+        },
+    )
     first_name = forms.CharField(label="Nombre", required=False)
     last_name = forms.CharField(label="Apellido", required=False)
-    empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=False, label="Empresa")
+    tipo_usuario = forms.ChoiceField(label="Tipo de usuario", choices=TIPO_USUARIO_CHOICES, initial='USUARIO')
+    usuario_referencia = forms.ModelChoiceField(
+        label="Copiar desde usuario",
+        queryset=User.objects.none(),
+        required=False,
+    )
+    empresas = forms.ModelMultipleChoiceField(
+        queryset=Empresa.objects.all(),
+        required=False,
+        label="Empresas",
+    )
 
     def __init__(self, *args, **kwargs):
         empresa_in_session = kwargs.pop('empresa_in_session', None)
         super().__init__(*args, **kwargs)
+        self.empresa_in_session = empresa_in_session
         self.fields['email'].widget.attrs.update({'class': 'form-control'})
         self.fields['first_name'].widget.attrs.update({'class': 'form-control'})
         self.fields['last_name'].widget.attrs.update({'class': 'form-control'})
-        self.fields['empresa'].widget.attrs.update({'class': 'form-control'})
+        self.fields['tipo_usuario'].widget.attrs.update({'class': 'form-control'})
+        self.fields['usuario_referencia'].widget.attrs.update({'class': 'form-control'})
+        self.fields['empresas'].widget.attrs.update({'class': 'form-select'})
+
+        empresa_ids = []
+        if self.data:
+            empresa_ids = self.data.getlist('empresas')
+
+        if not empresa_ids and empresa_in_session is not None:
+            empresa_ids = [str(empresa_in_session.pk)]
+
+        if empresa_ids:
+            self.fields['usuario_referencia'].queryset = User.objects.filter(
+                permiso__empresa_id__in=empresa_ids,
+                is_active=True,
+            ).distinct().order_by('username')
 
         if empresa_in_session is not None:
-            self.fields['empresa'].initial = empresa_in_session
-            self.fields['empresa'].widget = forms.HiddenInput()
+            self.fields['empresas'].initial = [empresa_in_session.pk]
 
     def clean_email(self):
         email = (self.cleaned_data.get('email') or '').strip().lower()
         if not email:
-            raise ValidationError('El email es obligatorio.')
+            raise ValidationError('validation.email_required')
         return email
+
+    def clean(self):
+        cleaned_data = super().clean()
+        tipo_usuario = cleaned_data.get('tipo_usuario')
+        usuario_referencia = cleaned_data.get('usuario_referencia')
+        empresas = list(cleaned_data.get('empresas') or [])
+
+        if not empresas:
+            empresa_in_session = getattr(self, 'empresa_in_session', None)
+            if empresa_in_session:
+                empresas = [empresa_in_session]
+                cleaned_data['empresas'] = empresas
+            else:
+                self.add_error('empresas', 'validation.company_required')
+
+        if tipo_usuario == 'USUARIO' and not usuario_referencia:
+            self.add_error('usuario_referencia', 'validation.reference_required')
+
+        if tipo_usuario == 'PROFESIONAL':
+            cleaned_data['usuario_referencia'] = None
+
+        if tipo_usuario == 'USUARIO' and usuario_referencia and empresas:
+            empresa_ids = [empresa.id for empresa in empresas]
+            tiene_permiso = Permiso.objects.filter(
+                usuario=usuario_referencia,
+                empresa_id__in=empresa_ids,
+            ).exists()
+            if not tiene_permiso:
+                self.add_error(
+                    'usuario_referencia',
+                    'validation.reference_company_mismatch'
+                )
+
+        return cleaned_data
 
 
 class SystemConfigForm(forms.ModelForm):
