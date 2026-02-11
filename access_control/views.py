@@ -26,6 +26,7 @@ from .decorators import verificar_permiso, PermisoDenegadoJson
 from django.utils.decorators import method_decorator
 from acounts.services.email_service import send_email_via_account
 from access_control.services.invite import invite_user_flow
+from access_control.services.empresa_activa import set_empresa_activa_en_sesion
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -848,9 +849,7 @@ def seleccionar_empresa(request):
     if request.method == "POST":
         empresa_id = request.POST.get("empresa_id")
         empresa = Empresa.objects.get(pk=empresa_id)
-        empresa_codigo = empresa.codigo
-        request.session["empresa_id"] = empresa_id
-        request.session["empresa_codigo"] = empresa_codigo
+        set_empresa_activa_en_sesion(request, empresa)
         return redirect("biblioteca:listar_propiedades")
 
     permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")

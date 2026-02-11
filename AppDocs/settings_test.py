@@ -167,6 +167,7 @@ MIGRATION_MODULES = {
     'api': None,
     'biblioteca': None,
     'chat': None,
+    'control_operacional': None,
     'control_de_proyectos': None,
     'evaluaciones': None,
     'settings': None,

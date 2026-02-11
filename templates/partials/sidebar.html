@@ -114,41 +114,14 @@
                         </ul>
                     </div>
                 </li>
-
-                <!-- Menú Control de Acceso -->
-                <li class="nav-item">
-                    <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
-                        <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
-                    </a>
-                    <div class="collapse menu-dropdown" id="sidebarControlAcceso">
-                        <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="menu.access_control.invite_user">Invitar Usuario</span></a>
-                            </li>
-                            {% if user.is_staff %}
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:invitaciones_lista' %}" class="nav-link"><span data-key="menu.access_control.invitations">Gestión de Invitaciones</span></a>
-                            </li>
-                            {% endif %}
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="menu.access_control.user_management">Gestión de Usuarios</span></a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="menu.access_control.company_management">Gestión de Empresas</span></a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="menu.access_control.view_management">Gestión de Vistas</span></a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="menu.access_control.permission_management">Gestión de Permisos</span></a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="menu.access_control.filter_permissions">Filtrar Permisos</span></a>
-                            </li>
-                        </ul>
-                    </div>
-                </li>
                 {% endif %}
+
+                <!-- Menú Control Operacional -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="{% url 'control_operacional:dashboard' %}">
+                        <i class="ri-dashboard-line"></i> <span data-key="menu.control_operacional">Control Operacional</span>
+                    </a>
+                </li>
 
                 <!-- Menú Cuentas -->
                 <li class="nav-item">
@@ -170,7 +143,39 @@
                     </div>
                 </li>
 
-                {% if user.is_authenticated and user.is_staff %}
+                {% if request.user.is_staff %}
+                <!-- Menú Control de Acceso -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
+                        <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarControlAcceso">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="menu.access_control.invite_user">Invitar Usuario</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:invitaciones_lista' %}" class="nav-link"><span data-key="menu.access_control.invitations">Gestión de Invitaciones</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="menu.access_control.user_management">Gestión de Usuarios</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="menu.access_control.company_management">Gestión de Empresas</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="menu.access_control.view_management">Gestión de Vistas</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="menu.access_control.permission_management">Gestión de Permisos</span></a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="menu.access_control.filter_permissions">Filtrar Permisos</span></a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarSettings" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarSettings">
                         <i class="ri-settings-3-line"></i> <span data-key="menu.settings">Settings</span>

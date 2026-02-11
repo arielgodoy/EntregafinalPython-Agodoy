@@ -12,7 +12,7 @@ Lista de Usuarios
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Lista de Usuarios" pagetitle="Usuarios" %}
+{% include "partials/page-title.html" with title="Lista de Usuarios" pagetitle="Usuarios" title_key="user_list_title" pagetitle_key="users.pagetitle" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -45,7 +45,7 @@ Lista de Usuarios
                                         <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
                                         </a>
-                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-usuario-id="{{ usuario.id }}" data-usuario-nombre="{{ usuario.username }}">
+                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-usuario-id="{{ usuario.id }}" data-usuario-nombre="{{ usuario.username }}" data-delete-url="{% url 'access_control:usuario_eliminar' usuario.id %}">
                                             <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
                                         </button>
                                     </td>
@@ -92,9 +92,10 @@ Lista de Usuarios
             const button = event.relatedTarget;
             const usuarioId = button.getAttribute("data-usuario-id");
             const usuarioNombreText = button.getAttribute("data-usuario-nombre");
+            const deleteUrl = button.getAttribute("data-delete-url");
 
             usuarioNombre.textContent = usuarioNombreText;
-            deleteForm.action = "{% url 'access_control:usuario_eliminar' 0 %}".replace("0", usuarioId);
+            deleteForm.action = deleteUrl || "";
         });
     });
 </script>

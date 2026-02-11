@@ -30,6 +30,7 @@ urlpatterns = [
     #path('access-control/', include('access_control.urls')), 
     path('access-control/', include('access_control.urls', namespace='access_control')),
     path('control-proyectos/', include('control_de_proyectos.urls', namespace='control_de_proyectos')),
+    path('control-operacional/', include('control_operacional.urls', namespace='control_operacional')),
     path('settings/', include('settings.urls')),
     path('evaluaciones/', include('evaluaciones.urls')),
 

@@ -1,0 +1,210 @@
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Control Operacional{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include "partials/page-title.html" with pagetitle="Control Operacional" title="Dashboard" title_key="control_operacional.dashboard.title" pagetitle_key="control_operacional.dashboard.pagetitle" %}
+                {% endblock pagetitle %}
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title" data-key="control_operacional.dashboard.heading">Dashboard Operacional</h5>
+                                <p class="card-text" data-key="control_operacional.dashboard.placeholder">Resumen operativo en construccion.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <h5 class="mb-3" data-key="control_operacional.kpi.section_title">KPIs por empresa</h5>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted" data-key="control_operacional.kpi.total_activos">Proyectos activos</h6>
+                                <h3 class="mb-0">{{ kpis.total_activos }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted" data-key="control_operacional.kpi.en_ejecucion">En ejecucion</h6>
+                                <h3 class="mb-0">{{ kpis.en_ejecucion }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted" data-key="control_operacional.kpi.en_cotizacion">En cotizacion</h6>
+                                <h3 class="mb-0">{{ kpis.en_cotizacion }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-xl-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="text-muted" data-key="control_operacional.kpi.terminados">Terminados</h6>
+                                <h3 class="mb-0">{{ kpis.terminados }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-xl-6">
+                        <div class="card card-height-100">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1" data-key="control_operacional.chart.proyectos_por_estado.title">Proyectos activos por estado</h4>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-3" data-key="control_operacional.chart.proyectos_por_estado.subtitle">Distribucion en la empresa activa</p>
+                                <div id="co_proyectos_estado_donut" data-colors='["--vz-primary", "--vz-success", "--vz-warning", "--vz-info"]' class="apex-charts" dir="ltr" style="min-height: 300px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{ chart_proyectos_por_estado|json_script:"chart-proyectos-estado-data" }}
+            </div>
+        </div>
+    </div>
+{% endblock content %}
+
+{% block extra_js %}
+    <script src="{% static 'libs/apexcharts/apexcharts.min.js'%}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var dataElement = document.getElementById("chart-proyectos-estado-data");
+            var chartElement = document.getElementById("co_proyectos_estado_donut");
+
+            if (!window.ApexCharts) {
+                console.error("ApexCharts no esta cargado.");
+                return;
+            }
+            if (!chartElement) {
+                console.error("No se encontro el contenedor del chart.");
+                return;
+            }
+            if (!dataElement) {
+                console.error("No se encontro el json_script del chart.");
+                return;
+            }
+
+            var chartData;
+            try {
+                chartData = JSON.parse(dataElement.textContent);
+            } catch (err) {
+                console.error("No se pudo parsear el JSON del chart.", err);
+                return;
+            }
+
+            console.log("Chart data", chartData);
+
+            function getChartColorsArray(chartId) {
+                var chart = document.getElementById(chartId);
+                if (!chart) {
+                    return null;
+                }
+                var colors = chart.getAttribute("data-colors");
+                if (!colors) {
+                    return null;
+                }
+                colors = JSON.parse(colors);
+                return colors.map(function (value) {
+                    var trimmed = value.replace(" ", "");
+                    if (trimmed.indexOf(",") === -1) {
+                        var cssValue = getComputedStyle(document.documentElement).getPropertyValue(trimmed);
+                        return cssValue || trimmed;
+                    }
+                    var rgba = trimmed.split(",");
+                    if (rgba.length === 2) {
+                        return "rgba(" + getComputedStyle(document.documentElement).getPropertyValue(rgba[0]) + "," + rgba[1] + ")";
+                    }
+                    return trimmed;
+                });
+            }
+
+            function translateLabels(keys) {
+                if (!window.langData) {
+                    console.warn("langData not loaded yet, using raw keys");
+                    return keys;
+                }
+                return keys.map(function (key) {
+                    return window.langData && window.langData[key] ? window.langData[key] : key;
+                });
+            }
+
+            function renderChart(labels) {
+                var colors = getChartColorsArray("co_proyectos_estado_donut") || ["#405189", "#0AB39C", "#F7B84B", "#299CDB"];
+                var options = {
+                    series: chartData.series || [],
+                    labels: labels,
+                    chart: {
+                        type: "donut",
+                        height: 300,
+                    },
+                    legend: {
+                        position: "bottom",
+                    },
+                    dataLabels: {
+                        enabled: false,
+                    },
+                    stroke: {
+                        lineCap: "round",
+                        width: 0,
+                    },
+                    colors: colors,
+                };
+
+                new ApexCharts(chartElement, options).render();
+            }
+
+            var labelKeys = chartData.labels_keys || [];
+
+            if (window.langData) {
+                renderChart(translateLabels(labelKeys));
+                return;
+            }
+
+            var defaultLang = "en";
+            var lang = localStorage.getItem("language") || defaultLang;
+            var request = new XMLHttpRequest();
+            request.open("GET", "/static/lang/" + lang + ".json", true);
+            request.onreadystatechange = function () {
+                if (this.readyState !== 4) {
+                    return;
+                }
+                if (this.status === 200) {
+                    try {
+                        window.langData = JSON.parse(this.responseText);
+                    } catch (err) {
+                        renderChart(labelKeys);
+                        return;
+                    }
+                    renderChart(translateLabels(labelKeys));
+                    return;
+                }
+                if (lang !== defaultLang) {
+                    lang = defaultLang;
+                    request.open("GET", "/static/lang/" + lang + ".json", true);
+                    request.send();
+                    return;
+                }
+                renderChart(labelKeys);
+            };
+            request.send();
+        });
+    </script>
+{% endblock extra_js %}

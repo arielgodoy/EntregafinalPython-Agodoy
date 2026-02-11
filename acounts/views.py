@@ -4,7 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
 from django.contrib.auth.forms import UserCreationForm
-from django.contrib.auth import authenticate, login,logout
+from django.contrib.auth import authenticate, login, logout
+from access_control.services.empresa_activa import resolve_post_login, set_empresa_activa_en_sesion
 import time
 from acounts.forms import CustomUserForm
 from django.contrib.auth.decorators import user_passes_test
@@ -54,11 +55,32 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect('biblioteca:listar_propiedades')  # Redirigir al usuario a la página de inicio después de un login exitoso cambair a dashboard de aplicaciones
+            status, empresa = resolve_post_login(request, user)
+            if status == "ONE" and empresa:
+                set_empresa_activa_en_sesion(request, empresa)
+                return redirect('biblioteca:listar_propiedades')
+            if status == "MANY":
+                return redirect('access_control:seleccionar_empresa')
+
+            logout(request)
+            return render(
+                request,
+                'pages/authentication/auth-signin-basic.html',
+                {
+                    'error_key': 'auth.login.error.no_company',
+                    'error_message': 'No tienes empresas asignadas. Contacta al administrador.',
+                },
+            )
         else:
             # Mostrar mensaje de error si el login no es válido
-            error_message = "Nombre de usuario o contraseña incorrectos."
-            return render(request, 'pages/authentication/auth-signin-basic.html', {'error_message': error_message})
+            return render(
+                request,
+                'pages/authentication/auth-signin-basic.html',
+                {
+                    'error_key': 'auth.login.error.invalid',
+                    'error_message': 'Nombre de usuario o contraseña incorrectos.',
+                },
+            )
     return render(request, 'pages/authentication/auth-signin-basic.html')
 
 def logout_view(request):
