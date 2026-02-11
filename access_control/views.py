@@ -34,21 +34,23 @@ class VerificarPermisoMixin:
 
     def dispatch(self, request, *args, **kwargs):
         if self.vista_nombre and self.permiso_requerido:
-            decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
-            vista_decorada = decorador(super().dispatch)
-            return vista_decorada(request, *args, **kwargs)
+            try:
+                decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+                vista_decorada = decorador(super().dispatch)
+                return vista_decorada(request, *args, **kwargs)
+            except PermisoDenegadoJson as e:
+                return self.handle_no_permission(request, str(e))
         return super().dispatch(request, *args, **kwargs)
 
-
-class VerificarPermisoSafeMixin(VerificarPermisoMixin):
-    def dispatch(self, request, *args, **kwargs):
-        try:
-            return super().dispatch(request, *args, **kwargs)
-        except PermisoDenegadoJson as e:
-            return self.handle_no_permission(request, str(e))
-
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
-        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+        # Detectar request AJAX/JSON
+        is_ajax = (
+            request.headers.get("x-requested-with") == "XMLHttpRequest" or
+            request.content_type == "application/json" or
+            "application/json" in request.headers.get("accept", "")
+        )
+        
+        if is_ajax:
             return JsonResponse({"success": False, "error": mensaje}, status=403)
 
         contexto = {
@@ -57,6 +59,11 @@ class VerificarPermisoSafeMixin(VerificarPermisoMixin):
             "empresa_nombre": request.session.get("empresa_nombre", "No definida"),
         }
         return render(request, "access_control/403_forbidden.html", contexto, status=403)
+
+
+# Alias para compatibilidad con codigo existente
+class VerificarPermisoSafeMixin(VerificarPermisoMixin):
+    pass
 
 
 class EmailAccountVistaRequiredMixin:
@@ -735,8 +742,8 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre='auth_invite').exists():
+            messages.error(request, 'Falta ejecutar seed_access_control para crear la Vista base "auth_invite".')
             form = self.get_form()
-            form.add_error(None, 'Falta ejecutar seed_access_control para crear la Vista base "auth_invite".')
             context = self.get_context_data(form=form)
             return self.render_to_response(context, status=400)
         try:
@@ -818,13 +825,35 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
 
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
-        with transaction.atomic():
-            Permiso.objects.filter(usuario=self.object).delete()
-            UsuarioPerfilEmpresa.objects.filter(usuario=self.object).delete()
-            UserEmailToken.objects.filter(user=self.object).delete()
-            self.object.delete()
-        messages.success(request, 'users.delete.success')
-        return redirect(self.success_url)
+        usuario_nombre = self.object.username
+        
+        try:
+            with transaction.atomic():
+                Permiso.objects.filter(usuario=self.object).delete()
+                UsuarioPerfilEmpresa.objects.filter(usuario=self.object).delete()
+                UserEmailToken.objects.filter(user=self.object).delete()
+                self.object.delete()
+            
+            # Si es una petición AJAX, devolver JSON
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Usuario "{usuario_nombre}" eliminado exitosamente'
+                })
+            
+            messages.success(request, 'users.delete.success')
+            return redirect(self.success_url)
+            
+        except Exception as e:
+            # Si es una petición AJAX, devolver error en JSON
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Error al eliminar el usuario: {str(e)}'
+                }, status=400)
+            
+            messages.error(request, f'Error al eliminar el usuario: {str(e)}')
+            return redirect(self.success_url)
 
 
 # class SeleccionarEmpresaView(VerificarPermisoMixin,LoginRequiredMixin, View):

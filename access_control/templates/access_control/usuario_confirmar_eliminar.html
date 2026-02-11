@@ -8,11 +8,11 @@
 {% endblock extra_css %}
 
 {% block title %}
-Eliminar Empresa
+Eliminar Usuario
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Eliminar Empresa" pagetitle="Empresas" %}
+{% include "partials/page-title.html" with title="Eliminar Usuario" pagetitle="Usuarios" title_key="delete_user_title" pagetitle_key="users.pagetitle" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -22,13 +22,20 @@ Eliminar Empresa
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
-                    <h4 class="card-title" data-key="delete_company_title">Eliminar Empresa</h4>
-                    <p data-key="delete_company_confirm">¿Estás seguro de que deseas eliminar la empresa "<strong>{{ object.nombre }}</strong>"?</p>
+                    <h4 class="card-title" data-key="delete_user_title">Eliminar Usuario</h4>
+                    <p data-key="delete_user_confirm">¿Estás seguro de que deseas eliminar al usuario "<strong>{{ object.username }}</strong>" ({{ object.email }})?</p>
+                    
+                    <div class="alert alert-warning" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong data-key="warning">Advertencia:</strong>
+                        <span data-key="delete_user_warning">Esta acción eliminará todos los permisos y configuraciones asociadas al usuario.</span>
+                    </div>
+                    
                     <form method="post" class="mt-4">
                         {% csrf_token %}
                         <div class="d-flex justify-content-end">
                             <button type="submit" class="btn btn-danger me-2" data-key="btn_delete">Eliminar</button>
-                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary" data-key="btn_cancel">Cancelar</a>
+                            <a href="{% url 'access_control:usuarios_lista' %}" class="btn btn-secondary" data-key="btn_cancel">Cancelar</a>
                         </div>
                     </form>
                 </div>

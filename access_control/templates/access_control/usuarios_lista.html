@@ -17,6 +17,7 @@ Lista de Usuarios
 
 {% block content %}
 <!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+{% csrf_token %}
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
@@ -38,14 +39,18 @@ Lista de Usuarios
                             </thead>
                             <tbody>
                                 {% for usuario in usuarios %}
-                                <tr>
+                                <tr id="usuario-row-{{ usuario.id }}">
                                     <td>{{ usuario.username }}</td>
                                     <td>{{ usuario.email }}</td>
                                     <td>
                                         <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
                                         </a>
-                                        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal" data-usuario-id="{{ usuario.id }}" data-usuario-nombre="{{ usuario.username }}" data-delete-url="{% url 'access_control:usuario_eliminar' usuario.id %}">
+                                        <button class="btn btn-danger btn-sm btn-eliminar-usuario" 
+                                                data-usuario-id="{{ usuario.id }}" 
+                                                data-usuario-nombre="{{ usuario.username }}"
+                                                data-usuario-email="{{ usuario.email }}"
+                                                data-delete-url="{% url 'access_control:usuario_eliminar' usuario.id %}">
                                             <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
                                         </button>
                                     </td>
@@ -70,54 +75,129 @@ Lista de Usuarios
             </div>
             <div class="modal-body">
                 <p data-key="delete_confirmation">¿Estás seguro de que deseas eliminar al usuario <strong id="usuarioNombre"></strong>?</p>
+                <p class="text-muted"><small id="usuarioEmail"></small></p>
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong data-key="warning">Advertencia:</strong>
+                    <span data-key="delete_user_warning">Esta acción eliminará todos los permisos y configuraciones asociadas al usuario.</span>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="cancel">Cancelar</button>
-                <form id="deleteForm" method="post" action="">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-danger" data-key="delete">Eliminar</button>
-                </form>
+                <button type="button" class="btn btn-danger" id="confirmDelete" data-key="delete">Eliminar</button>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const deleteModal = document.getElementById("deleteModal");
-        const deleteForm = document.getElementById("deleteForm");
-        const usuarioNombre = document.getElementById("usuarioNombre");
-
-        deleteModal.addEventListener("show.bs.modal", function (event) {
-            const button = event.relatedTarget;
-            const usuarioId = button.getAttribute("data-usuario-id");
-            const usuarioNombreText = button.getAttribute("data-usuario-nombre");
-            const deleteUrl = button.getAttribute("data-delete-url");
-
-            usuarioNombre.textContent = usuarioNombreText;
-            deleteForm.action = deleteUrl || "";
-        });
-    });
-</script>
 {% endblock content %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        feather.replace();
-    });
-</script>
-<script>
+    let usuariosTable;
+    let deleteUrl = '';
+    let usuarioId = '';
+
     $(document).ready(function () {
-        $('#usuarios-table').DataTable({
+        // Inicializar DataTable
+        usuariosTable = $('#usuarios-table').DataTable({
             language: {
                 url: "/static/lang/es-ES.json"
             },
             responsive: true,
             autoWidth: false,
         });
+
+        // Event listener para botones de eliminar
+        $(document).on('click', '.btn-eliminar-usuario', function(e) {
+            e.preventDefault();
+            
+            usuarioId = $(this).data('usuario-id');
+            const usuarioNombre = $(this).data('usuario-nombre');
+            const usuarioEmail = $(this).data('usuario-email');
+            deleteUrl = $(this).data('delete-url');
+
+            // Actualizar el modal con la información del usuario
+            $('#usuarioNombre').text(usuarioNombre);
+            $('#usuarioEmail').text(usuarioEmail);
+            
+            // Mostrar el modal
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            deleteModal.show();
+        });
+
+        // Confirmar eliminación
+        $('#confirmDelete').on('click', function() {
+            if (!deleteUrl) return;
+
+            // Deshabilitar el botón mientras se procesa
+            $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Eliminando...');
+
+            // Realizar petición AJAX
+            $.ajax({
+                url: deleteUrl,
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                success: function(response) {
+                    // Cerrar el modal
+                    bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+                    
+                    // Eliminar la fila de la tabla usando DataTables API
+                    const row = usuariosTable.row('#usuario-row-' + usuarioId);
+                    row.remove().draw();
+                    
+                    // Mostrar mensaje de éxito
+                    Toastify({
+                        text: response.message || "Usuario eliminado exitosamente",
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+                    }).showToast();
+                },
+                error: function(xhr) {
+                    let errorMsg = 'Error al eliminar el usuario';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+                    }
+                    
+                    // Mostrar mensaje de error
+                    Toastify({
+                        text: errorMsg,
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
+                    }).showToast();
+                },
+                complete: function() {
+                    // Rehabilitar el botón
+                    $('#confirmDelete').prop('disabled', false).text('Eliminar');
+                }
+            });
+        });
     });
+
+    // Función para obtener el CSRF token de las cookies
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
 </script>
 {% endblock extra_js %}
