@@ -13,6 +13,7 @@ from access_control.decorators import verificar_permiso, PermisoDenegadoJson
 from .models import Proyecto, Tarea, ClienteEmpresa, Profesional, TipoProyecto, EspecialidadProfesional, TipoTarea, TareaDocumento
 from .forms import ProyectoForm, TareaForm, ClienteEmpresaForm, ProfesionalForm, TipoTareaForm, TareaDocumentoForm
 import json
+from control_operacional.services.alerts import notify_project_created, notify_project_overdue
 
 
 class VerificarPermisoMixin:
@@ -145,7 +146,9 @@ class CrearProyectoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
             form.add_error(None, "No hay empresa seleccionada en la sesión")
             return self.form_invalid(form)
         form.instance.empresa_interna_id = empresa_id
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        notify_project_created(self.object, self.request.user)
+        return response
 
     def get_success_url(self):
         return reverse_lazy('control_de_proyectos:detalle_proyecto', kwargs={'pk': self.object.pk})
@@ -179,6 +182,11 @@ class EditarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy('control_de_proyectos:detalle_proyecto', kwargs={'pk': self.object.pk})
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        notify_project_overdue(self.object, self.request.user)
+        return response
 
 
 class EliminarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):

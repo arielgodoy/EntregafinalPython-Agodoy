@@ -19,33 +19,44 @@
                                 <div class="px-4 pt-4 mb-3">
                                     <div class="d-flex align-items-start">
                                         <div class="flex-grow-1">
-                                            <h5 class="mb-4">Chats</h5>
+                                            <h5 class="mb-4" data-key="chat.chats">Chats</h5>
                                         </div>
                                         <div class="flex-shrink-0">
-                                            <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="Add Contact">
+                                            <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="Add Contact" data-key="chat.add_contact">
     
                                                 <!-- Button trigger modal -->
-                                                <button type="button" class="btn btn-soft-success btn-sm">
+                                                <a href="{% url 'crear_conversacion' %}" class="btn btn-soft-success btn-sm">
                                                     <i class="ri-add-line align-bottom"></i>
-                                                </button>
+                                                </a>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="search-box">
-                                        <input type="text" class="form-control bg-light border-light" placeholder="Search here...">
-                                        <i class="ri-search-2-line search-icon"></i>
+                                        <form method="get" action="" class="d-grid gap-2">
+                                            <label class="form-label mb-0" data-key="chat.search.label">Busqueda</label>
+                                            <div class="position-relative">
+                                                <input type="text" name="q" class="form-control bg-light border-light" placeholder="Search here..." data-key="chat.search.placeholder" value="{{ search_query|default:'' }}">
+                                                <i class="ri-search-2-line search-icon"></i>
+                                            </div>
+                                            {% if show_center_filters %}
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="unread" value="1" id="chat-unread-only" {% if unread_only %}checked{% endif %}>
+                                                <label class="form-check-label" for="chat-unread-only" data-key="chat.filter.unread_only">Solo no leidos</label>
+                                            </div>
+                                            {% endif %}
+                                        </form>
                                     </div>
                                 </div> <!-- .p-4 -->
     
                                 <ul class="nav nav-tabs nav-tabs-custom nav-success nav-justified" role="tablist">
                                     <li class="nav-item">
                                         <a class="nav-link active" data-bs-toggle="tab" href="#chats" role="tab">
-                                            Chats
+                                            <span data-key="chat.tab.chats">Chats</span>
                                         </a>
                                     </li>
                                     <li class="nav-item">
                                         <a class="nav-link" data-bs-toggle="tab" href="#contacts" role="tab">
-                                            Contacts
+                                            <span data-key="chat.tab.contacts">Contacts</span>
                                         </a>
                                     </li>
                                 </ul>
@@ -55,10 +66,10 @@
                                         <div class="chat-room-list pt-3" data-simplebar>
                                             <div class="d-flex align-items-center px-4 mb-2">
                                                 <div class="flex-grow-1">
-                                                    <h4 class="mb-0 fs-11 text-muted text-uppercase">Direct Messages</h4>
+                                                    <h4 class="mb-0 fs-11 text-muted text-uppercase" data-key="chat.direct_messages">Direct Messages</h4>
                                                 </div>
                                                 <div class="flex-shrink-0">
-                                                    <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="New Message">
+                                                    <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="New Message" data-key="chat.new_message">
             
                                                         <!-- Button trigger modal -->
                                                         <button type="button" class="btn btn-soft-success btn-sm shadow-none">
@@ -70,17 +81,29 @@
             
                                             <div class="chat-message-list">
             
-                                                <ul class="list-unstyled chat-list chat-user-list" id="userList">
-                                                    
+                                                    <ul class="list-unstyled chat-list chat-user-list" id="userList">
+                                                        {% for conversacion in conversations %}
+                                                        <li class="{% if active_conversation and conversacion.id == active_conversation.id %}active{% endif %}">
+                                                            <a href="{% url 'chat_inbox' %}?conversation_id={{ conversacion.id }}">
+                                                                <div class="d-flex align-items-center">
+                                                                    <div class="flex-grow-1 overflow-hidden">
+                                                                        <p class="text-truncate mb-0">{{ conversacion }}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                        {% empty %}
+                                                        <li class="text-muted px-4" data-key="chat.no_conversations">No conversations</li>
+                                                        {% endfor %}
                                                 </ul>
                                             </div>
             
                                             <div class="d-flex align-items-center px-4 mt-4 pt-2 mb-2">
                                                 <div class="flex-grow-1">
-                                                    <h4 class="mb-0 fs-11 text-muted text-uppercase">Channels</h4>
+                                                    <h4 class="mb-0 fs-11 text-muted text-uppercase" data-key="chat.channels">Channels</h4>
                                                 </div>
                                                 <div class="flex-shrink-0">
-                                                    <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="Create group">
+                                                    <div data-bs-toggle="tooltip" data-bs-trigger="hover" data-bs-placement="bottom" title="Create group" data-key="chat.create_group">
                                                         <!-- Button trigger modal -->
                                                         <button type="button" class="btn btn-soft-success btn-sm">
                                                             <i class="ri-add-line align-bottom"></i>
@@ -99,7 +122,20 @@
                                     </div>
                                     <div class="tab-pane" id="contacts" role="tabpanel">
                                         <div class="chat-room-list pt-3" data-simplebar>
-                                            <div class="sort-contact">            
+                                            <div class="sort-contact">
+                                                <ul class="list-unstyled chat-list chat-user-list" id="contactList">
+                                                    {% for contact in contacts %}
+                                                    <li>
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="flex-grow-1 overflow-hidden">
+                                                                <p class="text-truncate mb-0">{{ contact.get_full_name|default:contact.username }}</p>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                    {% empty %}
+                                                    <li class="text-muted px-4" data-key="chat.no_contacts">No contacts</li>
+                                                    {% endfor %}
+                                                </ul>
                                             </div>
                                         </div>
                                     </div>
@@ -132,8 +168,8 @@
                                                                             <span class="user-status"></span>
                                                                         </div>
                                                                         <div class="flex-grow-1 overflow-hidden">
-                                                                            <h5 class="text-truncate mb-0 fs-16"><a class="text-reset username" data-bs-toggle="offcanvas" href="#userProfileCanvasExample" aria-controls="userProfileCanvasExample">Lisa Parker</a></h5>
-                                                                            <p class="text-truncate text-muted fs-14 mb-0 userStatus"><small>Online</small></p>
+                                                                            <h5 class="text-truncate mb-0 fs-16"><a class="text-reset username" data-bs-toggle="offcanvas" href="#userProfileCanvasExample" aria-controls="userProfileCanvasExample">{% if active_conversation %}{{ active_title }}{% else %}<span data-key="chat.no_active">No conversation selected</span>{% endif %}</a></h5>
+                                                                            <p class="text-truncate text-muted fs-14 mb-0 userStatus"><small data-key="chat.status.online">Online</small></p>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -149,7 +185,7 @@
                                                                         <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg">
                                                                             <div class="p-2">
                                                                                 <div class="search-box">
-                                                                                    <input type="text" class="form-control bg-light border-light" placeholder="Search here..." onkeyup="searchMessages()" id="searchMessage">
+                                                                                    <input type="text" class="form-control bg-light border-light" placeholder="Search here..." onkeyup="searchMessages()" id="searchMessage" data-key="chat.search.placeholder">
                                                                                     <i class="ri-search-2-line search-icon"></i>
                                                                                 </div>
                                                                             </div>
@@ -169,10 +205,10 @@
                                                                             <i data-feather="more-vertical" class="icon-sm"></i>
                                                                         </button>
                                                                         <div class="dropdown-menu dropdown-menu-end">
-                                                                            <a class="dropdown-item d-block d-lg-none user-profile-show" href="#"><i class="ri-user-2-fill align-bottom text-muted me-2"></i> View Profile</a>
-                                                                            <a class="dropdown-item" href="#"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i> Archive</a>
-                                                                            <a class="dropdown-item" href="#"><i class="ri-mic-off-line align-bottom text-muted me-2"></i> Muted</a>
-                                                                            <a class="dropdown-item" href="#"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i> Delete</a>
+                                                                            <a class="dropdown-item d-block d-lg-none user-profile-show" href="#"><i class="ri-user-2-fill align-bottom text-muted me-2"></i> <span data-key="chat.action.view_profile">View Profile</span></a>
+                                                                            <a class="dropdown-item" href="#"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i> <span data-key="chat.action.archive">Archive</span></a>
+                                                                            <a class="dropdown-item" href="#"><i class="ri-mic-off-line align-bottom text-muted me-2"></i> <span data-key="chat.action.muted">Muted</span></a>
+                                                                            <a class="dropdown-item" href="#"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i> <span data-key="chat.action.delete">Delete</span></a>
                                                                         </div>
                                                                     </div>
                                                                 </li>
@@ -185,15 +221,34 @@
                                                 <div class="chat-conversation p-3 p-lg-4 " id="chat-conversation" data-simplebar>
                                                     <div id="elmLoader">
                                                         <div class="spinner-border text-primary avatar-sm" role="status">
-                                                            <span class="visually-hidden">Loading...</span>
+                                                            <span class="visually-hidden" data-key="chat.loading">Loading...</span>
                                                         </div>
                                                     </div>
                                                     <ul class="list-unstyled chat-conversation-list" id="users-conversation">
-                                                        
+                                                        {% if active_conversation %}
+                                                            {% for mensaje in messages %}
+                                                            <li class="chat-list {% if mensaje.remitente_id == request.user.id %}right{% else %}left{% endif %}">
+                                                                <div class="conversation-list">
+                                                                    <div class="user-chat-content">
+                                                                        <div class="ctext-wrap">
+                                                                            <div class="ctext-wrap-content">
+                                                                                <p class="mb-0">{{ mensaje.contenido }}</p>
+                                                                                <p class="chat-time mb-0"><i class="ri-time-line align-middle"></i> <span class="align-middle">{{ mensaje.fecha_creacion|date:"H:i" }}</span></p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </li>
+                                                            {% empty %}
+                                                            <li class="text-muted" data-key="chat.no_messages">No messages</li>
+                                                            {% endfor %}
+                                                        {% else %}
+                                                            <li class="text-muted" data-key="chat.no_active">No conversation selected</li>
+                                                        {% endif %}
                                                     </ul>
                                                     <!-- end chat-conversation-list -->
                                                 </div>
-                                                <div class="alert alert-warning alert-dismissible copyclipboard-alert px-4 fade show " id="copyClipBoard" role="alert">
+                                                <div class="alert alert-warning alert-dismissible copyclipboard-alert px-4 fade show " id="copyClipBoard" role="alert" data-key="chat.copy">
                                                     Message copied
                                                 </div>
                                             </div>
@@ -212,8 +267,8 @@
                                                                         <img src="{% static 'images/users/avatar-2.jpg' %}" class="rounded-circle avatar-xs" alt="">
                                                                     </div>
                                                                     <div class="flex-grow-1 overflow-hidden">
-                                                                        <h5 class="text-truncate mb-0 fs-16"><a class="text-reset username" data-bs-toggle="offcanvas" href="#userProfileCanvasExample" aria-controls="userProfileCanvasExample">Lisa Parker</a></h5>
-                                                                        <p class="text-truncate text-muted fs-14 mb-0 userStatus"><small>24 Members</small></p>
+                                                                        <h5 class="text-truncate mb-0 fs-16"><a class="text-reset username" data-bs-toggle="offcanvas" href="#userProfileCanvasExample" aria-controls="userProfileCanvasExample"><span data-key="chat.channel.title">Lisa Parker</span></a></h5>
+                                                                        <p class="text-truncate text-muted fs-14 mb-0 userStatus"><small data-key="chat.channel.members">24 Members</small></p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -229,7 +284,7 @@
                                                                     <div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg">
                                                                         <div class="p-2">
                                                                             <div class="search-box">
-                                                                                <input type="text" class="form-control bg-light border-light" placeholder="Search here..." onkeyup="searchMessages()" id="searchMessage">
+                                                                                <input type="text" class="form-control bg-light border-light" placeholder="Search here..." onkeyup="searchMessages()" id="searchMessage" data-key="chat.search.placeholder">
                                                                                 <i class="ri-search-2-line search-icon"></i>
                                                                             </div>
                                                                         </div>
@@ -249,10 +304,10 @@
                                                                         <i data-feather="more-vertical" class="icon-sm"></i>
                                                                     </button>
                                                                     <div class="dropdown-menu dropdown-menu-end">
-                                                                        <a class="dropdown-item d-block d-lg-none user-profile-show" href="#"><i class="ri-user-2-fill align-bottom text-muted me-2"></i> View Profile</a>
-                                                                        <a class="dropdown-item" href="#"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i> Archive</a>
-                                                                        <a class="dropdown-item" href="#"><i class="ri-mic-off-line align-bottom text-muted me-2"></i> Muted</a>
-                                                                        <a class="dropdown-item" href="#"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i> Delete</a>
+                                                                        <a class="dropdown-item d-block d-lg-none user-profile-show" href="#"><i class="ri-user-2-fill align-bottom text-muted me-2"></i> <span data-key="chat.action.view_profile">View Profile</span></a>
+                                                                        <a class="dropdown-item" href="#"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i> <span data-key="chat.action.archive">Archive</span></a>
+                                                                        <a class="dropdown-item" href="#"><i class="ri-mic-off-line align-bottom text-muted me-2"></i> <span data-key="chat.action.muted">Muted</span></a>
+                                                                        <a class="dropdown-item" href="#"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i> <span data-key="chat.action.delete">Delete</span></a>
                                                                     </div>
                                                                 </div>
                                                             </li>
@@ -268,7 +323,7 @@
                                                     <!-- end chat-conversation-list -->
     
                                                 </div>
-                                                <div class="alert alert-warning alert-dismissible copyclipboard-alert px-4 fade show " id="copyClipBoardChannel" role="alert">
+                                                <div class="alert alert-warning alert-dismissible copyclipboard-alert px-4 fade show " id="copyClipBoardChannel" role="alert" data-key="chat.copy">
                                                     Message copied
                                                 </div>
                                             </div>
@@ -277,7 +332,8 @@
     
                                             <div class="chat-input-section p-3 p-lg-4">
     
-                                                <form id="chatinput-form" enctype="multipart/form-data">
+                                                <form id="chatinput-form" method="post" enctype="multipart/form-data" action="{% if active_conversation %}{% url 'enviar_mensaje' active_conversation.id %}{% else %}#{% endif %}">
+                                                    {% csrf_token %}
                                                     <div class="row g-0 align-items-center">
                                                         <div class="col-auto">
                                                             <div class="chat-input-links me-2">
@@ -290,15 +346,15 @@
                                                         </div>
     
                                                         <div class="col">
-                                                            <div class="chat-input-feedback">
+                                                            <div class="chat-input-feedback" data-key="chat.input.required">
                                                                 Please Enter a Message
                                                             </div>
-                                                            <input type="text" class="form-control chat-input bg-light border-light" id="chat-input" placeholder="Type your message..." autocomplete="off">
+                                                            <input type="text" class="form-control chat-input bg-light border-light" id="chat-input" name="contenido" placeholder="Type your message..." autocomplete="off" data-key="chat.input.placeholder" {% if not active_conversation %}disabled{% endif %}>
                                                         </div>
                                                         <div class="col-auto">
                                                             <div class="chat-input-links ms-2">
                                                                 <div class="links-list-item">
-                                                                    <button type="submit" class="btn btn-success chat-send waves-effect waves-light">
+                                                                    <button type="submit" class="btn btn-success chat-send waves-effect waves-light" {% if not active_conversation %}disabled{% endif %}>
                                                                         <i class="ri-send-plane-2-fill align-bottom"></i>
                                                                     </button>
                                                                 </div>
@@ -371,9 +427,9 @@
                                         <i class="ri-more-2-fill"></i>
                                     </a>
                                     <ul class="dropdown-menu dropdown-menu-end">
-                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i>Archive</a></li>
-                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-mic-off-line align-bottom text-muted me-2"></i>Muted</a></li>
-                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i>Delete</a></li>
+                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i><span data-key="chat.action.archive">Archive</span></a></li>
+                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-mic-off-line align-bottom text-muted me-2"></i><span data-key="chat.action.muted">Muted</span></a></li>
+                                        <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i><span data-key="chat.action.delete">Delete</span></a></li>
                                     </ul>
                                 </div>
                             </div>
@@ -385,24 +441,24 @@
             <div class="p-3 text-center">
                 <img src="{% static 'images/users/avatar-2.jpg'%}" alt="" class="avatar-lg img-thumbnail rounded-circle mx-auto profile-img">
                 <div class="mt-3">
-                    <h5 class="fs-16 mb-1"><a href="javascript:void(0);" class="link-primary username">Lisa Parker</a></h5>
-                    <p class="text-muted"><i class="ri-checkbox-blank-circle-fill me-1 align-bottom text-success"></i>Online</p>
+                    <h5 class="fs-16 mb-1"><a href="javascript:void(0);" class="link-primary username"><span data-key="chat.profile.name">Lisa Parker</span></a></h5>
+                    <p class="text-muted"><i class="ri-checkbox-blank-circle-fill me-1 align-bottom text-success"></i><span data-key="chat.status.online">Online</span></p>
                 </div>
 
                 <div class="d-flex gap-2 justify-content-center">
-                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Message">
+                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Message" data-key="chat.profile.message">
                         <span class="avatar-title rounded bg-light text-body">
                             <i class="ri-question-answer-line"></i>
                         </span>
                     </button>
 
-                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Favourite">
+                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Favourite" data-key="chat.profile.favourite">
                         <span class="avatar-title rounded bg-light text-body">
                             <i class="ri-star-line"></i>
                         </span>
                     </button>
 
-                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Phone">
+                    <button type="button" class="btn avatar-xs p-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Phone" data-key="chat.profile.phone">
                         <span class="avatar-title rounded bg-light text-body">
                             <i class="ri-phone-line"></i>
                         </span>
@@ -416,32 +472,32 @@
                         </button>
 
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i>Archive</a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-mic-off-line align-bottom text-muted me-2"></i>Muted</a></li>
-                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i>Delete</a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-inbox-archive-line align-bottom text-muted me-2"></i><span data-key="chat.action.archive">Archive</span></a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-mic-off-line align-bottom text-muted me-2"></i><span data-key="chat.action.muted">Muted</span></a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0);"><i class="ri-delete-bin-5-line align-bottom text-muted me-2"></i><span data-key="chat.action.delete">Delete</span></a></li>
                         </ul>
                     </div>
                 </div>
             </div>
 
             <div class="border-top border-top-dashed p-3">
-                <h5 class="fs-15 mb-3">Personal Details</h5>
+                <h5 class="fs-15 mb-3" data-key="chat.profile.details">Personal Details</h5>
                 <div class="mb-3">
-                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1">Number</p>
-                    <h6>+(256) 2451 8974</h6>
+                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1" data-key="chat.profile.number.label">Number</p>
+                    <h6 data-key="chat.profile.number.value">+(256) 2451 8974</h6>
                 </div>
                 <div class="mb-3">
-                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1">Email</p>
-                    <h6>lisaparker@gmail.com</h6>
+                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1" data-key="chat.profile.email.label">Email</p>
+                    <h6 data-key="chat.profile.email.value">lisaparker@gmail.com</h6>
                 </div>
                 <div>
-                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1">Location</p>
-                    <h6 class="mb-0">California, USA</h6>
+                    <p class="text-muted text-uppercase fw-medium fs-12 mb-1" data-key="chat.profile.location.label">Location</p>
+                    <h6 class="mb-0" data-key="chat.profile.location.value">California, USA</h6>
                 </div>
             </div>
             
             <div class="border-top border-top-dashed p-3">    
-                <h5 class="fs-15 mb-3">Attached Files</h5>
+                <h5 class="fs-15 mb-3" data-key="chat.profile.files">Attached Files</h5>
                 
                 <div class="vstack gap-2">
                     <div class="border rounded border-dashed p-2">
@@ -454,8 +510,8 @@
                                 </div>
                             </div>
                             <div class="flex-grow-1 overflow-hidden">
-                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block">App pages.zip</a></h5>
-                                <div class="text-muted">2.2MB</div>
+                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block" data-key="chat.profile.file1.name">App pages.zip</a></h5>
+                                <div class="text-muted" data-key="chat.profile.file1.size">2.2MB</div>
                             </div>
                             <div class="flex-shrink-0 ms-2">
                                 <div class="d-flex gap-1">
@@ -465,9 +521,9 @@
                                             <i class="ri-more-fill"></i>
                                         </button>
                                         <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> Share</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> Bookmark</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> Delete</a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.share">Share</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.bookmark">Bookmark</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.delete">Delete</span></a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -485,8 +541,8 @@
                                 </div>
                             </div>
                             <div class="flex-grow-1 overflow-hidden">
-                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block">Velzon admin.ppt</a></h5>
-                                <div class="text-muted">2.4MB</div>
+                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block" data-key="chat.profile.file2.name">Velzon admin.ppt</a></h5>
+                                <div class="text-muted" data-key="chat.profile.file2.size">2.4MB</div>
                             </div>
                             <div class="flex-shrink-0 ms-2">
                                 <div class="d-flex gap-1">
@@ -496,9 +552,9 @@
                                             <i class="ri-more-fill"></i>
                                         </button>
                                         <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> Share</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> Bookmark</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> Delete</a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.share">Share</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.bookmark">Bookmark</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.delete">Delete</span></a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -516,8 +572,8 @@
                                 </div>
                             </div>
                             <div class="flex-grow-1 overflow-hidden">
-                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block">Images.zip</a></h5>
-                                <div class="text-muted">1.2MB</div>
+                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block" data-key="chat.profile.file3.name">Images.zip</a></h5>
+                                <div class="text-muted" data-key="chat.profile.file3.size">1.2MB</div>
                             </div>
                             <div class="flex-shrink-0 ms-2">
                                 <div class="d-flex gap-1">
@@ -527,9 +583,9 @@
                                             <i class="ri-more-fill"></i>
                                         </button>
                                         <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> Share</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> Bookmark</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> Delete</a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.share">Share</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.bookmark">Bookmark</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.delete">Delete</span></a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -547,8 +603,8 @@
                                 </div>
                             </div>
                             <div class="flex-grow-1 overflow-hidden">
-                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block">bg-pattern.png</a></h5>
-                                <div class="text-muted">1.1MB</div>
+                                <h5 class="fs-13 mb-1"><a href="#" class="text-body text-truncate d-block" data-key="chat.profile.file4.name">bg-pattern.png</a></h5>
+                                <div class="text-muted" data-key="chat.profile.file4.size">1.1MB</div>
                             </div>
                             <div class="flex-shrink-0 ms-2">
                                 <div class="d-flex gap-1">
@@ -558,9 +614,9 @@
                                             <i class="ri-more-fill"></i>
                                         </button>
                                         <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> Share</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> Bookmark</a></li>
-                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> Delete</a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-share-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.share">Share</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-bookmark-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.bookmark">Bookmark</span></a></li>
+                                            <li><a class="dropdown-item" href="#"><i class="ri-delete-bin-line align-bottom me-2 text-muted"></i> <span data-key="chat.file.delete">Delete</span></a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -569,7 +625,7 @@
                     </div>
 
                     <div class="text-center mt-2">
-                        <button type="button" class="btn btn-danger">Load more <i class="ri-arrow-right-fill align-bottom ms-1"></i></button>
+                        <button type="button" class="btn btn-danger"><span data-key="chat.profile.load_more">Load more</span> <i class="ri-arrow-right-fill align-bottom ms-1"></i></button>
                     </div>
                 </div>
             </div>

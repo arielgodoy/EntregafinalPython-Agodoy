@@ -1,4 +1,5 @@
 {% load static %}
+{% load permisos_tags %}
 
 {% block sidebar %}
 <!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
@@ -142,6 +143,51 @@
                         </ul>
                     </div>
                 </li>
+
+                {% has_permiso "chat.inbox" "ingresar" as can_chat %}
+                {% if can_chat %}
+                <!-- Menú Chat -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarChat" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarChat">
+                        <i class="ri-chat-3-line"></i> <span data-key="menu.chat">Mensajería</span>
+                        {% if chat_unread_count|default:0 > 0 %}
+                            <span class="badge rounded-pill bg-danger ms-2">{{ chat_unread_count }}</span>
+                        {% endif %}
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarChat">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'chat_inbox' %}" class="nav-link" data-key="menu.chat">Mensajería</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'centro_mensajes' %}" class="nav-link" data-key="menu.chat.center">Centro de Mensajes</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                {% endif %}
+
+                {% if request.user.is_authenticated and request.session.empresa_id %}
+                <!-- Menú Notificaciones -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarNotificaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarNotificaciones">
+                        <i class="ri-notification-3-line"></i> <span data-key="menu.notifications">Notificaciones</span>
+                        {% if notifications_unread_count|default:0 > 0 %}
+                            <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_count }}</span>
+                        {% endif %}
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarNotificaciones">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'notificaciones:mis_notificaciones' %}" class="nav-link" data-key="menu.notifications">Notificaciones</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{% url 'notificaciones:centro_alertas' %}" class="nav-link" data-key="menu.notifications.center">Centro de Alertas</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                {% endif %}
 
                 {% if request.user.is_staff %}
                 <!-- Menú Control de Acceso -->

@@ -6,7 +6,8 @@ from django.conf.urls.static import static
 from django.contrib.auth.views import LoginView
 
 urlpatterns = [
-    
+    path('chat/', views.chat_inbox, name='chat_inbox'),
+    path('centro/', views.centro_mensajes, name='centro_mensajes'),
     path('conversaciones/', views.lista_conversaciones, name='lista_conversaciones'),
     path('conversaciones/<int:conversacion_id>/enviar-mensaje/', views.enviar_mensaje, name='enviar_mensaje'),
     path('conversaciones/crear/', views.crear_conversacion, name='crear_conversacion'),

@@ -167,3 +167,10 @@ COMPORTAMIENTO
 
 INCUMPLIMIENTO
 - CUALQUIER RESPUESTA QUE NO CUMPLA ESTE FORMATO SE CONSIDERA INVÁLIDA.
+
+
+Demo data local
+- Comando: python manage.py seed_demo_comms --empresa <empresa_id opcional> --users <n opcional> --convs <n opcional> --msgs <n opcional> --notifs <n opcional>
+- Reset: python manage.py seed_demo_comms --empresa <empresa_id opcional> --reset
+- Password demo (solo local): demo12345
+- Advertencia: no ejecutar en produccion.

@@ -1,0 +1,125 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Notificaciones{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Notificaciones" pagetitle="Notificaciones" title_key="notifications.page.title" pagetitle_key="notifications.page.title" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="mb-4" data-key="notifications.page.title">Notificaciones</h1>
+                    <form method="get" class="row g-3 align-items-end mb-4">
+                        <div class="col-12 col-md-4">
+                            <label for="filter-tipo" class="form-label" data-key="notifications.filter.type">Tipo</label>
+                            <select id="filter-tipo" name="tipo" class="form-select">
+                                <option value="all" {% if current_tipo == "all" %}selected{% endif %} data-key="notifications.type.all">Todos</option>
+                                <option value="message" {% if current_tipo == "message" %}selected{% endif %} data-key="notifications.type.message">Mensajes</option>
+                                <option value="alert" {% if current_tipo == "alert" %}selected{% endif %} data-key="notifications.type.alert">Alertas</option>
+                                <option value="system" {% if current_tipo == "system" %}selected{% endif %} data-key="notifications.type.system">Sistema</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label for="filter-estado" class="form-label" data-key="notifications.filter.state">Estado</label>
+                            <select id="filter-estado" name="estado" class="form-select">
+                                <option value="all" {% if current_estado == "all" %}selected{% endif %} data-key="notifications.state.all">Todas</option>
+                                <option value="unread" {% if current_estado == "unread" %}selected{% endif %} data-key="notifications.state.unread">No leidas</option>
+                                <option value="read" {% if current_estado == "read" %}selected{% endif %} data-key="notifications.state.read">Leidas</option>
+                            </select>
+                        </div>
+                        {% if show_scope %}
+                        <div class="col-12 col-md-4">
+                            <label for="filter-scope" class="form-label" data-key="notifications.scope.label">Alcance</label>
+                            <select id="filter-scope" name="scope" class="form-select">
+                                <option value="active" {% if current_scope == "active" %}selected{% endif %} data-key="notifications.scope.active_plus_global">Activa + Global</option>
+                                <option value="only_active" {% if current_scope == "only_active" %}selected{% endif %} data-key="notifications.scope.only_active">Solo empresa activa</option>
+                                <option value="only_global" {% if current_scope == "only_global" %}selected{% endif %} data-key="notifications.scope.only_global">Solo global</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                        <div class="col-12 col-md-4">
+                            <button type="submit" class="btn btn-primary" data-key="notifications.filter.apply">Aplicar filtros</button>
+                        </div>
+                    </form>
+
+                    {% if page_obj.object_list %}
+                        <div class="list-group">
+                            {% for item in page_obj.object_list %}
+                                <div class="list-group-item d-flex flex-column flex-md-row justify-content-between align-items-start gap-3">
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-2">
+                                            {% if item.is_read %}
+                                                <span class="badge bg-secondary" data-key="notifications.state.read">Leidas</span>
+                                            {% else %}
+                                                <span class="badge bg-success" data-key="notifications.state.unread">No leidas</span>
+                                            {% endif %}
+                                            {% if item.tipo == "MESSAGE" %}
+                                                <span class="badge bg-info" data-key="notifications.type.message">Mensajes</span>
+                                            {% elif item.tipo == "ALERT" %}
+                                                <span class="badge bg-danger" data-key="notifications.type.alert">Alertas</span>
+                                            {% else %}
+                                                <span class="badge bg-primary" data-key="notifications.type.system">Sistema</span>
+                                            {% endif %}
+                                        </div>
+                                        <h5 class="mb-1">{{ item.titulo }}</h5>
+                                        {% if item.cuerpo %}
+                                            <p class="mb-2 text-muted">{{ item.cuerpo }}</p>
+                                        {% endif %}
+                                        <small class="text-muted">{{ item.created_at|date:"Y-m-d H:i" }}</small>
+                                    </div>
+                                    <div class="d-flex flex-column gap-2">
+                                        <a class="btn btn-outline-primary" href="{% url 'notificaciones:ver_notificacion' item.id %}" data-key="notifications.open">Abrir</a>
+                                        {% if not item.is_read %}
+                                            <a class="btn btn-outline-secondary" href="{% url 'notificaciones:ver_notificacion' item.id %}?only_mark=1" data-key="notifications.mark_read">Marcar leida</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <nav class="mt-4" aria-label="pagination">
+                            <ul class="pagination">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        {% if show_scope %}
+                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&tipo={{ current_tipo }}&estado={{ current_estado }}&scope={{ current_scope }}" data-key="notifications.pagination.prev">Anterior</a>
+                                        {% else %}
+                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&tipo={{ current_tipo }}&estado={{ current_estado }}" data-key="notifications.pagination.prev">Anterior</a>
+                                        {% endif %}
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link" data-key="notifications.pagination.prev">Anterior</span>
+                                    </li>
+                                {% endif %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                                </li>
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        {% if show_scope %}
+                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&tipo={{ current_tipo }}&estado={{ current_estado }}&scope={{ current_scope }}" data-key="notifications.pagination.next">Siguiente</a>
+                                        {% else %}
+                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&tipo={{ current_tipo }}&estado={{ current_estado }}" data-key="notifications.pagination.next">Siguiente</a>
+                                        {% endif %}
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link" data-key="notifications.pagination.next">Siguiente</span>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% else %}
+                        <div class="alert alert-light" data-key="notifications.no_results">Sin resultados</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

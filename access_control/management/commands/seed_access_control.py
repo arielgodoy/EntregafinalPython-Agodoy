@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
-from access_control.models import Vista, PerfilAcceso, PerfilAccesoDetalle
+from access_control.models import Vista, PerfilAcceso, PerfilAccesoDetalle, UsuarioPerfilEmpresa
+from access_control.services.perfiles import apply_profile_to_user_empresa
 
 
 class Command(BaseCommand):
@@ -14,6 +15,11 @@ class Command(BaseCommand):
             'system_config',
             'company_config',
             'email_accounts',
+            'chat.inbox',
+            'chat.thread',
+            'chat.create',
+            'chat.send_message',
+            'chat.delete',
         ]
         for vista_nombre in vistas:
             vista, created = Vista.objects.get_or_create(nombre=vista_nombre)
@@ -30,6 +36,21 @@ class Command(BaseCommand):
                     'Maestro Usuarios': {
                         'ingresar': True,
                     },
+                    'chat.inbox': {
+                        'ingresar': True,
+                    },
+                    'chat.thread': {
+                        'ingresar': True,
+                    },
+                    'chat.create': {
+                        'ingresar': True,
+                    },
+                    'chat.send_message': {
+                        'ingresar': True,
+                    },
+                    'chat.delete': {
+                        'ingresar': False,
+                    },
                 },
             },
             {
@@ -39,6 +60,21 @@ class Command(BaseCommand):
                     'Maestro Usuarios': {
                         'ingresar': True,
                         'crear': True,
+                    },
+                    'chat.inbox': {
+                        'ingresar': True,
+                    },
+                    'chat.thread': {
+                        'ingresar': True,
+                    },
+                    'chat.create': {
+                        'ingresar': True,
+                    },
+                    'chat.send_message': {
+                        'ingresar': True,
+                    },
+                    'chat.delete': {
+                        'ingresar': False,
                     },
                 },
             },
@@ -53,6 +89,21 @@ class Command(BaseCommand):
                         'eliminar': True,
                         'autorizar': True,
                         'supervisor': True,
+                    },
+                    'chat.inbox': {
+                        'ingresar': True,
+                    },
+                    'chat.thread': {
+                        'ingresar': True,
+                    },
+                    'chat.create': {
+                        'ingresar': True,
+                    },
+                    'chat.send_message': {
+                        'ingresar': True,
+                    },
+                    'chat.delete': {
+                        'ingresar': True,
                     },
                 },
             },
@@ -92,3 +143,11 @@ class Command(BaseCommand):
                     vista=vista,
                     defaults=defaults,
                 )
+
+        for asignacion in UsuarioPerfilEmpresa.objects.select_related('usuario', 'empresa', 'perfil'):
+            apply_profile_to_user_empresa(
+                asignacion.usuario,
+                asignacion.empresa,
+                asignacion.perfil,
+                overwrite=False,
+            )

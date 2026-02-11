@@ -73,6 +73,7 @@ INSTALLED_APPS = [
      'evaluaciones',
      'control_de_proyectos',
     'control_operacional',
+    'notificaciones',
 ]
 
 MIDDLEWARE = [
@@ -104,6 +105,8 @@ TEMPLATES = [
                 'access_control.context_processors.global_context',
                 'access_control.context_processors.empresas_disponibles',
                 'settings.context_processors.user_preferences_to_localstorage',
+                'chat.context_processors.chat_unread_count',
+                'notificaciones.context_processors.notifications_unread_count',
             ],
         },
     },
