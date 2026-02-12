@@ -84,11 +84,13 @@
 - Cada cambio funcional debe incluir o actualizar tests relevantes.
 
 ## 9) Checklist antes de entregar cambios
-- Migraciones: makemigrations + migrate sin errores.
-- Lint básico: no errores obvios en consola.
-- Tests: ejecutar python manage.py test sin fallos.
-- Multiempresa: validar que listados/creación/edición respetan empresa activa.
-- UI: acordeones/collapses funcionan (abrir/cerrar) y no hay IDs duplicados.
+
+Comandos oficiales (local)
+- scripts\run_local.ps1
+- scripts\test_all.ps1
+- scripts\test_app.ps1 -App control_operacional
+- scripts\migrate_local.ps1
+Siempre ejecutar desde scripts para evitar rutas rotas.
 
 REGLA OBLIGATORIA – SISTEMA MULTILENGUAJE (i18n)
 

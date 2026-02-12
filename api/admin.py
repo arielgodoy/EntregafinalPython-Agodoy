@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from .models import Contratopublicidad, LmovimientosDetalle19
 
-# Register your models here.
+admin.site.register(Contratopublicidad)
+admin.site.register(LmovimientosDetalle19)
 

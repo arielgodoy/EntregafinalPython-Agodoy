@@ -117,12 +117,30 @@
                 </li>
                 {% endif %}
 
+                {% has_permiso "Control Operacional Dashboard" "ingresar" as can_co_dashboard %}
+                {% has_permiso "control_operacional.alertas" "ingresar" as can_co_alertas %}
+                {% if can_co_dashboard or can_co_alertas %}
                 <!-- Menú Control Operacional -->
                 <li class="nav-item">
-                    <a class="nav-link menu-link" href="{% url 'control_operacional:dashboard' %}">
+                    <a class="nav-link menu-link" href="#sidebarControlOperacional" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlOperacional">
                         <i class="ri-dashboard-line"></i> <span data-key="menu.control_operacional">Control Operacional</span>
                     </a>
+                    <div class="collapse menu-dropdown" id="sidebarControlOperacional">
+                        <ul class="nav nav-sm flex-column">
+                            {% if can_co_dashboard %}
+                            <li class="nav-item">
+                                <a href="{% url 'control_operacional:dashboard' %}" class="nav-link" data-key="control_operacional.dashboard.title">Dashboard</a>
+                            </li>
+                            {% endif %}
+                            {% if can_co_alertas %}
+                            <li class="nav-item">
+                                <a href="{% url 'control_operacional:alertas_operacionales' %}" class="nav-link" data-key="menu.control_operacional.alertas">Alertas Operacionales</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
                 </li>
+                {% endif %}
 
                 <!-- Menú Cuentas -->
                 <li class="nav-item">
@@ -172,18 +190,30 @@
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarNotificaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarNotificaciones">
                         <i class="ri-notification-3-line"></i> <span data-key="menu.notifications">Notificaciones</span>
-                        {% if notifications_unread_count|default:0 > 0 %}
-                            <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_count }}</span>
-                        {% endif %}
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarNotificaciones">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                <a href="{% url 'notificaciones:mis_notificaciones' %}" class="nav-link" data-key="menu.notifications">Notificaciones</a>
+                                <a href="{% url 'notificaciones:mis_notificaciones' %}" class="nav-link d-flex align-items-center justify-content-between">
+                                    <span data-key="menu.notifications">Notificaciones</span>
+                                    {% if notifications_unread_all|default:0 > 0 %}
+                                        <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_all }}</span>
+                                    {% endif %}
+                                </a>
                             </li>
                             <li class="nav-item">
-                                <a href="{% url 'notificaciones:centro_alertas' %}" class="nav-link" data-key="menu.notifications.center">Centro de Alertas</a>
+                                <a href="{% url 'notificaciones:centro_alertas' %}" class="nav-link d-flex align-items-center justify-content-between">
+                                    <span data-key="menu.notifications.center">Centro de Alertas</span>
+                                    {% if notifications_unread_alerts|default:0 > 0 %}
+                                        <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_alerts }}</span>
+                                    {% endif %}
+                                </a>
                             </li>
+                            {% if request.user.is_staff %}
+                            <li class="nav-item">
+                                <a href="{% url 'notificaciones:forzar_notificaciones' %}" class="nav-link" data-key="menu.notifications.force">Enviar notificaciones forzadas</a>
+                            </li>
+                            {% endif %}
                         </ul>
                     </div>
                 </li>

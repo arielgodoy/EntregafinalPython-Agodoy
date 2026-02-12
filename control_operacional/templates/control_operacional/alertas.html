@@ -1,0 +1,80 @@
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Alertas Operacionales{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include "partials/page-title.html" with pagetitle="Control Operacional" title="Alertas Operacionales" title_key="control_operacional.alertas.title" pagetitle_key="control_operacional.dashboard.pagetitle" %}
+                {% endblock pagetitle %}
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex flex-wrap gap-2 mb-3">
+                                    <span class="badge bg-danger">
+                                        <span data-key="control_operacional.alerts.severity.high">Alta</span>: {{ conteo_severidad.HIGH }}
+                                    </span>
+                                    <span class="badge bg-warning text-dark">
+                                        <span data-key="control_operacional.alerts.severity.medium">Media</span>: {{ conteo_severidad.MEDIUM }}
+                                    </span>
+                                    <span class="badge bg-success">
+                                        <span data-key="control_operacional.alerts.severity.low">Baja</span>: {{ conteo_severidad.LOW }}
+                                    </span>
+                                </div>
+
+                                <div class="table-responsive">
+                                    <table class="table table-striped align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col" data-key="control_operacional.alerts.table.severity">Severidad</th>
+                                                <th scope="col" data-key="control_operacional.alerts.table.project">Proyecto</th>
+                                                <th scope="col" data-key="control_operacional.alerts.table.reason">Motivo</th>
+                                                <th scope="col" data-key="control_operacional.alerts.table.action">Accion</th>
+                                                <th scope="col" data-key="control_operacional.alerts.table.ack">Reconocer</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for alerta in alertas %}
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge {% if alerta.severity == 'HIGH' %}bg-danger{% elif alerta.severity == 'MEDIUM' %}bg-warning text-dark{% else %}bg-success{% endif %}" data-key="{{ alerta.severity_key }}">{{ alerta.severity_label }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="fw-semibold">{{ alerta.proyecto_nombre }}</div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="fw-semibold" data-key="{{ alerta.title_key }}">{{ alerta.title }}</div>
+                                                        <div class="text-muted" data-key="{{ alerta.description_key }}">{{ alerta.description }}</div>
+                                                    </td>
+                                                    <td>
+                                                        <a href="{{ alerta.url }}" class="btn btn-sm btn-outline-primary" data-key="control_operacional.alerts.action.open">Abrir</a>
+                                                    </td>
+                                                    <td>
+                                                        <form method="post" action="{% url 'control_operacional:ack_alerta' %}">
+                                                            {% csrf_token %}
+                                                            <input type="hidden" name="alert_key" value="{{ alerta.key }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-secondary" data-key="control_operacional.alerts.action.ack">Reconocer</button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                            {% empty %}
+                                                <tr>
+                                                    <td colspan="5" class="text-center text-muted" data-key="control_operacional.alertas.empty">Sin alertas operacionales</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock content %}

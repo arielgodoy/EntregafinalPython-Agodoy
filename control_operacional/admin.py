@@ -1,3 +1,6 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import RegistroOperacional, AlertaAck
+
+admin.site.register(RegistroOperacional)
+admin.site.register(AlertaAck)

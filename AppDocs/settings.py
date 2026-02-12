@@ -107,6 +107,7 @@ TEMPLATES = [
                 'settings.context_processors.user_preferences_to_localstorage',
                 'chat.context_processors.chat_unread_count',
                 'notificaciones.context_processors.notifications_unread_count',
+                'notificaciones.context_processors.notifications_sidebar_counts',
             ],
         },
     },

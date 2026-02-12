@@ -11,4 +11,5 @@ urlpatterns = [
     path("mis-notificaciones/", views.mis_notificaciones, name="mis_notificaciones"),
     path("mis-notificaciones/<int:pk>/", views.ver_notificacion, name="ver_notificacion"),
     path("centro/", views.centro_alertas, name="centro_alertas"),
+    path("forzar/", views.forzar_notificaciones, name="forzar_notificaciones"),
 ]

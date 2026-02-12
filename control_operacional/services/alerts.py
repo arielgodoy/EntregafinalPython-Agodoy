@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.urls import reverse
 from django.utils import timezone
 
 from access_control.models import Permiso, Vista
+from control_de_proyectos.models import Proyecto
 from notificaciones.models import Notification
 from notificaciones.services import create_notification
 
@@ -78,3 +81,77 @@ def notify_project_overdue(proyecto, actor):
         created += 1
 
     return created
+
+
+def build_operational_alerts(empresa_id):
+    today = timezone.localdate()
+    proyectos = Proyecto.objects.filter(empresa_interna_id=empresa_id).only(
+        'id',
+        'nombre',
+        'fecha_inicio_estimada',
+        'fecha_termino_estimada',
+        'fecha_termino_real',
+    )
+
+    alertas = []
+    for proyecto in proyectos:
+        fecha_inicio = proyecto.fecha_inicio_estimada
+        fecha_termino = proyecto.fecha_termino_estimada
+        fecha_real = proyecto.fecha_termino_real
+
+        overdue = bool(fecha_termino and fecha_real is None and fecha_termino < today)
+        risk = bool(
+            fecha_termino
+            and fecha_real is None
+            and not overdue
+            and today > (fecha_termino - timedelta(days=7))
+        )
+
+        if overdue:
+            alertas.append({
+                'key': f"project:{proyecto.id}:overdue",
+                'proyecto_id': proyecto.id,
+                'proyecto_nombre': proyecto.nombre,
+                'severity': 'HIGH',
+                'severity_key': 'control_operacional.alerts.severity.high',
+                'severity_label': 'Alta',
+                'title': 'Proyecto atrasado',
+                'title_key': 'control_operacional.alerts.overdue.title',
+                'description': 'Fecha de termino estimada vencida',
+                'description_key': 'control_operacional.alerts.overdue.description',
+                'url': reverse('control_de_proyectos:detalle_proyecto', kwargs={'pk': proyecto.id}),
+                'created_at': fecha_termino or today,
+            })
+        elif risk:
+            alertas.append({
+                'key': f"project:{proyecto.id}:risk",
+                'proyecto_id': proyecto.id,
+                'proyecto_nombre': proyecto.nombre,
+                'severity': 'MEDIUM',
+                'severity_key': 'control_operacional.alerts.severity.medium',
+                'severity_label': 'Media',
+                'title': 'Proyecto en riesgo',
+                'title_key': 'control_operacional.alerts.risk.title',
+                'description': 'Fecha de termino estimada en los proximos 7 dias',
+                'description_key': 'control_operacional.alerts.risk.description',
+                'url': reverse('control_de_proyectos:detalle_proyecto', kwargs={'pk': proyecto.id}),
+                'created_at': fecha_termino or today,
+            })
+
+        if fecha_inicio is None or fecha_termino is None:
+            alertas.append({
+                'key': f"project:{proyecto.id}:missing_dates",
+                'proyecto_id': proyecto.id,
+                'proyecto_nombre': proyecto.nombre,
+                'severity': 'LOW',
+                'severity_key': 'control_operacional.alerts.severity.low',
+                'severity_label': 'Baja',
+                'title': 'Proyecto sin fechas',
+                'title_key': 'control_operacional.alerts.missing_dates.title',
+                'description': 'Completar fechas estimadas del proyecto',
+                'description_key': 'control_operacional.alerts.missing_dates.description',
+                'url': reverse('control_de_proyectos:detalle_proyecto', kwargs={'pk': proyecto.id}),
+                'created_at': today,
+            })
+
+    return alertas

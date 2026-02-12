@@ -15,6 +15,7 @@ class Command(BaseCommand):
             'system_config',
             'company_config',
             'email_accounts',
+            'control_operacional.alertas',
             'chat.inbox',
             'chat.thread',
             'chat.create',
@@ -34,6 +35,9 @@ class Command(BaseCommand):
                 'descripcion': 'Acceso basico',
                 'detalles': {
                     'Maestro Usuarios': {
+                        'ingresar': True,
+                    },
+                    'control_operacional.alertas': {
                         'ingresar': True,
                     },
                     'chat.inbox': {
@@ -60,6 +64,9 @@ class Command(BaseCommand):
                     'Maestro Usuarios': {
                         'ingresar': True,
                         'crear': True,
+                    },
+                    'control_operacional.alertas': {
+                        'ingresar': True,
                     },
                     'chat.inbox': {
                         'ingresar': True,
@@ -89,6 +96,9 @@ class Command(BaseCommand):
                         'eliminar': True,
                         'autorizar': True,
                         'supervisor': True,
+                    },
+                    'control_operacional.alertas': {
+                        'ingresar': True,
                     },
                     'chat.inbox': {
                         'ingresar': True,

@@ -53,6 +53,9 @@ def chat_inbox(request):
         participantes=request.user,
     ).prefetch_related('participantes')
 
+    for conversacion in conversaciones:
+        conversacion.display_title = _get_conversacion_titulo(conversacion, request.user)
+
     active_conversation = None
     conversation_id = request.GET.get("conversation_id")
     if conversation_id and str(conversation_id).isdigit():
@@ -63,7 +66,13 @@ def chat_inbox(request):
     if active_conversation:
         mark_conversation_read(active_conversation, request.user)
 
-    mensajes = Mensaje.objects.filter(conversacion=active_conversation).select_related('remitente') if active_conversation else Mensaje.objects.none()
+    mensajes = (
+        Mensaje.objects.filter(conversacion=active_conversation)
+        .select_related('remitente')
+        .order_by('fecha_creacion')
+        if active_conversation
+        else Mensaje.objects.none()
+    )
     contacto_ids = UsuarioPerfilEmpresa.objects.filter(
         empresa_id=empresa_id,
     ).values_list('usuario_id', flat=True)
@@ -102,6 +111,9 @@ def centro_mensajes(request):
         participantes=request.user,
     ).prefetch_related('participantes')
 
+    for conversacion in conversaciones:
+        conversacion.display_title = _get_conversacion_titulo(conversacion, request.user)
+
     if search_query:
         mensaje_ids = Mensaje.objects.filter(
             conversacion__empresa_id=empresa_id,
@@ -132,7 +144,13 @@ def centro_mensajes(request):
     if not active_conversation:
         active_conversation = conversaciones.first()
 
-    mensajes = Mensaje.objects.filter(conversacion=active_conversation).select_related('remitente') if active_conversation else Mensaje.objects.none()
+    mensajes = (
+        Mensaje.objects.filter(conversacion=active_conversation)
+        .select_related('remitente')
+        .order_by('fecha_creacion')
+        if active_conversation
+        else Mensaje.objects.none()
+    )
     if active_conversation and search_query:
         mensajes = mensajes.filter(contenido__icontains=search_query)
 
