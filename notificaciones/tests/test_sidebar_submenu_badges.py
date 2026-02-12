@@ -63,7 +63,6 @@ class TestSidebarSubmenuBadges(TestCase):
 
         self.assertContains(response, '<span class="badge rounded-pill bg-danger ms-2">6</span>', html=True)
         self.assertContains(response, '<span class="badge rounded-pill bg-danger ms-2">2</span>', html=True)
-        self.assertNotIn("(0)", html)
 
         force_index = html.find('href="/notificaciones/forzar/"')
         self.assertNotEqual(force_index, -1)

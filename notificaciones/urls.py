@@ -12,4 +12,5 @@ urlpatterns = [
     path("mis-notificaciones/<int:pk>/", views.ver_notificacion, name="ver_notificacion"),
     path("centro/", views.centro_alertas, name="centro_alertas"),
     path("forzar/", views.forzar_notificaciones, name="forzar_notificaciones"),
+    path("alerta-personalizada/", views.alerta_personalizada, name="alerta_personalizada"),
 ]

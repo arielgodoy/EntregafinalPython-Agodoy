@@ -47,6 +47,8 @@ class EmpresaActivaMiddleware:
             "/admin/",
             "/static/",
             "/media/",
+            "/notificaciones/forzar/",  # Herramienta admin: permite elegir empresa objetivo explícitamente
+            "/notificaciones/alerta-personalizada/",  # Herramienta admin: permite elegir empresa objetivo explícitamente
         )
 
         if path == selector_url or path.startswith(whitelist_prefixes):

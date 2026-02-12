@@ -1,0 +1,90 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Alerta personalizada{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Alerta personalizada" pagetitle="Notificaciones" title_key="notifications.custom.title" pagetitle_key="menu.notifications" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="mb-2" data-key="notifications.custom.title">Alerta personalizada</h1>
+                    <p class="text-muted" data-key="notifications.custom.subtitle">Crear una notificación manual</p>
+
+                    {% if error_key %}
+                        <div class="alert alert-danger" role="alert" data-key="{{ error_key }}">Error</div>
+                    {% endif %}
+
+                    {% if success_key %}
+                        <div class="alert alert-success" role="alert" data-key="{{ success_key }}">Notificación enviada</div>
+                    {% endif %}
+
+                    <form method="get" class="row g-3 mb-4">
+                        <div class="col-12 col-md-6">
+                            <label for="empresa" class="form-label" data-key="notifications.custom.company">Empresa objetivo</label>
+                            <select id="empresa" name="empresa" class="form-select" onchange="this.form.submit()">
+                                <option value="" data-key="notifications.force.company.placeholder">Seleccione empresa</option>
+                                {% for emp in empresas %}
+                                    <option value="{{ emp.id }}" {% if emp.id == empresa_objetivo_id %}selected{% endif %}>{{ emp.codigo }} - {{ emp.descripcion }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+
+                    <form method="post" class="row g-3">
+                        {% csrf_token %}
+                        <input type="hidden" name="empresa_objetivo_id" value="{{ empresa_objetivo_id }}">
+                        <div class="col-12 col-md-6">
+                            <label for="destinatario_id" class="form-label" data-key="notifications.custom.recipient">Destinatario</label>
+                            <select id="destinatario_id" name="destinatario_id" class="form-select" {% if not empresa_objetivo or not tiene_destinatarios %}disabled{% endif %}>
+                                {% if not empresa_objetivo %}
+                                    <option value="" data-key="notifications.force.company.placeholder">Seleccione empresa</option>
+                                {% elif not tiene_destinatarios %}
+                                    <option value="" data-key="notifications.custom.recipient.no_users">Sin usuarios asignados a esta empresa</option>
+                                {% else %}
+                                    {% for user in destinatarios %}
+                                        <option value="{{ user.id }}" {% if user.id|stringformat:"s" == destinatario_id|stringformat:"s" %}selected{% endif %}>{{ user.username }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="tipo" class="form-label" data-key="notifications.custom.type">Tipo</label>
+                            <select id="tipo" name="tipo" class="form-select">
+                                <option value="MESSAGE" {% if tipo == "MESSAGE" %}selected{% endif %} data-key="notifications.type.message">MESSAGE</option>
+                                <option value="ALERT" {% if tipo == "ALERT" %}selected{% endif %} data-key="notifications.type.alert">ALERT</option>
+                                <option value="SYSTEM" {% if tipo == "SYSTEM" %}selected{% endif %} data-key="notifications.type.system">SYSTEM</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="titulo" class="form-label" data-key="notifications.custom.subject">Título</label>
+                            <input id="titulo" name="titulo" type="text" class="form-control" value="{{ titulo }}" placeholder="Título" data-key="notifications.custom.subject">
+                        </div>
+                        <div class="col-12">
+                            <label for="cuerpo" class="form-label" data-key="notifications.custom.body">Cuerpo</label>
+                            <textarea id="cuerpo" name="cuerpo" class="form-control" rows="4" placeholder="Cuerpo" data-key="notifications.custom.body">{{ cuerpo }}</textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="url" class="form-label" data-key="notifications.custom.url">URL (opcional)</label>
+                            <input id="url" name="url" type="text" class="form-control" value="{{ url }}" placeholder="https://" data-key="notifications.custom.url">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="force_membership" name="force_membership" {% if force_membership %}checked{% endif %}>
+                                <label class="form-check-label" for="force_membership" data-key="notifications.custom.force_membership">Crear permiso mínimo si falta</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary" data-key="notifications.custom.submit" {% if not empresa_objetivo or not tiene_destinatarios %}disabled{% endif %}>Enviar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
