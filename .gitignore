@@ -5,7 +5,8 @@ __pycache__/
 
 
 media/*
-!media/avatares/
+!media/avatares/.gitkeep
+media/avatares/*
 !media/.gitkeep
 media/archivos_documentos/
 
