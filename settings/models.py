@@ -119,6 +119,8 @@ class UserPreferences(models.Model):
     send_headers = models.BooleanField(default=False)
     send_documents = models.BooleanField(default=False)
 
+    fecha_sistema = models.DateField(null=True, blank=True)
+
     def __str__(self):
         return f"Preferences for {self.user.username}"
 

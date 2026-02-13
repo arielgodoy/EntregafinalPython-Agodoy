@@ -92,6 +92,31 @@
     </div>
   </div>
 
+  <!-- Modal Fecha Sistema -->
+  <div class="modal fade" id="systemDateModal" tabindex="-1" aria-labelledby="systemDateLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="systemDateLabel" data-key="system_date.modal.title">System date</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="system_date_input" data-key="system_date.modal.input.label">System date</label>
+            <input type="date" id="system_date_input" name="fecha_sistema" class="form-control" value="{{ fecha_sistema }}">
+          </div>
+          <div id="system-date-error-invalid" class="text-danger small d-none" data-key="system_date.error.invalid">Invalid date</div>
+          <div id="system-date-error-server" class="text-danger small d-none" data-key="system_date.error.server">Server error</div>
+          <div id="system-date-success" class="text-success small d-none" data-key="system_date.success">Saved</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="system_date.modal.cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="system_date_save_btn" data-key="system_date.modal.save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {% block right_sidebar %}
     {% include "partials/customizer.html" %}
   {% endblock right_sidebar %}
@@ -226,12 +251,14 @@
     <script src="{% static 'js/pages/plugins/lord-icon-2.1.0.js'%}"></script>
     <script src="{% static 'libs/toastify-js/src/toastify.js' %}"></script>
     <script src="{% static 'js/plugins.js'%}"></script>
+    <script src="{% static 'js/system_date.js'%}"></script>
 
     {% block extra_js %}
     {% endblock extra_js %}
 
     <script src="{% static 'js/app.js'%}"></script>
     <script src="{% static 'js/notifications.js'%}"></script>
+    <script src="{% static 'js/global_search.js'%}"></script>
   {% endblock javascript %}
 </body>
 

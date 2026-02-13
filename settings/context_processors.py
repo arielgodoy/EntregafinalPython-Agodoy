@@ -1,5 +1,19 @@
 from .models import UserPreferences, ThemePreferences
 
+
+def system_date_context(request):
+    if not request.user.is_authenticated:
+        return {}
+
+    fecha = request.session.get("fecha_sistema")
+    if not fecha:
+        prefs = UserPreferences.objects.filter(user=request.user).first()
+        if prefs and prefs.fecha_sistema:
+            fecha = prefs.fecha_sistema.isoformat()
+            request.session["fecha_sistema"] = fecha
+
+    return {"fecha_sistema": fecha}
+
 def user_preferences_to_localstorage(request):
     if not request.user.is_authenticated:
         return {}

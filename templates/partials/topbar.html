@@ -34,91 +34,31 @@
                         </button>
 
                         <!-- App Search-->
-                        <form class="app-search d-none d-md-block">
-                            <!-- <div class="position-relative">
-                                <input type="text" class="form-control" placeholder="Search..." autocomplete="off" id="search-options" value="">
+                        <form class="app-search d-none d-md-block" id="global-search-form" autocomplete="off">
+                            <div class="position-relative">
+                                <input type="text" class="form-control" placeholder="Buscar..." autocomplete="off" id="search-options" value="" data-key="search.placeholder">
                                 <span class="mdi mdi-magnify search-widget-icon"></span>
                                 <span class="mdi mdi-close-circle search-widget-icon search-widget-icon-close d-none" id="search-close-options"></span>
-                            </div> -->
+                            </div>
                             <div class="dropdown-menu dropdown-menu-lg" id="search-dropdown">
                                 <div data-simplebar style="max-height: 320px;">
-                                    <!-- item-->
                                     <div class="dropdown-header">
-                                        <h6 class="text-overflow text-muted mb-0 text-uppercase">Recent Searches</h6>
+                                        <h6 class="text-overflow text-muted mb-0 text-uppercase" data-key="search.recent">Recent Searches</h6>
                                     </div>
 
-                                    <div class="dropdown-item bg-transparent text-wrap">
-                                        <a href="{% url 'biblioteca:listar_propiedades'%}" class="btn btn-soft-secondary btn-sm rounded-pill">how to setup <i class="mdi mdi-magnify ms-1"></i></a>
-                                        <a href="{% url 'biblioteca:listar_propiedades'%}" class="btn btn-soft-secondary btn-sm rounded-pill">buttons <i class="mdi mdi-magnify ms-1"></i></a>
-                                    </div>
-                                    <!-- item-->
+                                    <div class="dropdown-item bg-transparent text-wrap" id="global-search-recent-list"></div>
+
                                     <div class="dropdown-header mt-2">
-                                        <h6 class="text-overflow text-muted mb-1 text-uppercase">Pages</h6>
+                                        <h6 class="text-overflow text-muted mb-1 text-uppercase" data-key="search.pages">Pages</h6>
                                     </div>
 
-                                    <!-- item-->
-                                    <a href="javascript:void(0);" class="dropdown-item notify-item">
-                                        <i class="ri-bubble-chart-line align-middle fs-18 text-muted me-2"></i>
-                                        <span>Analytics Dashboard</span>
-                                    </a>
-
-                                    <!-- item-->
-                                    <a href="javascript:void(0);" class="dropdown-item notify-item">
-                                        <i class="ri-lifebuoy-line align-middle fs-18 text-muted me-2"></i>
-                                        <span>Help Center</span>
-                                    </a>
-
-                                    <!-- item-->
-                                    <a href="javascript:void(0);" class="dropdown-item notify-item">
-                                        <i class="ri-user-settings-line align-middle fs-18 text-muted me-2"></i>
-                                        <span>My account settings</span>
-                                    </a>
-
-                                    <!-- item-->
-                                    <div class="dropdown-header mt-2">
-                                        <h6 class="text-overflow text-muted mb-2 text-uppercase">Members</h6>
-                                    </div>
-
-                                    <div class="notification-list">
-                                        <!-- item -->
-                                        <a href="javascript:void(0);" class="d-flex dropdown-item notify-item py-2">
-                                            <img src="{% static 'images/users/avatar-2.jpg'%}" class="me-3 rounded-circle avatar-xs" alt="user-pic">
-                                            <div class="flex-grow-1">
-                                                <h6 class="m-0">Angela Bernier</h6>
-                                                <span class="fs-11 mb-0 text-muted">Manager</span>
-                                            </div>
-                                        </a>
-                                        <!-- item -->
-                                        <a href="javascript:void(0);" class="d-flex dropdown-item notify-item py-2">
-                                            {% if user.usuario.avatar %}
-                                                <img src="{{ user.usuario.avatar.url }}" class="rounded-circle avatar-xs" alt="Avatar">
-                                            {% else %}
-                                                <img src="{% static 'images/default-avatar.png' %}" class="rounded-circle avatar-xs" alt="Avatar por defecto">
-                                            {% endif %}
-
-                                            <div class="flex-grow-1">
-                                                <h6 class="m-0">David Grasso</h6>
-                                                <span class="fs-11 mb-0 text-muted">Web Designer</span>
-                                            </div>
-                                        </a>
-                                        <!-- item -->
-                                        <a href="javascript:void(0);" class="d-flex dropdown-item notify-item py-2">
-                                            <img src="{% static 'images/users/avatar-5.jpg'%}" class="me-3 rounded-circle avatar-xs" alt="user-pic">
-                                            <div class="flex-grow-1">
-                                                <h6 class="m-0">Mike Bunch</h6>
-                                                <span class="fs-11 mb-0 text-muted">React Developer</span>
-                                            </div>
-                                        </a>
-                                    </div>
+                                    <div id="global-search-loading" class="dropdown-item text-muted" data-key="search.loading">Cargando...</div>
+                                    <div id="global-search-empty" class="dropdown-item text-muted d-none" data-key="search.no_results">Sin resultados</div>
+                                    <div id="global-search-pages"></div>
                                 </div>
 
                                 <div class="text-center pt-3 pb-1">
-                                    {% comment %}
-                                    <a href="{% url 'pages:pages.search_results' %}" class="btn btn-primary btn-sm">
-                                        View All Results <i class="ri-arrow-right-line ms-1"></i>
-                                    </a>
-                                    {% endcomment %}
-                                    
+                                    <a href="/search/results/" class="btn btn-primary btn-sm" id="global-search-view-all" data-key="search.view_all">Ver todos los resultados</a>
                                 </div>
                             </div>
                         </form>
@@ -143,12 +83,22 @@
                         </div>
                         <div class="text-end mt-2">
                             {% if empresa_seleccionada %}
-                            <span data-toggle="modal" data-target="#cambiarEmpresaModal" style="cursor: pointer;">                                
-                                <p class="text-muted">Empresa: {{ empresa_seleccionada.descripcion }}</p>
-                            </span>
+                            <div class="d-flex align-items-center gap-2 me-3">
+                                <span class="text-muted small" data-key="topbar.company.label">Empresa:</span>
+                                <a href="#" id="company-switch-trigger" class="fw-semibold text-reset text-decoration-none" data-bs-toggle="modal" data-bs-target="#cambiarEmpresaModal">
+                                    {{ empresa_seleccionada.descripcion }}
+                                </a>
+                                {% if fecha_sistema %}
+                                <span class="text-muted small" data-key="topbar.company_date.separator">|</span>
+                                <span class="text-muted small" data-key="topbar.system_date.label">Fecha sistema:</span>
+                                <a href="#" id="system-date-trigger" class="fw-semibold text-reset text-decoration-none" data-bs-toggle="modal" data-bs-target="#systemDateModal" data-current-date="{{ fecha_sistema }}">
+                                    <span id="system-date-value">{{ fecha_sistema }}</span>
+                                </a>
+                                {% endif %}
+                            </div>
                         {% else %}
                         <span data-bs-toggle="modal" data-bs-target="#cambiarEmpresaModal" style="cursor: pointer;">
-                            <p class="text-muted">Seleccionar Empresa</p>
+                            <p class="text-muted" data-key="topbar.company.select">Seleccionar Empresa</p>
                         </span>
                         {% endif %}
                             <!-- <a href="{% url 'subeavatar' %}" class="btn btn-secondary">

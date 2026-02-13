@@ -1,13 +1,12 @@
 from django.urls import path
 from .views import (
-    configurar_email,  
+    configurar_email,
     probar_configuracion_entrada,
     probar_configuracion_salida,
     enviar_correo_prueba,
     recibir_correo_prueba,
-    guardar_preferencias
-    
-    
+    guardar_preferencias,
+    set_fecha_sistema,
 )
 
 urlpatterns = [
@@ -17,6 +16,7 @@ urlpatterns = [
     path('enviar-correo-prueba/', enviar_correo_prueba, name='enviar_correo_prueba'),
     path('recibir-correo-prueba/', recibir_correo_prueba, name='recibir_correo_prueba'),
     path('guardar-preferencias/', guardar_preferencias, name='guardar_preferencias'),
+    path('fecha-sistema/set/', set_fecha_sistema, name='set_fecha_sistema'),
 
     
 ]

@@ -49,6 +49,8 @@ class EmpresaActivaMiddleware:
             "/media/",
             "/notificaciones/forzar/",  # Herramienta admin: permite elegir empresa objetivo explícitamente
             "/notificaciones/alerta-personalizada/",  # Herramienta admin: permite elegir empresa objetivo explícitamente
+            "/settings/fecha-sistema/",  # Fecha sistema por usuario
+            "/search/menu/",  # Busqueda global (retorna vacio sin empresa activa)
         )
 
         if path == selector_url or path.startswith(whitelist_prefixes):

@@ -5,6 +5,8 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login, logout
+from django.utils import timezone
+from settings.models import UserPreferences
 from access_control.services.empresa_activa import resolve_post_login, set_empresa_activa_en_sesion
 import time
 from acounts.forms import CustomUserForm
@@ -55,6 +57,11 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
+            prefs, _ = UserPreferences.objects.get_or_create(user=user)
+            if not prefs.fecha_sistema:
+                prefs.fecha_sistema = timezone.localdate()
+                prefs.save(update_fields=["fecha_sistema"])
+            request.session["fecha_sistema"] = prefs.fecha_sistema.isoformat()
             status, empresa = resolve_post_login(request, user)
             if status == "ONE" and empresa:
                 set_empresa_activa_en_sesion(request, empresa)

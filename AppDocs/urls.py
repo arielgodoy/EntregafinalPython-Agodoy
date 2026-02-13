@@ -32,6 +32,7 @@ urlpatterns = [
     path('control-proyectos/', include('control_de_proyectos.urls', namespace='control_de_proyectos')),
     path('control-operacional/', include('control_operacional.urls', namespace='control_operacional')),
     path('settings/', include('settings.urls')),
+    path('search/', include('core_search.urls')),
     path('evaluaciones/', include('evaluaciones.urls')),
     path('notificaciones/', include('notificaciones.urls', namespace='notificaciones')),
 

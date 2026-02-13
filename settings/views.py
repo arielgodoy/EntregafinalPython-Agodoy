@@ -3,6 +3,8 @@ from django.shortcuts import render, redirect
 from .models import UserPreferences, ThemePreferences
 from django.contrib import messages
 from django import forms
+from datetime import date
+import re
 
 
 #importaciones para prueba de envio de correo
@@ -180,6 +182,29 @@ def recibir_correo_prueba(request):
             return JsonResponse({"success": True, "subject": subject})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)})
+
+
+@require_POST
+@login_required
+def set_fecha_sistema(request):
+    fecha_str = (request.POST.get("fecha_sistema") or "").strip()
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha_str):
+        return JsonResponse({"ok": False, "error_key": "system_date.error.invalid"}, status=400)
+
+    try:
+        fecha = date.fromisoformat(fecha_str)
+    except ValueError:
+        return JsonResponse({"ok": False, "error_key": "system_date.error.invalid"}, status=400)
+
+    try:
+        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        prefs.fecha_sistema = fecha
+        prefs.save(update_fields=["fecha_sistema"])
+        request.session["fecha_sistema"] = fecha_str
+        return JsonResponse({"ok": True, "fecha_sistema": fecha_str})
+    except Exception:
+        return JsonResponse({"ok": False, "error_key": "system_date.error.server"}, status=500)
 
 
 
