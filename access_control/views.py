@@ -28,7 +28,7 @@ from .forms import (
     AccessRequestGrantForm,
 )
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+
 from django.views import View
 from django.conf import settings as django_settings
 import logging
@@ -183,23 +183,67 @@ class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
 
 
-@csrf_exempt
+@login_required
 def toggle_permiso(request):
-    if request.method == "POST":
-        permiso_id = request.POST.get("permiso_id")
-        permiso_field = request.POST.get("permiso_field")
-        value = request.POST.get("value") == "true"  # Convertir el valor a booleano
-
-        try:
-            permiso = Permiso.objects.get(id=permiso_id)
-            setattr(permiso, permiso_field, value)
-            permiso.save()
-            return JsonResponse({"success": True, "new_value": value})
-        except Permiso.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Permiso no encontrado"})
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-    return JsonResponse({"success": False, "error": "Método no permitido"})
+    """
+    Modifica un permiso granular (ingresar/crear/modificar/eliminar/autorizar/supervisor).
+    ENDPOINT CRÍTICO: No usa @verificar_permiso (es esencial para configuración de permisos).
+    Solo requiere login para evitar ciclo circular (no puedes dar permisos sin poder togglear).
+    
+    Validaciones aplicadas:
+    - Solo POST permitido
+    - permiso_id debe ser dígito
+    - permiso_field debe estar en whitelist
+    - CSRF token requerido (frontend envía X-CSRFToken)
+    """
+    # Validar método HTTP
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "Método no permitido. Solo POST."},
+            status=405
+        )
+    
+    # Campos válidos para toggle
+    VALID_FIELDS = ["ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor"]
+    
+    # Obtener y validar parámetros
+    permiso_id = request.POST.get("permiso_id", "").strip()
+    permiso_field = request.POST.get("permiso_field", "").strip()
+    value_str = request.POST.get("value", "").strip()
+    
+    # Validar permiso_id es dígito
+    if not permiso_id.isdigit():
+        return JsonResponse(
+            {"success": False, "error": "permiso_id inválido"},
+            status=400
+        )
+    
+    # Validar permiso_field está en whitelist
+    if permiso_field not in VALID_FIELDS:
+        return JsonResponse(
+            {"success": False, "error": f"permiso_field no válido. Permitidos: {', '.join(VALID_FIELDS)}"},
+            status=400
+        )
+    
+    # Convertir value de forma segura
+    value = value_str.lower() == "true"
+    
+    try:
+        permiso = Permiso.objects.get(id=int(permiso_id))
+        setattr(permiso, permiso_field, value)
+        permiso.save()
+        return JsonResponse({"success": True, "new_value": value})
+    except Permiso.DoesNotExist:
+        return JsonResponse(
+            {"success": False, "error": "Permiso no encontrado"},
+            status=404
+        )
+    except Exception as e:
+        logger.exception("Error en toggle_permiso")
+        return JsonResponse(
+            {"success": False, "error": str(e)},
+            status=500
+        )
 
 
 # def permisos_filtrados_view(request):
@@ -260,7 +304,7 @@ class VistaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Vista
     template_name = 'access_control/vistas_lista.html'
     context_object_name = 'vistas'
-    vista_nombre = "Maestro Vistas"
+    vista_nombre = "Control de Acceso - Maestro Vistas"
     permiso_requerido = "ingresar"
 
 class VistaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
@@ -268,7 +312,7 @@ class VistaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     fields = ['nombre', 'descripcion']
     template_name = 'access_control/vistas_form.html'
     success_url = reverse_lazy('access_control:vistas_lista')
-    vista_nombre = "Maestro Vistas"
+    vista_nombre = "Control de Acceso - Maestro Vistas"
     permiso_requerido = "crear"
 
 class VistaEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
@@ -276,8 +320,8 @@ class VistaEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     fields = ['nombre', 'descripcion']
     template_name = 'access_control/vistas_form.html'
     success_url = reverse_lazy('access_control:vistas_lista')
-    vista_nombre = "Maestro Vistas"
-    permiso_requerido = "editar"
+    vista_nombre = "Control de Acceso - Maestro Vistas"
+    permiso_requerido = "modificar"
 
 class VistaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Vista
@@ -292,10 +336,10 @@ class PermisoListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Permiso
     template_name = 'access_control/permisos_lista.html'
     context_object_name = 'permisos'
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "ingresar"
 
-class PermisoCrearView(LoginRequiredMixin, CreateView):
+class PermisoCrearView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Permiso
     fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
@@ -303,19 +347,19 @@ class PermisoCrearView(LoginRequiredMixin, CreateView):
     vista_nombre = "Maestro Permisos"
     permiso_requerido = "crear"
 
-class PermisoEditarView(LoginRequiredMixin, UpdateView):
+class PermisoEditarView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Permiso
     fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "modificar"
 
-class PermisoEliminarView(LoginRequiredMixin, DeleteView):
+class PermisoEliminarView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Permiso
     template_name = 'access_control/permiso_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:permisos_lista')
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "eliminar"
 
 
@@ -324,7 +368,7 @@ class EmpresaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Empresa
     template_name = 'access_control/empresas_lista.html'
     context_object_name = 'empresas'
-    vista_nombre = "Maestro Empresas"
+    vista_nombre = "Control de Acceso - Maestro Empresas"
     permiso_requerido = "ingresar"
 
 class EmpresaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
@@ -332,7 +376,7 @@ class EmpresaCrearView(VerificarPermisoMixin,LoginRequiredMixin, CreateView):
     fields = ['codigo', 'descripcion']
     template_name = 'access_control/empresas_form.html'
     success_url = reverse_lazy('access_control:empresas_lista')
-    vista_nombre = "Maestro Empresas"
+    vista_nombre = "Control de Acceso - Maestro Empresas"
     permiso_requerido = "crear"
 
 
@@ -341,14 +385,14 @@ class EmpresaEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     fields = ['codigo', 'descripcion']
     template_name = 'access_control/empresas_form.html'
     success_url = reverse_lazy('access_control:empresas_lista')
-    vista_nombre = "Maestro Empresas"
+    vista_nombre = "Control de Acceso - Maestro Empresas"
     permiso_requerido = "modificar"
 
 class EmpresaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Empresa
     template_name = 'access_control/empresa_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:empresas_lista')
-    vista_nombre = "Maestro Empresas"
+    vista_nombre = "Control de Acceso - Maestro Empresas"
     permiso_requerido = "eliminar"
 
 
@@ -357,7 +401,7 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
     form_class = SystemConfigForm
     template_name = 'access_control/settings_system.html'
     success_url = reverse_lazy('access_control:system_config')
-    vista_nombre = 'system_config'
+    vista_nombre = 'Control de Acceso - system_config'
     permiso_requerido = 'modificar'
 
     def _get_or_create_active_config(self):
@@ -824,6 +868,7 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
 
 @login_required
+@verificar_permiso("Access Control - Solicitar Acceso", "crear")
 @require_POST
 def solicitar_acceso(request):
     motivo = (request.POST.get("motivo") or "").strip()
@@ -949,6 +994,10 @@ def solicitar_acceso(request):
 
 @login_required
 def grant_access_request(request, pk):
+    """
+    Permite a staff (y solo a staff) otorgar acceso a usuarios que lo solicitaron.
+    Validación de staff se hace dentro de la función (no por decorador).
+    """
     VISTA_NOMBRE_GRANT = "access_control.grant_access_request"
     Vista.objects.get_or_create(nombre=VISTA_NOMBRE_GRANT, defaults={"descripcion": ""})
     if not request.user.is_staff:

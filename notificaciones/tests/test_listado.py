@@ -23,16 +23,21 @@ class TestListadoNotificaciones(TestCase):
 
     def _login_with_empresa(self, empresa):
         self.client.force_login(self.user)
-        vista, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
-            defaults={"descripcion": "Vista de notificaciones"},
-        )
-        Permiso.objects.update_or_create(
-            usuario=self.user,
-            empresa=empresa,
-            vista=vista,
-            defaults={"ingresar": True},
-        )
+        vista_names = [
+            "Notificaciones - Mis Notificaciones",
+            "Notificaciones - Ver Notificación",
+        ]
+        for vista_name in vista_names:
+            vista, _ = Vista.objects.get_or_create(
+                nombre=vista_name,
+                defaults={"descripcion": "Vista de notificaciones"},
+            )
+            Permiso.objects.update_or_create(
+                usuario=self.user,
+                empresa=empresa,
+                vista=vista,
+                defaults={"ingresar": True},
+            )
         session = self.client.session
         session["empresa_id"] = empresa.id
         session["empresa_codigo"] = empresa.codigo

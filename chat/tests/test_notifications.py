@@ -15,7 +15,7 @@ class ChatNotificationsTests(TestCase):
         self.conversacion = Conversacion.objects.create(empresa=self.empresa)
         self.conversacion.participantes.set([self.user_a, self.user_b])
 
-        vista = Vista.objects.create(nombre="chat.send_message")
+        vista = Vista.objects.create(nombre="Chat - Enviar mensaje")
         Permiso.objects.create(
             usuario=self.user_a,
             empresa=self.empresa,

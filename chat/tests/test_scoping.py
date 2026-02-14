@@ -56,9 +56,9 @@ class TestChatScoping(TestCase):
         self.assertEqual(response.url, reverse("access_control:seleccionar_empresa"))
 
     def test_inbox_scoped_por_empresa_y_participante(self):
-        self._grant_permiso(self.user1, self.empresa_a, "chat.inbox")
-        self._grant_permiso(self.user2, self.empresa_a, "chat.inbox")
-        self._grant_permiso(self.user3, self.empresa_b, "chat.inbox")
+        self._grant_permiso(self.user1, self.empresa_a, "Chat - Lista de conversaciones")
+        self._grant_permiso(self.user2, self.empresa_a, "Chat - Lista de conversaciones")
+        self._grant_permiso(self.user3, self.empresa_b, "Chat - Lista de conversaciones")
 
         conversacion_a = Conversacion.objects.create(empresa=self.empresa_a)
         conversacion_a.participantes.set([self.user1, self.user2])
@@ -76,7 +76,7 @@ class TestChatScoping(TestCase):
         self.assertNotIn(conversacion_b, conversaciones)
 
     def test_thread_denies_cross_empresa(self):
-        self._grant_permiso(self.user1, self.empresa_a, "chat.thread")
+        self._grant_permiso(self.user1, self.empresa_a, "Chat - Ver conversación")
 
         conversacion_b = Conversacion.objects.create(empresa=self.empresa_b)
         conversacion_b.participantes.set([self.user1])
@@ -90,9 +90,9 @@ class TestChatScoping(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_create_conversation_rejects_participant_outside_empresa(self):
-        self._grant_permiso(self.user1, self.empresa_a, "chat.create")
-        self._grant_permiso(self.user2, self.empresa_a, "chat.create")
-        self._grant_permiso(self.user3, self.empresa_b, "chat.create")
+        self._grant_permiso(self.user1, self.empresa_a, "Chat - Crear conversación")
+        self._grant_permiso(self.user2, self.empresa_a, "Chat - Crear conversación")
+        self._grant_permiso(self.user3, self.empresa_b, "Chat - Crear conversación")
 
         perfil = PerfilAcceso.objects.create(nombre="Demo", is_active=True)
         UsuarioPerfilEmpresa.objects.create(usuario=self.user1, empresa=self.empresa_a, perfil=perfil)
@@ -111,7 +111,7 @@ class TestChatScoping(TestCase):
         self.assertEqual(Conversacion.objects.count(), 0)
 
     def test_send_message_requires_participant(self):
-        self._grant_permiso(self.user3, self.empresa_a, "chat.send_message")
+        self._grant_permiso(self.user3, self.empresa_a, "Chat - Enviar mensaje")
 
         conversacion_a = Conversacion.objects.create(empresa=self.empresa_a)
         conversacion_a.participantes.set([self.user1, self.user2])

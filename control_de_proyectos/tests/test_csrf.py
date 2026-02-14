@@ -12,8 +12,8 @@ class AvanceCsrfTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='user3', password='pass')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 01')
-        self.vista_modificar = Vista.objects.create(nombre='Modificar Tarea')
-        self.vista_detalle = Vista.objects.create(nombre='Ver Detalle Proyecto')
+        self.vista_modificar = Vista.objects.create(nombre='Control de Proyectos - Actualizar avance de tarea')
+        self.vista_detalle = Vista.objects.create(nombre='Control de Proyectos - Detalle de proyecto')
 
         self.cliente = ClienteEmpresa.objects.create(
             nombre='Cliente Uno',

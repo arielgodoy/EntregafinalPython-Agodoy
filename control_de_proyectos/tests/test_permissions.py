@@ -12,7 +12,7 @@ class AvancePermisosTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='user1', password='pass')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 01')
-        self.vista = Vista.objects.create(nombre='Modificar Tarea')
+        self.vista = Vista.objects.create(nombre='Control de Proyectos - Actualizar avance de tarea')
         self.cliente = ClienteEmpresa.objects.create(
             nombre='Cliente Uno',
             rut='12.345.678-5',

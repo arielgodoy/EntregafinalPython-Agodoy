@@ -15,7 +15,7 @@ class TestNotificacionesPermissions(TestCase):
         self.empresa_a = Empresa.objects.create(codigo="01", descripcion="Empresa A")
         self.empresa_b = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         self.vista = Vista.objects.create(
-            nombre="notificaciones.mis_notificaciones",
+            nombre="Notificaciones - Mis Notificaciones",
             descripcion="Vista de notificaciones",
         )
 

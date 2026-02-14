@@ -4,80 +4,37 @@ from django.views.generic import TemplateView
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, DeleteView
-from django.shortcuts import render, redirect,get_object_or_404
-from .models import Propiedad, Documento,Propietario
-from .forms import PropietarioForm,PropiedadForm
-from django.urls import reverse
-from django.views.generic.edit import DeleteView
-from django.urls import reverse_lazy
+from django.shortcuts import render, redirect, get_object_or_404
+from .models import Propiedad, Documento, Propietario
+from .forms import PropietarioForm, PropiedadForm
+from django.urls import reverse, reverse_lazy
 from .models import TipoDocumento
 from .forms import TipoDocumentoForm
 from django.views.generic import View
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.urls import reverse, reverse_lazy
-from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
-from access_control.decorators import verificar_permiso
-from access_control.models import Empresa
-from django.urls import reverse_lazy, reverse
-from django.shortcuts import get_object_or_404
-from django.http import JsonResponse,HttpResponseForbidden
-from django.core.mail import EmailMultiAlternatives, get_connection
-from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from settings.models import UserPreferences
-from biblioteca.models import Documento
-from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.utils.timezone import now
-from django.views.decorators.http import require_POST
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from datetime import date
 import json
-
 import os
 import zipfile
 from io import BytesIO
-from django.http import HttpResponse
-from django.conf import settings
-from django.contrib.auth.decorators import login_required
-from datetime import date
 
-#Decorador generar para verificar permispo por mixim
-from access_control.decorators import PermisoDenegadoJson
-class VerificarPermisoMixin:
-    vista_nombre = None
-    permiso_requerido = None
-    def dispatch(self, request, *args, **kwargs):
-        if self.vista_nombre and self.permiso_requerido:
-            decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
-
-            @decorador
-            def view_func(req, *a, **kw):
-                return super(VerificarPermisoMixin, self).dispatch(req, *a, **kw)
-
-            try:
-                return view_func(request, *args, **kwargs)
-            except PermisoDenegadoJson as e:
-                return self.handle_no_permission(request, str(e))
-
-        return super().dispatch(request, *args, **kwargs)
-
-    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
-        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
-            return JsonResponse({"success": False, "error": mensaje}, status=403)
-
-        contexto = {
-            "mensaje": mensaje,
-            "vista_nombre": getattr(self, "vista_nombre", "Desconocida"),
-            "empresa_nombre": request.session.get("empresa_nombre", "No definida"),
-        }
-        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+# OFFICIAL IMPORTS
+from access_control.decorators import verificar_permiso
+from access_control.views import VerificarPermisoMixin  # OFFICIAL VERSION
+from access_control.models import Empresa
+from settings.models import UserPreferences
 
 
 class CrearPropietarioModalView(VerificarPermisoMixin, LoginRequiredMixin, View):
     model = Propietario
-    vista_nombre = "Maestro Propietarios Modal"
+    vista_nombre = "Biblioteca - Crear Propietario Modal"
     permiso_requerido = "crear"
 
     def post(self, request, *args, **kwargs):
@@ -108,7 +65,9 @@ class ModalesEjemploView(LoginRequiredMixin, TemplateView):
 
 ### respaldo biblioteca completa ###
 @login_required
+@verificar_permiso("Biblioteca - Respaldo Biblioteca", "ingresar")
 def respaldo_biblioteca_zip(request):
+    """Descargar respaldo completo de la biblioteca en ZIP."""
     # Ruta absoluta al directorio de archivos
     carpeta_archivos = os.path.join(settings.MEDIA_ROOT, 'archivos_documentos')
     fecha_str = date.today().strftime("%Y%m%d")
@@ -129,7 +88,9 @@ def respaldo_biblioteca_zip(request):
     return response
 ### respaldo por rol ###
 @login_required
+@verificar_permiso("Biblioteca - Descargar Propiedad", "ingresar")
 def descargar_documentos_propiedad_zip(request, propiedad_id):
+    """Descargar documentos de una propiedad en ZIP."""
     propiedad = get_object_or_404(Propiedad, pk=propiedad_id)
     documentos = Documento.objects.filter(propiedad=propiedad)
 
@@ -158,7 +119,7 @@ class CrearPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Propiedad
     form_class = PropiedadForm
     template_name = 'crear_propiedad.html'
-    vista_nombre = "Maestro Propiedades"
+    vista_nombre = "Biblioteca - Crear Propiedad"
     permiso_requerido = "crear"
 
     def get_success_url(self):
@@ -232,14 +193,14 @@ class DetallePropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DetailView
     model = Propiedad    
     template_name = 'detalle_propiedad.html'
     context_object_name = 'propiedad'
-    vista_nombre = "Detalle de Propiedad"
+    vista_nombre = "Biblioteca - Detalle Propiedad"
     permiso_requerido = "ingresar"
 #READ
 class ListarPropiedadesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propiedad
     template_name = 'listado_propiedades.html'
     context_object_name = 'propiedades'
-    vista_nombre = "Listado de Propiedades"
+    vista_nombre = "Biblioteca - Listar Propiedades"
     permiso_requerido = "ingresar"
 #UPDATE
 class ModificarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
@@ -247,7 +208,7 @@ class ModificarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
     form_class = PropiedadForm
     template_name = 'modificar_propiedad.html'
     success_url = reverse_lazy('biblioteca:listar_propiedades')
-    vista_nombre = "Maestro Propiedades"
+    vista_nombre = "Biblioteca - Modificar Propiedad"
     permiso_requerido = "modificar"
 
     def get_context_data(self, **kwargs):
@@ -256,12 +217,12 @@ class ModificarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
         context['propietario_nombre'] = self.object.propietario.nombre if self.object.propietario else ""
         return context
 #DELETE
-class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
+class EliminarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Propiedad
     template_name = 'eliminar_propiedad.html'
     success_url = reverse_lazy('biblioteca:listar_propiedades')
-    vista_nombre="Maestro Propiedades"
-    permiso_requerido="eliminar"
+    vista_nombre = "Biblioteca - Eliminar Propiedad"
+    permiso_requerido = "eliminar"
 
     def form_valid(self, form):
         # Obtener la propiedad a eliminar
@@ -279,43 +240,43 @@ class EliminarPropiedadView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView)
 ########            CRUD MAESTRO DE PROPIETARIOS                   ########
 ###########################################################################
 #CREATE
-class CrearPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
+class CrearPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'crear_propietario.html'
     success_url = reverse_lazy('biblioteca:listar_propietarios')
-    vista_nombre="Maestro Propietarios"
-    permiso_requerido="crear"
+    vista_nombre = "Biblioteca - Crear Propietario"
+    permiso_requerido = "crear"
 #READ
-class DetallePropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DetailView):
+class DetallePropietarioView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Propietario
     template_name = 'detalle_propietario.html'
     context_object_name = 'propietario'
-    vista_nombre="Detalle Propietario" 
-    permiso_requerido="ingresar"
+    vista_nombre = "Biblioteca - Detalle Propietario"
+    permiso_requerido = "ingresar"
 #READ
-class ListarPropietariosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):    
+class ListarPropietariosView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Propietario
     template_name = 'listado_propietarios.html'
     context_object_name = 'propietarios'
-    vista_nombre="Listar Propietarios" 
-    permiso_requerido="ingresar"
+    vista_nombre = "Biblioteca - Listar Propietarios"
+    permiso_requerido = "ingresar"
 
 #UPDATE
-class ModificarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,UpdateView):
+class ModificarPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Propietario
     form_class = PropietarioForm
     template_name = 'modificar_propietario.html'
     success_url = reverse_lazy('biblioteca:listar_propietarios')
-    vista_nombre="Maestro Propietarios" 
-    permiso_requerido="modificar"
+    vista_nombre = "Biblioteca - Modificar Propietario"
+    permiso_requerido = "modificar"
 #DELETE
-class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteView):
+class EliminarPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Propietario
     template_name = 'eliminar_propietario.html'
     success_url = reverse_lazy('biblioteca:listar_propietarios')
-    vista_nombre="Maestro Propietarios" 
-    permiso_requerido="eliminar"
+    vista_nombre = "Biblioteca - Eliminar Propietario"
+    permiso_requerido = "eliminar"
 
 
 
@@ -331,26 +292,26 @@ class EliminarPropietarioView(VerificarPermisoMixin,LoginRequiredMixin,DeleteVie
 ########            CRUD MAESTRO DE TIPOS DE DOCUMENTOS            ########
 ###########################################################################
 #CREATE
-class CrearTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,CreateView):
+class CrearTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = TipoDocumento
     form_class = TipoDocumentoForm
     template_name = 'crear_tipo_documento.html'
     success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
-    vista_nombre="Maestro tipos de Documentos"
-    permiso_requerido="crear"
+    vista_nombre = "Biblioteca - Crear Tipo Documento"
+    permiso_requerido = "crear"
 #READ
-class ListarTiposDocumentosView(VerificarPermisoMixin,LoginRequiredMixin,ListView):
+class ListarTiposDocumentosView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = TipoDocumento
     template_name = 'listar_tipos_documentos.html'
     context_object_name = 'tipos_documentos'
-    vista_nombre="Maestro tipos de Documentos"
-    permiso_requerido="ingresar"
+    vista_nombre = "Biblioteca - Listar Tipos Documentos"
+    permiso_requerido = "ingresar"
 #UPDATE
-class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
+class ModificarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = 'modificar_tipo_documento.html'
     success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
-    vista_nombre="Maestro tipos de Documentos"
-    permiso_requerido="modificar"
+    vista_nombre = "Biblioteca - Modificar Tipo Documento"
+    permiso_requerido = "modificar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -365,11 +326,11 @@ class ModificarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
             return redirect(self.success_url)
         return render(request, self.template_name, {'form': form})
 #DELETE
-class EliminarTipoDocumentoView(VerificarPermisoMixin,LoginRequiredMixin,View):
+class EliminarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = 'eliminar_tipo_documento.html'
     success_url = reverse_lazy('biblioteca:listar_tipos_documentos')
-    vista_nombre="Maestro tipos de Documentos"
-    permiso_requerido="eliminar"
+    vista_nombre = "Biblioteca - Eliminar Tipo Documento"
+    permiso_requerido = "eliminar"
 
     def get(self, request, pk):
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
@@ -395,7 +356,7 @@ class CrearDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Documento
     fields = ['tipo_documento', 'nombre_documento', 'archivo', 'fecha_documento', 'fecha_vencimiento']
     template_name = 'crear_documento.html'
-    vista_nombre = "Maestro Propiedades"
+    vista_nombre = "Biblioteca - Crear Documento"
     permiso_requerido = "modificar"
 
     def get_initial(self):
@@ -420,7 +381,7 @@ class ListadoDocumentosView(VerificarPermisoMixin, LoginRequiredMixin, ListView)
     model = Documento
     template_name = 'listado_documentos.html'
     context_object_name = 'documentos'
-    vista_nombre = "Listado General de Documentos"  # Puedes ajustarlo según tu tabla VistaPermiso
+    vista_nombre = "Biblioteca - Listar Documentos"
     permiso_requerido = "ingresar"
     
     def get_context_data(self, **kwargs):
@@ -432,10 +393,11 @@ class ListadoDocumentosView(VerificarPermisoMixin, LoginRequiredMixin, ListView)
     def get_queryset(self):
         return Documento.objects.select_related('propiedad', 'tipo_documento')
 #READ
-@csrf_exempt
 @require_POST
 @login_required
+@verificar_permiso("Biblioteca - Enviar Enlace Documento", "ingresar")
 def enviar_enlace_documento(request, documento_id):
+    """Enviar enlace de documento por email."""
     try:
         email_destino = request.POST.get('correo')
         if not email_destino:
@@ -479,11 +441,11 @@ def enviar_enlace_documento(request, documento_id):
         return JsonResponse({"success": False, "error": str(e)})
 
 #DELETE
-class EliminarDocumentoView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
+class EliminarDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Documento
-    template_name = 'eliminar_documento.html'  # Cambia esto si tienes un template para confirmar eliminación.
-    vista_nombre="Maestro Documentos"
-    permiso_requerido="eliminar"
+    template_name = 'eliminar_documento.html'
+    vista_nombre = "Biblioteca - Eliminar Documento"
+    permiso_requerido = "eliminar"
 
     def get_success_url(self):
         """Redirige a la página de detalle de la propiedad asociada."""

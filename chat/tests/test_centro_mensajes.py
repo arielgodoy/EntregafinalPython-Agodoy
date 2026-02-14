@@ -11,7 +11,7 @@ class TestCentroMensajes(TestCase):
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa A")
         self.user1 = User.objects.create_user(username="user1", password="pass")
         self.user2 = User.objects.create_user(username="user2", password="pass")
-        vista = Vista.objects.create(nombre="chat.inbox")
+        vista = Vista.objects.create(nombre="Chat - Centro de mensajes")
         Permiso.objects.create(
             usuario=self.user1,
             empresa=self.empresa,

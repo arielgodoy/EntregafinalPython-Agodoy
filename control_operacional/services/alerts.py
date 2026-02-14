@@ -10,7 +10,7 @@ from notificaciones.services import create_notification
 
 
 def _get_recipients(empresa_id):
-    vista = Vista.objects.filter(nombre="Control Operacional Dashboard").first()
+    vista = Vista.objects.filter(nombre="Control Operacional - Dashboard").first()
     if not vista:
         return []
     permisos = Permiso.objects.filter(

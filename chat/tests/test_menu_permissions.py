@@ -14,9 +14,9 @@ class TestChatMenuPermissions(TestCase):
             email="user_a@example.com",
             password="pass12345",
         )
-        self.vista = Vista.objects.create(nombre="chat.inbox")
+        self.vista = Vista.objects.create(nombre="Chat - Bandeja de entrada")
         self.vista_notificaciones, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
+            nombre="Notificaciones - Mis Notificaciones",
             defaults={"descripcion": ""},
         )
 

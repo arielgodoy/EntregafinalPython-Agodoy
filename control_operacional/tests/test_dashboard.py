@@ -11,7 +11,7 @@ class ControlOperacionalDashboardTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pass1234")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
-        self.vista = Vista.objects.create(nombre="Control Operacional Dashboard")
+        self.vista = Vista.objects.create(nombre="Control Operacional - Dashboard")
 
     def _login_with_empresa(self):
         self.client.force_login(self.user)

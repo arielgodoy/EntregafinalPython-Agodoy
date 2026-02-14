@@ -25,7 +25,7 @@ class TestChatUnread(TestCase):
             password="pass12345",
         )
         self.vista_notificaciones, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
+            nombre="Notificaciones - Topbar",
             defaults={"descripcion": ""},
         )
 

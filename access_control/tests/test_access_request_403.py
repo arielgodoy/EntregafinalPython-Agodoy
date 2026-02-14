@@ -19,6 +19,28 @@ class TestAccessRequest403(TestCase):
         self.staff = User.objects.create_user(username="staff", password="pass123", email="staff@example.com", is_staff=True)
         self.empresa = Empresa.objects.create(codigo="99", descripcion="Empresa Test")
         self.vista = Vista.objects.create(nombre="Maestro Usuarios")
+        
+        # Crear Vistas para solicitar_acceso y grant_access_request (para decoradores @verificar_permiso)
+        self.vista_solicitar_acceso = Vista.objects.create(nombre="Access Control - Solicitar Acceso")
+        self.vista_otorgar_acceso = Vista.objects.create(nombre="Access Control - Otorgar Acceso")
+        
+        # Dar permisos al usuario para las nuevas vistas
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_solicitar_acceso,
+            ingresar=True,
+            crear=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_otorgar_acceso,
+            ingresar=True,
+            autorizar=True,
+        )
+        
+        # Permiso existente para pruebas de acceso denegado
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

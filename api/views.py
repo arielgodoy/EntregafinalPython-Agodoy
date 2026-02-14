@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
 from .models import Contratopublicidad,LmovimientosDetalle19
 from biblioteca.models import Propietario
 from .serializers import PropietarioSerializer
@@ -47,6 +48,8 @@ from access_control.services.invite import invite_user_flow
 
 
 class TrabajadoresViewSet(ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    
     def list(self, request, *args, **kwargs):
         cliente_sistema = settings.CONFIGURACIONES['CLIENTE_SISTEMA']
         empresa_codigo = self.request.session.get("empresa_codigo", "00")  # Por defecto "00"
@@ -85,6 +88,8 @@ class TrabajadoresViewSet(ReadOnlyModelViewSet):
             return Response({'status': 'error', 'message': str(e)}, status=500)
         
 class MaestroempresasMRO(ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    
     def list(self, request, *args, **kwargs):
         cliente_sistema = settings.CONFIGURACIONES['CLIENTE_SISTEMA']
         empresa_codigo = self.request.session.get("empresa_codigo", "00")  # Por defecto "00"
@@ -132,6 +137,7 @@ class PropietarioViewSet(ReadOnlyModelViewSet):
     search_fields = ['nombre', 'rut']
 
 
+@login_required
 @require_POST
 def invite_user(request):
     if request.content_type != 'application/json':

@@ -15,16 +15,22 @@ class TopbarNotificationsTests(TestCase):
 
     def _login(self, user, empresa_id):
         self.client.force_login(user)
-        vista, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
-            defaults={"descripcion": "Vista de notificaciones"},
-        )
-        Permiso.objects.update_or_create(
-            usuario=user,
-            empresa_id=empresa_id,
-            vista=vista,
-            defaults={"ingresar": True},
-        )
+        vista_names = [
+            "Notificaciones - Topbar",
+            "Notificaciones - Marcar como leída",
+            "Notificaciones - Marcar todas como leídas",
+        ]
+        for vista_name in vista_names:
+            vista, _ = Vista.objects.get_or_create(
+                nombre=vista_name,
+                defaults={"descripcion": "Vista de notificaciones"},
+            )
+            Permiso.objects.update_or_create(
+                usuario=user,
+                empresa_id=empresa_id,
+                vista=vista,
+                defaults={"ingresar": True},
+            )
         session = self.client.session
         session["empresa_id"] = empresa_id
         session.save()

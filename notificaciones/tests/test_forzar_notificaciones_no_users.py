@@ -15,6 +15,22 @@ class ForzarNotificacionesNoUsersTests(TestCase):
         self.empresa2 = Empresa.objects.create(codigo='02', descripcion='Empresa 2')
         self.perfil = PerfilAcceso.objects.create(nombre='Basico', descripcion='Perfil basico')
         self.vista = Vista.objects.create(nombre='Test Vista', descripcion='Vista de prueba')
+        vista_forzar, _ = Vista.objects.get_or_create(
+            nombre='Forzar Notificaciones',
+            defaults={'descripcion': 'Vista de forzar notificaciones'},
+        )
+        Permiso.objects.update_or_create(
+            usuario=self.staff_user,
+            empresa=self.empresa1,
+            vista=vista_forzar,
+            defaults={'ingresar': True},
+        )
+        Permiso.objects.update_or_create(
+            usuario=self.staff_user,
+            empresa=self.empresa2,
+            vista=vista_forzar,
+            defaults={'ingresar': True},
+        )
         
     def test_sin_empresa_objetivo_muestra_warning(self):
         """Staff sin empresa_objetivo en GET -> vista 200, warning select_company, boton disabled"""

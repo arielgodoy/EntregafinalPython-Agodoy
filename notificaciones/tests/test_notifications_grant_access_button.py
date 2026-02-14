@@ -22,7 +22,7 @@ class TestNotificationsGrantAccessButton(TestCase):
             motivo="Test",
         )
         self.vista = Vista.objects.create(
-            nombre="notificaciones.mis_notificaciones",
+            nombre="Notificaciones - Mis Notificaciones",
             descripcion="Vista de notificaciones",
         )
         Permiso.objects.create(

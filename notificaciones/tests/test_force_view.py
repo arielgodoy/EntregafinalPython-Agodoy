@@ -21,7 +21,16 @@ class TestForzarNotificaciones(TestCase):
             password="pass12345",
             is_staff=True,
         )
-        self.vista = Vista.objects.create(nombre="notificaciones.mis_notificaciones", descripcion="Vista de notificaciones")
+        self.vista = Vista.objects.create(
+            nombre="Forzar Notificaciones",
+            descripcion="Vista de forzar notificaciones",
+        )
+        Permiso.objects.create(
+            usuario=self.staff_user,
+            empresa=self.empresa,
+            vista=self.vista,
+            ingresar=True,
+        )
 
     def _login_with_empresa(self, user, empresa):
         self.client.force_login(user)
@@ -43,11 +52,11 @@ class TestForzarNotificaciones(TestCase):
         self.assertContains(response, "data-key=\"notifications.force.warning.select_company\"")
 
     def test_staff_post_creates_notifications(self):
-        Permiso.objects.create(
+        Permiso.objects.update_or_create(
             usuario=self.staff_user,
             empresa=self.empresa,
             vista=self.vista,
-            ingresar=True,
+            defaults={"ingresar": True},
         )
         self._login_with_empresa(self.staff_user, self.empresa)
 

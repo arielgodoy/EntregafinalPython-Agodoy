@@ -11,7 +11,7 @@ class ProyectosScopingTests(TestCase):
         self.user = User.objects.create_user(username='user2', password='pass')
         self.empresa_a = Empresa.objects.create(codigo='01', descripcion='Empresa A')
         self.empresa_b = Empresa.objects.create(codigo='02', descripcion='Empresa B')
-        self.vista = Vista.objects.create(nombre='Listar Proyectos')
+        self.vista = Vista.objects.create(nombre='Control de Proyectos - Proyectos')
 
         self.cliente_a = ClienteEmpresa.objects.create(
             nombre='Cliente A',

@@ -34,8 +34,8 @@ class TestCentroAlertas(TestCase):
     def _login_with_empresa(self):
         self.client.force_login(self.user)
         vista, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
-            defaults={"descripcion": "Vista de notificaciones"},
+            nombre="Notificaciones - Centro de Alertas",
+            defaults={"descripcion": "Vista de Centro de Alertas"},
         )
         Permiso.objects.update_or_create(
             usuario=self.user,

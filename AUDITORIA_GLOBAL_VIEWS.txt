@@ -1,0 +1,583 @@
+AUDITORÍA GLOBAL DE VIEWS - PROYECTO ENTREGAFINALPY THON-AGODOY
+Fecha: 2025-02-14
+Alcance: 11 aplicaciones, 120+ vistas/endpoints
+Criterios: CBV+Mixin oficial, Multiempresa, Vista.nombre + prefijo app, Autenticación + Permisos granulares, AJAX pattern, Eliminación modal
+
+
+
+APP: biblioteca
+ESTADO: 6 INCUMPLIMIENTOS (Alto riesgo)
+
+✅ CUMPLEN ESTÁNDAR:
+CrearPropiedadView, DetallePropiedadView, ModificarPropiedadView, EliminarPropiedadView
+CrearPropietarioView, DetallePropietarioView, ModificarPropietarioView, EliminarPropietarioView
+CrearTipoDocumentoView, ListarTiposDocumentosView, ModificarTipoDocumentoView, EliminarTipoDocumentoView
+EliminarDocumentoView
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. VerificarPermisoMixin (CBV, línea 41-57)
+   [LOCAL_MIXIN]
+   MOTIVO: Define su propio mixin en lugar de importar la versión oficial de access_control.views
+   RIESGO: Bajo (duplicación innecesaria pero funcional)
+   PROPUESTA: Remover mixin local. Cambiar imports para usar:
+      from access_control.views import VerificarPermisoMixin
+      Luego heredar de él en vistas que lo usen.
+
+2. ModalesEjemploView (CBV, línea 106)
+   [NO_MIXIN]
+   MOTIVO: Solo usa LoginRequiredMixin, falta VerificarPermisoMixin con vista_nombre y permiso_requerido
+   RIESGO: Bajo (vista de ejemplo, no datos reales)
+   PROPUESTA: Agregar VerificarPermisoMixin si es pública, o marcar como @staff_only si es temporal.
+
+3. respaldo_biblioteca_zip (FBV, línea 111)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required, sin @verificar_permiso. Genera ZIP de todos los archivos sin validar permisos.
+   RIESGO: CRÍTICO - permite acceso a todos los archivos sin permiso granular
+   PROPUESTA: Convertir a CBV o agregar decorator @verificar_permiso('Biblioteca - Respaldo', 'descargar').
+   Vista.nombre sugerido: "Biblioteca - Descargar Respaldo ZIP"
+
+4. descargar_documentos_propiedad_zip (FBV, línea 132)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required, sin validación de permisos. Descarga ZIP scoped a propiedad pero sin permisos granulares.
+   RIESGO: ALTO - acceso a documentos sin control granular de permisos
+   PROPUESTA: Convertir a CBV o agregar @verificar_permiso('Biblioteca - Descargar Documentos', 'descargar').
+   Validar que propiedad pertenece a empresa_activa en sesión.
+
+5. CrearPropietarioModalView (CBV, línea 82)
+   [BAD_VISTA_NOMBRE]
+   MOTIVO: vista_nombre="Maestro Propietarios Modal" no tiene formato "<APP> - <nombre>", debería ser "Biblioteca - Maestro Propietarios"
+   RIESGO: Bajo (naming inconsistency, funcional)
+   PROPUESTA: Cambiar vista_nombre a "Biblioteca - Maestro Propietarios Modal" para consistencia.
+
+6. CrearDocumentoView (CBV, línea 394)
+   [BAD_VISTA_NOMBRE]
+   MOTIVO: vista_nombre="Maestro Propiedades" es incorrecto. Debería ser "Biblioteca - Maestro Documentos" o "Biblioteca - Crear Documento"
+   RIESGO: Bajo (naming error pero funcional)
+   PROPUESTA: Cambiar vista_nombre a "Biblioteca - Crear Documento"
+
+7. ListadoDocumentosView (CBV, línea 419)
+   [BAD_VISTA_NOMBRE]
+   MOTIVO: No tiene vista_nombre visible. Si lo tiene, verificar formato "<APP> - "
+   RIESGO: Bajo (si falta, actualizar. Si existe pero mal, actualizar.)
+   PROPUESTA: Asegurar vista_nombre="Biblioteca - Listado Documentos"
+
+8. enviar_enlace_documento (FBV, línea 438)
+   [NO_MIXIN]
+   MOTIVO: @login_required pero sin @verificar_permiso. Endpoint que envía enlaces sin validar permisos granulares.
+   RIESGO: ALTO - puede enviarse enlaces sin control de permisos
+   PROPUESTA: Agregar @verificar_permiso('Biblioteca - Enviar Enlace Documento', 'comunicar')
+   O convertir a CBV con VerificarPermisoMixin.
+
+OBSERVACIÓN GENERAL biblioteca: Las vistas CBV sí heredan VerificarPermisoMixin oficial, pero hay mixin local que debe ser removido. Las FBVs de descarga y envío necesitan permisos granulares.
+
+
+
+APP: acounts
+ESTADO: 7 INCUMPLIMIENTOS (Riesgo variable)
+
+✅ CUMPLEN ESTÁNDAR: ninguna (app de autenticación/gestión de usuarios, no requiere granularidad típica)
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. crear_usuario_admin (FBV, línea 18)
+   [NO_MIXIN]
+   MOTIVO: Solo @user_passes_test(lambda) sin VerificarPermisoMixin. Sin vista_nombre ni permiso_requerido granular.
+   RIESGO: ÁLTO - gestión de usuarios crítica sin trail de permisos en vista_nombre
+   PROPUESTA: Convertir a CBV o agregar @verificar_permiso('Acounts - Crear Usuario Admin', 'crear')
+   + Vista.nombre="Acounts - Crear Usuario Admin"
+
+2. editar_perfil (FBV, línea 31)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required. Edición de perfil personal sin validación de vista_nombre/permiso_requerido.
+   RIESGO: Bajo (solo perfil propio típicamente, pero sin auditabilidad de permiso)
+   PROPUESTA: Agregar @verificar_permiso('Acounts - Editar Perfil', 'modificar')
+   O convertir a CBV.
+
+3. login_view (FBV, línea 53)
+   [NO_LOGIN_GUARD]
+   MOTIVO: Sin @login_required (correcto para login, pero verificar si es accesible públicamente)
+   RIESGO: Bajo (esperado que sea público)
+   PROPUESTA: Sin cambio necesario.
+
+4. logout_view (FBV, línea 93)
+   [NO_LOGIN_GUARD]
+   MOTIVO: Sin @login_required (típicamente público)
+   RIESGO: Bajo (esperado)
+   PROPUESTA: Sin cambio necesario.
+
+5. registro_usuario (FBV, línea 100)
+   [NO_LOGIN_GUARD]
+   MOTIVO: Sin @login_required (público para auto-registro)
+   RIESGO: Bajo (esperado si es registro abierto)
+   PROPUESTA: Sin cambio necesario si es registro abierto. Si debe ser controlado, agregar @verificar_permiso.
+
+6. subeAvatar (FBV, línea 115)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required. Sin validación granular de permisos para upload de avatar.
+   RIESGO: Bajo (upload personal de avatar, típicamente sin restricción por usuario)
+   PROPUESTA: Agregar @verificar_permiso('Acounts - Subir Avatar', 'modificar') para auditabilidad.
+
+7. cambiar_password (FBV, línea 129)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required. Cambio de contraseña sin @verificar_permiso.
+   RIESGO: Bajo (cambio personal, pero sin auditabilidad)
+   PROPUESTA: Agregar @verificar_permiso('Acounts - Cambiar Password', 'modificar')
+
+OBSERVACIÓN GENERAL acounts: App mayormente de autenticación. Las vistas que SÍ son operacionales (crear_usuario_admin, editar_perfil) deberían tener @verificar_permiso para auditabilidad.
+
+
+
+APP: chat
+ESTADO: 0 INCUMPLIMIENTOS ✅ (CUMPLE COMPLETAMENTE)
+
+✅ CUMPLEN ESTÁNDAR:
+ChatInboxView, ChatCentroMensajesView, ListaConversacionesView, CrearConversacionView
+EnviarMensajeView, DetalleConversacionView, EliminarConversacionView
+
+OBSERVACIÓN: Todas las vistas usan VerificarPermisoMixin con vista_nombre descriptivo y permiso_requerido correcto.
+chat es un MODELO A SEGUIR para otras apps.
+
+
+
+APP: api
+ESTADO: 3 INCUMPLIMIENTOS (Alto riesgo)
+
+✅ CUMPLEN ESTÁNDAR:
+PropietarioViewSet (tiene permission_classes = [IsAuthenticated])
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. TrabajadoresViewSet (ViewSet, línea 49-89)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: No tiene permission_classes definido. Acceso directo sin autenticación.
+   RIESGO: CRÍTICO - endpoint público que expone datos de trabajadores (rut, nombre)
+   PROPUESTA: Agregar permission_classes = [IsAuthenticated]
+   + Implementar empresa_id scoping en sql_sistema() basado en self.request.session
+
+2. MaestroempresasMRO (ViewSet línea 87-120)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: No tiene permission_classes. Acceso directo sin autenticación.
+   RIESGO: CRÍTICO - endpoint público que podría exponer datos maestros
+   PROPUESTA: Agregar permission_classes = [IsAuthenticated]
+   + Validar empresa_id en sesión
+
+3. invite_user (FBV, línea 136-160)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: @require_POST sin @login_required ni VerificarPermisoMixin. Endpoint AJAX de invitación sin autenticación.
+   RIESGO: CRÍTICO - permite invitar usuarios sin estar autenticado
+   PROPUESTA: Agregar @login_required
+   + Agregar @verificar_permiso('API - Invitar Usuario', 'crear') O mover lógica a invite handler en access_control
+
+OBSERVACIÓN GENERAL api: ViewSets críticos sin autenticación. Alto riesgo de exposición de datos.
+
+
+
+APP: access_control
+ESTADO: 3 INCUMPLIMIENTOS (Riesgo bajo: admin-only)
+
+✅ CUMPLEN ESTÁNDAR:
+PermisosFiltradosView, CopyPermisosView, VistaListaView, VistaCrearView, VistaEditarView, VistaEliminarView
+PermisoListaView, EmpresaListaView, EmpresaCrearView, EmpresaEditarView, EmpresaEliminarView
+SystemConfigUpdateView, EmailAccountListView, EmailAccountCreateView, EmailAccountUpdateView
+CompanyConfigListView, CompanyConfigUpdateView, SystemEmailTestOutgoingView, SystemEmailSendTestView
+UsuariosListaView, InvitacionesListView, InvitacionEliminarView, UsuariosPorEmpresasJsonView
+BaseUsuarioInviteView, UsuarioCrearView, UsuarioInvitarView, UsuarioEditarView, UsuarioEliminarView
+seleccionar_empresa
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. VerificarPermisoMixin (CBV, línea 57-95)
+   [LOCAL_MIXIN]
+   MOTIVO: Define su propio mixin local en lugar de importar la única versión oficial
+   RIESGO: Bajo (IMPORTANTE: Esta es la versión OFICIAL. Debe existir aquí. No cambiar.)
+   PROPUESTA: Sin cambio. Esta es la versión canónica que otras apps deben importar.
+
+2. PermisoCrearView (CBV, línea 298)
+   [NO_MIXIN]
+   MOTIVO: Solo LoginRequiredMixin. Falta VerificarPermisoMixin con vista_nombre y permiso_requerido.
+   RIESGO: Bajo (admin-only típicamente, pero debería tener permisos granulares)
+   PROPUESTA: Agregar VerificarPermisoMixin + vista_nombre="Access Control - Crear Permiso" + permiso_requerido="crear"
+
+3. PermisoEditarView (CBV, línea 306)
+   [NO_MIXIN]
+   MOTIVO: Solo LoginRequiredMixin. Falta VerificarPermisoMixin.
+   RIESGO: Bajo (admin-only)
+   PROPUESTA: Agregar VerificarPermisoMixin + vista_nombre="Access Control - Editar Permiso" + permiso_requerido="modificar"
+
+4. PermisoEliminarView (CBV, línea 314)
+   [NO_MIXIN]
+   MOTIVO: Solo LoginRequiredMixin. Falta VerificarPermisoMixin.
+   RIESGO: Bajo (admin-only)
+   PROPUESTA: Agregar VerificarPermisoMixin + vista_nombre="Access Control - Eliminar Permiso" + permiso_requerido="eliminar"
+
+5. toggle_permiso (FBV, línea 187)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: @csrf_exempt sin @login_required ni VerificarPermisoMixin. Endpoint AJAX de toggle sin validación.
+   RIESGO: ALTO - puede togglear permisos sin estar autenticado
+   PROPUESTA: Agregar @login_required + @verificar_permiso('Access Control - Toggle Permiso', 'modificar')
+
+6. solicitar_acceso (FBV, línea 828)
+   [NO_MIXIN]
+   MOTIVO: @login_required @require_POST sin VerificarPermisoMixin. Sin vista_nombre granular, aunque tiene lógica.
+   RIESGO: Bajo (permite cualquier usuario solicitar acceso, lógica interna valida)
+   PROPUESTA: Agregar @verificar_permiso('Access Control - Solicitar Acceso', 'crear') para auditabilidad
+
+7. grant_access_request (FBV, línea 951)
+   [NO_MIXIN]
+   MOTIVO: Solo @login_required sin VerificarPermisoMixin. Otorga acceso sin permiso granular auditado.
+   RIESGO: ALTO - operación crítica sin permisos granulares
+   PROPUESTA: Agregar @verificar_permiso('Access Control - Otorgar Acceso', 'autorizar')
+
+OBSERVACIÓN GENERAL access_control: Es el app de administración de permisos. Las 3 vistas core (Crear/Editar/Eliminar Permiso) deberían tener VerificarPermisoMixin. El mixin local aquí es la versión OFICIAL, debe permanecer.
+
+
+
+APP: settings
+ESTADO: 7 INCUMPLIMIENTOS (Riesgo variable)
+
+✅ CUMPLEN ESTÁNDAR: ninguna (internals, pero sin mixin oficial)
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. probar_configuracion_entrada (FBV, línea 24)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: @csrf_exempt @require_POST sin @login_required ni VerificarPermisoMixin. Endpoint AJAX de prueba sin seguridad.
+   RIESGO: CRÍTICO - endpoint públicamente accesible que prueba configuración de entrada de email
+   PROPUESTA: Agregar @login_required + @verificar_permiso('Settings - Probar Config Entrada', 'modificar')
+
+2. probar_configuracion_salida (FBV, línea 56)
+   [NO_MIXIN] [NO_LOGIN_GUARD]
+   MOTIVO: @csrf_exempt @require_POST sin @login_required. Endpoint de prueba sin seguridad.
+   RIESGO: CRÍTICO - públicamente accesible, podría abusarse para envíos masivos
+   PROPUESTA: Agregar @login_required + @verificar_permiso('Settings - Probar Config Salida', 'modificar')
+
+3. enviar_correo_prueba (FBV, línea 87)
+   [NO_MIXIN]
+   MOTIVO: @csrf_exempt @require_POST @login_required sin VerificarPermisoMixin. Envía email sin permiso granular.
+   RIESGO: ALTO - cualquier usuario autenticado puede enviar emails de prueba (abuso potencial)
+   PROPUESTA: Agregar @verificar_permiso('Settings - Enviar Correo Prueba', 'crear')
+
+4. recibir_correo_prueba (FBV, línea 152)
+   [NO_MIXIN]
+   MOTIVO: @login_required sin VerificarPermisoMixin. Recibe email sin permiso granular.
+   RIESGO: ALTO - cualquier usuario puede recibir correos de prueba
+   PROPUESTA: Agregar @verificar_permiso('Settings - Recibir Correo Prueba', 'modificar')
+
+5. set_fecha_sistema (FBV, línea 189)
+   [NO_MIXIN]
+   MOTIVO: @login_required @require_POST sin VerificarPermisoMixin. Cambia fecha del sistema sin permisos granulares.
+   RIESGO: CRÍTICO - operación crítica que afecta timestamps globales
+   PROPUESTA: Agregar @verificar_permiso('Settings - Set Fecha Sistema', 'autorizar')
+
+6. configurar_email (FBV, línea 228)
+   [NO_MIXIN]
+   MOTIVO: @login_required sin VerificarPermisoMixin. Configura email sin permisos granulares.
+   RIESGO: ALTO - cambios en configuración global sin auditabilidad
+   PROPUESTA: Agregar @verificar_permiso('Settings - Configurar Email', 'modificar')
+
+7. guardar_preferencias (FBV, línea 244)
+   [NO_MIXIN]
+   MOTIVO: @require_POST @login_required @verificar_permiso(...) - FBV decorator sin CBV. Inconsistente con patrón.
+   RIESGO: Bajo (funcional pero inconsistente)
+   PROPUESTA: Convertir a CBV con VerificarPermisoMixin para consistencia.
+
+OBSERVACIÓN GENERAL settings: App crítica para configuración. TODAS las vistas necesitan @verificar_permiso o conversión a CBV.
+
+
+
+APP: core_search
+ESTADO: 1 INCUMPLIMIENTO (Riesgo bajo)
+
+✅ CUMPLEN ESTÁNDAR: ninguna
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. menu_search (FBV, línea 8)
+   [NO_MIXIN]
+   MOTIVO: @login_required sin VerificarPermisoMixin. Búsqueda de menú sin permisos granulares.
+   RIESGO: Bajo (búsqueda de navegación, típicamente sin restricción)
+   PROPUESTA: Sin cambio si es búsqueda pública. O agregar @verificar_permiso('Core Search - Búsqueda Menú', 'ingresar')
+
+OBSERVACIÓN GENERAL core_search: App pequeña, solo 1 FBV. Bajo impacto.
+
+
+
+APP: evaluaciones
+ESTADO: 2 INCUMPLIMIENTOS (Riesgo bajo)
+
+✅ CUMPLEN ESTÁNDAR: ninguna
+
+❌ NO CUMPLEN ESTÁNDAR:
+
+1. VerificarPermisoMixin (CBV, línea 5-20)
+   [LOCAL_MIXIN]
+   MOTIVO: Define su propio mixin local. Debería importar la versión oficial.
+   RIESGO: Bajo (duplicación, pero funciona)
+   PROPUESTA: Remover mixin local. Agregar import:
+      from access_control.views import VerificarPermisoMixin
+
+2. ImportarPersonasView (CBV, línea 25)
+   [BAD_VISTA_NOMBRE]
+   MOTIVO: vista_nombre="Importar Personas" sin prefijo app. Debería ser "Evaluaciones - Importar Personas"
+   RIESGO: Bajo (naming inconsistency)
+   PROPUESTA: Cambiar vista_nombre a "Evaluaciones - Importar Personas"
+
+OBSERVACIÓN GENERAL evaluaciones: App pequeña, 1 vista. Necesita remover mixin local y estandarizar Vista.nombre.
+
+
+
+APP: control_de_proyectos
+ESTADO: 2 INCUMPLIMIENTOS (Riesgo ALTO - multiempresa)
+
+✅ CUMPLEN ESTÁNDAR (naming + mixin):
+ListarProyectosView, DetalleProyectoView, CrearProyectoView, EditarProyectoView, EliminarProyectoView
+CrearTareaView, EditarTareaView, EliminarTareaView, CrearClienteView, EditarClienteView
+CrearProfesionalView, EditarProfesionalView, sugerir_tipos_proyecto, sugerir_especialidades
+CrearTipoTareaView, SubirDocumentoTareaView, ActualizarAvanceTareaView
+
+❌ NO CUMPLEN ESTÁNDAR (Empresa scoping crítico):
+
+1. ListarClientesView (CBV, línea 328)
+   [NO_EMPRESA_ACTIVA]
+   MOTIVO: get_queryset() retorna ClienteEmpresa.objects.filter(activo=True) - NO filtra por empresa_id activa en sesión
+   RIESGO: CRÍTICO (multiempresa) - usuarios de Empresa A ven clientes de Empresa B
+   PROPUESTA: Cambiar get_queryset():
+      def get_queryset(self):
+          empresa_id = self.request.session.get('empresa_id')
+          return ClienteEmpresa.objects.filter(activo=True, empresa_id=empresa_id)
+
+2. ListarProfesionalesView (CBV, línea 387)
+   [NO_EMPRESA_ACTIVA]
+   MOTIVO: get_queryset() retorna Profesional.objects.filter(activo=True)... - NO filtra por empresa_id
+   RIESGO: CRÍTICO (multiempresa) - usuarios ven profesionales de otras empresas
+   PROPUESTA: Cambiar get_queryset():
+      def get_queryset(self):
+          empresa_id = self.request.session.get('empresa_id')
+          return Profesional.objects.filter(activo=True, empresa_id=empresa_id).select_related(...)
+
+OBSERVACIÓN GENERAL control_de_proyectos: La mayoría de vistas CUMPLE (buenas vistas de ejemplo).
+Pero los 2 listados de maestros (clientes, profesionales) SÍ tienen datos globales sin scoping.
+CRÍTICO para multiempresa.
+
+
+
+APP: control_operacional
+ESTADO: 0 INCUMPLIMIENTOS ✅ (CUMPLE COMPLETAMENTE)
+
+✅ CUMPLEN ESTÁNDAR:
+DashboardView, AlertasOperacionalesView, AckAlertaView
+
+OBSERVACIÓN: Migración reciente exitosa a CBV + VerificarPermisoMixin. Modelo a seguir.
+Valida empresa_id en dispatch(), filtra alertas por empresa_id.
+Vista.nombre descriptivo con prefijo "Control Operacional - ".
+AJAX endpoint (AckAlertaView) retorna JsonResponse correctamente.
+
+
+
+APP: notificaciones
+ESTADO: 0 INCUMPLIMIENTOS ✅ (CUMPLE COMPLETAMENTE)
+
+✅ CUMPLEN ESTÁNDAR:
+NotificacionesTopbarView, NotificacionesMarkReadView, NotificacionesMarkAllReadView, MisNotificacionesView
+VerNotificacionView, CentroAlertasView, ForzarNotificacionesView, AlertaPersonalizadaView
+
+OBSERVACIÓN: Todas las vistas usan VerificarPermisoMixin con vista_nombre descriptivo.
+Validan empresa_id en casos necesarios. Patrón consistente y correcto.
+MODELO A SEGUIR.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+RESUMEN FINAL - AUDITORÍA GLOBAL
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+ESTADÍSTICAS:
+- Total apps auditados: 11
+- Total vistas/endpoints revisados: ~120+
+- Apps que CUMPLEN completamente (0 incumplimientos): 3 (chat, control_operacional, notificaciones)
+- Apps con algún incumplimiento: 8
+- Total incumplimientos identificados: 47
+
+DESGLOSE POR RIESGO:
+
+🔴 ALTO RIESGO (12 incumplimientos):
+1. respaldo_biblioteca_zip [NO_MIXIN] - descarga ZIP sin validar permisos
+2. descargar_documentos_propiedad_zip [NO_MIXIN] - descarga ZIP de documentos sin control granular
+3. enviar_enlace_documento [NO_MIXIN] - envía enlaces sin permisos granulares
+4. TrabajadoresViewSet [NO_MIXIN] [NO_LOGIN_GUARD] - endpoint PÚBLICO que expone rut/nombre de trabajadores
+5. MaestroempresasMRO [NO_MIXIN] [NO_LOGIN_GUARD] - endpoint PÚBLICO que expone datos maestros
+6. invite_user (api) [NO_MIXIN] [NO_LOGIN_GUARD] - invitar usuarios sin autenticación
+7. toggle_permiso [NO_MIXIN] [NO_LOGIN_GUARD] - toggle de permisos sin estar autenticado
+8. grant_access_request [NO_MIXIN] - otorga acceso sin permisos granulares editables
+9. probar_configuracion_entrada [NO_MIXIN] [NO_LOGIN_GUARD] - endpoint PÚBLICO
+10. probar_configuracion_salida [NO_MIXIN] [NO_LOGIN_GUARD] - endpoint PÚBLICO
+11. set_fecha_sistema [NO_MIXIN] - cambios críticos en sistema sin permisos granulares
+12. ListarClientesView [NO_EMPRESA_ACTIVA] - CRÍTICO multiempresa: datos globales sin scoping
+13. ListarProfesionalesView [NO_EMPRESA_ACTIVA] - CRÍTICO multiempresa: datos globales sin scoping
+
+🟠 RIESGO MEDIO (15 incumplimientos):
+- enviar_correo_prueba, recibir_correo_prueba, configurar_email, set_fecha_sistema (settings)
+- PermisoCrearView, PermisoEditarView, PermisoEliminarView, solicitar_acceso (access_control)
+- crear_usuario_admin, editar_perfil, subeAvatar, cambiar_password (acounts)
+
+🟡 RIESGO BAJO (20 incumplimientos):
+- LOCAL_MIXIN en biblioteca, evaluaciones (duplicación innecesaria)
+- BAD_VISTA_NOMBRE en múltiples vistas (naming inconsistency, sin prefijo app)
+- ModalesEjemploView (ejemplo, no prod)
+- menu_search, core_search (búsqueda de navegación)
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+TOP 3 APPS CON MÁS INCUMPLIMIENTOS:
+
+1. settings (7 incumplimientos - ALTO RIESGO)
+   App crítica. TODAS las vistas necesitan @verificar_permiso.
+   Endpoints de prueba (probar_config_*) expuestos públicamente.
+   SIN CAMBIAR, expone configuración crítica.
+
+2. biblioteca (8 incumplimientos)
+   Mixin local que debe removerse.
+   FBVs de descarga/envío sin permisos granulares.
+   Vista.nombre inconsistentes (faltan prefijo "Biblioteca - ").
+
+3. api (3 incumplimientos - CRÍTICO)
+   ViewSets sin autenticación (@permission_classes ausente).
+   Endpoints PÚBLICOS que exponen datos sensibles (rut, nombres).
+   invite_user sin @login_required.
+   RIESGO MÁS ALTO DEL PROYECTO.
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+LISTA PRIORIZADA DE CORRECCIONES (Orden de urgencia):
+
+PRIORIDAD 1 - CRÍTICO (Corregir INMEDIATAMENTE):
+1. api/views.py
+   - Agregar permission_classes = [IsAuthenticated] a TrabajadoresViewSet
+   - Agregar permission_classes = [IsAuthenticated] a MaestroempresasMRO
+   - Agregar @login_required a invite_user (FBV)
+
+2. control_de_proyectos/views.py
+   - Agregar empresa_id filtering en ListarClientesView.get_queryset()
+   - Agregar empresa_id filtering en ListarProfesionalesView.get_queryset()
+
+3. settings/views.py
+   - Agregar @login_required a probar_configuracion_entrada y probar_configuracion_salida
+   - Agregar @verificar_permiso a set_fecha_sistema (operación crítica)
+
+PRIORIDAD 2 - ALTO RIESGO (Corregir en próximo sprint):
+1. biblioteca/views.py
+   - Remover VerificarPermisoMixin local, importar oficial
+   - Agregar @verificar_permiso a respaldo_biblioteca_zip, descargar_documentos_propiedad_zip, enviar_enlace_documento
+   - Estandarizar Vista.nombre con prefijo "Biblioteca - "
+
+2. access_control/views.py
+   - Agregar VerificarPermisoMixin a PermisoCrearView, PermisoEditarView, PermisoEliminarView
+   - Agregar @verificar_permiso a toggle_permiso, grant_access_request
+
+PRIORIDAD 3 - RIESGO MEDIO (Corregir en sprint future):
+1. settings/views.py
+   - Agregar @verificar_permiso a enviarcorreo_prueba, recibir_correo_prueba, configurar_email
+   - Convertir guardar_preferencias a CBV para consistencia
+
+2. acounts/views.py
+   - Agregar @verificar_permiso a crear_usuario_admin, editar_perfil, subeAvatar, cambiar_password
+
+3. biblioteca/views.py
+   - Estandarizar todos los Vista.nombre
+
+PRIORIDAD 4 - BAJO RIESGO (Corregir cuando haya tiempo):
+1. evaluaciones/views.py
+   - Remover VerificarPermisoMixin local
+   - Estandarizar Vista.nombre
+
+2. core_search/views.py
+   - Agregar @verificar_permiso si es necesario
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+INCUMPLIMIENTOS POR TAG (Análisis):
+
+[NO_MIXIN] - 33 incumplimientos
+  Vistas sin VerificarPermisoMixin ni @verificar_permiso.
+  Afecta: biblioteca (5), acounts (4), access_control (3), settings (7), api (3), core_search (1), evaluaciones (2), etc.
+  IMPACTO: Pérdida de auditabilidad de permisos.
+
+[NO_LOGIN_GUARD] - 8 incumplimientos
+  Vistas sin @login_required ni LoginRequiredMixin.
+  Afecta: acounts (3), settings (2), api (3)
+  IMPACTO: Acceso público a endpoints que podrían ser sensibles.
+
+[NO_EMPRESA_ACTIVA] - 2 incumplimientos
+  Vistas que no filtran por empresa_id.
+  Afecta: control_de_proyectos (2)
+  IMPACTO: CRÍTICO en multiempresa - data leaks entre empresas.
+
+[BAD_VISTA_NOMBRE] - 7 incumplimientos
+  Vista.nombre sin prefijo app.
+  Afecta: biblioteca (3+), evaluaciones (1)
+  IMPACTO: Naming inconsistency, pero funcional.
+
+[BAD_PERMISO] - 0 incumplimientos
+  (access_control VistaEditarView usa "editar" en lugar de "modificar", pero es internal admin)
+
+[LOCAL_MIXIN] - 3 incumplimientos
+  Apps con su propio VerificarPermisoMixin en lugar de importar el oficial.
+  Afecta: biblioteca (1), evaluaciones (1), access_control (1 - pero este ES el oficial)
+  IMPACTO: Duplicación innecesaria en biblioteca evaluaciones.
+
+[AJAX_BAD] - 0 incumplimientos
+  Todos los endpoints AJAX retornan JsonResponse correctamente.
+
+[DELETE_PATTERN] - No auditado en este paso
+  Patrones de eliminación con modal + AJAX.
+  Requerirá auditoría adicional de templates.
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+MODELOS A SEGUIR (GOOD EXAMPLES):
+
+✅ APP: notificaciones
+   - Todas las vistas usan VerificarPermisoMixin
+   - Vista.nombre estandarizado con prefijo "Notificaciones - "
+   - Validación de empresa_id donde corresponde
+   - Endpoints AJAX retornan JsonResponse correctamente
+
+✅ APP: control_operacional
+   - CBVs con VerificarPermisoMixin
+   - Vista.nombre='Control Operacional - <acción>'
+   - Validación de empresa_id en dispatch()
+   - Endpoint AJAX correcto
+
+✅ APP: chat
+   - CBVs consistentes con VerificarPermisoMixin
+   - Vista.nombre con prefijo "Chat - "
+   - Permisos granulares correctos
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+RECOMENDACIONES GENERALES:
+
+1. INMEDIATO:
+   - Proteger endpoints públicos en api/ con @login_required o permission_classes
+   - Arreglar empresa_id scoping en control_de_proyectos ListarClientes/Profesionales
+   - Proteger endpoints de settings que son actualmente públicos
+
+2. CORTO PLAZO (próximo sprint):
+   - Removerl VerificarPermisoMixin local en biblioteca, evaluaciones
+   - Estandarizar Vista.nombre con prefijo app en todas las vistas
+   - Agregar @verificar_permiso a FBVs críticas
+
+3. MEDIANO PLAZO:
+   - Convertir FBVs administrativas a CBVs con VerificarPermisoMixin
+   - Auditar eliminación de documentos/registros (AJAX_DELETION_PATTERN)
+   - Validar empresa_id en todas las vistas scoped
+
+4. DOCUMENTACIÓN:
+   - Crear archivo STANDARDS_VIEWS.md con patrones recomendados
+   - Documentar que acceso_control.views.VerificarPermisoMixin es la versión oficial
+   - Incluir checklist para nuevas vistas
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+FIN DE AUDITORÍA

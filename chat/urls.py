@@ -1,20 +1,26 @@
 # urls.py
 from django.urls import path
-from . import views
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib.auth.views import LoginView
+
+from .views import (
+    ChatInboxView,
+    ChatCentroMensajesView,
+    ListaConversacionesView,
+    CrearConversacionView,
+    DetalleConversacionView,
+    EnviarMensajeView,
+    EliminarConversacionView,
+)
 
 urlpatterns = [
-    path('chat/', views.chat_inbox, name='chat_inbox'),
-    path('centro/', views.centro_mensajes, name='centro_mensajes'),
-    path('conversaciones/', views.lista_conversaciones, name='lista_conversaciones'),
-    path('conversaciones/<int:conversacion_id>/enviar-mensaje/', views.enviar_mensaje, name='enviar_mensaje'),
-    path('conversaciones/crear/', views.crear_conversacion, name='crear_conversacion'),
-    path('conversaciones/<int:conversacion_id>/', views.detalle_conversacion, name='detalle_conversacion'),
-    path('conversacion/<int:conversacion_id>/eliminar/', views.eliminar_conversacion, name='eliminar_conversacion'),
-
-
+    path('chat/', ChatInboxView.as_view(), name='chat_inbox'),
+    path('centro/', ChatCentroMensajesView.as_view(), name='centro_mensajes'),
+    path('conversaciones/', ListaConversacionesView.as_view(), name='lista_conversaciones'),
+    path('conversaciones/<int:conversacion_id>/enviar-mensaje/', EnviarMensajeView.as_view(), name='enviar_mensaje'),
+    path('conversaciones/crear/', CrearConversacionView.as_view(), name='crear_conversacion'),
+    path('conversaciones/<int:pk>/', DetalleConversacionView.as_view(), name='detalle_conversacion'),
+    path('conversacion/<int:pk>/eliminar/', EliminarConversacionView.as_view(), name='eliminar_conversacion'),
 ]
 
 

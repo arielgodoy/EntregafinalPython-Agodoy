@@ -24,7 +24,7 @@ class TestTopbarPagination(TestCase):
     def _login_with_empresa(self, empresa):
         self.client.force_login(self.user)
         vista, _ = Vista.objects.get_or_create(
-            nombre="notificaciones.mis_notificaciones",
+            nombre="Notificaciones - Topbar",
             defaults={"descripcion": "Vista de notificaciones"},
         )
         Permiso.objects.update_or_create(

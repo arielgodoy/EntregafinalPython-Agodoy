@@ -15,7 +15,8 @@ class ControlOperacionalAlertasTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pass1234")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
-        self.vista = Vista.objects.create(nombre="control_operacional.alertas")
+        self.vista = Vista.objects.create(nombre="Control Operacional - Alertas")
+        self.vista_ack = Vista.objects.create(nombre="Control Operacional - Reconocer alerta")
         self.cliente = ClienteEmpresa.objects.create(nombre="Cliente A", rut="12.345.678-5")
 
     def _login_with_empresa(self):
@@ -92,6 +93,18 @@ class ControlOperacionalAlertasTests(TestCase):
 
         self._login_with_empresa()
         self._grant_ingresar()
+        # Grant permission for AckAlertaView specifically
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_ack,
+            ingresar=True,
+            crear=False,
+            modificar=False,
+            eliminar=False,
+            autorizar=False,
+            supervisor=False,
+        )
 
         alert_key = f"project:{proyecto.id}:overdue"
         post_response = self.client.post(
@@ -108,6 +121,18 @@ class ControlOperacionalAlertasTests(TestCase):
     def test_ack_rechaza_key_invalida(self):
         self._login_with_empresa()
         self._grant_ingresar()
+        # Grant permission for AckAlertaView specifically
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_ack,
+            ingresar=True,
+            crear=False,
+            modificar=False,
+            eliminar=False,
+            autorizar=False,
+            supervisor=False,
+        )
 
         response = self.client.post(
             reverse("control_operacional:ack_alerta"),

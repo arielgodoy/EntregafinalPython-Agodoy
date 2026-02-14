@@ -30,9 +30,9 @@ class TestCrossEmpresaSecurity(TestCase):
         self.user3 = User.objects.create_user(username="user3", password="pass")
         self.perfil = PerfilAcceso.objects.create(nombre="Demo", is_active=True)
 
-        self.vista_chat_create = Vista.objects.create(nombre="chat.create")
-        self.vista_chat_send = Vista.objects.create(nombre="chat.send_message")
-        self.vista_chat_thread = Vista.objects.create(nombre="chat.thread")
+        self.vista_chat_create = Vista.objects.create(nombre="Chat - Crear conversación")
+        self.vista_chat_send = Vista.objects.create(nombre="Chat - Enviar mensaje")
+        self.vista_chat_thread = Vista.objects.create(nombre="Chat - Ver conversación")
 
     def _grant_permiso(self, user, empresa, vista):
         return Permiso.objects.create(

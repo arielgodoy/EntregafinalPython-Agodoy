@@ -11,7 +11,10 @@ class TestAlertaPersonalizada(TestCase):
         self.staff_user = User.objects.create_user(username="staff", password="pass123", is_staff=True)
         self.normal_user = User.objects.create_user(username="normal", password="pass123", is_staff=False)
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 1")
-        self.vista = Vista.objects.create(nombre="notificaciones.mis_notificaciones", descripcion="Vista de notificaciones")
+        self.vista = Vista.objects.create(
+            nombre="Alerta Personalizada",
+            descripcion="Vista de alerta personalizada",
+        )
 
     def test_no_staff_get_y_post_403(self):
         self.client.login(username="normal", password="pass123")
