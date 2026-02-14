@@ -94,3 +94,68 @@ class UsuarioPerfilEmpresa(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.empresa.codigo} - {self.perfil.nombre}"
+
+
+class AccessRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "PENDING"
+        APPROVED = "APPROVED", "APPROVED"
+        REJECTED = "REJECTED", "REJECTED"
+        RESPONDED = "RESPONDED", "RESPONDED"
+        RESOLVED = "RESOLVED", "RESOLVED"
+
+    class EmailStatus(models.TextChoices):
+        SKIPPED = "SKIPPED", "SKIPPED"
+        SENT = "SENT", "SENT"
+        FAILED = "FAILED", "FAILED"
+
+    solicitante = models.ForeignKey(User, on_delete=models.CASCADE, related_name="access_requests")
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, null=True, blank=True)
+    vista_nombre = models.CharField(max_length=255)
+    motivo = models.TextField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    responded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_requests_responded",
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+    response_text = models.TextField(blank=True)
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="access_requests_resolved",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_note = models.TextField(blank=True)
+    email_attempted = models.BooleanField(default=False)
+    email_sent = models.BooleanField(default=False)
+    email_status = models.CharField(
+        max_length=20,
+        choices=EmailStatus.choices,
+        default=EmailStatus.SKIPPED,
+    )
+    email_from = models.TextField(blank=True, default="")
+    email_error = models.TextField(blank=True, default="")
+    email_recipients = models.TextField(blank=True, default="")
+    staff_recipient_ids = models.TextField(blank=True, default="")
+    notified_staff_count = models.PositiveIntegerField(default=0)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["solicitante", "status", "created_at"]),
+            models.Index(fields=["empresa", "vista_nombre", "status"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.solicitante.username} - {self.vista_nombre} - {self.status} "
+            f"- email_status={self.email_status}"
+        )

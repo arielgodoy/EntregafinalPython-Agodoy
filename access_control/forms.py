@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig
-from .models import Permiso, Empresa
+from .models import Permiso, Empresa, Vista
 from django.contrib.auth.models import User
 
 class PermisoForm(forms.ModelForm):
@@ -17,6 +17,46 @@ class PermisoForm(forms.ModelForm):
             'autorizar': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'supervisor': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+
+class AccessRequestGrantForm(forms.Form):
+    usuario = forms.ModelChoiceField(queryset=User.objects.none(), required=False, disabled=True, label="Usuario")
+    empresa = forms.ModelChoiceField(queryset=Empresa.objects.none(), required=False, disabled=True, label="Empresa")
+    vista = forms.ModelChoiceField(queryset=Vista.objects.none(), required=False, disabled=True, label="Vista")
+    ingresar = forms.BooleanField(required=False, initial=True, label="Ingresar")
+    crear = forms.BooleanField(required=False, initial=False, label="Crear")
+    modificar = forms.BooleanField(required=False, initial=False, label="Modificar")
+    eliminar = forms.BooleanField(required=False, initial=False, label="Eliminar")
+    autorizar = forms.BooleanField(required=False, initial=False, label="Autorizar")
+    supervisor = forms.BooleanField(required=False, initial=False, label="Supervisor")
+
+    def __init__(self, *args, **kwargs):
+        usuario = kwargs.pop("usuario", None)
+        empresa = kwargs.pop("empresa", None)
+        vista = kwargs.pop("vista", None)
+        super().__init__(*args, **kwargs)
+
+        for field_name in ["usuario", "empresa", "vista"]:
+            self.fields[field_name].widget.attrs.update({"class": "form-select"})
+        for field_name in [
+            "ingresar",
+            "crear",
+            "modificar",
+            "eliminar",
+            "autorizar",
+            "supervisor",
+        ]:
+            self.fields[field_name].widget.attrs.update({"class": "form-check-input"})
+
+        if usuario is not None:
+            self.fields["usuario"].queryset = User.objects.filter(id=usuario.id)
+            self.fields["usuario"].initial = usuario
+        if empresa is not None:
+            self.fields["empresa"].queryset = Empresa.objects.filter(id=empresa.id)
+            self.fields["empresa"].initial = empresa
+        if vista is not None:
+            self.fields["vista"].queryset = Vista.objects.filter(id=vista.id)
+            self.fields["vista"].initial = vista
 
 class PermisoFiltroForm(forms.Form):
     usuario = forms.ModelChoiceField(queryset=User.objects.all(), required=False, label="Usuario")
