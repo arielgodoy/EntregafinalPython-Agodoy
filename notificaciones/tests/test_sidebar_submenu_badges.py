@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from access_control.models import Empresa, PerfilAcceso, UsuarioPerfilEmpresa
+from access_control.models import Empresa, PerfilAcceso, Permiso, UsuarioPerfilEmpresa, Vista
 from notificaciones.models import Notification
 
 
@@ -21,6 +21,16 @@ class TestSidebarSubmenuBadges(TestCase):
 
     def _login_with_empresa(self):
         self.client.force_login(self.user)
+        vista, _ = Vista.objects.get_or_create(
+            nombre="notificaciones.mis_notificaciones",
+            defaults={"descripcion": "Vista de notificaciones"},
+        )
+        Permiso.objects.update_or_create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=vista,
+            defaults={"ingresar": True},
+        )
         session = self.client.session
         session["empresa_id"] = self.empresa.id
         session["empresa_codigo"] = self.empresa.codigo

@@ -3,14 +3,18 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.views import View
 
 from chat.services.unread import get_unread_count
 from access_control.models import Empresa, Permiso, Vista
+from access_control.views import VerificarPermisoMixin
+from access_control.services.access_requests import build_access_request_context
 from notificaciones.models import Notification
 from notificaciones.services import get_topbar_counts, get_topbar_notifications, mark_read, mark_all_read
 
@@ -65,8 +69,41 @@ def _base_queryset_scope(user, empresa_id, scope):
     return _base_queryset(user, empresa_id)
 
 
+def _require_notificaciones_ingresar(request):
+    empresa_id = _get_empresa_id(request)
+    vista_nombre = "Notificaciones"
+    Vista.objects.get_or_create(
+        nombre=vista_nombre,
+        defaults={"descripcion": "Vista de notificaciones"},
+    )
+    if not empresa_id:
+        contexto = build_access_request_context(
+            request,
+            vista_nombre,
+            "No tienes permisos suficientes para acceder a esta página.",
+        )
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+    has_perm = Permiso.objects.filter(
+        usuario=request.user,
+        empresa_id=empresa_id,
+        vista__nombre=vista_nombre,
+        ingresar=True,
+    ).exists()
+    if not has_perm:
+        contexto = build_access_request_context(
+            request,
+            vista_nombre,
+            "No tienes permisos suficientes para acceder a esta página.",
+        )
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+    return None
+
+
 @login_required
 def topbar(request):
+    permiso_response = _require_notificaciones_ingresar(request)
+    if permiso_response:
+        return permiso_response
     empresa_id = _get_empresa_id(request)
     tipo_raw = (request.GET.get("type") or "ALL").upper()
     allowed_types = {"ALL", "MESSAGE", "ALERT", "SYSTEM"}
@@ -132,6 +169,9 @@ def topbar(request):
 
 @login_required
 def mark_read_view(request, notification_id):
+    permiso_response = _require_notificaciones_ingresar(request)
+    if permiso_response:
+        return permiso_response
     empresa_id = _get_empresa_id(request)
     qs = _base_queryset(request.user, empresa_id)
     notification = qs.filter(id=notification_id).first()
@@ -144,6 +184,9 @@ def mark_read_view(request, notification_id):
 
 @login_required
 def mark_all_read_view(request):
+    permiso_response = _require_notificaciones_ingresar(request)
+    if permiso_response:
+        return permiso_response
     empresa_id = _get_empresa_id(request)
     count = mark_all_read(request.user, empresa_id)
     return JsonResponse({"success": True, "updated": count})
@@ -151,6 +194,9 @@ def mark_all_read_view(request):
 
 @login_required
 def mis_notificaciones(request):
+    permiso_response = _require_notificaciones_ingresar(request)
+    if permiso_response:
+        return permiso_response
     empresa_id = _get_empresa_id(request)
     qs = _base_queryset(request.user, empresa_id)
 
@@ -182,6 +228,9 @@ def mis_notificaciones(request):
 
 @login_required
 def ver_notificacion(request, pk):
+    permiso_response = _require_notificaciones_ingresar(request)
+    if permiso_response:
+        return permiso_response
     empresa_id = _get_empresa_id(request)
     qs = _base_queryset(request.user, empresa_id)
     notification = qs.filter(id=pk).first()
@@ -196,42 +245,52 @@ def ver_notificacion(request, pk):
     return redirect(notification.url)
 
 
-@login_required
-def centro_alertas(request):
-    empresa_id = _get_empresa_id(request)
-    scope = (request.GET.get("scope") or "active").lower()
-    if scope not in ("active", "only_active", "only_global"):
-        scope = "active"
+class CentroAlertasView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Centro de Alertas"
+    permiso_requerido = "ingresar"
 
-    qs = _base_queryset_scope(request.user, empresa_id, scope)
+    def dispatch(self, request, *args, **kwargs):
+        Vista.objects.get_or_create(
+            nombre=self.vista_nombre,
+            defaults={"descripcion": "Centro de Alertas"},
+        )
+        return super().dispatch(request, *args, **kwargs)
 
-    tipo = (request.GET.get("tipo") or "alert").lower()
-    estado = (request.GET.get("estado") or "all").lower()
+    def get(self, request, *args, **kwargs):
+        empresa_id = _get_empresa_id(request)
+        scope = (request.GET.get("scope") or "active").lower()
+        if scope not in ("active", "only_active", "only_global"):
+            scope = "active"
 
-    if tipo in ("message", "alert", "system"):
-        qs = qs.filter(tipo=tipo.upper())
-    elif tipo != "all":
-        tipo = "alert"
-        qs = qs.filter(tipo=Notification.Tipo.ALERT)
+        qs = _base_queryset_scope(request.user, empresa_id, scope)
 
-    if estado == "unread":
-        qs = qs.filter(is_read=False)
-    elif estado == "read":
-        qs = qs.filter(is_read=True)
+        tipo = (request.GET.get("tipo") or "alert").lower()
+        estado = (request.GET.get("estado") or "all").lower()
 
-    qs = qs.order_by("-created_at")
-    paginator = Paginator(qs, 20)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
+        if tipo in ("message", "alert", "system"):
+            qs = qs.filter(tipo=tipo.upper())
+        elif tipo != "all":
+            tipo = "alert"
+            qs = qs.filter(tipo=Notification.Tipo.ALERT)
 
-    context = {
-        "page_obj": page_obj,
-        "current_tipo": tipo,
-        "current_estado": estado,
-        "current_scope": scope,
-        "show_scope": True,
-    }
-    return render(request, "notificaciones/mis_notificaciones.html", context)
+        if estado == "unread":
+            qs = qs.filter(is_read=False)
+        elif estado == "read":
+            qs = qs.filter(is_read=True)
+
+        qs = qs.order_by("-created_at")
+        paginator = Paginator(qs, 20)
+        page_number = request.GET.get("page")
+        page_obj = paginator.get_page(page_number)
+
+        context = {
+            "page_obj": page_obj,
+            "current_tipo": tipo,
+            "current_estado": estado,
+            "current_scope": scope,
+            "show_scope": True,
+        }
+        return render(request, "notificaciones/mis_notificaciones.html", context)
 
 
 @login_required

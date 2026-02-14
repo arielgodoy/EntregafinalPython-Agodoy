@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from access_control.models import Empresa
+from access_control.models import Empresa, Permiso, Vista
 from notificaciones.models import Notification
 
 
@@ -23,6 +23,16 @@ class TestTopbarPagination(TestCase):
 
     def _login_with_empresa(self, empresa):
         self.client.force_login(self.user)
+        vista, _ = Vista.objects.get_or_create(
+            nombre="notificaciones.mis_notificaciones",
+            defaults={"descripcion": "Vista de notificaciones"},
+        )
+        Permiso.objects.update_or_create(
+            usuario=self.user,
+            empresa=empresa,
+            vista=vista,
+            defaults={"ingresar": True},
+        )
         session = self.client.session
         session["empresa_id"] = empresa.id
         session.save()
