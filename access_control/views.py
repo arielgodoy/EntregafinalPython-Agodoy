@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.models import User as Usuario
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.mail import send_mail
 from django.shortcuts import render, redirect, get_object_or_404
 
 from django.contrib.auth.forms import UserChangeForm
@@ -11,11 +12,21 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView,FormView
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 from django.db import transaction
 
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig, UserEmailToken, UserEmailTokenPurpose
-from .models import Empresa, Permiso, Vista, UsuarioPerfilEmpresa
-from .forms import PermisoForm,PermisoFiltroForm,UsuarioInvitacionForm,UsuarioEditarForm, SystemConfigForm, EmailAccountForm, CompanyConfigForm
+from .models import Empresa, Permiso, Vista, UsuarioPerfilEmpresa, AccessRequest
+from .forms import (
+    PermisoForm,
+    PermisoFiltroForm,
+    UsuarioInvitacionForm,
+    UsuarioEditarForm,
+    SystemConfigForm,
+    EmailAccountForm,
+    CompanyConfigForm,
+    AccessRequestGrantForm,
+)
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
@@ -26,7 +37,20 @@ from .decorators import verificar_permiso, PermisoDenegadoJson
 from django.utils.decorators import method_decorator
 from acounts.services.email_service import send_email_via_account
 from access_control.services.invite import invite_user_flow
+from access_control.services.access_requests import (
+    build_access_request_context,
+    build_grant_access_request_url,
+    can_create_access_request,
+    get_recent_access_request,
+    get_empresa_from_request,
+    get_staff_recipients,
+    get_staff_recipient_data,
+    is_user_mail_enabled,
+    record_access_request_email_audit,
+)
+from notificaciones.models import Notification
 from access_control.services.empresa_activa import set_empresa_activa_en_sesion
+logger = logging.getLogger(__name__)
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
     vista_nombre = None
@@ -53,11 +77,8 @@ class VerificarPermisoMixin:
         if is_ajax:
             return JsonResponse({"success": False, "error": mensaje}, status=403)
 
-        contexto = {
-            "mensaje": mensaje,
-            "vista_nombre": getattr(self, "vista_nombre", "Desconocida"),
-            "empresa_nombre": request.session.get("empresa_nombre", "No definida"),
-        }
+        vista_nombre = getattr(self, "vista_nombre", "Desconocida")
+        contexto = build_access_request_context(request, vista_nombre, mensaje)
         return render(request, "access_control/403_forbidden.html", contexto, status=403)
 
 
@@ -752,7 +773,9 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
             return self.handle_no_permission(request, str(e))
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
-        return render(request, "access_control/403_forbidden.html", {"mensaje": mensaje}, status=403)
+        vista_nombre = getattr(self, "vista_nombre", "Desconocida")
+        contexto = build_access_request_context(request, vista_nombre, mensaje)
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -798,6 +821,253 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
         messages.success(self.request, f'Invitación enviada a {email}.')
         return redirect(self.success_url)
+
+
+@login_required
+@require_POST
+def solicitar_acceso(request):
+    motivo = (request.POST.get("motivo") or "").strip()
+    vista_nombre = (request.POST.get("vista_nombre") or "").strip()
+    empresa_id = (request.POST.get("empresa_id") or "").strip()
+    wants_json = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("accept", "")
+    )
+
+    if not vista_nombre:
+        vista_nombre = "Desconocida"
+
+    empresa = None
+    if empresa_id.isdigit():
+        empresa = Empresa.objects.filter(id=int(empresa_id)).first()
+    if empresa is None:
+        empresa = get_empresa_from_request(request)
+
+    if len(motivo) < 10:
+        if wants_json:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message_key": "access.request.toast.motivo_required",
+                },
+                status=400,
+            )
+        messages.error(request, "access.request.error.motivo_required")
+        return redirect(request.META.get("HTTP_REFERER", "/"))
+
+    existing_request = get_recent_access_request(request.user, empresa, vista_nombre)
+    if existing_request:
+        if wants_json:
+            recipients_count = len(
+                [email for email in (existing_request.email_recipients or "").split(",") if email]
+            )
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "created": False,
+                    "duplicate": True,
+                    "message_key": "access.request.toast.dup",
+                    "email_attempted": existing_request.email_attempted,
+                    "email_sent": existing_request.email_sent,
+                    "email_error": existing_request.email_error,
+                    "email_status": existing_request.email_status,
+                    "email_recipients_count": recipients_count,
+                    "notified_staff_count": existing_request.notified_staff_count,
+                }
+            )
+        messages.info(request, "access.request.sent.dup")
+        return redirect(request.META.get("HTTP_REFERER", "/"))
+
+    access_request = AccessRequest.objects.create(
+        solicitante=request.user,
+        empresa=empresa,
+        vista_nombre=vista_nombre,
+        motivo=motivo,
+        status=AccessRequest.Status.PENDING,
+    )
+    grant_url = build_grant_access_request_url(request, access_request)
+
+    staff_qs, staff_ids, staff_emails = get_staff_recipient_data()
+    staff_users = list(staff_qs)
+    notifications = []
+    empresa_label = (
+        f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}" if empresa else "No definida"
+    )
+    titulo = "Solicitud de acceso"
+    cuerpo = (
+        f"Usuario: {request.user.username}\n"
+        f"Empresa: {empresa_label}\n"
+        f"Vista: {vista_nombre}\n"
+        f"Motivo: {motivo}"
+    )
+    for staff in staff_users:
+        notifications.append(
+            Notification(
+                destinatario=staff,
+                empresa=empresa,
+                tipo=Notification.Tipo.SYSTEM,
+                titulo=titulo,
+                cuerpo=cuerpo,
+                url=grant_url,
+                actor=request.user,
+                dedupe_key=f"access_request:{access_request.id}:to:{staff.id}",
+            )
+        )
+    if notifications:
+        Notification.objects.bulk_create(notifications)
+
+    enviar_email = request.POST.get("enviar_email") == "on"
+    record_access_request_email_audit(
+        access_request,
+        request.user,
+        staff_ids,
+        staff_emails,
+        enviar_email,
+        titulo,
+        cuerpo,
+    )
+
+    if wants_json:
+        recipients_count = len([email for email in (access_request.email_recipients or "").split(",") if email])
+        return JsonResponse(
+            {
+                "ok": True,
+                "created": True,
+                "duplicate": False,
+                "message_key": "access.request.toast.ok",
+                "email_attempted": access_request.email_attempted,
+                "email_sent": access_request.email_sent,
+                "email_error": access_request.email_error,
+                "email_status": access_request.email_status,
+                "email_recipients_count": recipients_count,
+                "notified_staff_count": access_request.notified_staff_count,
+            }
+        )
+    messages.success(request, "access.request.sent.ok")
+    return redirect(request.META.get("HTTP_REFERER", "/"))
+
+
+@login_required
+def grant_access_request(request, pk):
+    VISTA_NOMBRE_GRANT = "access_control.grant_access_request"
+    Vista.objects.get_or_create(nombre=VISTA_NOMBRE_GRANT, defaults={"descripcion": ""})
+    if not request.user.is_staff:
+        contexto = build_access_request_context(
+            request,
+            VISTA_NOMBRE_GRANT,
+            "No tienes permisos suficientes para otorgar acceso.",
+        )
+        return render(request, "access_control/403_forbidden.html", contexto, status=403)
+
+    access_request = get_object_or_404(AccessRequest, pk=pk)
+    if access_request.vista_nombre:
+        Vista.objects.get_or_create(nombre=access_request.vista_nombre, defaults={"descripcion": ""})
+    empresa = access_request.empresa
+    usuario_objetivo = access_request.solicitante
+    vista = Vista.objects.filter(nombre=access_request.vista_nombre).first()
+
+    if not empresa or not usuario_objetivo or not vista:
+        context = {
+            "access_request": access_request,
+            "form": AccessRequestGrantForm(usuario=usuario_objetivo, empresa=empresa, vista=vista),
+            "error_message_key": "access_request.grant.missing_data",
+        }
+        return render(request, "access_control/grant_access_request.html", context, status=400)
+
+    permiso_existente = Permiso.objects.filter(
+        usuario=usuario_objetivo,
+        empresa=empresa,
+        vista=vista,
+    ).first()
+
+    initial_flags = {
+        "ingresar": True,
+        "crear": False,
+        "modificar": False,
+        "eliminar": False,
+        "autorizar": False,
+        "supervisor": False,
+    }
+    if permiso_existente:
+        initial_flags = {
+            "ingresar": permiso_existente.ingresar,
+            "crear": permiso_existente.crear,
+            "modificar": permiso_existente.modificar,
+            "eliminar": permiso_existente.eliminar,
+            "autorizar": permiso_existente.autorizar,
+            "supervisor": permiso_existente.supervisor,
+        }
+
+    if access_request.status != AccessRequest.Status.PENDING:
+        form = AccessRequestGrantForm(
+            usuario=usuario_objetivo,
+            empresa=empresa,
+            vista=vista,
+            initial=initial_flags,
+        )
+        context = {
+            "access_request": access_request,
+            "form": form,
+            "already_resolved": True,
+        }
+        return render(request, "access_control/grant_access_request.html", context)
+
+    if request.method == "POST":
+        form = AccessRequestGrantForm(
+            request.POST,
+            usuario=usuario_objetivo,
+            empresa=empresa,
+            vista=vista,
+            initial=initial_flags,
+        )
+        if form.is_valid():
+            with transaction.atomic():
+                permiso, created = Permiso.objects.update_or_create(
+                    usuario=usuario_objetivo,
+                    empresa=empresa,
+                    vista=vista,
+                    defaults={
+                        "ingresar": bool(form.cleaned_data.get("ingresar")),
+                        "crear": bool(form.cleaned_data.get("crear")),
+                        "modificar": bool(form.cleaned_data.get("modificar")),
+                        "eliminar": bool(form.cleaned_data.get("eliminar")),
+                        "autorizar": bool(form.cleaned_data.get("autorizar")),
+                        "supervisor": bool(form.cleaned_data.get("supervisor")),
+                    },
+                )
+                access_request.status = AccessRequest.Status.RESOLVED
+                access_request.resolved_by = request.user
+                access_request.resolved_at = timezone.now()
+                access_request.resolved_note = ""
+                access_request.responded_by = request.user
+                access_request.responded_at = access_request.resolved_at
+                access_request.save(
+                    update_fields=[
+                        "status",
+                        "resolved_by",
+                        "resolved_at",
+                        "resolved_note",
+                        "responded_by",
+                        "responded_at",
+                    ]
+                )
+
+            messages.success(request, "access_request.grant.success")
+            return redirect("access_control:grant_access_request", pk=access_request.id)
+    else:
+        form = AccessRequestGrantForm(
+            usuario=usuario_objetivo,
+            empresa=empresa,
+            vista=vista,
+            initial=initial_flags,
+        )
+
+    context = {
+        "access_request": access_request,
+        "form": form,
+        "already_resolved": False,
+    }
+    return render(request, "access_control/grant_access_request.html", context)
 
 
 class UsuarioCrearView(BaseUsuarioInviteView):

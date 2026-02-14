@@ -27,6 +27,8 @@ urlpatterns = [
 
     
     path('toggle-permiso/', views.toggle_permiso, name='toggle_permiso'),
+    path('solicitar-acceso/', views.solicitar_acceso, name='solicitar_acceso'),
+    path('solicitudes/<int:pk>/otorgar/', views.grant_access_request, name='grant_access_request'),
 
     path('vistas/', VistaListaView.as_view(), name='vistas_lista'),
     path('vistas/crear/', VistaCrearView.as_view(), name='vista_crear'),

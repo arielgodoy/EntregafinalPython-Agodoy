@@ -19,21 +19,56 @@ class InviteUserFlowTests(TestCase):
         self.client.force_login(self.user)
         session = self.client.session
         session['empresa_id'] = self.empresa.id
+        session['empresa_codigo'] = self.empresa.codigo
+        session['empresa_nombre'] = self.empresa.descripcion
         session.save()
 
     def _grant_invite_perm(self, allow_create=True):
-        vista_auth = Vista.objects.create(nombre='auth_invite')
-        Vista.objects.create(nombre='Maestro Usuarios')
-        Permiso.objects.create(
+        vista_auth, _ = Vista.objects.get_or_create(
+            nombre='auth_invite',
+            defaults={'descripcion': ''},
+        )
+        Vista.objects.get_or_create(
+            nombre='Maestro Usuarios',
+            defaults={'descripcion': ''},
+        )
+        Permiso.objects.update_or_create(
             usuario=self.user,
             empresa=self.empresa,
             vista=vista_auth,
-            ingresar=True,
-            crear=allow_create,
-            modificar=False,
-            eliminar=False,
-            autorizar=False,
-            supervisor=False,
+            defaults={
+                'ingresar': True,
+                'crear': allow_create,
+                'modificar': False,
+                'eliminar': False,
+                'autorizar': False,
+                'supervisor': False,
+            },
+        )
+
+    def _invite_debug_info(self, response):
+        if response.status_code == 302:
+            return None
+        location = None
+        if hasattr(response, 'headers'):
+            location = response.headers.get('Location')
+        elif hasattr(response, 'get'):
+            location = response.get('Location')
+        form = response.context.get('form') if hasattr(response, 'context') else None
+        form_errors = form.errors if form else None
+        from django.contrib.messages import get_messages
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        content = response.content or b''
+        try:
+            snippet = content.decode('utf-8', errors='replace')[:1500]
+        except Exception:
+            snippet = str(content)[:1500]
+        return (
+            f"status_code={response.status_code}\n"
+            f"location={location}\n"
+            f"form_errors={form_errors}\n"
+            f"messages={messages}\n"
+            f"content_snippet={snippet}"
         )
 
     def test_permiso_denegado_retorna_403(self):
@@ -43,6 +78,7 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'Inv',
             'last_name': 'User',
             'tipo_usuario': 'PROFESIONAL',
+            'empresas': [self.empresa.id],
         })
         self.assertEqual(response.status_code, 403)
 
@@ -53,6 +89,7 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'Inv',
             'last_name': 'User',
             'tipo_usuario': 'PROFESIONAL',
+            'empresas': [self.empresa.id],
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'errors.company_config.public_base_url_required')
@@ -60,21 +97,23 @@ class InviteUserFlowTests(TestCase):
     @patch('access_control.services.invite.send_security_email')
     def test_invite_crea_usuario_inactivo_y_token_no_consumido_en_get(self, mock_send):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
-        def _send_mail_side_effect(**kwargs):
+        def _send_mail_side_effect(*args, **kwargs):
             send_mail(
-                kwargs['subject'],
-                kwargs['body_text'],
+                kwargs.get('subject') or '',
+                kwargs.get('body_text') or '',
                 'noreply@test.local',
-                kwargs['to_emails'],
+                kwargs.get('to_emails') or [],
             )
-            return {'success': True}
+            return {'ok': True, 'success': True}
 
         mock_send.side_effect = _send_mail_side_effect
 
@@ -83,8 +122,10 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'Inv',
             'last_name': 'User',
             'tipo_usuario': 'PROFESIONAL',
+            'empresas': [self.empresa.id],
         })
-        self.assertEqual(response.status_code, 302)
+        debug_info = self._invite_debug_info(response)
+        self.assertEqual(response.status_code, 302, msg=debug_info or '')
 
         invited = User.objects.get(username='invite@test.local')
         self.assertFalse(invited.is_active)
@@ -108,21 +149,23 @@ class InviteUserFlowTests(TestCase):
     @patch('access_control.services.invite.send_security_email')
     def test_mail_contiene_link_activacion(self, mock_send):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
-        def _send_mail_side_effect(**kwargs):
+        def _send_mail_side_effect(*args, **kwargs):
             send_mail(
-                kwargs['subject'],
-                kwargs['body_text'],
+                kwargs.get('subject') or '',
+                kwargs.get('body_text') or '',
                 'noreply@test.local',
-                kwargs['to_emails'],
+                kwargs.get('to_emails') or [],
             )
-            return {'success': True}
+            return {'ok': True, 'success': True}
 
         mock_send.side_effect = _send_mail_side_effect
 
@@ -131,18 +174,22 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'Link',
             'last_name': 'User',
             'tipo_usuario': 'PROFESIONAL',
+            'empresas': [self.empresa.id],
         })
-        self.assertEqual(response.status_code, 302)
+        debug_info = self._invite_debug_info(response)
+        self.assertEqual(response.status_code, 302, msg=debug_info or '')
         self.assertEqual(len(mail.outbox), 1)
         self.assertRegex(mail.outbox[0].body, r'/auth/activate/[^/]+/')
 
     def test_invitar_usuario_sin_perfil_retiene_error(self):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
         response = self.client.post(reverse('access_control:usuario_crear'), data={
@@ -150,6 +197,7 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'User',
             'last_name': 'NoProfile',
             'tipo_usuario': 'USUARIO',
+            'empresas': [self.empresa.id],
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'validation.reference_required')
@@ -157,21 +205,23 @@ class InviteUserFlowTests(TestCase):
     @patch('access_control.services.invite.send_security_email')
     def test_invitar_profesional_no_requiere_perfil(self, mock_send):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
-        def _send_mail_side_effect(**kwargs):
+        def _send_mail_side_effect(*args, **kwargs):
             send_mail(
-                kwargs['subject'],
-                kwargs['body_text'],
+                kwargs.get('subject') or '',
+                kwargs.get('body_text') or '',
                 'noreply@test.local',
-                kwargs['to_emails'],
+                kwargs.get('to_emails') or [],
             )
-            return {'success': True}
+            return {'ok': True, 'success': True}
 
         mock_send.side_effect = _send_mail_side_effect
 
@@ -180,8 +230,10 @@ class InviteUserFlowTests(TestCase):
             'first_name': 'Pro',
             'last_name': 'User',
             'tipo_usuario': 'PROFESIONAL',
+            'empresas': [self.empresa.id],
         })
-        self.assertEqual(response.status_code, 302)
+        debug_info = self._invite_debug_info(response)
+        self.assertEqual(response.status_code, 302, msg=debug_info or '')
 
         invited = User.objects.get(username='pro@test.local')
         permisos = Permiso.objects.filter(usuario=invited).count()
@@ -190,15 +242,32 @@ class InviteUserFlowTests(TestCase):
     @patch('access_control.services.invite.send_security_email')
     def test_invitar_usuario_con_referencia_clona_permisos(self, mock_send):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
+        vista_base, _ = Vista.objects.get_or_create(
+            nombre='Maestro Usuarios',
+            defaults={'descripcion': ''},
+        )
         vista = Vista.objects.create(nombre='Vista Referencia')
         usuario_ref = User.objects.create_user(username='referencia', password='pass')
+        Permiso.objects.create(
+            usuario=usuario_ref,
+            empresa=self.empresa,
+            vista=vista_base,
+            ingresar=True,
+            crear=False,
+            modificar=False,
+            eliminar=False,
+            autorizar=False,
+            supervisor=False,
+        )
         Permiso.objects.create(
             usuario=usuario_ref,
             empresa=self.empresa,
@@ -211,14 +280,14 @@ class InviteUserFlowTests(TestCase):
             supervisor=False,
         )
 
-        def _send_mail_side_effect(**kwargs):
+        def _send_mail_side_effect(*args, **kwargs):
             send_mail(
-                kwargs['subject'],
-                kwargs['body_text'],
+                kwargs.get('subject') or '',
+                kwargs.get('body_text') or '',
                 'noreply@test.local',
-                kwargs['to_emails'],
+                kwargs.get('to_emails') or [],
             )
-            return {'success': True}
+            return {'ok': True, 'success': True}
 
         mock_send.side_effect = _send_mail_side_effect
 
@@ -228,8 +297,10 @@ class InviteUserFlowTests(TestCase):
             'last_name': 'Profile',
             'tipo_usuario': 'USUARIO',
             'usuario_referencia': usuario_ref.id,
+            'empresas': [self.empresa.id],
         })
-        self.assertEqual(response.status_code, 302)
+        debug_info = self._invite_debug_info(response)
+        self.assertEqual(response.status_code, 302, msg=debug_info or '')
 
         invited = User.objects.get(username='user-profile@test.local')
         permiso = Permiso.objects.filter(
@@ -243,21 +314,23 @@ class InviteUserFlowTests(TestCase):
     @patch('access_control.services.invite.send_security_email')
     def test_invitar_multiempresa_crea_permisos_y_meta(self, mock_send):
         self._grant_invite_perm(allow_create=True)
-        SystemConfig.objects.create(
+        SystemConfig.objects.update_or_create(
             is_active=True,
-            public_base_url='http://testserver',
-            default_from_email='noreply@test.local',
-            default_from_name='Test System',
+            defaults={
+                'public_base_url': 'http://testserver',
+                'default_from_email': 'noreply@test.local',
+                'default_from_name': 'Test System',
+            },
         )
 
-        def _send_mail_side_effect(**kwargs):
+        def _send_mail_side_effect(*args, **kwargs):
             send_mail(
-                kwargs['subject'],
-                kwargs['body_text'],
+                kwargs.get('subject') or '',
+                kwargs.get('body_text') or '',
                 'noreply@test.local',
-                kwargs['to_emails'],
+                kwargs.get('to_emails') or [],
             )
-            return {'success': True}
+            return {'ok': True, 'success': True}
 
         mock_send.side_effect = _send_mail_side_effect
 
@@ -268,7 +341,8 @@ class InviteUserFlowTests(TestCase):
             'tipo_usuario': 'PROFESIONAL',
             'empresas': [self.empresa.id, self.empresa_sec.id],
         })
-        self.assertEqual(response.status_code, 302)
+        debug_info = self._invite_debug_info(response)
+        self.assertEqual(response.status_code, 302, msg=debug_info or '')
 
         invited = User.objects.get(username='multi@test.local')
         permisos = Permiso.objects.filter(

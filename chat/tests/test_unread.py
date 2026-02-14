@@ -3,7 +3,7 @@ from django.test import RequestFactory, TestCase
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 
-from access_control.models import Empresa
+from access_control.models import Empresa, Permiso, Vista
 from chat.context_processors import chat_unread_count
 from chat.models import Conversacion, Mensaje, MensajeLeido
 from chat.services.unread import get_unread_count, mark_conversation_read
@@ -23,6 +23,10 @@ class TestChatUnread(TestCase):
             username="user2",
             email="user2@example.com",
             password="pass12345",
+        )
+        self.vista_notificaciones, _ = Vista.objects.get_or_create(
+            nombre="notificaciones.mis_notificaciones",
+            defaults={"descripcion": ""},
         )
 
     def _make_conversation(self, empresa):
@@ -69,7 +73,15 @@ class TestChatUnread(TestCase):
         self.client.force_login(self.user1)
         session = self.client.session
         session["empresa_id"] = self.empresa_a.id
+        session["empresa_codigo"] = self.empresa_a.codigo
+        session["empresa_nombre"] = self.empresa_a.descripcion
         session.save()
+        Permiso.objects.update_or_create(
+            usuario=self.user1,
+            empresa=self.empresa_a,
+            vista=self.vista_notificaciones,
+            defaults={"ingresar": True},
+        )
 
         response = self.client.get(reverse("notificaciones:topbar"))
         self.assertEqual(response.status_code, 200)
