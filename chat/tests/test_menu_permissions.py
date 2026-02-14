@@ -15,6 +15,10 @@ class TestChatMenuPermissions(TestCase):
             password="pass12345",
         )
         self.vista = Vista.objects.create(nombre="chat.inbox")
+        self.vista_notificaciones, _ = Vista.objects.get_or_create(
+            nombre="notificaciones.mis_notificaciones",
+            defaults={"descripcion": ""},
+        )
 
     def _login_with_empresa(self):
         self.client.force_login(self.user)
@@ -25,11 +29,17 @@ class TestChatMenuPermissions(TestCase):
         session.save()
 
     def test_menu_visible_with_permiso(self):
-        Permiso.objects.create(
+        Permiso.objects.update_or_create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_notificaciones,
+            defaults={"ingresar": True},
+        )
+        Permiso.objects.update_or_create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista,
-            ingresar=True,
+            defaults={"ingresar": True},
         )
         self._login_with_empresa()
         response = self.client.get(reverse("notificaciones:mis_notificaciones"))
@@ -38,6 +48,12 @@ class TestChatMenuPermissions(TestCase):
         self.assertContains(response, reverse("chat_inbox"))
 
     def test_menu_hidden_without_permiso(self):
+        Permiso.objects.update_or_create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_notificaciones,
+            defaults={"ingresar": True},
+        )
         self._login_with_empresa()
         response = self.client.get(reverse("notificaciones:mis_notificaciones"))
         self.assertEqual(response.status_code, 200)
