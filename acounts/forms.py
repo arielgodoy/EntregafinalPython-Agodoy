@@ -15,6 +15,15 @@ class CustomUserForm(UserChangeForm):
          #model = CustomUser
          model = User
          fields = ['username', 'first_name', 'last_name', 'email']
+     
+     def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
+         # Hacer el campo username de solo lectura
+         self.fields['username'].disabled = True
+         self.fields['username'].widget.attrs.update({
+             'class': 'form-control',
+             'readonly': 'readonly'
+         })
 
 class AvatarForm(ModelForm):
      imagen= forms.ImageField(required=False)

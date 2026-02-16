@@ -1,0 +1,110 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+{% endblock extra_css %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
+                <h1 class="mb-4 text-center" data-key="users.edit.title">Editar Usuario</h1>
+                <form method="post" class="p-3">
+                    {% csrf_token %}
+                    
+                    <!-- Username (Read-only) -->
+                    <div class="form-group mb-3">
+                        <label for="{{ form.username.id_for_label }}" class="form-label" data-key="users.edit.username.label">Nombre de usuario</label>
+                        {{ form.username }}
+                        <small class="text-muted d-block mt-1" data-key="users.edit.username.help">El nombre de usuario no se puede modificar</small>
+                        {% for error in form.username.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- First Name -->
+                    <div class="form-group mb-3">
+                        <label for="{{ form.first_name.id_for_label }}" class="form-label" data-key="users.edit.first_name.label">Nombre</label>
+                        {{ form.first_name }}
+                        {% for error in form.first_name.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Last Name -->
+                    <div class="form-group mb-3">
+                        <label for="{{ form.last_name.id_for_label }}" class="form-label" data-key="users.edit.last_name.label">Apellido</label>
+                        {{ form.last_name }}
+                        {% for error in form.last_name.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Email -->
+                    <div class="form-group mb-3">
+                        <label for="{{ form.email.id_for_label }}" class="form-label" data-key="users.edit.email.label">Email</label>
+                        {{ form.email }}
+                        {% for error in form.email.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Password -->
+                    <div class="form-group mb-3">
+                        <label for="{{ form.password.id_for_label }}" class="form-label" data-key="users.edit.password.label">Contraseña</label>
+                        {{ form.password }}
+                        <small class="text-muted d-block mt-1" data-key="users.edit.password.help">Dejar en blanco para mantener la contraseña actual</small>
+                        {% for error in form.password.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Is Active -->
+                    <div class="form-group mb-3 form-check">
+                        {{ form.is_active }}
+                        <label for="{{ form.is_active.id_for_label }}" class="form-check-label" data-key="users.edit.is_active.label">Usuario activo</label>
+                        <small class="text-muted d-block" data-key="users.edit.is_active.help">Desmarcar para desactivar el acceso del usuario</small>
+                        {% for error in form.is_active.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Is Staff -->
+                    <div class="form-group mb-3 form-check">
+                        {{ form.is_staff }}
+                        <label for="{{ form.is_staff.id_for_label }}" class="form-check-label" data-key="users.edit.is_staff.label">Acceso a administración</label>
+                        <small class="text-muted d-block" data-key="users.edit.is_staff.help">Permite acceso al panel de administración Django</small>
+                        {% for error in form.is_staff.errors %}
+                        <div class="text-danger">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                        <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <button type="submit" class="btn btn-primary w-50 me-2" data-key="buttons.save_changes">Guardar cambios</button>
+                        <a href="{% url 'access_control:usuarios_lista' %}" class="btn btn-secondary w-50" data-key="buttons.cancel">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        feather.replace();
+    });
+</script>
+{% endblock extra_js %}

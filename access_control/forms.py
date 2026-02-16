@@ -297,18 +297,35 @@ class CompanyConfigForm(forms.ModelForm):
 
 class UsuarioEditarForm(forms.ModelForm):
     password = forms.CharField(
-        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '********'}),
         label="Contraseña",
-        required=False
+        required=False,
+        help_text="Dejar en blanco para mantener la contraseña actual"
     )
-
+    
     class Meta:
         model = User
-        fields = ['username', 'email', 'password']
+        fields = ['username', 'first_name', 'last_name', 'email', 'is_active', 'is_staff', 'password']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control', 'readonly': 'readonly'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_staff': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Username no editable
+        self.fields['username'].disabled = True
+        # Configurar labels
+        self.fields['first_name'].required = False
+        self.fields['last_name'].required = False
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        if self.cleaned_data['password']:
+        if self.cleaned_data.get('password'):
             user.set_password(self.cleaned_data['password'])
         if commit:
             user.save()

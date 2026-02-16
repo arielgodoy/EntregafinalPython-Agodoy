@@ -135,10 +135,9 @@ def record_access_request_email_audit(
     access_request.email_sent_at = None
     access_request.email_status = AccessRequest.EmailStatus.SKIPPED
 
+    # Verificar primero la CAPACIDAD del usuario para enviar email, luego su intención
     reason = None
-    if not enviar_email:
-        reason = "email_option_unchecked"
-    elif prefs is None or not bool(getattr(prefs, "email_enabled", False)):
+    if prefs is None or not bool(getattr(prefs, "email_enabled", False)):
         reason = "user_email_disabled"
     elif not (requester and (requester.email or "").strip()):
         reason = "user_missing_email"
@@ -146,6 +145,8 @@ def record_access_request_email_audit(
         reason = "missing_smtp_config"
     elif len(recipients) == 0:
         reason = "no_staff_recipients"
+    elif not enviar_email:
+        reason = "email_option_unchecked"
 
     email_attempted = reason is None
     access_request.email_attempted = email_attempted

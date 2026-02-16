@@ -69,6 +69,7 @@ class VerificarPermisoMixin:
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
         # Detectar request AJAX/JSON
         is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
             request.headers.get("x-requested-with") == "XMLHttpRequest" or
             request.content_type == "application/json" or
             "application/json" in request.headers.get("accept", "")
@@ -121,7 +122,7 @@ class CompanyConfigVistaRequiredMixin:
 class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
     template_name = 'access_control/permisos_filtrados.html'
     form_class = PermisoFiltroForm
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "modificar"
     success_url = reverse_lazy('access_control:permisos_filtrados')    
 
@@ -263,7 +264,7 @@ def toggle_permiso(request):
 #     }
 #     return render(request, 'access_control/permisos_filtrados.html', context)
 class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "supervisor"
 
     def post(self, request, *args, **kwargs):
@@ -327,7 +328,7 @@ class VistaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = Vista
     template_name = 'access_control/vista_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:vistas_lista')
-    vista_nombre = "Maestro Vistas"
+    vista_nombre = "Control de Acceso - Maestro Vistas"
     permiso_requerido = "eliminar"
 
 
@@ -344,7 +345,7 @@ class PermisoCrearView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
-    vista_nombre = "Maestro Permisos"
+    vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "crear"
 
 class PermisoEditarView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
@@ -361,6 +362,67 @@ class PermisoEliminarView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView)
     success_url = reverse_lazy('access_control:permisos_lista')
     vista_nombre = "Control de Acceso - Maestro Permisos"
     permiso_requerido = "eliminar"
+    
+    def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+        """Sobrescribir para incluir el nombre del usuario en el mensaje"""
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            request.headers.get("x-requested-with") == "XMLHttpRequest" or
+            request.content_type == "application/json" or
+            "application/json" in request.headers.get("accept", "")
+        )
+        
+        username = request.user.username if request.user.is_authenticated else "Desconocido"
+        
+        if is_ajax:
+            return JsonResponse({
+                "success": False,
+                "message": "permission_delete_no_access",
+                "username": username,
+                "action": "Eliminar"
+            }, status=403)
+        
+        return super().handle_no_permission(request, mensaje)
+    
+    def post(self, request, *args, **kwargs):
+        """Sobrescribir post para manejar AJAX - DeleteView llama a post, no a delete"""
+        # Detectar si es AJAX
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+        
+        if is_ajax:
+            # Manejar eliminación AJAX
+            try:
+                with transaction.atomic():
+                    self.object = self.get_object()
+                    
+                    # Verificar que el permiso pertenece a la empresa activa
+                    empresa_activa = request.session.get('empresa_id')
+                    if self.object.empresa_id != empresa_activa:
+                        return JsonResponse({
+                            'success': False,
+                            'message': 'permission_delete_forbidden'
+                        }, status=403)
+                    
+                    # Realizar la eliminación
+                    permiso_info = f"{self.object.usuario.username} - {self.object.empresa.codigo} - {self.object.vista.nombre}"
+                    self.object.delete()
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'permission_deleted_success'
+                    })
+            except Exception as e:
+                print(f"[POST] Error al eliminar: {str(e)}")
+                return JsonResponse({
+                    'success': False,
+                    'message': 'request_error'
+                }, status=500)
+        else:
+            # Llamar al comportamiento normal de DeleteView para form tradicional
+            return super().post(request, *args, **kwargs)
 
 
 
@@ -618,7 +680,7 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = User
     template_name = 'access_control/usuarios_lista.html'
     context_object_name = 'usuarios'
-    vista_nombre = "Maestro Usuarios"
+    vista_nombre = "Control de Acceso - Maestro Usuarios"
     permiso_requerido = "ingresar"
 
     def render_to_response(self, context, **response_kwargs):
@@ -762,7 +824,7 @@ class InvitacionEliminarView(VerificarPermisoSafeMixin, LoginRequiredMixin, View
 
 
 class UsuariosPorEmpresasJsonView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = "Maestro Usuarios"
+    vista_nombre = "Control de Acceso - Maestro Usuarios"
     permiso_requerido = "ingresar"
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
@@ -802,7 +864,7 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
     form_class = UsuarioInvitacionForm
     template_name = 'access_control/usuarios_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
-    vista_nombre = 'auth_invite'
+    vista_nombre = 'Control de Acceso - Invitar Usuario'    
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
@@ -867,129 +929,143 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         return redirect(self.success_url)
 
 
-@login_required
-@verificar_permiso("Access Control - Solicitar Acceso", "crear")
-@require_POST
-def solicitar_acceso(request):
-    motivo = (request.POST.get("motivo") or "").strip()
-    vista_nombre = (request.POST.get("vista_nombre") or "").strip()
-    empresa_id = (request.POST.get("empresa_id") or "").strip()
-    wants_json = (
-        request.headers.get("x-requested-with") == "XMLHttpRequest"
-        or "application/json" in request.headers.get("accept", "")
-    )
+class SolicitarAccesoView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    """Vista para solicitar acceso a una vista cuando el usuario no tiene permisos."""
+    vista_nombre = "Control de Acceso - Solicitar Acceso"
+    permiso_requerido = "crear"
 
-    if not vista_nombre:
-        vista_nombre = "Desconocida"
+    def post(self, request, *args, **kwargs):
+        """Procesa la solicitud de acceso."""
+        motivo = (request.POST.get("motivo") or "").strip()
+        vista_nombre = (request.POST.get("vista_nombre") or "").strip()
+        empresa_id = (request.POST.get("empresa_id") or "").strip()
+        
+        # Detectar request JSON/AJAX
+        wants_json = (
+            request.headers.get("x-requested-with") == "XMLHttpRequest"
+            or "application/json" in request.headers.get("accept", "")
+        )
 
-    empresa = None
-    if empresa_id.isdigit():
-        empresa = Empresa.objects.filter(id=int(empresa_id)).first()
-    if empresa is None:
-        empresa = get_empresa_from_request(request)
+        # Normalizar vista_nombre
+        if not vista_nombre:
+            vista_nombre = "Desconocida"
 
-    if len(motivo) < 10:
-        if wants_json:
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "message_key": "access.request.toast.motivo_required",
-                },
-                status=400,
+        # Obtener empresa
+        empresa = None
+        if empresa_id.isdigit():
+            empresa = Empresa.objects.filter(id=int(empresa_id)).first()
+        if empresa is None:
+            empresa = get_empresa_from_request(request)
+
+        # Validar motivo (mínimo 10 caracteres)
+        if len(motivo) < 10:
+            if wants_json:
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "message_key": "access.request.toast.motivo_required",
+                    },
+                    status=400,
+                )
+            messages.error(request, "access.request.error.motivo_required")
+            return redirect(request.META.get("HTTP_REFERER", "/"))
+
+        # Verificar solicitud duplicada (cooldown de 15 minutos)
+        existing_request = get_recent_access_request(request.user, empresa, vista_nombre)
+        if existing_request:
+            if wants_json:
+                recipients_count = len(
+                    [email for email in (existing_request.email_recipients or "").split(",") if email]
+                )
+                return JsonResponse(
+                    {
+                        "ok": True,
+                        "created": False,
+                        "duplicate": True,
+                        "message_key": "access.request.toast.dup",
+                        "email_attempted": existing_request.email_attempted,
+                        "email_sent": existing_request.email_sent,
+                        "email_error": existing_request.email_error,
+                        "email_status": existing_request.email_status,
+                        "email_recipients_count": recipients_count,
+                        "notified_staff_count": existing_request.notified_staff_count,
+                    }
+                )
+            messages.info(request, "access.request.sent.dup")
+            return redirect(request.META.get("HTTP_REFERER", "/"))
+
+        # Crear solicitud de acceso
+        access_request = AccessRequest.objects.create(
+            solicitante=request.user,
+            empresa=empresa,
+            vista_nombre=vista_nombre,
+            motivo=motivo,
+            status=AccessRequest.Status.PENDING,
+        )
+        grant_url = build_grant_access_request_url(request, access_request)
+
+        # ✅ NOTIFICACIONES INTERNAS: SIEMPRE se crean, independiente de configuración de email
+        # El usuario SIEMPRE recibirá notificación interna, incluso si no tiene email configurado
+        staff_qs, staff_ids, staff_emails = get_staff_recipient_data()
+        staff_users = list(staff_qs)
+        notifications = []
+        empresa_label = (
+            f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}" if empresa else "No definida"
+        )
+        titulo = "Solicitud de acceso"
+        cuerpo = (
+            f"Usuario: {request.user.username}\n"
+            f"Empresa: {empresa_label}\n"
+            f"Vista: {vista_nombre}\n"
+            f"Motivo: {motivo}"
+        )
+        for staff in staff_users:
+            notifications.append(
+                Notification(
+                    destinatario=staff,
+                    empresa=empresa,
+                    tipo=Notification.Tipo.SYSTEM,
+                    titulo=titulo,
+                    cuerpo=cuerpo,
+                    url=grant_url,
+                    actor=request.user,
+                    dedupe_key=f"access_request:{access_request.id}:to:{staff.id}",
+                )
             )
-        messages.error(request, "access.request.error.motivo_required")
-        return redirect(request.META.get("HTTP_REFERER", "/"))
+        if notifications:
+            Notification.objects.bulk_create(notifications)
 
-    existing_request = get_recent_access_request(request.user, empresa, vista_nombre)
-    if existing_request:
+        # 📧 EMAIL: Solo se intenta si el usuario marcó el checkbox Y tiene email/SMTP configurado
+        enviar_email = request.POST.get("enviar_email") == "on"
+        record_access_request_email_audit(
+            access_request,
+            request.user,
+            staff_ids,
+            staff_emails,
+            enviar_email,
+            titulo,
+            cuerpo,
+        )
+
+        # Retornar respuesta JSON o redirect según tipo de request
         if wants_json:
-            recipients_count = len(
-                [email for email in (existing_request.email_recipients or "").split(",") if email]
-            )
+            recipients_count = len([email for email in (access_request.email_recipients or "").split(",") if email])
             return JsonResponse(
                 {
                     "ok": True,
-                    "created": False,
-                    "duplicate": True,
-                    "message_key": "access.request.toast.dup",
-                    "email_attempted": existing_request.email_attempted,
-                    "email_sent": existing_request.email_sent,
-                    "email_error": existing_request.email_error,
-                    "email_status": existing_request.email_status,
+                    "created": True,
+                    "duplicate": False,
+                    "message_key": "access.request.toast.ok",
+                    "email_attempted": access_request.email_attempted,
+                    "email_sent": access_request.email_sent,
+                    "email_error": access_request.email_error,
+                    "email_status": access_request.email_status,
                     "email_recipients_count": recipients_count,
-                    "notified_staff_count": existing_request.notified_staff_count,
+                    "notified_staff_count": access_request.notified_staff_count,
                 }
             )
-        messages.info(request, "access.request.sent.dup")
+        messages.success(request, "access.request.sent.ok")
         return redirect(request.META.get("HTTP_REFERER", "/"))
-
-    access_request = AccessRequest.objects.create(
-        solicitante=request.user,
-        empresa=empresa,
-        vista_nombre=vista_nombre,
-        motivo=motivo,
-        status=AccessRequest.Status.PENDING,
-    )
-    grant_url = build_grant_access_request_url(request, access_request)
-
-    staff_qs, staff_ids, staff_emails = get_staff_recipient_data()
-    staff_users = list(staff_qs)
-    notifications = []
-    empresa_label = (
-        f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}" if empresa else "No definida"
-    )
-    titulo = "Solicitud de acceso"
-    cuerpo = (
-        f"Usuario: {request.user.username}\n"
-        f"Empresa: {empresa_label}\n"
-        f"Vista: {vista_nombre}\n"
-        f"Motivo: {motivo}"
-    )
-    for staff in staff_users:
-        notifications.append(
-            Notification(
-                destinatario=staff,
-                empresa=empresa,
-                tipo=Notification.Tipo.SYSTEM,
-                titulo=titulo,
-                cuerpo=cuerpo,
-                url=grant_url,
-                actor=request.user,
-                dedupe_key=f"access_request:{access_request.id}:to:{staff.id}",
-            )
-        )
-    if notifications:
-        Notification.objects.bulk_create(notifications)
-
-    enviar_email = request.POST.get("enviar_email") == "on"
-    record_access_request_email_audit(
-        access_request,
-        request.user,
-        staff_ids,
-        staff_emails,
-        enviar_email,
-        titulo,
-        cuerpo,
-    )
-
-    if wants_json:
-        recipients_count = len([email for email in (access_request.email_recipients or "").split(",") if email])
-        return JsonResponse(
-            {
-                "ok": True,
-                "created": True,
-                "duplicate": False,
-                "message_key": "access.request.toast.ok",
-                "email_attempted": access_request.email_attempted,
-                "email_sent": access_request.email_sent,
-                "email_error": access_request.email_error,
-                "email_status": access_request.email_status,
-                "email_recipients_count": recipients_count,
-                "notified_staff_count": access_request.notified_staff_count,
-            }
-        )
-    messages.success(request, "access.request.sent.ok")
-    return redirect(request.META.get("HTTP_REFERER", "/"))
 
 
 @login_required
@@ -1129,17 +1205,21 @@ class UsuarioInvitarView(BaseUsuarioInviteView):
 class UsuarioEditarView(VerificarPermisoMixin,LoginRequiredMixin, UpdateView):
     model = User
     form_class = UsuarioEditarForm
-    template_name = 'access_control/usuarios_form.html'
+    template_name = 'access_control/usuarios_editar_form.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
-    vista_nombre = "Maestro Usuarios"
+    vista_nombre = "Control de Acceso - Maestro Usuarios"
     permiso_requerido = "modificar"
+    
+    def form_valid(self, form):
+        messages.success(self.request, 'users.edit.success')
+        return super().form_valid(form)
 
 
 class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     model = User
     template_name = 'access_control/usuario_confirmar_eliminar.html'
     success_url = reverse_lazy('access_control:usuarios_lista')
-    vista_nombre = "Maestro Usuarios"
+    vista_nombre = "Control de Acceso - Maestro Usuarios"
     permiso_requerido = "eliminar"
 
     def delete(self, request, *args, **kwargs):
@@ -1174,23 +1254,6 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
             messages.error(request, f'Error al eliminar el usuario: {str(e)}')
             return redirect(self.success_url)
 
-
-# class SeleccionarEmpresaView(VerificarPermisoMixin,LoginRequiredMixin, View):
-#     template_name = "access_control/seleccionar_empresa.html"
-#     vista_nombre = "Cambiar Empresa"
-#     permiso_requerido = "modificar"
-
-#     def get(self, request, *args, **kwargs):
-#         permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
-#         empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
-
-#         print(empresas)  # Para depuración
-#         return render(request, self.template_name, {"empresas": empresas})
-
-#     def post(self, request, *args, **kwargs):
-#         empresa_id = request.POST.get("empresa_id")
-#         request.session["empresa_id"] = empresa_id
-#         return redirect("listar_propiedades")
 
 @login_required
 def seleccionar_empresa(request):

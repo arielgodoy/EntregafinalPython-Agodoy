@@ -3,6 +3,9 @@
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
 <!-- Toastify CSS -->
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock extra_css %}
@@ -59,6 +62,7 @@ Gestión de Permisos Filtrados
                                 <th data-key="table_e">E</th>
                                 <th data-key="table_a">A</th>
                                 <th data-key="table_s">S</th>
+                                <th data-key="table_actions">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -75,6 +79,16 @@ Gestión de Permisos Filtrados
                                            {% if permiso|getattribute:field %}checked{% endif %}>
                                 </td>
                                 {% endfor %}
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-danger btn-sm delete-permiso-btn" 
+                                            data-permiso-id="{{ permiso.id }}" 
+                                            data-permiso-user="{{ permiso.usuario.username }}" 
+                                            data-permiso-empresa="{{ permiso.empresa.codigo }}" 
+                                            data-permiso-vista="{{ permiso.vista.nombre }}"
+                                            data-key="btn_delete_permiso">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -142,104 +156,406 @@ Gestión de Permisos Filtrados
         </div>
     </div>
 </div>
+
+<!-- Modal para eliminar permiso -->
+<div class="modal fade" id="deletePermisoModal" tabindex="-1" aria-labelledby="deletePermisoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deletePermisoModalLabel" data-key="modal_delete_permiso">Eliminar Permiso</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p data-key="delete_permiso_confirm_message">¿Estás seguro de que deseas eliminar este permiso?</p>
+                <div class="alert alert-info">
+                    <strong data-key="label_user">Usuario:</strong> <span id="delete-permiso-user"></span><br>
+                    <strong data-key="label_company">Empresa:</strong> <span id="delete-permiso-empresa"></span><br>
+                    <strong data-key="label_view">Vista:</strong> <span id="delete-permiso-vista"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="btn_cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmDeletePermisoButton" data-key="btn_confirm_delete">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock content %}
 
 {% block extra_js %}
 {{ block.super }}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.permiso-checkbox').forEach(function (checkbox) {
-        checkbox.addEventListener('change', function () {
-            const permisoId = this.dataset.permisoId;
-            const permisoField = this.dataset.permisoField;
-            const value = this.checked;
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
 
-            fetch("{% url 'access_control:toggle_permiso' %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: new URLSearchParams({
-                    permiso_id: permisoId,
-                    permiso_field: permisoField,
-                    value: value
-                })
+<script>
+(function() {
+    // Variables globales para traducciones
+    var translations = {};
+    
+    // Función para obtener traducción
+    function t(key) {
+        return translations[key] || key;
+    }
+    
+    // Cargar traducciones
+    function loadTranslations() {
+        var lang = localStorage.getItem('language') || 'en';
+        return fetch('/static/lang/' + lang + '.json', { credentials: 'same-origin' })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Failed to load translations');
+                return response.json();
             })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    alert("Error al actualizar permiso: " + (data.error || "Error desconocido"));
-                }
+            .then(function(data) {
+                translations = data || {};
+                return translations;
             })
-            .catch(error => {
-                console.error("Error en la solicitud:", error);
-                alert("Error en la solicitud");
+            .catch(function(error) {
+                console.error('Error loading translations:', error);
+                translations = {};
+                return translations;
             });
+    }
+    
+    document.addEventListener('DOMContentLoaded', function () {
+        // Cargar traducciones primero
+        loadTranslations().then(function() {
+            initializeDataTable();
+            initCheckboxListeners();
         });
     });
-});
-</script>
+    
+    function initializeDataTable() {
+        // Inicializar DataTables si la tabla existe
+        {% if permisos %}
+        var lang = localStorage.getItem('language') || 'en';
+        var dtLang = lang === 'sp' ? 'es-ES' : 'en-GB';
+        
+        const table = $('#tabla-permisos').DataTable({
+            language: {
+                url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/' + dtLang + '.json'
+            },
+            responsive: true,
+            pageLength: 25,
+            order: [[2, 'asc']], // Ordenar por Vista
+            columnDefs: [
+                { targets: [3, 4, 5, 6, 7, 8, 9], orderable: false, searchable: false } // Columnas de checkboxes y acciones no ordenables
+            ],
+            drawCallback: function() {
+                // Re-enlazar eventos después de cada redibujado de DataTables
+                initCheckboxListeners();
+            }
+        });
+        {% endif %}
+    }
+    
+    // Función para inicializar los listeners de checkboxes
+    function initCheckboxListeners() {
+        document.querySelectorAll('.permiso-checkbox').forEach(function (checkbox) {
+            // Eliminar listeners previos para evitar duplicados
+            checkbox.removeEventListener('change', handleCheckboxChange);
+            // Agregar listener
+            checkbox.addEventListener('change', handleCheckboxChange);
+        });
+    }
+    
+    // Handler para el cambio de checkbox
+    function handleCheckboxChange() {
+        const permisoId = this.dataset.permisoId;
+        const permisoField = this.dataset.permisoField;
+        const value = this.checked;
+        const checkboxElement = this;
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('copyPermissionsButton').addEventListener('click', function () {
-        const origenUsuario = document.getElementById('origenUsuario').value;
-        const origenEmpresa = document.getElementById('origenEmpresa').value;
-        const destinoUsuario = document.getElementById('destinoUsuario').value;
-        const destinoEmpresa = document.getElementById('destinoEmpresa').value;
-
-        fetch("{% url 'access_control:copy_permissions' %}", {
-            method: "POST",
+        fetch("{% url 'access_control:toggle_permiso' %}", {
+            method: 'POST',
             headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                "X-CSRFToken": "{{ csrf_token }}"
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
             },
             body: new URLSearchParams({
-                origen_usuario: origenUsuario,
-                origen_empresa: origenEmpresa,
-                destino_usuario: destinoUsuario,
-                destino_empresa: destinoEmpresa
+                permiso_id: permisoId,
+                permiso_field: permisoField,
+                value: value
             })
         })
-        .then(response => {
-            if (!response.ok) {
-                // 🔴 Si el servidor no responde 200 OK, asumimos que no hay permisos
-                throw new Error("SE REQUIERE PERMISO SUPERVISOR");
-            }
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (!data.success) {
+                // Mostrar error con Toastify usando traducciones
+                var errorMsg = t('permission_update_error') + ': ' + (data.error || t('unknown_error'));
                 Toastify({
-                    text: "Permisos copiados exitosamente.",
-                    duration: 3000,
-                    gravity: "top",
-                    position: "right",
-                    backgroundColor: "#28a745",
-                }).showToast();
-                location.reload();
-            } else {
-                Toastify({
-                    text: "Error: " + data.error,
+                    text: errorMsg,
                     duration: 5000,
                     gravity: "top",
                     position: "right",
                     backgroundColor: "#dc3545",
                 }).showToast();
+                // Revertir el checkbox
+                checkboxElement.checked = !value;
+            } else {
+                // Mostrar éxito con Toastify usando traducciones
+                Toastify({
+                    text: t('permission_updated_success'),
+                    duration: 2000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#28a745",
+                }).showToast();
             }
         })
         .catch(error => {
+            console.error('Error en la solicitud:', error);
             Toastify({
-                text: error.message || "Error inesperado",
+                text: t('request_error'),
                 duration: 5000,
                 gravity: "top",
                 position: "right",
                 backgroundColor: "#dc3545",
             }).showToast();
+            // Revertir el checkbox
+            checkboxElement.checked = !value;
+        });
+    }
+})();
+</script>
+
+<script>
+(function() {
+    // Variables globales para traducciones
+    var translations = {};
+    
+    // Función para obtener traducción
+    function t(key) {
+        return translations[key] || key;
+    }
+    
+    // Función para reemplazar placeholders en traducciones
+    function tReplace(key, replacements) {
+        var text = t(key);
+        if (replacements) {
+            for (var placeholder in replacements) {
+                text = text.replace('{' + placeholder + '}', replacements[placeholder]);
+            }
+        }
+        return text;
+    }
+    
+    // Cargar traducciones
+    function loadTranslations() {
+        var lang = localStorage.getItem('language') || 'en';
+        return fetch('/static/lang/' + lang + '.json', { credentials: 'same-origin' })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Failed to load translations');
+                return response.json();
+            })
+            .then(function(data) {
+                translations = data || {};
+                return translations;
+            })
+            .catch(function(error) {
+                console.error('Error loading translations:', error);
+                translations = {};
+                return translations;
+            });
+    }
+    
+    document.addEventListener('DOMContentLoaded', function () {
+        // Cargar traducciones primero
+        loadTranslations().then(function() {
+            initCopyPermissionsButton();
         });
     });
-});
+    
+    function initCopyPermissionsButton() {
+        document.getElementById('copyPermissionsButton').addEventListener('click', function () {
+            const origenUsuario = document.getElementById('origenUsuario').value;
+            const origenEmpresa = document.getElementById('origenEmpresa').value;
+            const destinoUsuario = document.getElementById('destinoUsuario').value;
+            const destinoEmpresa = document.getElementById('destinoEmpresa').value;
+
+            fetch("{% url 'access_control:copy_permissions' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: new URLSearchParams({
+                    origen_usuario: origenUsuario,
+                    origen_empresa: origenEmpresa,
+                    destino_usuario: destinoUsuario,
+                    destino_empresa: destinoEmpresa
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // 🔴 Si el servidor no responde 200 OK, asumimos que no hay permisos
+                    throw new Error(t('supervisor_permission_required'));
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    Toastify({
+                        text: t('permissions_copied_success'),
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#28a745",
+                    }).showToast();
+                    location.reload();
+                } else {
+                    Toastify({
+                        text: t('permission_update_error') + ': ' + data.error,
+                        duration: 5000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#dc3545",
+                    }).showToast();
+                }
+            })
+            .catch(error => {
+                Toastify({
+                    text: error.message || t('unexpected_error'),
+                    duration: 5000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#dc3545",
+                }).showToast();
+            });
+        });
+    }
+    
+    // Función para manejar la eliminación de permisos
+    function initializeDeletePermiso() {
+        var permisoIdToDelete = null;
+        var deleteModal = new bootstrap.Modal(document.getElementById('deletePermisoModal'));
+        var table = $('#tabla-permisos').DataTable();
+        
+        // Evento para abrir modal de eliminación
+        $(document).on('click', '.delete-permiso-btn', function() {
+            permisoIdToDelete = $(this).data('permiso-id');
+            var permisoUser = $(this).data('permiso-user');
+            var permisoEmpresa = $(this).data('permiso-empresa');
+            var permisoVista = $(this).data('permiso-vista');
+            
+            // Actualizar el contenido del modal
+            $('#delete-permiso-user').text(permisoUser);
+            $('#delete-permiso-empresa').text(permisoEmpresa);
+            $('#delete-permiso-vista').text(permisoVista);
+            
+            deleteModal.show();
+        });
+        
+        // Evento para confirmar eliminación
+        $('#confirmDeletePermisoButton').on('click', function() {
+            if (!permisoIdToDelete) return;
+            
+            var deleteUrl = "{% url 'access_control:permiso_eliminar' 0 %}".replace('0', permisoIdToDelete);
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', deleteUrl, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-CSRFToken', '{{ csrf_token }}');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.setRequestHeader('Accept', 'application/json');
+            
+            xhr.onload = function() {
+                var data = null;
+                
+                // Intentar parsear JSON, manejar HTML si falla
+                try {
+                    data = JSON.parse(xhr.responseText);
+                } catch (e) {
+                    console.error('Error parsing JSON - Server returned HTML instead of JSON');
+                    
+                    // Si falla el parse, probablemente es un 403 con HTML
+                    var username = '{{ request.user.username }}';
+                    var errorMsg = tReplace('permission_delete_no_access', {
+                        username: username,
+                        action: 'Eliminar'
+                    });
+                    
+                    Toastify({
+                        text: errorMsg,
+                        duration: 5000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#dc3545",
+                    }).showToast();
+                    deleteModal.hide();
+                    permisoIdToDelete = null;
+                    return;
+                }
+                
+                if (xhr.status === 200 && data.success) {
+                    // Eliminar la fila de DataTables sin recargar la página
+                    var row = table.row($('.delete-permiso-btn[data-permiso-id="' + permisoIdToDelete + '"]').closest('tr'));
+                    row.remove().draw();
+                    
+                    Toastify({
+                        text: t(data.message),
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#28a745",
+                    }).showToast();
+                    
+                    deleteModal.hide();
+                    permisoIdToDelete = null;
+                } else {
+                    // Manejar error
+                    var errorMessage;
+                    if (data && data.message) {
+                        // Si el mensaje es permission_delete_no_access, usar tReplace con username y action
+                        if (data.message === 'permission_delete_no_access' && data.username && data.action) {
+                            errorMessage = tReplace(data.message, {
+                                username: data.username,
+                                action: data.action
+                            });
+                        } else {
+                            errorMessage = t(data.message);
+                        }
+                    } else {
+                        errorMessage = t('request_error');
+                    }
+                    
+                    Toastify({
+                        text: errorMessage,
+                        duration: 5000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "#dc3545",
+                    }).showToast();
+                    deleteModal.hide();
+                    permisoIdToDelete = null;
+                }
+            };
+            
+            xhr.onerror = function() {
+                Toastify({
+                    text: t('request_error'),
+                    duration: 5000,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "#dc3545",
+                }).showToast();
+                deleteModal.hide();
+                permisoIdToDelete = null;
+            };
+            
+            xhr.send();
+        });
+    }
+    
+    // Inicializar eliminación al cargar el DOM
+    document.addEventListener('DOMContentLoaded', function() {
+        loadTranslations().then(function() {
+            initializeDeletePermiso();
+        });
+    });
+})();
 </script>
 
 {% endblock extra_js %}

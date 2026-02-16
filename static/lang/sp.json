@@ -503,6 +503,13 @@
 "btn_copy_permissions": "Copiar Permisos",
 "no_permissions_message": "No hay permisos para mostrar.",
 "modal_copy_permissions": "Copiar Permisos",
+"permission_update_error": "Error al actualizar permiso",
+"permission_updated_success": "Permiso actualizado correctamente",
+"request_error": "Error en la solicitud",
+"unknown_error": "Error desconocido",
+"permissions_copied_success": "Permisos copiados exitosamente.",
+"supervisor_permission_required": "SE REQUIERE PERMISO SUPERVISOR",
+"unexpected_error": "Error inesperado",
 "label_origin_user": "Usuario Origen",
 "label_origin_company": "Empresa Origen",
 "label_target_user": "Usuario Destino",
@@ -570,6 +577,20 @@
 "users.invite.loading_users": "Cargando usuarios...",
 "users.invite.no_users": "No hay usuarios disponibles.",
 "users.invite.select_user": "Selecciona un usuario",
+"users.edit.title": "Editar Usuario",
+"users.edit.username.label": "Nombre de usuario",
+"users.edit.username.help": "El nombre de usuario no se puede modificar",
+"users.edit.first_name.label": "Nombre",
+"users.edit.last_name.label": "Apellido",
+"users.edit.email.label": "Email",
+"users.edit.password.label": "Contraseña",
+"users.edit.password.help": "Dejar en blanco para mantener la contraseña actual",
+"users.edit.is_active.label": "Usuario activo",
+"users.edit.is_active.help": "Desmarcar para desactivar el acceso del usuario",
+"users.edit.is_staff.label": "Acceso a administración",
+"users.edit.is_staff.help": "Permite acceso al panel de administración Django",
+"users.edit.success": "Usuario actualizado correctamente",
+"buttons.save_changes": "Guardar cambios",
 "buttons.send_invitation": "Enviar invitación",
 "buttons.cancel": "Cancelar",
 "buttons.delete": "Eliminar",
@@ -765,22 +786,51 @@
 "search.group.chat": "Mensajería",
 "search.group.notificaciones": "Notificaciones",
 "search.group.access_control": "Control de Acceso",
-"search.group.settings": "Configuración"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+"search.group.settings": "Configuración",
+"table_actions": "Acciones",
+"btn_delete_permiso": "Eliminar",
+"modal_delete_permiso": "Eliminar Permiso",
+"delete_permiso_confirm_message": "¿Estás seguro de que deseas eliminar este permiso?",
+"label_view": "Vista",
+"btn_confirm_delete": "Eliminar",
+"permission_deleted_success": "Permiso eliminado correctamente",
+"permission_delete_forbidden": "No tienes permiso para eliminar este permiso",
+"permission_delete_no_access": "El usuario {username} no tiene acceso a {action}",
+"error_403_title": "Acceso Denegado",
+"error_403_pagetitle": "Error 403",
+"error_403": "403",
+"error_403_message": "No tienes permisos suficientes para acceder a esta página.",
+"error_403_attempt": "Intentaste acceder a la vista",
+"error_403_company": "de la empresa",
+"go_back": "Volver",
+"access.request.button": "Solicitar acceso",
+"access.request.history.title": "Solicitudes pendientes para esta vista",
+"access.request.history.item": "Solicitud",
+"access.request.history.empty": "No hay solicitudes pendientes.",
+"access.request.history.grant_link": "Otorgar acceso",
+"access.request.modal.title": "Solicitar acceso",
+"access.request.modal.context": "Solicitas acceso a",
+"access.request.modal.context_company": "de la empresa",
+"access.request.motivo.label": "Motivo",
+"access.request.motivo.placeholder": "Describe el motivo",
+"access.request.email.option": "Enviar por email a administradores",
+"access.request.email.disabled": "Tu usuario no tiene email configurado, se enviará solo notificación interna.",
+"access.request.submit": "Enviar solicitud",
+"access.request.toast.ok": "Solicitud enviada correctamente.",
+"access.request.toast.dup": "Ya enviaste una solicitud recientemente para esta vista.",
+"access.request.toast.motivo_required": "El motivo es obligatorio (mínimo 10 caracteres).",
+"access.request.toast.error": "Ocurrió un error. Intenta nuevamente.",
+"access.request.toast.email_failed": "Solicitud enviada, pero el correo no pudo entregarse.",
+"access.request.error.motivo_required": "El motivo es obligatorio (mínimo 10 caracteres).",
+"access.request.sent.dup": "Ya enviaste una solicitud recientemente para esta vista.",
+"access.request.sent.ok": "Solicitud enviada correctamente.",
+"access_request.email.label": "Email",
+"access_request.email.sent": "Enviado",
+"access_request.email.failed": "Falló",
+"access_request.email.na": "Omitido",
+"access_request.email.from": "De",
+"access_request.email.recipients": "Destinatarios",
+"access_request.email.error": "Error",
+"access_request.grant.missing_data": "Faltan datos para otorgar el acceso",
+"access_request.grant.success": "Acceso otorgado correctamente"
 }

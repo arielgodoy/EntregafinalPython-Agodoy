@@ -10,6 +10,7 @@ from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEl
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
 from .views import InvitacionesListView, InvitacionEliminarView
 from .views import toggle_permiso,PermisosFiltradosView, CopyPermisosView, seleccionar_empresa
+from .views import SolicitarAccesoView
 
 
 #from .views import permisos_filtrados_view, toggle_permiso,PermisosFiltradosView
@@ -19,7 +20,6 @@ app_name = 'access_control'  # Define el espacio de nombres
 
 urlpatterns = [
     #path('permisos-filtrados/', permisos_filtrados_view, name='permisos_filtrados'),  
-    #path("seleccionar_empresa/", SeleccionarEmpresaView.as_view(), name="seleccionar_empresa"),
     path('seleccionar_empresa/', views.seleccionar_empresa, name='seleccionar_empresa'), 
     path('copiar-permisos/', CopyPermisosView.as_view(), name='copy_permissions'),
     path('permisos-filtrados/', PermisosFiltradosView.as_view(), name='permisos_filtrados'), 
@@ -27,7 +27,7 @@ urlpatterns = [
 
     
     path('toggle-permiso/', views.toggle_permiso, name='toggle_permiso'),
-    path('solicitar-acceso/', views.solicitar_acceso, name='solicitar_acceso'),
+    path('solicitar-acceso/', SolicitarAccesoView.as_view(), name='solicitar_acceso'),
     path('solicitudes/<int:pk>/otorgar/', views.grant_access_request, name='grant_access_request'),
 
     path('vistas/', VistaListaView.as_view(), name='vistas_lista'),

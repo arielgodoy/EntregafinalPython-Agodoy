@@ -279,6 +279,184 @@ Este es el patrón OFICIAL del sistema. Aplicar a TODOS los listados con elimina
 
 ---
 
+10.1) REGLA TÉCNICA CRÍTICA: DeleteView + AJAX (OBLIGATORIO LEER)
+
+⚠️ PROBLEMA COMÚN: Sobrescribir delete() en DeleteView NO funciona para AJAX
+
+CAUSA RAÍZ:
+- Django DeleteView recibe peticiones POST (no DELETE HTTP)
+- El flujo es: POST → post() → form_valid() → delete()
+- Si sobrescribes delete() y retornas JsonResponse, Django ya renderizó HTML antes
+
+SOLUCIÓN OBLIGATORIA:
+
+class MiEliminarView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
+    model = MiModelo
+    template_name = 'mi_confirmar_eliminar.html'
+    success_url = reverse_lazy('mi_lista')
+    vista_nombre = "Mi Vista"
+    permiso_requerido = "eliminar"
+    
+    def post(self, request, *args, **kwargs):
+        """SOBRESCRIBIR POST - NO DELETE"""
+        # 1. Detectar AJAX
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+        
+        if is_ajax:
+            # 2. Manejar eliminación AJAX directamente
+            try:
+                with transaction.atomic():
+                    self.object = self.get_object()
+                    
+                    # 3. Validaciones de negocio (scoping, etc.)
+                    empresa_activa = request.session.get('empresa_id')
+                    if hasattr(self.object, 'empresa_id') and self.object.empresa_id != empresa_activa:
+                        return JsonResponse({
+                            'success': False,
+                            'message': 'no_permission_delete'
+                        }, status=403)
+                    
+                    # 4. Eliminar
+                    self.object.delete()
+                    
+                    # 5. Retornar JSON
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'deleted_successfully'
+                    })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'delete_error'
+                }, status=500)
+        else:
+            # 6. Flujo tradicional (form HTML)
+            return super().post(request, *args, **kwargs)
+
+DETECCIÓN DE AJAX - MÉTODO ROBUSTO:
+
+Opción 1 (Header X-Requested-With):
+    request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+
+Opción 2 (Header Accept):
+    'application/json' in request.META.get('HTTP_ACCEPT', '')
+
+Opción 3 (Combinada - RECOMENDADA):
+    is_ajax = (
+        request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+        'application/json' in request.META.get('HTTP_ACCEPT', '')
+    )
+
+JAVASCRIPT - Configuración correcta de headers:
+
+var xhr = new XMLHttpRequest();
+xhr.open('POST', deleteUrl, true);
+xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+xhr.setRequestHeader('X-CSRFToken', csrfToken);
+xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');  // ← CRÍTICO
+xhr.setRequestHeader('Accept', 'application/json');           // ← RESPALDO
+
+// O con jQuery:
+$.ajax({
+    url: deleteUrl,
+    type: 'POST',
+    headers: {
+        'X-CSRFToken': csrfToken,
+        'X-Requested-With': 'XMLHttpRequest'
+    },
+    success: function(response) {
+        // Manejar response.success / response.message
+    }
+});
+
+VALIDACIÓN DE PERMISOS EN AJAX:
+
+Si se necesita mensaje personalizado con username:
+
+def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
+    """Sobrescribir para incluir username en mensaje de error"""
+    is_ajax = (
+        request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+        'application/json' in request.META.get('HTTP_ACCEPT', '')
+    )
+    
+    if is_ajax:
+        username = request.user.username if request.user.is_authenticated else "Desconocido"
+        return JsonResponse({
+            "success": False,
+            "message": "permission_denied",
+            "username": username,
+            "action": "Eliminar"
+        }, status=403)
+    
+    return super().handle_no_permission(request, mensaje)
+
+MENSAJE CON PLACEHOLDERS (i18n):
+
+JavaScript:
+    function tReplace(key, replacements) {
+        var text = t(key);
+        if (replacements) {
+            for (var placeholder in replacements) {
+                text = text.replace('{' + placeholder + '}', replacements[placeholder]);
+            }
+        }
+        return text;
+    }
+    
+    // Uso:
+    var errorMsg = tReplace('permission_denied', {
+        username: data.username,
+        action: data.action
+    });
+
+JSON (sp.json / en.json):
+    "permission_denied": "El usuario {username} no tiene acceso a {action}"
+    "permission_denied": "User {username} doesn't have access to {action}"
+
+VALIDACIÓN MULTIEMPRESA (Scoping):
+
+SIEMPRE validar que el objeto a eliminar pertenece a la empresa activa:
+
+empresa_activa = request.session.get('empresa_id')
+
+# Para modelos con empresa_id directo:
+if self.object.empresa_id != empresa_activa:
+    return JsonResponse({'success': False, 'message': 'forbidden'}, status=403)
+
+# Para modelos con relación:
+if self.object.empresa.id != empresa_activa:
+    return JsonResponse({'success': False, 'message': 'forbidden'}, status=403)
+
+RESUMEN - CHECKLIST OBLIGATORIO:
+
+✓ Sobrescribir post(), NO delete()
+✓ Detectar AJAX al inicio de post()
+✓ Validar empresa activa (scoping)
+✓ Usar transaction.atomic()
+✓ Retornar JsonResponse para AJAX
+✓ Llamar super().post() para flujo tradicional
+✓ Configurar headers X-Requested-With en JavaScript
+✓ Manejar errores con try/except
+✓ Usar claves i18n en todos los mensajes
+✓ Cerrar modal después de éxito
+✓ Actualizar DataTable sin reload (row.remove().draw())
+
+ERRORES COMUNES A EVITAR:
+
+✗ Sobrescribir delete() esperando que funcione con AJAX
+✗ No detectar AJAX correctamente (olvidar HTTP_X_REQUESTED_WITH)
+✗ Retornar HTML cuando se espera JSON
+✗ No validar empresa activa
+✗ Hardcodear mensajes en español/inglés
+✗ No cerrar el modal después de eliminar
+✗ Recargar página completa en lugar de actualizar DataTable
+
+---
+
 11) ARQUITECTURA: FBV vs CBV - Cuándo NO migrar a CBV (REGLA CRÍTICA)
 
 Principio fundamental: No todas las vistas deben ser CBV. CBV es para CRUD simple.

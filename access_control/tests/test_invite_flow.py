@@ -24,18 +24,26 @@ class InviteUserFlowTests(TestCase):
         session.save()
 
     def _grant_invite_perm(self, allow_create=True):
-        vista_auth, _ = Vista.objects.get_or_create(
+        # Vista 'auth_invite' necesaria para dispatch check en BaseUsuarioInviteView
+        Vista.objects.get_or_create(
             nombre='auth_invite',
             defaults={'descripcion': ''},
         )
+        # Vista 'Maestro Usuarios' necesaria para invite_user_flow (permisos base del invitado)
         Vista.objects.get_or_create(
             nombre='Maestro Usuarios',
             defaults={'descripcion': ''},
         )
+        # Vista real usada por VerificarPermisoMixin en BaseUsuarioInviteView
+        vista_invite, _ = Vista.objects.get_or_create(
+            nombre='Control de Acceso - Invitar Usuario',
+            defaults={'descripcion': ''},
+        )
+        # Otorgar permiso al usuario de test en la vista correcta
         Permiso.objects.update_or_create(
             usuario=self.user,
             empresa=self.empresa,
-            vista=vista_auth,
+            vista=vista_invite,
             defaults={
                 'ingresar': True,
                 'crear': allow_create,
@@ -360,19 +368,22 @@ class InviteUserFlowTests(TestCase):
         )
 
     def test_endpoint_usuarios_por_empresas_filtra_por_permiso(self):
-        vista_auth = Vista.objects.create(nombre='auth_invite')
+        # Vista usada por UsuariosPorEmpresasJsonView
+        vista_maestro_usuarios = Vista.objects.create(nombre='Control de Acceso - Maestro Usuarios')
         vista_base = Vista.objects.create(nombre='Maestro Usuarios')
+        # Otorgar permiso en la vista correcta
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
-            vista=vista_auth,
+            vista=vista_maestro_usuarios,
             ingresar=True,
-            crear=True,
+            crear=False,
             modificar=False,
             eliminar=False,
             autorizar=False,
             supervisor=False,
         )
+        # Permiso adicional para datos de test
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
