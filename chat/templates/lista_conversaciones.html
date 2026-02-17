@@ -1,58 +1,94 @@
-{% extends "base.html" %}
-{% block contenido %}
+{% extends "partials/base.html" %}
 
-<div class="container">
-    <div class="card-body">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th scope="col">Conversación</th>
-                    <th scope="col">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for conversacion in conversaciones %}
-                <tr>
-                    <td>
-                        <a href="{% url 'detalle_conversacion' conversacion.id %}">{{ conversacion }}</a>
-                    </td>
-                    <td>
-                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirmacionModal{{ conversacion.id }}">Eliminar</button>
-                    </td>
-                </tr>
+{% block title %}
+Lista de Conversaciones
+{% endblock title %}
 
-                <!-- Modal de confirmación -->
-                <div class="modal fade" id="confirmacionModal{{ conversacion.id }}" tabindex="-1" aria-labelledby="confirmacionModalLabel" aria-hidden="true">
-                    <div class="modal-dialog">
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Lista de Conversaciones" pagetitle="Chat" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="row">
+
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="h4 mb-0" data-key="chat.conversations.title">Conversaciones</h1>
+                <a href="{% url 'crear_conversacion' %}" class="btn btn-primary" data-key="chat.conversations.create">Crear conversación</a>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                  <thead>
+                    <tr>
+                      <th scope="col" data-key="chat.conversations.col.conversation">Conversación</th>
+                      <th scope="col" class="text-center" data-key="chat.conversations.col.actions">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for conversacion in conversaciones %}
+                    <tr>
+                      <td>
+                        <a href="{% url 'detalle_conversacion' conversacion.id %}">
+                          {{ conversacion }}
+                        </a>
+                      </td>
+                      <td class="text-center">
+                        <button type="button"
+                                class="btn btn-danger btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#confirmacionModal{{ conversacion.id }}"
+                                data-key="chat.conversations.delete">
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+
+                    <div class="modal fade" id="confirmacionModal{{ conversacion.id }}" tabindex="-1" aria-hidden="true">
+                      <div class="modal-dialog">
                         <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="confirmacionModalLabel">Confirmar eliminación</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                ¿Estás seguro de que deseas eliminar esta conversación?
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <form action="{% url 'eliminar_conversacion' conversacion.id %}" method="post">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-danger">Eliminar</button>
-                                </form>
-                            </div>
+                          <div class="modal-header">
+                            <h5 class="modal-title" data-key="chat.conversations.delete.title">Confirmar eliminación</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                          </div>
+                          <div class="modal-body" data-key="chat.conversations.delete.body">
+                            ¿Estás seguro de que deseas eliminar esta conversación?
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="common.cancel">Cancelar</button>
+                            <form action="{% url 'eliminar_conversacion' conversacion.id %}" method="post">
+                              {% csrf_token %}
+                              <button type="submit" class="btn btn-danger" data-key="common.delete">Eliminar</button>
+                            </form>
+                          </div>
                         </div>
+                      </div>
                     </div>
-                </div>
-                {% empty %}
-                <tr>
-                    <td colspan="2">
-                        <p>No tienes conversaciones.</p>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <a href="{% url 'crear_conversacion' %}" class="btn btn-primary">Crear conversación</a>
-    </div>
-</div>
 
-{% endblock %}
+                    {% empty %}
+                    <tr>
+                      <td colspan="2" class="text-center">
+                        <span data-key="chat.conversations.empty">No tienes conversaciones.</span>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

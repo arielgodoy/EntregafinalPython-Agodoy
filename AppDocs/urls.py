@@ -35,6 +35,7 @@ urlpatterns = [
     path('search/', include('core_search.urls')),
     path('evaluaciones/', include('evaluaciones.urls')),
     path('notificaciones/', include('notificaciones.urls', namespace='notificaciones')),
+    path('auditoria/', include('auditoria.urls', namespace='auditoria')),
 
 ]
 

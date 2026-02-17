@@ -1,0 +1,229 @@
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
+{% endblock extra_css %}
+
+{% block title %}
+Auditoría Biblioteca
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Auditoría Biblioteca" pagetitle="Auditoría" %}
+{% endblock pagetitle %}
+
+{% block content %}
+
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+
+```
+            <h1 class="mb-4 text-center" data-key="auditoria_biblioteca">
+                Auditoría Biblioteca
+            </h1>
+
+            {% if not empresa_selected %}
+            <div class="alert alert-info" data-key="no_company_selected">
+                No hay empresa seleccionada.
+                Por favor
+                <a href="{% url 'access_control:seleccionar_empresa' %}" data-key="select_company_link">
+                    seleccione una empresa
+                </a>
+                para ver eventos de auditoría.
+            </div>
+            {% else %}
+
+            <form method="get" class="mb-4 p-3 rounded shadow bg-mode">
+
+                <div class="row g-2">
+
+                    <div class="col-md-2">
+                        <input type="text" name="user" class="form-control"
+                               placeholder="Usuario"
+                               value="{{ request.GET.user }}"
+                               data-key="filter_user">
+                    </div>
+
+                    <div class="col-md-2">
+                        <select name="action" class="form-select">
+                            <option value="" data-key="filter_action">Acción</option>
+                            {% for acc in acciones %}
+                            <option value="{{ acc }}"
+                                {% if request.GET.action == acc %}selected{% endif %}>
+                                {{ acc }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="text" name="object_type" class="form-control"
+                               placeholder="Tipo objeto"
+                               value="{{ request.GET.object_type }}"
+                               data-key="filter_object_type">
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="text" name="object_id" class="form-control"
+                               placeholder="ID objeto"
+                               value="{{ request.GET.object_id }}"
+                               data-key="filter_object_id">
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="text" name="vista_nombre" class="form-control"
+                               placeholder="Vista"
+                               value="{{ request.GET.vista_nombre }}"
+                               data-key="filter_view">
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="text" name="path" class="form-control"
+                               placeholder="Path"
+                               value="{{ request.GET.path }}"
+                               data-key="filter_path">
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="date" name="date_from" class="form-control"
+                               value="{{ request.GET.date_from }}"
+                               data-key="filter_date_from">
+                    </div>
+
+                    <div class="col-md-2">
+                        <input type="date" name="date_to" class="form-control"
+                               value="{{ request.GET.date_to }}"
+                               data-key="filter_date_to">
+                    </div>
+
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100"
+                                data-key="btn_filter">
+                            Filtrar
+                        </button>
+                    </div>
+
+                </div>
+
+            </form>
+
+            <div class="table-responsive">
+
+                <table id="tabla-auditoria"
+                       class="table table-bordered table-striped align-middle">
+
+                    <thead>
+                        <tr>
+                            <th data-key="table_date">Fecha</th>
+                            <th data-key="table_user">Usuario</th>
+                            <th data-key="table_action">Acción</th>
+                            <th data-key="table_view">Vista</th>
+                            <th data-key="table_type">Tipo</th>
+                            <th data-key="table_id">ID</th>
+                            <th data-key="table_path">Path</th>
+                            <th data-key="table_status">Status</th>
+                            <th data-key="table_duration">Duración (ms)</th>
+                            <th data-key="table_detail">Detalle</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for evento in eventos %}
+                        <tr>
+                            <td>{{ evento.created_at }}</td>
+                            <td>{{ evento.user }}</td>
+                            <td>{{ evento.action }}</td>
+                            <td>{{ evento.vista_nombre }}</td>
+                            <td>{{ evento.object_type }}</td>
+                            <td>{{ evento.object_id }}</td>
+                            <td>{{ evento.path }}</td>
+                            <td>{{ evento.status_code }}</td>
+                            <td>{{ evento.duration_ms }}</td>
+                            <td>
+                                <a href="{% url 'auditoria:auditoria_biblioteca_detail' evento.pk %}"
+                                   class="btn btn-sm btn-primary"
+                                   data-key="btn_view">
+                                    Ver
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center"
+                                data-key="no_results">
+                                Sin resultados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            {% if is_paginated %}
+            <div class="mt-3 text-center">
+
+                {% if page_obj.has_previous %}
+                <a class="btn btn-secondary btn-sm"
+                   href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">
+                    Anterior
+                </a>
+                {% endif %}
+
+                <span class="mx-2" data-key="pagination_page">
+                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                </span>
+
+                {% if page_obj.has_next %}
+                <a class="btn btn-secondary btn-sm"
+                   href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">
+                    Siguiente
+                </a>
+                {% endif %}
+
+            </div>
+            {% endif %}
+
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+```
+
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.jQuery && $.fn.DataTable) {
+        $('#tabla-auditoria').DataTable({
+            responsive: true,
+            pageLength: 25,
+            order: [[0, 'desc']]
+        });
+    } else {
+        console.warn('DataTables no está cargado.');
+    }
+});
+</script>
+
+{% endblock extra_js %}

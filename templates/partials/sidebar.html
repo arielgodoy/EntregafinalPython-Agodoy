@@ -71,6 +71,7 @@
                     </div>
                 </li>
 
+                <!-- Menú Evaluaciones -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarEvaluaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarEvaluaciones">
                         <i class="ri-file-list-3-line"></i> <span data-key="menu.evaluations">Evaluaciones</span>
@@ -78,16 +79,13 @@
                     <div class="collapse menu-dropdown" id="sidebarEvaluaciones">
                         <ul class="nav nav-sm flex-column">
                             <li class="nav-item">
-                                
                                 <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="menu.evaluations.import_people">Importar Personas</span></a>
-                                
                             </li>
                         </ul>
                     </div>
                 </li>
 
-                {% if user.is_superuser %}
-                <!-- Menú Gestión de Proyectos -->
+                <!-- Menú Gestión de Proyectos (SIEMPRE VISIBLE) -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarGestionProyectos" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarGestionProyectos">
                         <i class="ri-folder-chart-2-line"></i> <span data-key="menu.projects">Gestión de Proyectos</span>
@@ -115,32 +113,23 @@
                         </ul>
                     </div>
                 </li>
-                {% endif %}
 
-                {% has_permiso "Control Operacional Dashboard" "ingresar" as can_co_dashboard %}
-                {% has_permiso "control_operacional.alertas" "ingresar" as can_co_alertas %}
-                {% if can_co_dashboard or can_co_alertas %}
-                <!-- Menú Control Operacional -->
+                <!-- Menú Control Operacional (SIEMPRE VISIBLE) -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlOperacional" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlOperacional">
                         <i class="ri-dashboard-line"></i> <span data-key="menu.control_operacional">Control Operacional</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarControlOperacional">
                         <ul class="nav nav-sm flex-column">
-                            {% if can_co_dashboard %}
                             <li class="nav-item">
                                 <a href="{% url 'control_operacional:dashboard' %}" class="nav-link" data-key="control_operacional.dashboard.title">Dashboard</a>
                             </li>
-                            {% endif %}
-                            {% if can_co_alertas %}
                             <li class="nav-item">
                                 <a href="{% url 'control_operacional:alertas_operacionales' %}" class="nav-link" data-key="menu.control_operacional.alertas">Alertas Operacionales</a>
                             </li>
-                            {% endif %}
                         </ul>
                     </div>
                 </li>
-                {% endif %}
 
                 <!-- Menú Cuentas -->
                 <li class="nav-item">
@@ -162,9 +151,7 @@
                     </div>
                 </li>
 
-                {% has_permiso "chat.inbox" "ingresar" as can_chat %}
-                {% if can_chat %}
-                <!-- Menú Chat -->
+                <!-- Menú Chat (SIEMPRE VISIBLE) -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarChat" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarChat">
                         <i class="ri-chat-3-line"></i> <span data-key="menu.chat">Mensajería</span>
@@ -183,10 +170,8 @@
                         </ul>
                     </div>
                 </li>
-                {% endif %}
 
-                {% if request.user.is_authenticated and request.session.empresa_id %}
-                <!-- Menú Notificaciones -->
+                <!-- Menú Notificaciones (SIEMPRE VISIBLE) -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarNotificaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarNotificaciones">
                         <i class="ri-notification-3-line"></i> <span data-key="menu.notifications">Notificaciones</span>
@@ -209,21 +194,31 @@
                                     {% endif %}
                                 </a>
                             </li>
-                            {% if request.user.is_staff %}
                             <li class="nav-item">
                                 <a href="{% url 'notificaciones:forzar_notificaciones' %}" class="nav-link" data-key="menu.notifications.force">Enviar notificaciones forzadas</a>
                             </li>
                             <li class="nav-item">
                                 <a href="{% url 'notificaciones:alerta_personalizada' %}" class="nav-link" data-key="menu.notifications.custom">Alerta personalizada</a>
                             </li>
-                            {% endif %}
                         </ul>
                     </div>
                 </li>
-                {% endif %}
-
-                {% if request.user.is_staff %}
-                <!-- Menú Control de Acceso -->
+                {% if user.is_superuser %}
+                <!-- Menú Auditoría (SIEMPRE VISIBLE) -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarAuditoria" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarAuditoria">
+                        <i class="ri-search-eye-line"></i> <span data-key="menu.audit">Auditoría</span>
+                    </a>
+                    <div class="collapse menu-dropdown" id="sidebarAuditoria">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{% url 'auditoria:auditoria_biblioteca_list' %}" class="nav-link" data-key="menu.audit.library">Auditoría Biblioteca</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                
+                <!-- Menú Control de Acceso (SIEMPRE VISIBLE) -->
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
                         <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
@@ -255,6 +250,8 @@
                     </div>
                 </li>
 
+                <!-- Menú Settings (SIEMPRE VISIBLE) -->
+                 
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarSettings" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarSettings">
                         <i class="ri-settings-3-line"></i> <span data-key="menu.settings">Settings</span>

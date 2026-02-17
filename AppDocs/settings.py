@@ -75,6 +75,7 @@ INSTALLED_APPS = [
      'control_de_proyectos',
     'control_operacional',
     'notificaciones',
+    'auditoria',
 ]
 
 MIDDLEWARE = [
@@ -86,6 +87,7 @@ MIDDLEWARE = [
     'access_control.middleware.EmpresaActivaMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'auditoria.middleware.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'AppDocs.urls'

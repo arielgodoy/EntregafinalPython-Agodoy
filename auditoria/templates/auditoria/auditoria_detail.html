@@ -1,0 +1,113 @@
+{% extends "partials/base.html" %}
+
+{% block title %}
+Detalle Auditoría
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Detalle Auditoría" pagetitle="Auditoría" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-12">
+
+          <div class="card shadow-sm bg-mode">
+            <div class="card-body">
+
+              <h1 class="mb-4 text-center" data-key="detalle_auditoria">Detalle Auditoría</h1>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                  <tbody>
+                    <tr><th data-key="field_date">Fecha</th><td>{{ evento.created_at }}</td></tr>
+                    <tr><th data-key="field_user">Usuario</th><td>{{ evento.user }}</td></tr>
+                    <tr><th data-key="field_company">Empresa</th><td>{{ evento.empresa_id }}</td></tr>
+                    <tr><th data-key="field_action">Acción</th><td>{{ evento.action }}</td></tr>
+                    <tr><th data-key="field_view">Vista</th><td>{{ evento.vista_nombre }}</td></tr>
+                    <tr><th data-key="field_method">Método</th><td>{{ evento.method }}</td></tr>
+                    <tr><th data-key="field_path">Path</th><td>{{ evento.path }}</td></tr>
+                    <tr><th data-key="field_querystring">Querystring</th><td>{{ evento.querystring }}</td></tr>
+                    <tr><th data-key="field_ip">IP</th><td>{{ evento.ip_address }}</td></tr>
+                    <tr><th data-key="field_user_agent">User Agent</th><td>{{ evento.user_agent }}</td></tr>
+                    <tr><th data-key="field_status">Status</th><td>{{ evento.status_code }}</td></tr>
+                    <tr><th data-key="field_duration">Duración (ms)</th><td>{{ evento.duration_ms }}</td></tr>
+                    <tr><th data-key="field_object_type">Tipo objeto</th><td>{{ evento.object_type }}</td></tr>
+                    <tr><th data-key="field_object_id">ID objeto</th><td>{{ evento.object_id }}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="row mt-4 g-3">
+                <div class="col-12 col-lg-4">
+                  <div class="card shadow-sm bg-mode h-100">
+                    <div class="card-header">
+                      <h5 class="mb-0" data-key="meta">Meta</h5>
+                    </div>
+                    <div class="card-body">
+                      <pre class="mb-0" style="white-space: pre-wrap;">{{ evento.meta|safe }}</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="card shadow-sm bg-mode h-100">
+                    <div class="card-header">
+                      <h5 class="mb-0" data-key="before">Before</h5>
+                    </div>
+                    <div class="card-body">
+                      <pre class="mb-0" style="white-space: pre-wrap;">{{ evento.before|safe }}</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                  <div class="card shadow-sm bg-mode h-100">
+                    <div class="card-header">
+                      <h5 class="mb-0" data-key="after">After</h5>
+                    </div>
+                    <div class="card-body">
+                      <pre class="mb-0" style="white-space: pre-wrap;">{{ evento.after|safe }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card shadow-sm bg-mode mt-4">
+                <div class="card-header">
+                  <h5 class="mb-0" data-key="cambios">Cambios</h5>
+                </div>
+                <div class="card-body">
+                  {% if changes %}
+                    <ul class="mb-0">
+                      {% for campo, cambio in changes.items %}
+                        <li>{{ campo }}: {{ cambio.from }} → {{ cambio.to }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p class="text-muted mb-0" data-key="no_changes">No hay cambios.</p>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="text-end mt-4">
+                <a href="{% url 'auditoria:auditoria_biblioteca_list' %}" class="btn btn-secondary" data-key="volver_listado">
+                  Volver al listado
+                </a>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}

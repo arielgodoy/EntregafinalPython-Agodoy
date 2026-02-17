@@ -1,87 +1,103 @@
-{% extends "base.html" %}
-{% block contenido %}
+{% extends "partials/base.html" %}
+
+{% block extra_css %}
 <style>
-    /* Estilos para simular WhatsApp */
-    .card-body {
-        background-color: #f1f1f1;
-        border-radius: 10px;
-        padding: 10px;
-    }
-
-    .mensaje {
-        padding: 5px;
-        margin-bottom: 10px;
-        border-radius: 10px;
-        max-width: 70%;
-        clear: both; /* Asegura que cada mensaje comience en una nueva línea */
-        overflow-wrap: break-word; /* Evita que las palabras largas desborden el contenedor */
-    }
-
-    .mensaje-propio {
-        background-color: #DCF8C6;
-        float: right;
-    }
-
-    .mensaje-otro {
-        background-color: #FFF;
-        float: left;
-    }
-
-    .avatar {
-        width: 25px;
-        height: 25px;
-        border-radius: 50%;
-        margin-right: 5px;
-        vertical-align: middle;
-    }
-
-    /* Estilos para el formulario de envío */
-    .formulario-envio {
-        margin-top: 20px;
-    }
+  .chat-wrapper { min-height: 60vh; }
+  .chat-messages {
+    background: #f1f1f1;
+    border-radius: 12px;
+    padding: 12px;
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+  .msg {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 14px;
+    max-width: 75%;
+    overflow-wrap: break-word;
+    clear: both;
+  }
+  .msg-own { background: #DCF8C6; margin-left: auto; }
+  .msg-other { background: #FFFFFF; margin-right: auto; }
+  .msg-meta { font-size: 12px; opacity: 0.75; }
+  .avatar {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
 </style>
+{% endblock extra_css %}
 
-<div class="container">
-    <div class="card-body">
-        <h1>{{ conversacion.titulo }}</h1>
-        <div class="row">
-            <div class="col-md-4"></div> <!-- Columna de espacio en blanco -->
-            <div class="col-md-4"> <!-- Columna principal -->
-                {% for mensaje in mensajes %}
-                <div class="mensaje {% if mensaje.remitente == request.user %}mensaje-propio{% else %}mensaje-otro{% endif %}">
-                    {% if mensaje.remitente.avatar %}
-                        <img src="{{ mensaje.remitente.avatar.imagen.url }}" alt="{{ mensaje.remitente.username }} Avatar" class="avatar">
-                    {% endif %}
-                    
-                    <strong>{{ mensaje.remitente }}</strong>: {% autoescape off %}{{ mensaje.contenido|urlize }}{% endautoescape %}
-                </div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4"></div> <!-- Columna de espacio en blanco -->
-        </div>
-    </div>
-</div>
+{% block title %}
+Detalle conversación
+{% endblock title %}
 
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Detalle conversación" pagetitle="Chat" %}
+{% endblock pagetitle %}
 
-
-
-<div class="container">
-  <div class="card-body">
-      <h1>{{ conversacion.titulo }}</h1>
+{% block content %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
       <div class="row">
-          <div class="col-md-3"></div> <!-- Columna de espacio en blanco -->
-          <div class="col-md-6"> <!-- Columna principal -->
-            <!-- Formulario de envío de mensajes -->
-            <div class="container formulario-envio">  
-              <form method="post">
-                  {% csrf_token %}
-                  {{ form.as_p }}
-                  <input type="submit" value="Enviar">
+
+        <div class="col-12 col-xl-10">
+          <div class="card chat-wrapper">
+            <div class="card-body">
+
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="h4 mb-0">{{ conversacion.titulo }}</h1>
+                <div class="d-flex gap-2">
+                  <a href="{% url 'lista_conversaciones' %}" class="btn btn-light btn-sm" data-key="chat.back_to_list">Volver</a>
+                </div>
+              </div>
+
+              <div class="chat-messages mb-3" id="chatMessages">
+                {% for mensaje in mensajes %}
+                  <div class="msg {% if mensaje.remitente == request.user %}msg-own{% else %}msg-other{% endif %}">
+                    <div class="d-flex align-items-center mb-1">
+                      {% if mensaje.remitente.avatar %}
+                        <img src="{{ mensaje.remitente.avatar.imagen.url }}" alt="{{ mensaje.remitente.username }}" class="avatar">
+                      {% endif %}
+                      <strong class="me-2">{{ mensaje.remitente }}</strong>
+                      <span class="msg-meta">{{ mensaje.fecha_creacion }}</span>
+                    </div>
+                    <div>
+                      {% autoescape off %}{{ mensaje.contenido|urlize }}{% endautoescape %}
+                    </div>
+                  </div>
+                {% empty %}
+                  <div class="text-center" data-key="chat.messages.empty">No hay mensajes aún.</div>
+                {% endfor %}
+              </div>
+
+              <form method="post" class="mt-2">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <div class="d-flex justify-content-end">
+                  <button type="submit" class="btn btn-primary" data-key="chat.send">Enviar</button>
+                </div>
               </form>
+
             </div>
-            {% endblock %}
           </div>
-          <div class="col-md-3"></div> <!-- Columna de espacio en blanco -->
+        </div>
+
       </div>
+    </div>
   </div>
 </div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var el = document.getElementById('chatMessages');
+    if (el) { el.scrollTop = el.scrollHeight; }
+  });
+</script>
+{% endblock extra_js %}

@@ -1,11 +1,11 @@
 {% extends "partials/base.html" %}
 
 {% block title %}
-Enviar mensaje
+Eliminar conversación
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Enviar mensaje" pagetitle="Chat" %}
+{% include "partials/page-title.html" with title="Eliminar conversación" pagetitle="Chat" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -19,19 +19,18 @@ Enviar mensaje
           <div class="card">
             <div class="card-body">
 
-              <h1 class="h4 mb-3" data-key="chat.send.title">Enviar mensaje</h1>
-              <p class="mb-3">
-                <span data-key="chat.send.conversation_label">Conversación:</span>
+              <h1 class="h4 mb-3" data-key="chat.delete.title">Eliminar conversación</h1>
+              <p data-key="chat.delete.confirm">¿Seguro que deseas eliminar esta conversación?</p>
+
+              <div class="alert alert-warning">
                 <strong>{{ conversacion }}</strong>
-              </p>
+              </div>
 
               <form method="post">
                 {% csrf_token %}
-                {{ form.as_p }}
-
                 <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-primary" data-key="chat.send.submit">Enviar mensaje</button>
-                  <a href="{% url 'detalle_conversacion' conversacion.id %}" class="btn btn-light" data-key="common.back">Volver</a>
+                  <button type="submit" class="btn btn-danger" data-key="common.delete">Eliminar</button>
+                  <a href="{% url 'lista_conversaciones' %}" class="btn btn-light" data-key="common.cancel">Cancelar</a>
                 </div>
               </form>
 

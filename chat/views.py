@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, DetailView, DeleteView
-from django.views.generic.edit import FormView
+from django.views.generic.edit import FormView, FormMixin
 
 from access_control.models import UsuarioPerfilEmpresa
 from access_control.views import VerificarPermisoMixin
@@ -17,6 +17,9 @@ from .services.conversations import create_conversation, validate_participants
 from .services.empresa import get_empresa_activa_id, assert_empresa_activa
 from .services.messages import create_message
 from .services.unread import mark_conversation_read
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_conversacion_titulo(conversacion, user):
@@ -84,7 +87,7 @@ class ChatInboxView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "unread_only": False,
             "show_center_filters": False,
         }
-        return render(request, "apps/apps-chat.html", context)
+        return render(request, "crear_conversacion.html", context)
 
 
 class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -169,7 +172,7 @@ class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "unread_only": unread_only,
             "show_center_filters": True,
         }
-        return render(request, "apps/apps-chat.html", context)
+        return render(request, "lista_conversaciones.html", context)
 
 
 class ListaConversacionesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
@@ -207,14 +210,35 @@ class CrearConversacionView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
     def post(self, request, *args, **kwargs):
         empresa_id = get_empresa_activa_id(request)
+
+        # LOGS TEMPORALES (BORRAR DESPUÉS)
+        logger.info(
+            "CHAT_CREATE_POST path=%s user=%s empresa_id=%s post_keys=%s participantes=%s",
+            request.path,
+            getattr(request.user, "username", None),
+            empresa_id,
+            list(request.POST.keys()),
+            request.POST.getlist("participantes"),
+        )
+
         try:
             validate_participants(
                 empresa_id,
                 request.user,
                 request.POST.getlist('participantes'),
             )
-        except ValueError:
-            return HttpResponseForbidden()
+        except ValueError as e:
+            # LOG TEMPORAL (BORRAR DESPUÉS)
+            logger.info("CHAT_CREATE_VALIDATION_ERROR error=%s", str(e))
+
+            form = self.get_form()
+            # Si el form tiene el field 'participantes', mejor error al campo
+            if 'participantes' in getattr(form, "fields", {}):
+                form.add_error('participantes', 'Debes seleccionar participantes válidos para la empresa activa.')
+            else:
+                form.add_error(None, 'No se pudo crear la conversación. Revisa participantes.')
+            return self.form_invalid(form)
+
         return super().post(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -223,21 +247,40 @@ class CrearConversacionView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         kwargs['empresa_id'] = get_empresa_activa_id(self.request)
         return kwargs
 
+    # Cambios en CrearConversacionView.form_valid (usar pk en redirect)
+    # Dentro de CrearConversacionView
+
     def form_valid(self, form):
         empresa_id = get_empresa_activa_id(self.request)
-        participantes = form.cleaned_data.get('participantes')
-        participant_ids = [user.id for user in participantes]
+
+        participantes = form.cleaned_data.get("participantes") or []
+        participant_ids = [u.id for u in participantes]
+
+        # IMPORTANTE: nunca incluir al creador como “participante seleccionado”
+        participant_ids = [uid for uid in participant_ids if uid != self.request.user.id]
+
+        # Validación final por si quedó vacío
+        if not participant_ids:
+            form.add_error("participantes", "Debes seleccionar al menos 1 participante distinto a ti.")
+            return self.form_invalid(form)
+
         try:
             conversacion = create_conversation(
                 empresa_id,
                 self.request.user,
                 participant_ids,
             )
-        except ValueError:
-            return HttpResponseForbidden()
-        return redirect('detalle_conversacion', conversacion_id=conversacion.id)
+        except ValueError as e:
+            # NO 403: mostrar el error
+            form.add_error(None, f"No se pudo crear la conversación: {str(e)}")
+            return self.form_invalid(form)
+
+        return redirect("detalle_conversacion", pk=conversacion.id)
 
 
+
+
+# Cambios en EnviarMensajeView: usar pk en vez de conversacion_id
 class EnviarMensajeView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
     vista_nombre = "Chat - Enviar mensaje"
     permiso_requerido = "ingresar"
@@ -259,7 +302,7 @@ class EnviarMensajeView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
         empresa_id = get_empresa_activa_id(self.request)
         return get_object_or_404(
             Conversacion,
-            id=self.kwargs['conversacion_id'],
+            id=self.kwargs['pk'],
             empresa_id=empresa_id,
             participantes=self.request.user,
         )
@@ -276,10 +319,11 @@ class EnviarMensajeView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
             )
         except ValueError:
             return HttpResponseForbidden()
-        return redirect('detalle_conversacion', conversacion_id=self.kwargs['conversacion_id'])
+        return redirect('detalle_conversacion', pk=self.kwargs['pk'])
 
 
-class DetalleConversacionView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
+
+class DetalleConversacionView(VerificarPermisoMixin, LoginRequiredMixin, FormMixin, DetailView):
     vista_nombre = "Chat - Ver conversación"
     permiso_requerido = "ingresar"
     model = Conversacion
@@ -329,7 +373,7 @@ class DetalleConversacionView(VerificarPermisoMixin, LoginRequiredMixin, DetailV
             )
         except ValueError:
             return HttpResponseForbidden()
-        return redirect('detalle_conversacion', conversacion_id=self.get_object().id)
+        return redirect('detalle_conversacion', pk=self.get_object().id)
 
 
 class EliminarConversacionView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):

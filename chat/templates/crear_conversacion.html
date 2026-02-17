@@ -1,17 +1,69 @@
-{% extends "base.html" %}
-{% block contenido %}
+{% extends "partials/base.html" %}
+{% load i18n static %}
 
-<div class="container">
-    <div class="card-body">
-      <h1>Crear nueva conversación</h1>
+{% block title %}{% trans "Crear conversación" %}{% endblock %}
 
-      <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Crear conversación</button>
-      </form><!--  -->     
+{% block pagetitle %}
+  {% include "partials/page-title.html" with title="Crear conversación" pagetitle="Chat" %}
+{% endblock %}
 
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="row">
+
+        <div class="col-12 col-lg-8">
+          <div class="card">
+            <div class="card-body">
+
+              <h1 class="h4 mb-3" data-key="chat.create.title">{% trans "Crear nueva conversación" %}</h1>
+
+              <form method="post" id="form-crear-conversacion">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                  <label class="form-label" for="participantes" data-key="label_participantes">{% trans "Participantes" %}</label>
+                  {% if form.participantes %}
+                    {{ form.participantes }}
+                  {% else %}
+                    {{ form.as_p }}
+                  {% endif %}
+                  {% if form.errors.participantes %}
+                    <div class="invalid-feedback d-block">{{ form.errors.participantes|striptags }}</div>
+                  {% endif %}
+                </div>
+
+                {% if form.non_field_errors %}
+                  <div class="alert alert-danger">{{ form.non_field_errors|striptags }}</div>
+                {% endif %}
+
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-primary" data-key="chat.create.submit">{% trans "Crear conversación" %}</button>
+                  <a href="{% url 'lista_conversaciones' %}" class="btn btn-light" data-key="common.back">{% trans "Volver" %}</a>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
 </div>
-</div>
+{% endblock %}
 
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function(){
+    var select = document.querySelector('[name="participantes"]');
+    if(select){
+      select.setAttribute('multiple','multiple');
+      // asegurar clase y tamaño coherente con UI empresarial
+      select.classList.add('form-select');
+      select.classList.add('form-select-sm');
+    }
+  });
+</script>
 {% endblock %}
