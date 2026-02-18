@@ -13,6 +13,7 @@ import time
 from acounts.forms import CustomUserForm
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth import update_session_auth_hash
+from .models import Avatar
 
 @user_passes_test(lambda u: u.is_superuser)
 @login_required
@@ -34,7 +35,8 @@ def crear_usuario_admin(request):
 def editar_perfil(request):
     """Editar perfil de usuario y avatar."""
     user = request.user
-    avatar = user.avatar
+    # Asegurarnos de tener un objeto Avatar relacionado para evitar RelatedObjectDoesNotExist
+    avatar, _ = Avatar.objects.get_or_create(user=user)
     if request.method == 'POST':
         user_form = CustomUserForm(request.POST, instance=user)
         avatar_form = AvatarForm(request.POST, request.FILES, instance=avatar)
@@ -119,7 +121,7 @@ def registro_usuario(request):
 @login_required
 def subeAvatar(request):
     """Subir/cambiar avatar de usuario."""
-    avatar = request.user.avatar    
+    avatar, _ = Avatar.objects.get_or_create(user=request.user)
     if request.method == 'POST':
         form = AvatarForm(request.POST, request.FILES, instance=avatar)
         if form.is_valid():
