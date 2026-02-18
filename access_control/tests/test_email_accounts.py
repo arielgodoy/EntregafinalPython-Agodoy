@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.core.management import call_command
 
 from acounts.models import EmailAccount
 from access_control.models import Empresa, Permiso, Vista
@@ -49,3 +50,10 @@ class EmailAccountViewTests(TestCase):
         response = self.client.get(reverse('access_control:email_accounts_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Cuenta Test')
+
+
+class VistaDataMigrationTests(TestCase):
+    def test_data_migration_created_email_accounts_vista(self):
+        # Ejecuta el seed (management command) para crear las vistas requeridas
+        call_command('seed_access_control')
+        self.assertTrue(Vista.objects.filter(nombre='email_accounts').exists())
