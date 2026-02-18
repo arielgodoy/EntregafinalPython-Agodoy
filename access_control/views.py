@@ -32,6 +32,7 @@ from django.http import JsonResponse
 
 from django.views import View
 from django.conf import settings as django_settings
+import smtplib
 import logging
 
 from .decorators import verificar_permiso, PermisoDenegadoJson
@@ -656,7 +657,23 @@ def _send_system_test_email(request, subject, body_text):
             body_text=body_text,
             to_emails=[to_email],
         )
-    except Exception:
+    except Exception as e:
+        # Registrar detalle en logger (sin exponer credenciales)
+        logger.exception("System email test failed for EmailAccount id=%s host=%s:%s",
+                         getattr(email_account, 'id', None),
+                         getattr(email_account, 'smtp_host', None),
+                         getattr(email_account, 'smtp_port', None))
+
+        # Mapear errores SMTP a mensajes más claros para el usuario
+        if isinstance(e, smtplib.SMTPAuthenticationError):
+            return JsonResponse({
+                'detail': _('Error de autenticación SMTP. Verifique usuario y contraseña.'),
+            }, status=400)
+        if isinstance(e, (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected)):
+            return JsonResponse({
+                'detail': _('No se pudo conectar al servidor SMTP. Verifique host/puerto y conectividad.'),
+            }, status=400)
+        # Caso por defecto
         return JsonResponse({
             'detail': _('Error enviando correo de prueba.'),
         }, status=400)
