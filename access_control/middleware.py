@@ -1,5 +1,7 @@
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.http import JsonResponse
+from django.utils.translation import gettext as _
 
 
 class EmpresaActivaMiddleware:
@@ -9,6 +11,15 @@ class EmpresaActivaMiddleware:
     def __call__(self, request):
         if self._should_enforce(request):
             if not request.session.get("empresa_id"):
+                # Para peticiones AJAX/JSON devolver JSON con 401 en vez de redirect
+                is_ajax = (
+                    request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+                    request.headers.get('x-requested-with') == 'XMLHttpRequest' or
+                    'application/json' in request.META.get('HTTP_ACCEPT', '') or
+                    'application/json' in request.headers.get('accept', '')
+                )
+                if is_ajax:
+                    return JsonResponse({'detail': _('Empresa activa requerida')}, status=401)
                 return redirect(self._get_selector_url())
         return self.get_response(request)
 

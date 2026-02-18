@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.core.management import call_command
+from django.utils.translation import gettext as _
 
 from acounts.models import EmailAccount
 from access_control.models import Empresa, Permiso, Vista
@@ -19,7 +20,7 @@ class EmailAccountViewTests(TestCase):
     def test_missing_vista_returns_400(self):
         response = self.client.get(reverse('access_control:email_accounts_list'))
         self.assertEqual(response.status_code, 400)
-        self.assertContains(response, 'NO ENCONTRADO: Vista email_accounts', status_code=400)
+        self.assertContains(response, _('NO ENCONTRADO: Vista email_accounts'), status_code=400)
 
     def test_list_ok_with_permiso_ingresar(self):
         vista = Vista.objects.create(nombre='email_accounts')

@@ -48,7 +48,16 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 if not empresa_id:
                     return redirect("access_control:seleccionar_empresa")
 
-                vista, _ = Vista.objects.get_or_create(nombre=vista_nombre)
+                # Intentar obtener la vista por nombre exacto. Si no existe,
+                # buscar por sufijo (ej. 'Control de Acceso - Maestro Usuarios' <-> 'Maestro Usuarios')
+                vista = Vista.objects.filter(nombre=vista_nombre).first()
+                if not vista:
+                    # Intentar emparejar por la parte después del prefijo ' - '
+                    suffix = vista_nombre.split(' - ')[-1]
+                    vista = Vista.objects.filter(nombre__icontains=suffix).first()
+                # Si aún no existe, crear la vista con el nombre completo
+                if not vista:
+                    vista, _ = Vista.objects.get_or_create(nombre=vista_nombre)
 
                 try:
                     empresa = Empresa.objects.get(id=empresa_id)

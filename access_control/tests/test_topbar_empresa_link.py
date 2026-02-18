@@ -3,6 +3,7 @@ Tests para verificar que el link de cambio de empresa en topbar funciona correct
 """
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 
@@ -22,7 +23,8 @@ class TopbarEmpresaLinkTests(TestCase):
             descripcion="Empresa de prueba",
         )
         # Crear permiso para la vista raíz (biblioteca listar propiedades)
-        self.vista = Vista.objects.get_or_create(nombre="Listado de Propiedades")[0]
+        # Coincidir con el nombre usado por la view: 'Biblioteca - Listar Propiedades'
+        self.vista = Vista.objects.get_or_create(nombre="Biblioteca - Listar Propiedades")[0]
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
@@ -49,12 +51,13 @@ class TopbarEmpresaLinkTests(TestCase):
         # Verificar que el modal trigger existe con Bootstrap 5 syntax
         self.assertIn('data-bs-toggle="modal"', html)
         self.assertIn('data-bs-target="#cambiarEmpresaModal"', html)
-        self.assertIn(self.empresa.descripcion, html)
 
-        # Verificar que NO usa Bootstrap 4 syntax (data-toggle, data-target)
-        # Excepto si hay otros elementos que lo usen, pero el de empresa debe ser BS5
-        # Buscamos el contexto específico del texto "Empresa:"
-        self.assertIn("Empresa:", html)
+        # La representación en la UI del selector suele ser "<codigo> - <descripcion>"
+        display = f"{self.empresa.codigo} - {self.empresa.descripcion}"
+        self.assertIn(display, html)
+
+        # Verificar que el modal existe y está marcado con la clave de traducción esperada
+        self.assertIn('data-key="modal.select_company"', html)
 
     def test_topbar_sin_empresa_seleccionada_tiene_modal_trigger(self):
         """
@@ -87,8 +90,8 @@ class TopbarEmpresaLinkTests(TestCase):
         # Verificar que el modal existe
         self.assertIn('id="cambiarEmpresaModal"', html)
         # Verificar que el form apunta a la URL correcta
-        # El form está en templates/partials/base.html
-        # y tiene action="{% url 'access_control:seleccionar_empresa' %}"
+        expected_action = reverse("access_control:seleccionar_empresa")
+        self.assertIn(f'action="{expected_action}"', html)
 
     def test_post_seleccionar_empresa_actualiza_sesion(self):
         """

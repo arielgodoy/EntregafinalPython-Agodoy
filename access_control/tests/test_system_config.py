@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.translation import gettext as _
 
 from acounts.models import SystemConfig
 from access_control.forms import SystemConfigForm
@@ -30,7 +31,7 @@ class SystemConfigViewTests(TestCase):
     def test_missing_vista_returns_400(self):
         response = self.client.get(reverse('access_control:system_config'))
         self.assertEqual(response.status_code, 400)
-        self.assertContains(response, 'NO ENCONTRADO: Vista system_config', status_code=400)
+        self.assertContains(response, _('NO ENCONTRADO: Vista system_config'), status_code=400)
 
     def test_view_ok_with_permission(self):
         vista = Vista.objects.create(nombre='system_config')

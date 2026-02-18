@@ -14,6 +14,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.db import transaction
+from django.utils.translation import gettext as _
 
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig, UserEmailToken, UserEmailTokenPurpose
 from .models import Empresa, Permiso, Vista, UsuarioPerfilEmpresa, AccessRequest
@@ -93,7 +94,7 @@ class EmailAccountVistaRequiredMixin:
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre=self.vista_nombre).exists():
-            messages.error(request, f'NO ENCONTRADO: Vista {self.vista_nombre}')
+            messages.error(request, _('NO ENCONTRADO: Vista {vista}').format(vista=self.vista_nombre))
             if hasattr(self, 'get_form'):
                 form = self.get_form()
                 context = self.get_context_data(form=form)
@@ -109,7 +110,7 @@ class CompanyConfigVistaRequiredMixin:
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre=self.vista_nombre).exists():
-            messages.error(request, f'NO ENCONTRADO: Vista {self.vista_nombre}')
+            messages.error(request, _('NO ENCONTRADO: Vista {vista}').format(vista=self.vista_nombre))
             if hasattr(self, 'get_form'):
                 form = self.get_form()
                 context = self.get_context_data(form=form)
@@ -200,7 +201,7 @@ def toggle_permiso(request):
     # Validar método HTTP
     if request.method != "POST":
         return JsonResponse(
-            {"success": False, "error": "Método no permitido. Solo POST."},
+            {"success": False, "error": _("Método no permitido. Solo POST.")},
             status=405
         )
     
@@ -215,7 +216,7 @@ def toggle_permiso(request):
     # Validar permiso_id es dígito
     if not permiso_id.isdigit():
         return JsonResponse(
-            {"success": False, "error": "permiso_id inválido"},
+            {"success": False, "error": _("permiso_id inválido")},
             status=400
         )
     
@@ -236,7 +237,7 @@ def toggle_permiso(request):
         return JsonResponse({"success": True, "new_value": value})
     except Permiso.DoesNotExist:
         return JsonResponse(
-            {"success": False, "error": "Permiso no encontrado"},
+            {"success": False, "error": _("Permiso no encontrado")},
             status=404
         )
     except Exception as e:
@@ -295,7 +296,7 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 )
             return JsonResponse({"success": True})
         except Usuario.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Usuario no encontrado."})
+            return JsonResponse({"success": False, "error": _("Usuario no encontrado.")})
         except Empresa.DoesNotExist:
             return JsonResponse({"success": False, "error": "Empresa no encontrada."})
         except Exception as e:
@@ -479,7 +480,7 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre='system_config').exists():
-            messages.error(request, 'NO ENCONTRADO: Vista system_config')
+            messages.error(request, _('NO ENCONTRADO: Vista system_config'))
             config = self._get_or_create_active_config()
             form = self.get_form_class()(instance=config)
             return render(request, self.template_name, {'form': form}, status=400)
@@ -579,7 +580,7 @@ class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin,
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre='system_config').exists():
             return JsonResponse({
-                'detail': 'NO ENCONTRADO: Vista system_config',
+                'detail': _('NO ENCONTRADO: Vista system_config'),
             }, status=400)
         return super().dispatch(request, *args, **kwargs)
 
@@ -594,7 +595,7 @@ class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, Vie
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre='system_config').exists():
             return JsonResponse({
-                'detail': 'NO ENCONTRADO: Vista system_config',
+                'detail': _('NO ENCONTRADO: Vista system_config'),
             }, status=400)
         return super().dispatch(request, *args, **kwargs)
 
@@ -614,25 +615,25 @@ def _send_system_test_email(request, subject, body_text):
     ).first()
     if not config:
         return JsonResponse({
-            'detail': 'No existe una configuración activa del sistema.',
+            'detail': _('No existe una configuración activa del sistema.'),
         }, status=400)
 
     email_account = config.security_email_account
     if not email_account or not email_account.is_active:
         return JsonResponse({
-            'detail': 'Falta security_email_account en SystemConfig.',
+            'detail': _('Falta security_email_account en SystemConfig.'),
         }, status=400)
 
     missing_fields = _validate_email_account_for_smtp(email_account)
     if missing_fields:
         return JsonResponse({
-            'detail': f"El EmailAccount no tiene {', '.join(missing_fields)} configurado",
+            'detail': _('El EmailAccount no tiene {fields} configurado').format(fields=', '.join(missing_fields)),
         }, status=400)
 
     to_email = (request.user.email or '').strip()
     if not to_email:
         return JsonResponse({
-            'detail': 'El usuario no tiene email configurado.',
+            'detail': _('El usuario no tiene email configurado.'),
         }, status=400)
 
     if django_settings.DEBUG:
@@ -657,7 +658,7 @@ def _send_system_test_email(request, subject, body_text):
         )
     except Exception:
         return JsonResponse({
-            'detail': 'Error enviando correo de prueba.',
+            'detail': _('Error enviando correo de prueba.'),
         }, status=400)
 
     return JsonResponse({'status': 'ok'})
@@ -791,13 +792,13 @@ class InvitacionEliminarView(VerificarPermisoSafeMixin, LoginRequiredMixin, View
     permiso_requerido = 'eliminar'
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
-        messages.error(request, 'invitations.delete.forbidden')
+        messages.error(request, _('invitations.delete.forbidden'))
         return redirect('access_control:invitaciones_lista')
 
     def post(self, request, pk, *args, **kwargs):
         token = UserEmailToken.objects.filter(pk=pk).select_related('user').first()
         if not token:
-            messages.error(request, 'invitations.delete.not_found')
+            messages.error(request, _('invitations.delete.not_found'))
             return redirect('access_control:invitaciones_lista')
 
         empresa_ids = []
@@ -819,7 +820,7 @@ class InvitacionEliminarView(VerificarPermisoSafeMixin, LoginRequiredMixin, View
             return self.handle_no_permission(request)
 
         token.delete()
-        messages.success(request, 'invitations.delete.success')
+        messages.success(request, _('invitations.delete.success'))
         return redirect('access_control:invitaciones_lista')
 
 
@@ -869,7 +870,7 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre='auth_invite').exists():
-            messages.error(request, 'Falta ejecutar seed_access_control para crear la Vista base "auth_invite".')
+            messages.error(request, _('Falta ejecutar seed_access_control para crear la Vista base "auth_invite".'))
             form = self.get_form()
             context = self.get_context_data(form=form)
             return self.render_to_response(context, status=400)
