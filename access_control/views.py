@@ -919,11 +919,13 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
                 created_by=self.request.user,
             )
         except Exception:
-            form.add_error(None, 'No se pudo enviar el correo de invitación.')
+            # Si ocurre una excepción inesperada, mostrar mensaje genérico
+            form.add_error(None, _('errors.email.send_failed'))
             return self.form_invalid(form)
 
         if not result.get('ok'):
-            form.add_error(None, result.get('error'))
+            # result['error'] es una clave de i18n definida en los recursos
+            form.add_error(None, _(result.get('error') or 'errors.unknown'))
             return self.form_invalid(form)
 
         messages.success(self.request, f'Invitación enviada a {email}.')

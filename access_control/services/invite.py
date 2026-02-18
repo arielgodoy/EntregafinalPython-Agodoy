@@ -121,13 +121,20 @@ def invite_user_flow(email, first_name, last_name, empresas, tipo_usuario, usuar
         f'<p><a href="{activation_link}">Activar cuenta</a></p>'
     )
 
-    send_security_email(
-        empresa=empresa_principal,
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
-        to_emails=[email],
-    )
+    try:
+        send_security_email(
+            empresa=empresa_principal,
+            subject=subject,
+            body_text=body_text,
+            body_html=body_html,
+            to_emails=[email],
+        )
+    except Exception as e:
+        # Devolver error legible al caller; el detalle se registrará en email_service
+        return {
+            'ok': False,
+            'error': 'errors.email.send_failed',
+        }
 
     return {
         'ok': True,

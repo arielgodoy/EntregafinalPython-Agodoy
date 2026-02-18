@@ -1,4 +1,5 @@
 import smtplib
+import logging
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
@@ -68,8 +69,21 @@ def send_email_for_purpose(
     try:
         server.login(email_account.smtp_user, email_account.smtp_password)
         server.send_message(msg)
+    except Exception as e:
+        # Registrar destinatarios para facilitar diagnóstico (evitar volcar datos adicionales)
+        logging.exception(
+            "Failed to send email via EmailAccount id=%s host=%s:%s recipients=%s",
+            getattr(email_account, 'id', None),
+            email_account.smtp_host,
+            email_account.smtp_port,
+            recipients,
+        )
+        raise
     finally:
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            logging.debug("Error while quitting SMTP server connection", exc_info=True)
 
     return {'success': True, 'recipients': recipients}
 
@@ -129,6 +143,13 @@ def send_email_via_account(
     )
     if body_html:
         msg.attach_alternative(body_html, "text/html")
-
-    msg.send()
+    try:
+        msg.send()
+    except Exception:
+        logging.exception(
+            "Failed to send email via EmailAccount id=%s (send_email_via_account) recipients=%s",
+            getattr(email_account, 'id', None),
+            recipients,
+        )
+        raise
     return {'success': True, 'recipients': recipients}
