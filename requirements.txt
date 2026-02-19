@@ -12,3 +12,6 @@ Pillow==11.0.0
 pyzbar==0.1.9
 sqlparse==0.5.2
 tzdata==2024.2
+channels
+daphne
+# channels_redis  # Optional: enable in Paso 2 if you have Redis

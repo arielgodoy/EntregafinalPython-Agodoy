@@ -1,0 +1,43 @@
+{% load static %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WS Debug - Chat {{ conversation_id }}</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;padding:1rem}#log{white-space:pre-wrap;background:#f6f6f6;padding:1rem;border:1px solid #ddd;height:300px;overflow:auto}</style>
+</head>
+<body>
+  <h3>WS Debug - conversation {{ conversation_id }}</h3>
+  <div>
+    <label>Message: <input id="msg" style="width:60%"></label>
+    <button id="send">Send</button>
+  </div>
+  <p>WebSocket URL: <code id="wsurl"></code></p>
+  <div id="log"></div>
+
+  <script>
+    const convId = {{ conversation_id }};
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = protocol + '://' + window.location.host + '/ws/chat/' + convId + '/';
+    document.getElementById('wsurl').textContent = wsUrl;
+
+    const log = (t)=>{ const d = document.getElementById('log'); d.innerText = d.innerText + '\n' + t; d.scrollTop = d.scrollHeight; };
+    let ws;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onopen = ()=> log('[open] connected');
+      ws.onclose = (ev)=> log('[close] code='+ev.code);
+      ws.onerror = (ev)=> log('[error] ' + JSON.stringify(ev));
+      ws.onmessage = (ev)=> log('[recv] ' + ev.data);
+    } catch(e){ log('[exception] ' + e); }
+
+    document.getElementById('send').addEventListener('click', ()=>{
+      const v = document.getElementById('msg').value;
+      if(!ws || ws.readyState !== WebSocket.OPEN){ log('[send] ws not open'); return; }
+      const payload = { type: 'message', content: v };
+      ws.send(JSON.stringify(payload));
+      log('[sent] ' + JSON.stringify(payload));
+    });
+  </script>
+</body>
+</html>

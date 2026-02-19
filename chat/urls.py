@@ -10,6 +10,7 @@ from .views import (
     DetalleConversacionView,
     EnviarMensajeView,
     EliminarConversacionView,
+    ws_debug_view,
 )
 
 urlpatterns = [
@@ -26,3 +27,7 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Debug-only websocket tester
+    urlpatterns += [
+        path('ws-debug/<int:conversation_id>/', ws_debug_view, name='ws_debug'),
+    ]

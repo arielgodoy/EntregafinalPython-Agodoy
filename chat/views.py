@@ -4,6 +4,8 @@ from django.contrib.auth.models import User
 from django.db.models import Q, Exists, OuterRef
 from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
+from django.http import Http404
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, DetailView, DeleteView
@@ -83,11 +85,12 @@ class ChatInboxView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "messages": mensajes,
             "contacts": contactos,
             "unread_count": {},
+            "chat_unread_count": 0,
             "search_query": "",
             "unread_only": False,
             "show_center_filters": False,
         }
-        return render(request, "crear_conversacion.html", context)
+        return render(request, "chat/chat_inbox.html", context)
 
 
 class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -168,11 +171,12 @@ class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "messages": mensajes,
             "contacts": contactos,
             "unread_count": {},
+            "chat_unread_count": 0,
             "search_query": search_query,
             "unread_only": unread_only,
             "show_center_filters": True,
         }
-        return render(request, "lista_conversaciones.html", context)
+        return render(request, "chat/chat_inbox.html", context)
 
 
 class ListaConversacionesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
@@ -396,3 +400,15 @@ class EliminarConversacionView(VerificarPermisoMixin, LoginRequiredMixin, Delete
             empresa_id=empresa_id,
             participantes=self.request.user,
         )
+
+
+def ws_debug_view(request, conversation_id):
+    """Endpoint de prueba SOLO en DEBUG para probar WS localmente.
+
+    Muestra una página simple que abre un WebSocket a /ws/chat/<conversation_id>/
+    y permite enviar/recibir mensajes. NO incluir en producción.
+    """
+    if not settings.DEBUG:
+        raise Http404()
+
+    return render(request, 'chat/ws_debug.html', {'conversation_id': conversation_id})

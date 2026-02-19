@@ -78,6 +78,11 @@ INSTALLED_APPS = [
     'auditoria',
 ]
 
+# Channels (ASGI) - habilitado de forma optativa para chat
+INSTALLED_APPS += [
+    'channels',
+]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -118,6 +123,16 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'AppDocs.wsgi.application'
+
+# ASGI entrypoint para Channels
+ASGI_APPLICATION = 'AppDocs.asgi.application'
+
+# Channel layers - InMemory para desarrollo/local (no requiere Redis)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 
 # Database
