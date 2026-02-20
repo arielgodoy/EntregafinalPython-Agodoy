@@ -310,7 +310,7 @@ class ConfigurarEmailView(LoginRequiredMixin, View):
 
 @login_required
 @require_POST
-@verificar_permiso("preferencias_tema", "modificar")
+@verificar_permiso("Settings - Theme preference", "modificar")
 def guardar_preferencias(request):
     """Guardar preferencias de tema del usuario."""
     try:

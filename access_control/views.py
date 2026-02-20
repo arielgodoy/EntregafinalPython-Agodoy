@@ -91,7 +91,7 @@ class VerificarPermisoSafeMixin(VerificarPermisoMixin):
 
 
 class EmailAccountVistaRequiredMixin:
-    vista_nombre = 'email_accounts'
+    vista_nombre = 'Settings - Emails Acounts'
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre=self.vista_nombre).exists():
@@ -107,7 +107,8 @@ class EmailAccountVistaRequiredMixin:
 
 
 class CompanyConfigVistaRequiredMixin:
-    vista_nombre = 'company_config'
+    
+    vista_nombre = 'Settings - Configuracion de Empresa'
 
     def dispatch(self, request, *args, **kwargs):
         if not Vista.objects.filter(nombre=self.vista_nombre).exists():
@@ -465,7 +466,7 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
     form_class = SystemConfigForm
     template_name = 'access_control/settings_system.html'
     success_url = reverse_lazy('access_control:system_config')
-    vista_nombre = 'Control de Acceso - system_config'
+    vista_nombre = 'Settings - Configuración del Sistema'
     permiso_requerido = 'modificar'
 
     def _get_or_create_active_config(self):
@@ -480,8 +481,8 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
         return config
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='system_config').exists():
-            messages.error(request, _('NO ENCONTRADO: Vista system_config'))
+        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
+            messages.error(request, _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'))
             config = self._get_or_create_active_config()
             form = self.get_form_class()(instance=config)
             return render(request, self.template_name, {'form': form}, status=400)
@@ -508,7 +509,7 @@ class EmailAccountListView(EmailAccountVistaRequiredMixin, VerificarPermisoSafeM
     model = EmailAccount
     template_name = 'access_control/settings_email_accounts_list.html'
     context_object_name = 'email_accounts'
-    vista_nombre = 'email_accounts'
+    vista_nombre = 'Settings - Emails Acounts'
     permiso_requerido = 'ingresar'
 
     def get_context_data(self, **kwargs):
@@ -548,7 +549,7 @@ class CompanyConfigListView(CompanyConfigVistaRequiredMixin, VerificarPermisoSaf
     model = Empresa
     template_name = 'access_control/settings_company_list.html'
     context_object_name = 'empresas'
-    vista_nombre = 'company_config'
+    vista_nombre = 'Settings - Configuracion de Empresa'
     permiso_requerido = 'modificar'
 
 
@@ -557,7 +558,7 @@ class CompanyConfigUpdateView(CompanyConfigVistaRequiredMixin, VerificarPermisoS
     form_class = CompanyConfigForm
     template_name = 'access_control/settings_company_form.html'
     success_url = reverse_lazy('access_control:company_config_list')
-    vista_nombre = 'company_config'
+    vista_nombre = 'Settings - Configuracion de Empresa'
     permiso_requerido = 'modificar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -575,13 +576,13 @@ class CompanyConfigUpdateView(CompanyConfigVistaRequiredMixin, VerificarPermisoS
 
 
 class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = 'system_config'
+    vista_nombre = 'Settings - Configuración del Sistema'
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='system_config').exists():
+        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
             return JsonResponse({
-                'detail': _('NO ENCONTRADO: Vista system_config'),
+                'detail': _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'),
             }, status=400)
         return super().dispatch(request, *args, **kwargs)
 
@@ -590,13 +591,13 @@ class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin,
 
 
 class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = 'system_config'
+    vista_nombre = 'Settings - Configuración del Sistema'
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='system_config').exists():
+        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
             return JsonResponse({
-                'detail': _('NO ENCONTRADO: Vista system_config'),
+                'detail': _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'),
             }, status=400)
         return super().dispatch(request, *args, **kwargs)
 
@@ -606,9 +607,9 @@ class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, Vie
 
 def _send_system_test_email(request, subject, body_text):
     logger = logging.getLogger(__name__)
-    if not Vista.objects.filter(nombre='system_config').exists():
+    if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
         return JsonResponse({
-            'detail': 'NO ENCONTRADO: Vista system_config',
+            'detail': 'NO ENCONTRADO: Vista Settings - Configuración del Sistema',
         }, status=400)
 
     config = SystemConfig.objects.filter(is_active=True).select_related(
@@ -1024,7 +1025,7 @@ class SolicitarAccesoView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
         grant_url = build_grant_access_request_url(request, access_request)
 
-        # ✅ NOTIFICACIONES INTERNAS: SIEMPRE se crean, independiente de configuración de email
+        # ? NOTIFICACIONES INTERNAS: SIEMPRE se crean, independiente de configuración de email
         # El usuario SIEMPRE recibirá notificación interna, incluso si no tiene email configurado
         staff_qs, staff_ids, staff_emails = get_staff_recipient_data()
         staff_users = list(staff_qs)
@@ -1055,7 +1056,7 @@ class SolicitarAccesoView(VerificarPermisoMixin, LoginRequiredMixin, View):
         if notifications:
             Notification.objects.bulk_create(notifications)
 
-        # 📧 EMAIL: Solo se intenta si el usuario marcó el checkbox Y tiene email/SMTP configurado
+        # ?? EMAIL: Solo se intenta si el usuario marcó el checkbox Y tiene email/SMTP configurado
         enviar_email = request.POST.get("enviar_email") == "on"
         record_access_request_email_audit(
             access_request,

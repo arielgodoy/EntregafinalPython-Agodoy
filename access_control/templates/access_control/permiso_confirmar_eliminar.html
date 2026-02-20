@@ -1,0 +1,44 @@
+{% extends "partials/base.html" %}
+{% block extra_css %}
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock extra_css %}
+
+
+{% block title %}
+Eliminar Permiso
+{% endblock title %}
+
+{% block pagetitle %}
+<div class="page-title">
+    <h1 data-key="permissions.delete.page_title">Eliminar Permiso</h1>
+    {% comment %}Usamos un título local aquí para no modificar partials compartidos.{% endcomment %}
+</div>
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title" data-key="permissions.delete.title">Eliminar Permiso</h4>
+                    <p class="mb-3" data-key="permissions.delete.confirm">¿Estás seguro de que deseas eliminar este permiso?</p>
+                    <p><strong data-key="permissions.delete.object">{{ object }}</strong></p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-danger me-2" data-key="btn-eliminar">Eliminar</button>
+                            <a href="{% url 'access_control:permisos_lista' %}" class="btn btn-secondary" data-key="permissions.delete.cancel">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{% endblock extra_js %}

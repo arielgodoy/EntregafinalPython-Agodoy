@@ -73,7 +73,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 ).first()
 
                 # Auto-crear o actualizar permisos para vistas de usuario
-                vistas_auto_permiso = ["preferencias_tema", "Accounts - Editar Perfil"]
+                vistas_auto_permiso = ["Settings - Theme preference", "Accounts - Editar Perfil"]
                 if vista_nombre in vistas_auto_permiso:
                     if not permiso:
                         permiso = Permiso.objects.create(

@@ -30,6 +30,7 @@ Gestión de Permisos
                     </div>
 
                     <div class="table-responsive">
+                        <form id="csrf-form">{% csrf_token %}</form>
                         <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="permisos-table">
                             <thead>
                                 <tr>
@@ -47,7 +48,7 @@ Gestión de Permisos
                             </thead>
                             <tbody>
                                 {% for permiso in permisos %}
-                                <tr>
+                                <tr id="permiso-row-{{ permiso.id }}">
                                     <td>{{ permiso.usuario.username }}</td>
                                     <td>{{ permiso.empresa.codigo }}</td>
                                     <td>{{ permiso.vista.nombre }}</td>
@@ -73,9 +74,12 @@ Gestión de Permisos
                                         <a href="{% url 'access_control:permiso_editar' permiso.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
                                         </a>
-                                        <a href="{% url 'access_control:permiso_eliminar' permiso.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar este permiso?');">
+                                        <button type="button" class="btn btn-danger btn-sm btn-eliminar-permiso"
+                                                data-permiso-id="{{ permiso.id }}"
+                                                data-permiso-nombre="{{ permiso.usuario.username }} - {{ permiso.empresa.codigo }} - {{ permiso.vista.nombre }}"
+                                                data-delete-url="{% url 'access_control:permiso_eliminar' permiso.id %}">
                                             <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
-                                        </a>
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -93,14 +97,117 @@ Gestión de Permisos
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
 <script>
+    let permisoTable;
+    let deleteUrl = '';
+    let permisoId = '';
+
     document.addEventListener('DOMContentLoaded', function () {
-        $('#permisos-table').DataTable({
+        permisoTable = $('#permisos-table').DataTable({
             language: {
                 url: "/static/lang/es-ES.json"
             },
             responsive: true,
             autoWidth: false,
         });
+
+        // Click en botón eliminar (delegación)
+        $(document).on('click', '.btn-eliminar-permiso', function(e) {
+            e.preventDefault();
+            permisoId = $(this).data('permiso-id');
+            const permisoNombre = $(this).data('permiso-nombre');
+            deleteUrl = $(this).data('delete-url');
+
+            // Actualizar modal
+            $('#permisoNombre').text(permisoNombre);
+
+            // Mostrar modal
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteModalPermiso'));
+            deleteModal.show();
+        });
+
+        // Confirmar eliminación
+        $('#confirmDeletePermiso').on('click', function() {
+            if (!deleteUrl) return;
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Eliminando...');
+
+            $.ajax({
+                url: deleteUrl,
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val() || getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                success: function(response) {
+                    bootstrap.Modal.getInstance(document.getElementById('deleteModalPermiso')).hide();
+                    // Remover fila
+                    try {
+                        permisoTable.row('#permiso-row-' + permisoId).remove().draw();
+                    } catch (err) {
+                        // fallback: eliminar del DOM
+                        $('#permiso-row-' + permisoId).remove();
+                    }
+
+                    Toastify({
+                        text: response.message || "Eliminado exitosamente",
+                        duration: 3000,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+                    }).showToast();
+                },
+                error: function(xhr) {
+                    let errorMsg = 'Error al eliminar';
+                    if (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) {
+                        errorMsg = xhr.responseJSON.error || xhr.responseJSON.message;
+                    }
+                    Toastify({ text: errorMsg, duration: 3000, gravity: "top", position: "right", backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)" }).showToast();
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).text('Eliminar');
+                }
+            });
+        });
     });
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
 </script>
+
+<!-- Modal de confirmación (ID único para permisos) -->
+<div class="modal fade" id="deleteModalPermiso" tabindex="-1" aria-labelledby="deleteModalPermisoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalPermisoLabel" data-key="confirm_delete">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p data-key="delete_confirmation">¿Estás seguro de que deseas eliminar <strong id="permisoNombre"></strong>?</p>
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong data-key="warning">Advertencia:</strong>
+                    <span data-key="delete_warning">Esta acción es irreversible.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmDeletePermiso" data-key="delete">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock extra_js %}
