@@ -129,8 +129,14 @@ class AuditoriaBibliotecaListView(VerificarPermisoMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         qs = self.object_list
-        context["acciones"] = qs.values_list("action", flat=True).distinct()
-        context["usuarios"] = qs.values_list("user__username", flat=True).distinct()
+        # Para los filtros mostramos valores únicos en todo el conjunto de la empresa
+        empresa_id = self.request.session.get("empresa_id")
+        base_qs = AuditoriaBibliotecaEvent.objects.filter(empresa_id=empresa_id)
+        context["acciones"] = list(base_qs.values_list("action", flat=True).distinct().order_by("action"))
+        context["usuarios"] = list(base_qs.values_list("user__username", flat=True).distinct().order_by("user__username"))
+        # Valores únicos para el filtro de vistas y paths
+        context["vistas"] = list(base_qs.values_list("vista_nombre", flat=True).distinct().order_by("vista_nombre"))
+        context["paths"] = list(base_qs.values_list("path", flat=True).distinct().order_by("path"))
         # indicar si hay empresa seleccionada
         context["empresa_selected"] = getattr(self, "empresa_selected", False)
         context["empresa_id"] = self.request.session.get("empresa_id")

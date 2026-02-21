@@ -51,7 +51,6 @@ class AuditoriaService:
         model_class = cls.APP_MODEL_MAP.get(app_label)
         if not model_class:
             return None
-
         event_data = cls._sanitize_data(event_data)
         return model_class.objects.create(**event_data)
 

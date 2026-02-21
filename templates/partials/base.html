@@ -37,6 +37,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- DataTables JS: moved to per-page partial to avoid global duplication -->
+    <style>
+      /* Fix: asegurar que los modales estén por encima del sidebar/overlay */
+      .modal-backdrop { z-index: 20005 !important; }
+      .modal { z-index: 20010 !important; }
+    </style>
     {% endblock css %}
 </head>
 
@@ -257,6 +262,38 @@
 
     {% block extra_js %}
     {% endblock extra_js %}
+    <script>
+      // Mover modales al <body> para evitar problemas de stacking context
+      (function(){
+        function moveModalsToBody(root) {
+          const scope = root || document;
+          const modals = scope.querySelectorAll && scope.querySelectorAll('.modal');
+          if (!modals) return;
+          modals.forEach(m => {
+            if (m.parentElement && m.parentElement !== document.body) {
+              document.body.appendChild(m);
+            }
+          });
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function(){ moveModalsToBody(document); });
+        } else {
+          moveModalsToBody(document);
+        }
+
+        // Observe DOM for dynamically added modals (e.g., includes)
+        const observer = new MutationObserver(function(mutations){
+          mutations.forEach(m => {
+            if (!m.addedNodes) return;
+            m.addedNodes.forEach(node => {
+              try { moveModalsToBody(node); } catch(e){}
+            });
+          });
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      })();
+    </script>
     <script>
       // Normalize language codes so app.js finds the correct JSON file.
       (function(){

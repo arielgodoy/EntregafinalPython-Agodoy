@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.http import HttpResponse, JsonResponse
+from django.db import transaction
+from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.timezone import now
@@ -312,28 +314,50 @@ class EliminarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DeleteVie
     success_url = reverse_lazy("biblioteca:listar_propiedades")
     vista_nombre = "Biblioteca - Eliminar Propiedad"
     permiso_requerido = "eliminar"
-
-    def form_valid(self, form):
+    def delete(self, request, *args, **kwargs):
         from auditoria.helpers import audit_log
         from auditoria.services import AuditoriaService
+        self.object = self.get_object()
+        nombre = getattr(self.object, 'rol', str(self.object))
 
-        obj = self.get_object()
-        before_snapshot = AuditoriaService.model_to_snapshot(obj)
+        try:
+            with transaction.atomic():
+                before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                self.object.delete()
 
-        response = super().form_valid(form)
+                audit_log(
+                    request=request,
+                    action="DELETE",
+                    app_label="biblioteca",
+                    obj=self.object,
+                    before=before_snapshot,
+                    vista_nombre=self.vista_nombre,
+                    status_code=200,
+                    meta={"entity": "Propiedad"},
+                )
 
-        audit_log(
-            request=self.request,
-            action="DELETE",
-            app_label="biblioteca",
-            obj=obj,
-            before=before_snapshot,
-            vista_nombre=self.vista_nombre,
-            status_code=getattr(response, "status_code", None),
-            meta={"entity": "Propiedad"},
-        )
+            # Detección robusta de petición AJAX/fetch: X-Requested-With o Accept: application/json
+            xrw = request.headers.get('X-Requested-With', '')
+            accept = request.headers.get('Accept', '')
+            is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
 
-        return response
+            messages.success(request, 'biblioteca.propiedad.delete.success')
+            return redirect(self.success_url)
+
+        except Exception as e:
+            xrw = request.headers.get('X-Requested-With', '')
+            accept = request.headers.get('Accept', '')
+            is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+            messages.error(request, f'Error al eliminar: {str(e)}')
+            return redirect(self.success_url)
+
+    def post(self, request, *args, **kwargs):
+        # Llamar directamente a delete() para asegurar que se ejecuta nuestro flujo
+        return self.delete(request, *args, **kwargs)
 
 
 ###########################################################################

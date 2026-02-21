@@ -11,18 +11,39 @@
 Detalle de Propietario
 {% endblock title %}
 
+{% block content %}
 {% block pagetitle %}
 {% include "partials/page-title.html" with title="Detalle de Propietario" pagetitle="Propietarios" %}
 {% endblock pagetitle %}
-
-{% block content %}
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="card shadow-lg p-4 mb-5 rounded">
-                <h1 class="mb-4">{{ propietario.nombre }}</h1>
-                <p><strong>RUT:</strong> {{ propietario.rut }}</p>
-                <p><strong>Teléfono:</strong> {{ propietario.telefono }}</p>
+
+<!-- Modal de confirmación reutilizable para eliminación de propiedad -->
+<div class="modal fade" id="deletePropiedadModal" tabindex="-1" aria-labelledby="deletePropiedadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deletePropiedadModalLabel" data-key="confirm_delete">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p data-key="biblioteca.propiedad.delete_confirmation">¿Estás seguro de que deseas eliminar la propiedad <strong id="propiedadRol"></strong>?</p>
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong data-key="warning">Advertencia:</strong>
+                    <span data-key="delete_warning">Esta acción es irreversible.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmDeletePropiedad" data-key="delete">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# extra_js removed from here; scripts consolidated at the end of the template #}
                 <p><strong>Rol:</strong> {{ propietario.get_rol_display }}</p>
             </div>
 
@@ -43,16 +64,19 @@ Detalle de Propietario
                         </thead>
                         <tbody>
                             {% for propiedad in propietario.propiedad_set.all %}
-                            <tr>
+                            <tr id="propiedad-row-{{ propiedad.pk }}">
                                 <td>{{ propiedad.rol }}</td>
                                 <td>{{ propiedad.direccion }}</td>
                                 <td>
                                     <a href="{% url 'biblioteca:detalle_propiedad' propiedad.pk %}" class="btn btn-primary btn-sm">
                                         <i class="bi bi-eye"></i> Ver
                                     </a>
-                                    <a href="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}" class="btn btn-danger btn-sm">
-                                        <i class="bi bi-trash"></i> Eliminar
-                                    </a>
+                                    <button type="button" class="btn btn-danger btn-sm btn-eliminar-propiedad"
+                                            data-propiedad-id="{{ propiedad.pk }}"
+                                            data-propiedad-rol="{{ propiedad.rol }}"
+                                            data-delete-url="{% url 'biblioteca:eliminar_propiedad' propiedad.pk %}">
+                                        <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
+                                    </button>
                                     <a href="{% url 'biblioteca:modificar_propiedad' propiedad.pk %}" class="btn btn-warning btn-sm">
                                         <i class="bi bi-pencil"></i> Modificar
                                     </a>
@@ -68,14 +92,115 @@ Detalle de Propietario
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener('DOMContentLoaded', function () {
+    // Inicializar DataTable
+    if (window.jQuery && $.fn.DataTable) {
         $('#tabla-propiedades').DataTable({
-            language: {
-                url: "/static/lang/es-ES.json"
-            },
+            language: { url: '/static/lang/es-ES.json' },
             responsive: true,
             autoWidth: false,
         });
+    }
+
+    // Lógica del modal de eliminación
+    const deleteModalEl = document.getElementById('deletePropiedadModal');
+    const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
+    const confirmBtn = document.getElementById('confirmDeletePropiedad');
+    let deleteUrl = '';
+    let propiedadId = '';
+
+    document.querySelectorAll('.btn-eliminar-propiedad').forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            propiedadId = this.getAttribute('data-propiedad-id');
+            deleteUrl = this.getAttribute('data-delete-url');
+            const rol = this.getAttribute('data-propiedad-rol');
+            const rolEl = document.getElementById('propiedadRol');
+            if (rolEl) rolEl.textContent = rol;
+            if (deleteModal) deleteModal.show();
+        });
     });
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+            if (!deleteUrl) return;
+            confirmBtn.disabled = true;
+            const originalText = confirmBtn.textContent;
+            confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>' + (originalText || 'Eliminando...');
+
+            const csrftoken = document.querySelector('input[name=csrfmiddlewaretoken]') ? document.querySelector('input[name=csrfmiddlewaretoken]').value : getCookie('csrftoken');
+
+            fetch(deleteUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                redirect: 'manual',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrftoken,
+                    'Accept': 'application/json'
+                }
+            }).then(r => {
+                // Si el servidor redirige (302) o respuesta no es JSON, recargar la página
+                if (r.status === 302 || r.redirected) {
+                    // Mostrar toast de éxito rápido y recargar como fallback
+                    if (window.Toastify) {
+                        Toastify({ text: 'Eliminado', duration: 800, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'}).showToast();
+                    }
+                    setTimeout(function(){ window.location.reload(); }, 750);
+                    return Promise.reject(new Error('redirect'));
+                }
+                const ct = r.headers.get('Content-Type') || '';
+                if (ct.indexOf('application/json') === -1) {
+                    // No es JSON: mostrar toast de éxito y recargar como fallback
+                    if (window.Toastify) {
+                        Toastify({ text: 'Eliminado', duration: 800, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'}).showToast();
+                    }
+                    setTimeout(function(){ window.location.reload(); }, 750);
+                    return Promise.reject(new Error('not-json'));
+                }
+                return r.json();
+            }).then(data => {
+                if (data && data.success) {
+                    // remove row by id
+                    if (propiedadId) {
+                        const node = document.getElementById('propiedad-row-' + propiedadId);
+                        if (node && node.remove) node.remove();
+                    }
+                    if (window.Toastify) {
+                        Toastify({ text: data.message || 'Eliminado', duration: 3000, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'}).showToast();
+                    }
+                } else {
+                    const err = (data && data.error) ? data.error : 'Error al eliminar';
+                    if (window.Toastify) Toastify({ text: err, duration: 3000, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #ff5f6d, #ffc371)'}).showToast();
+                }
+            }).catch(err => {
+                // Si la promesa fue rechazada por un redirect, ya recargamos.
+                if (err && (err.message === 'redirect' || err.message === 'not-json')) return;
+                if (window.Toastify) Toastify({ text: 'Error al eliminar', duration: 3000, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #ff5f6d, #ffc371)'}).showToast();
+            }).finally(() => {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = originalText;
+                if (deleteModal) deleteModal.hide();
+                deleteUrl = '';
+                propiedadId = '';
+            });
+        });
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
 </script>
 {% endblock content %}

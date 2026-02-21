@@ -77,17 +77,21 @@ Auditoría Biblioteca
                     </div>
 
                     <div class="col-md-2">
-                        <input type="text" name="vista_nombre" class="form-control"
-                               placeholder="Vista"
-                               value="{{ request.GET.vista_nombre }}"
-                               data-key="filter_view">
+                        <select name="vista_nombre" class="form-select">
+                            <option value="" data-key="filter_view">Vista</option>
+                            {% for v in vistas %}
+                            <option value="{{ v }}" {% if request.GET.vista_nombre == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="col-md-2">
-                        <input type="text" name="path" class="form-control"
-                               placeholder="Path"
-                               value="{{ request.GET.path }}"
-                               data-key="filter_path">
+                        <select name="path" class="form-select">
+                            <option value="" data-key="filter_path">Path</option>
+                            {% for p in paths %}
+                            <option value="{{ p }}" {% if request.GET.path == p %}selected{% endif %}>{{ p }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="col-md-2">
@@ -155,10 +159,16 @@ Auditoría Biblioteca
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="10" class="text-center"
-                                data-key="no_results">
-                                Sin resultados
-                            </td>
+                            <td class="text-center" data-key="no_results">Sin resultados</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
                         </tr>
                         {% endfor %}
                     </tbody>
