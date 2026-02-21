@@ -541,3 +541,33 @@ D) SEÑALES DE ALERTA - NO MIGRAR SI VES:
 Estos patrones NO deben tocarse salvo bug fix operacional.
 
 FIN DEL ARCHIVO
+
+---
+
+## Entorno virtual recomendado (instrucción operativa)
+
+En este repositorio hay un entorno virtual en la raíz llamado `venv_django5`.
+Todos los desarrolladores y scripts locales deben usar ese entorno antes de ejecutar comandos de gestión, tests o instaladores de dependencias.
+
+Activación (desde la raíz del repo):
+
+- PowerShell (Windows):
+  ```powershell
+  .\venv_django5\Scripts\Activate.ps1
+  ```
+
+- CMD (Windows):
+  ```bat
+  .\venv_django5\Scripts\activate
+  ```
+
+- Linux / macOS:
+  ```bash
+  source venv_django5/bin/activate
+  ```
+
+Uso recomendado:
+- Siempre activar el entorno antes de ejecutar `python manage.py ...`, `pytest` o `pip install -r requirements.txt`.
+- Si se necesita un entorno distinto, documentarlo en el README y en el PR.
+
+No renombrar ni eliminar `venv_django5` sin coordinar con el equipo.

@@ -1,4 +1,4 @@
-#!C:\Users\Admin\Desktop\Django\coderhouse\EntregafinalPython-Agodoy\venv_django5\Scripts\python.exe
+#!F:\Desarrollo\Personal\Django\EntregafinalPython-Agodoy\venv_django5\Scripts\python.exe
 from __future__ import print_function
 
 import argparse

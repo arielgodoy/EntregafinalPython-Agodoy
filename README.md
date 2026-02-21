@@ -43,4 +43,15 @@ Aplicación 3    :chat
 
     
 
+## Notas operativas: seed de `Vista` en `access_control`
+
+Se agregó un comando seguro para crear las filas de `Vista` faltantes requeridas por `access_control`.
+
+- Comando: `python manage.py seed_vistas`
+- Variable para auto-seed tras `migrate`: `ACCESS_CONTROL_AUTO_SEED_VISTAS` (por defecto `False`).
+
+No se crean permisos por defecto; el comando sólo asegura que las `Vista` globales existan.
+
+
+
 

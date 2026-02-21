@@ -43,10 +43,18 @@ def build_access_request_context(request, vista_nombre, mensaje):
         vista_nombre=vista_nombre,
         status=AccessRequest.Status.PENDING,
     ).order_by("-created_at")[:5]
+    # Construir URL para que el personal pueda otorgar acceso (si existe al menos una solicitud)
+    staff_grant_url = None
+    try:
+        if pending and len(pending) > 0:
+            staff_grant_url = reverse("access_control:grant_access_request", args=[pending[0].id])
+    except Exception:
+        staff_grant_url = None
     return {
         "mensaje": mensaje,
         "vista_nombre": vista_nombre,
         "empresa_nombre": empresa_nombre,
+        "staff_grant_url": staff_grant_url,
         "empresa_id": empresa.id if empresa else "",
         "mail_enabled": is_user_mail_enabled(request.user),
         "pending_access_requests": pending,

@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+<!-- i18n: access_control.empresas_form: Todos los textos visibles deben tener data-key -->
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -8,9 +9,14 @@
 
 
 
-{% block pagetitle %}
+{% block title %}{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}{% endblock title %}
 
-{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}
+{% block pagetitle %}
+{% if view.object.pk %}
+    {% include "partials/page-title.html" with title_key="access_control.empresas_form.title_edit" pagetitle_key="menu.access_control.company_management" %}
+{% else %}
+    {% include "partials/page-title.html" with title_key="access_control.empresas_form.title_create" pagetitle_key="menu.access_control.company_management" %}
+{% endif %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -19,14 +25,14 @@
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
-                    <h4 class="card-title">{% if view.object.pk %}Editar Empresa{% else %}Crear Nueva Empresa{% endif %}</h4>
+                    <h4 class="card-title">{% if view.object.pk %}<span data-key="access_control.empresas_form.title_edit">Editar Empresa</span>{% else %}<span data-key="access_control.empresas_form.title_create">Crear Nueva Empresa</span>{% endif %}</h4>
                     <form method="post">
                         {% csrf_token %}
                         <!-- Campo Código -->
                         <div class="mb-3">
-                            <label for="codigo" class="form-label">Código</label>
+                            <label for="codigo" class="form-label"><span data-key="access_control.empresas_form.label_codigo">Código</span></label>
                             <input type="text" name="codigo" id="codigo" class="form-control" maxlength="2" required value="{{ form.codigo.value }}">
-                            <small class="text-muted">Debe ser un número de 2 dígitos (00-99).</small>
+                            <small class="text-muted" data-key="access_control.empresas_form.help_codigo">Debe ser un número de 2 dígitos (00-99).</small>
                         </div>
 
                         <!-- Campo Descripción -->
@@ -37,8 +43,8 @@
 
                         <!-- Botones de acción -->
                         <div class="d-flex justify-content-end">
-                            <button type="submit" class="btn btn-success me-2">Guardar</button>
-                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-success me-2"><span data-key="buttons.save">Guardar</span></button>
+                            <a href="{% url 'access_control:empresas_lista' %}" class="btn btn-secondary"><span data-key="buttons.cancel">Cancelar</span></a>
                         </div>
                     </form>
                 </div>

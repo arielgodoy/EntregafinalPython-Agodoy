@@ -1,12 +1,18 @@
 {% extends "partials/base.html" %}
 
+{% block title %}Cuenta de Correo{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="settings.email_accounts.form.title" pagetitle_key="menu.access_control" %}
+{% endblock pagetitle %}
+
 {% block content %}
 <!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
-                <h1 class="mb-4 text-center" data-key="email_accounts_form_title">Email Account</h1>
+                <h1 class="mb-4 text-center" data-key="settings.email_accounts.form.title">Email Account</h1>
 
                 {% if messages %}
                 <div class="mb-3">
@@ -35,8 +41,8 @@
                     </div>
                     {% endfor %}
                     <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-success w-50 me-2" data-key="save">Guardar</button>
-                        <a href="{% url 'access_control:email_accounts_list' %}" class="btn btn-secondary w-50" data-key="cancel">Cancelar</a>
+                        <button type="submit" class="btn btn-success w-50 me-2" data-key="settings.email_accounts.form.save">Guardar</button>
+                        <a href="{% url 'access_control:email_accounts_list' %}" class="btn btn-secondary w-50" data-key="settings.email_accounts.form.cancel">Cancelar</a>
                     </div>
                 </form>
             </div>

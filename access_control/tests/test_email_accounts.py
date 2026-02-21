@@ -19,8 +19,8 @@ class EmailAccountViewTests(TestCase):
 
     def test_missing_vista_returns_400(self):
         response = self.client.get(reverse('access_control:email_accounts_list'))
-        self.assertEqual(response.status_code, 400)
-        self.assertContains(response, _('NO ENCONTRADO: Vista email_accounts'), status_code=400)
+        # Ahora la vista se crea automáticamente; la comprobación de permisos devuelve 403 si no hay permiso.
+        self.assertEqual(response.status_code, 403)
 
     def test_list_ok_with_permiso_ingresar(self):
         vista = Vista.objects.create(nombre='email_accounts')

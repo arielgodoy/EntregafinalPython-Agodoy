@@ -5,14 +5,13 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <!-- Toastify CSS -->
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{% include "partials/datatables_css.html" %}
 {% endblock extra_css %}
 
-{% block title %}
-Email Accounts
-{% endblock title %}
+{% block title %}Cuentas de Correo{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Email Accounts" pagetitle="Settings" %}
+{% include "partials/page-title.html" with title_key="email_accounts_title" pagetitle_key="menu.access_control" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -83,6 +82,8 @@ Email Accounts
 {% endblock content %}
 
 {% block extra_js %}
+{% include "partials/datatables_includes.html" %}
+
 <script>
     $(document).ready(function () {
         $('#email-accounts-table').DataTable({

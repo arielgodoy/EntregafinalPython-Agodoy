@@ -94,15 +94,13 @@ class EmailAccountVistaRequiredMixin:
     vista_nombre = 'Settings - Emails Acounts'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre=self.vista_nombre).exists():
-            messages.error(request, _('NO ENCONTRADO: Vista {vista}').format(vista=self.vista_nombre))
-            if hasattr(self, 'get_form'):
-                form = self.get_form()
-                context = self.get_context_data(form=form)
-            else:
-                self.object_list = []
-                context = self.get_context_data(object_list=self.object_list)
-            return self.render_to_response(context, status=400)
+        # Asegurar que la Vista exista; crearla si falta (idempotente).
+        vista, created = Vista.objects.get_or_create(
+            nombre=self.vista_nombre,
+            defaults={"descripcion": ""},
+        )
+        if created:
+            messages.info(request, _('Se creó la Vista {vista}').format(vista=self.vista_nombre))
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -111,15 +109,13 @@ class CompanyConfigVistaRequiredMixin:
     vista_nombre = 'Settings - Configuracion de Empresa'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre=self.vista_nombre).exists():
-            messages.error(request, _('NO ENCONTRADO: Vista {vista}').format(vista=self.vista_nombre))
-            if hasattr(self, 'get_form'):
-                form = self.get_form()
-                context = self.get_context_data(form=form)
-            else:
-                self.object_list = []
-                context = self.get_context_data(object_list=self.object_list)
-            return self.render_to_response(context, status=400)
+        # Asegurar que la Vista exista; crearla si falta (idempotente).
+        vista, created = Vista.objects.get_or_create(
+            nombre=self.vista_nombre,
+            defaults={"descripcion": ""},
+        )
+        if created:
+            messages.info(request, _('Se creó la Vista {vista}').format(vista=self.vista_nombre))
         return super().dispatch(request, *args, **kwargs)
 
 class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
@@ -481,11 +477,13 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
         return config
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
-            messages.error(request, _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'))
-            config = self._get_or_create_active_config()
-            form = self.get_form_class()(instance=config)
-            return render(request, self.template_name, {'form': form}, status=400)
+        # Asegurar que la Vista exista; crearla si no existe.
+        vista, created = Vista.objects.get_or_create(
+            nombre='Settings - Configuración del Sistema',
+            defaults={"descripcion": ""},
+        )
+        if created:
+            messages.info(request, _('Se creó la Vista {vista}').format(vista='Settings - Configuración del Sistema'))
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
@@ -532,7 +530,7 @@ class EmailAccountCreateView(EmailAccountVistaRequiredMixin, VerificarPermisoSaf
     form_class = EmailAccountForm
     template_name = 'access_control/settings_email_accounts_form.html'
     success_url = reverse_lazy('access_control:email_accounts_list')
-    vista_nombre = 'email_accounts'
+    vista_nombre = 'Settings - Emails Acounts'
     permiso_requerido = 'crear'
 
 
@@ -541,7 +539,7 @@ class EmailAccountUpdateView(EmailAccountVistaRequiredMixin, VerificarPermisoSaf
     form_class = EmailAccountForm
     template_name = 'access_control/settings_email_accounts_form.html'
     success_url = reverse_lazy('access_control:email_accounts_list')
-    vista_nombre = 'email_accounts'
+    vista_nombre = 'Settings - Emails Acounts'
     permiso_requerido = 'modificar'
 
 
@@ -580,10 +578,8 @@ class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin,
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
-            return JsonResponse({
-                'detail': _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'),
-            }, status=400)
+        # Asegurar la existencia de la Vista antes de continuar (idempotente).
+        Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -595,10 +591,8 @@ class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, Vie
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
-            return JsonResponse({
-                'detail': _('NO ENCONTRADO: Vista Settings - Configuración del Sistema'),
-            }, status=400)
+        # Asegurar la existencia de la Vista antes de continuar (idempotente).
+        Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -607,10 +601,8 @@ class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, Vie
 
 def _send_system_test_email(request, subject, body_text):
     logger = logging.getLogger(__name__)
-    if not Vista.objects.filter(nombre='Settings - Configuración del Sistema').exists():
-        return JsonResponse({
-            'detail': 'NO ENCONTRADO: Vista Settings - Configuración del Sistema',
-        }, status=400)
+    # Asegurar existencia de la Vista necesaria para las comprobaciones.
+    Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
 
     config = SystemConfig.objects.filter(is_active=True).select_related(
         'security_email_account'
@@ -887,11 +879,8 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
-        if not Vista.objects.filter(nombre='auth_invite').exists():
-            messages.error(request, _('Falta ejecutar seed_access_control para crear la Vista base "auth_invite".'))
-            form = self.get_form()
-            context = self.get_context_data(form=form)
-            return self.render_to_response(context, status=400)
+        # Asegurar existencia de la vista base para invitaciones
+        Vista.objects.get_or_create(nombre='auth_invite', defaults={'descripcion': ''})
         try:
             return super().dispatch(request, *args, **kwargs)
         except PermisoDenegadoJson as e:

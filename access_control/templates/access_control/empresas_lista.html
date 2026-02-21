@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 {% block extra_css %}
 <!-- Flatpickr CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -7,12 +8,10 @@
 {% endblock extra_css %}
 
 
-{% block title %}
-Lista de Empresas
-{% endblock title %}
+{% block title %}Lista de Empresas{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Lista de Empresas" pagetitle="Empresas" %}
+{% include "partials/page-title.html" with title_key="empresas.lista.title" pagetitle_key="menu.access_control.company_management" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -22,17 +21,17 @@ Lista de Empresas
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h1 class="card-title">Lista de Empresas</h1>
-                        <a href="{% url 'access_control:empresa_crear' %}" class="btn btn-success">Crear Nueva Empresa</a>
+                        <h1 class="card-title" data-key="empresas.lista.heading">Lista de Empresas</h1>
+                        <a href="{% url 'access_control:empresa_crear' %}" class="btn btn-success" data-key="empresas.create.button">Crear Nueva Empresa</a>
                     </div>
 
                     <div class="table-responsive">
                         <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="empresas-table">
                             <thead>
                                 <tr>
-                                    <th>Código</th>
-                                    <th>Descripción</th>
-                                    <th>Acciones</th>
+                                    <th data-key="empresas.table.codigo">Código</th>
+                                    <th data-key="empresas.table.descripcion">Descripción</th>
+                                    <th data-key="empresas.table.actions">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -42,10 +41,10 @@ Lista de Empresas
                                     <td>{{ empresa.descripcion }}</td>
                                     <td>
                                         <a href="{% url 'access_control:empresa_editar' empresa.id %}" class="btn btn-primary btn-sm">
-                                            <i class="bi bi-pencil"></i> Editar
+                                            <i class="bi bi-pencil"></i> <span data-key="buttons.edit">Editar</span>
                                         </a>
-                                        <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm('¿Seguro que deseas eliminar esta empresa?');">
-                                            <i class="bi bi-trash"></i> Eliminar
+                                        <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm(document.getElementById('i18n-empresas-delete-confirm').textContent || '¿Seguro que deseas eliminar esta empresa?');">
+                                            <i class="bi bi-trash"></i> <span data-key="buttons.delete">Eliminar</span>
                                         </a>
                                     </td>
                                 </tr>
@@ -57,9 +56,12 @@ Lista de Empresas
             </div>
         </div>
     </div>
-</div>
+    </div>
 
-<script>
+    <!-- i18n: access_control.empresas_lista: confirmar eliminación de empresa -->
+    <span id="i18n-empresas-delete-confirm" style="display:none;" data-key="access_control.empresas_lista.confirm_delete">¿Seguro que deseas eliminar esta empresa?</span>
+
+    <script>
     $(document).ready(function () {
         $('#empresas-table').DataTable({
             language: {

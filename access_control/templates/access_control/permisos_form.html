@@ -7,19 +7,13 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock extra_css %}
 
-{% block title %}
-{% if object %}
-<span data-key="edit_permission">Editar Permiso</span>
-{% else %}
-<span data-key="create_permission">Crear Permiso</span>
-{% endif %}
-{% endblock title %}
+{% block title %}{% if object %}Editar Permiso{% else %}Crear Permiso{% endif %}{% endblock title %}
 
 {% block pagetitle %}
 {% if object %}
-    {% include "partials/page-title.html" with title="Editar Permiso" pagetitle="Permisos" %}
+    {% include "partials/page-title.html" with title_key="edit_permission" pagetitle_key="menu.access_control.permission_management" %}
 {% else %}
-    {% include "partials/page-title.html" with title="Crear Permiso" pagetitle="Permisos" %}
+    {% include "partials/page-title.html" with title_key="create_permission" pagetitle_key="menu.access_control.permission_management" %}
 {% endif %}
 {% endblock pagetitle %}
 

@@ -30,8 +30,8 @@ class SystemConfigViewTests(TestCase):
 
     def test_missing_vista_returns_400(self):
         response = self.client.get(reverse('access_control:system_config'))
-        self.assertEqual(response.status_code, 400)
-        self.assertContains(response, _('NO ENCONTRADO: Vista system_config'), status_code=400)
+        # La vista ahora se crea automáticamente; la comprobación de permisos devuelve 403 si no hay permiso.
+        self.assertEqual(response.status_code, 403)
 
     def test_view_ok_with_permission(self):
         vista = Vista.objects.create(nombre='system_config')

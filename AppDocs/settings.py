@@ -224,6 +224,12 @@ MEDIA_URL ='/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR,'media')
 
 
+# Control automático de seed para access_control (por defecto DESACTIVADO)
+# Si se desea habilitar la creación automática de filas `Vista` tras migrate,
+# definir `ACCESS_CONTROL_AUTO_SEED_VISTAS = True` en settings locales/entorno.
+ACCESS_CONTROL_AUTO_SEED_VISTAS = False
+
+
 
 
 AUTHENTICATION_BACKENDS = [

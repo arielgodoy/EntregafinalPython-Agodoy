@@ -1,16 +1,23 @@
 {% extends "partials/base.html" %}
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock extra_css %}
 
+{% block title %}Invitar Usuario{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="access_control.invite.title" pagetitle_key="menu.access_control" %}
+{% endblock pagetitle %}
+
 {% block content %}
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
-                <h1 class="mb-4 text-center">Invitar Usuario</h1>
+                <h1 class="mb-4 text-center" data-key="access_control.invite.title">Invitar Usuario</h1>
                 {% if messages %}
                 <div class="mb-3">
                     {% for message in messages %}

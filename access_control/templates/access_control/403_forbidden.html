@@ -27,6 +27,11 @@ Acceso Denegado
                 </p>
                 <div class="d-inline-flex flex-wrap gap-2 justify-content-center">
                     <a href="javascript:history.back()" class="btn btn-primary" data-key="go_back">Volver</a>
+                    {% if request.user.is_staff or request.user.is_superuser %}
+                        {% if staff_grant_url %}
+                            <a href="{{ staff_grant_url }}" class="btn btn-warning" data-key="403.grant_access">Dar acceso</a>
+                        {% endif %}
+                    {% endif %}
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#accessRequestModal" data-key="access.request.button">Solicitar acceso</button>
                 </div>
             </div>
