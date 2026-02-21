@@ -47,6 +47,11 @@ Detalle de Propietario
                 <p><strong>Rol:</strong> {{ propietario.get_rol_display }}</p>
             </div>
 
+<!-- Hidden csrf token form for JS to pick up token reliably -->
+<form id="_csrf_form" style="display:none;">
+    {% csrf_token %}
+</form>
+
             <div class="card shadow-lg p-4 mt-4 rounded">
                 <h2 class="mb-4">Propiedades asociadas:</h2>
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -140,23 +145,26 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Accept': 'application/json'
                 }
             }).then(r => {
-                // Si el servidor redirige (302) o respuesta no es JSON, recargar la página
+                // Manejo de redirecciones: no forzamos reload automático
                 if (r.status === 302 || r.redirected) {
-                    // Mostrar toast de éxito rápido y recargar como fallback
+                    const location = r.headers.get('Location');
                     if (window.Toastify) {
-                        Toastify({ text: 'Eliminado', duration: 800, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'}).showToast();
+                        Toastify({ text: 'Sesión expirada o redirección del servidor', duration: 3000, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #ff5f6d, #ffc371)'}).showToast();
                     }
-                    setTimeout(function(){ window.location.reload(); }, 750);
+                    if (location) {
+                        // seguir la redirección del servidor (login u otra página)
+                        setTimeout(function(){ window.location.href = location; }, 900);
+                    }
                     return Promise.reject(new Error('redirect'));
                 }
                 const ct = r.headers.get('Content-Type') || '';
                 if (ct.indexOf('application/json') === -1) {
-                    // No es JSON: mostrar toast de éxito y recargar como fallback
-                    if (window.Toastify) {
-                        Toastify({ text: 'Eliminado', duration: 800, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'}).showToast();
-                    }
-                    setTimeout(function(){ window.location.reload(); }, 750);
-                    return Promise.reject(new Error('not-json'));
+                    // Intentar leer texto de error y mostrarlo en toast sin recargar
+                    return r.text().then(text => {
+                        const message = text ? (text.length > 300 ? text.slice(0,300) + '...' : text) : 'Respuesta inesperada del servidor';
+                        if (window.Toastify) Toastify({ text: message, duration: 5000, gravity: 'top', position: 'right', backgroundColor: 'linear-gradient(to right, #ff5f6d, #ffc371)'}).showToast();
+                        return Promise.reject(new Error('not-json'));
+                    });
                 }
                 return r.json();
             }).then(data => {
