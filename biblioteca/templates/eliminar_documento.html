@@ -1,0 +1,21 @@
+{% extends "partials/base.html" %}
+
+{% block title %}
+<span data-key="confirm_delete">Eliminar Documento</span>
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar Documento" pagetitle="Documentos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+
+<h1 data-key="confirm_delete">Confirmar Eliminación</h1>
+<p data-key="biblioteca.documento.delete_confirmation">¿Estás seguro de que deseas eliminar el documento <strong>{{ documento.nombre }}</strong>?</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger" data-key="btn_confirm_delete">Eliminar</button>
+    <a href="{% url 'biblioteca:detalle_propiedad' pk=documento.propiedad.pk %}" class="btn btn-secondary" data-key="cancel">Cancelar</a>
+</form>
+
+{% endblock content %}
