@@ -116,7 +116,7 @@
         <div class="user-chat w-100 overflow-hidden minimal-border">
           <div class="chat-content d-lg-flex">
             <div class="w-100 overflow-hidden position-relative">
-              <div class="position-relative" id="users-chat">
+                <div class="position-relative" id="chat-root" data-conversation-id="{{ active_conversation.id|default:'' }}" data-http-send-url="{% if active_conversation %}{% url 'enviar_mensaje' active_conversation.id %}{% endif %}" data-user-id="{{ request.user.id }}" data-current-username="{{ request.user.username }}">
                 <div class="p-3 user-chat-topbar">
                   <div class="row align-items-center">
                     <div class="col-sm-4 col-8">
@@ -312,6 +312,7 @@
 {% block extra_js %}
 <!-- Reuse theme scripts if available in static/js/pages -->
 <script src="{% static 'js/pages/chat.init.js' %}"></script>
+<script src="{% static 'chat/js/chat_ws.js' %}"></script>
 {% endblock %}
 
 <!-- Hidden elements required by theme JS when showing copy notifications -->

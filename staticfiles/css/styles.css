@@ -1,0 +1,85 @@
+/* styles.css */
+
+
+/* Estilos para el contenido */
+.container {
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+/* Estilos para el menú */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+}
+
+.navbar-nav {
+    display: flex;
+    list-style: none;
+    padding: 0;
+}
+
+.nav-item {
+    margin-right: 10px;
+}
+
+/* Estilos para las vistas específicas */
+
+/* listar_propiedades.html */
+.propiedad-card {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+
+/* crear_propietario.html y crear_propiedad.html */
+.form-group {
+    margin-bottom: 20px;
+}
+
+
+
+/* styles.css */
+
+/* Centrar el formulario en la página */
+.login-form {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #fff;
+}
+
+/* Estilos para los mensajes de error */
+.text-danger {
+    color: #dc3545;
+}
+
+/* Estilos para centrar el botón de login */
+.text-center {
+    text-align: center;
+}
+
+/* Estilos para dar un poco de espacio entre los elementos del formulario */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.social-links {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+.social-links a {
+    color: #333;
+    font-size: 1.5rem;
+    margin: 0 1rem;
+    transition: color 0.3s;
+}
+
+.social-links a:hover {
+    color: #007bff;
+}

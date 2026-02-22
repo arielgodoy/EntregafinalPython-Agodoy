@@ -1,50 +1,140 @@
-function searchMessages(){var t,s=document.getElementById("searchMessage").value.toUpperCase(),e=document.getElementById("users-conversation").getElementsByTagName("li");Array.from(e).forEach(function(e){t=e.getElementsByTagName("p")[0]?e.getElementsByTagName("p")[0]:"",-1<(t.textContent||t.innerText?t.textContent||t.innerText:"" ).toUpperCase().indexOf(s)?e.style.display="":e.style.display="none"})}!function(){var r="//static/images/users/user-dummy-img.jpg",n="//static/images/users/multi-user.jpg",o=!1;function s(){var s=document.querySelectorAll(".user-chat");Array.from(document.querySelectorAll(".chat-user-list li a")).forEach(function(e){e.addEventListener("click",function(e){s.forEach(function(e){e.classList.add("user-chat-show")});var t=document.querySelector(".chat-user-list li.active");t&&t.classList.remove("active"),this.parentNode.classList.add("active")})}),document.querySelectorAll(".user-chat-remove").forEach(function(e){e.addEventListener("click",function(e){s.forEach(function(e){e.classList.remove("user-chat-show")})})})}document.querySelectorAll(".favourite-btn").forEach(function(e){e.addEventListener("click",function(e){this.classList.toggle("active")})});function e(e,t){var s=new XMLHttpRequest;s.open("GET",l+e,!0),s.responseType="json",s.onload=function(){var e=s.status;t(200===e?null:e,s.response)},s.send()}var a="users-chat",c="users",l="/static/json/",d="",m=1;v(a);function u(e,t,s,n,a){var r='<div class="ctext-wrap">';if(null!=t)r+='<div class="ctext-wrap-content" id='+e+'><p class="mb-0 ctext-content">'+t+"</p></div>";else if(s&&0<s.length){for(r+='<div class="message-img mb-0">',i=0;i<s.length;i++)r+='<div class="message-img-list">                <div>                    <a class="popup-img d-inline-block" href="'+s[i]+'">                        <img src="'+s[i]+'" alt="" class="rounded border">                    </a>                </div>                <div class="message-img-link">                <ul class="list-inline mb-0">                    <li class="list-inline-item dropdown">                        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">                            <i class="ri-more-fill"></i>                        </a>                        <div class="dropdown-menu">                            <a class="dropdown-item" href="'+s[i]+'" download=""><i class="ri-download-2-line me-2 text-muted align-bottom"></i>Download</a>                            <a class="dropdown-item" href="#"><i class="ri-reply-line me-2 text-muted align-bottom"></i>Reply</a>                            <a class="dropdown-item" href="#"><i class="ri-share-line me-2 text-muted align-bottom"></i>Forward</a>                            <a class="dropdown-item" href="#"><i class="ri-bookmark-line me-2 text-muted align-bottom"></i>Bookmark</a>                            <a class="dropdown-item delete-image" href="#"><i class="ri-delete-bin-5-line me-2 text-muted align-bottom"></i>Delete</a>                        </div>                    </li>                </ul>                </div>            </div>';r+="</div>"}else 0<n.length&&(r+='<div class="ctext-wrap-content">            <div class="p-3 border-primary border rounded-3">            <div class="d-flex align-items-center attached-file">                <div class="flex-shrink-0 avatar-sm me-3 ms-0 attached-file-avatar">                    <div class="avatar-title bg-primary-subtle text-primary rounded-circle font-size-20">                        <i class="ri-attachment-2"></i>                    </div>                </div>                <div class="flex-grow-1 overflow-hidden">                    <div class="text-start">                        <h5 class="font-size-14 mb-1">design-phase-1-approved.pdf</h5>                        <p class="text-muted text-truncate font-size-13 mb-0">12.5 MB</p>                    </div>                </div>                <div class="flex-shrink-0 ms-4">                    <div class="d-flex gap-2 font-size-20 d-flex align-items-start">                        <div>                            <a href="#" class="text-muted">                                <i class="bx bxs-download"></i>                            </a>                        </div>                    </div>                </div>            </div>            </div>        </div>');return!0===a&&(r+='<div class="dropdown align-self-start message-box-drop">                <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">                    <i class="ri-more-2-fill"></i>                </a>                <div class="dropdown-menu">                    <a class="dropdown-item reply-message" href="#"><i class="ri-reply-line me-2 text-muted align-bottom"></i>Reply</a>                    <a class="dropdown-item" href="#"><i class="ri-share-line me-2 text-muted align-bottom"></i>Forward</a>                    <a class="dropdown-item copy-message" href="#"><i class="ri-file-copy-line me-2 text-muted align-bottom"></i>Copy</a>                    <a class="dropdown-item" href="#"><i class="ri-bookmark-line me-2 text-muted align-bottom"></i>Bookmark</a>                    <a class="dropdown-item delete-item" href="#"><i class="ri-delete-bin-5-line me-2 text-muted align-bottom"></i>Delete</a>                </div>            </div>'),r+="</div>"}function p(){"users"==c?(document.getElementById("channel-chat").style.display="none",document.getElementById("users-chat").style.display="block"):(document.getElementById("channel-chat").style.display="block",document.getElementById("users-chat").style.display="none"),t(l+"chats.json")}function t(e){var t,s;e=e,t=function(e,t){var a,r,s,n,l,i;null!==e?console.log("Something went wrong: "+e):(a="users"==c?t[0].chats:t[0].channel_chat,document.getElementById(c+"-conversation").innerHTML="",r=0,a.forEach(function(t,e){var s,n;0<r?r-=1:(n=t.from_id==m?" right":" left",s=d.find(function(e){return e.id==t.to_id}),n='<li class="chat-list'+n+'" id='+t.id+'>                        <div class="conversation-list">',m!=t.from_id&&(n+='<div class="chat-avatar"><img src="'+s.profile+'" alt=""></div>'),n=(n+='<div class="user-chat-content">')+u(t.id,t.msg,t.has_images,t.has_files,t.has_dropDown),a[e+1]&&t.from_id==a[e+1].from_id&&(r=function(e,t,s){for(var n=0;e[t]&&e[t+1]&&e[t+1].from_id==s;)n++,t++;return n}(a,e,t.from_id),n+=function(e,t,s){for(var n=0;e[t]&&e[t+1]&&e[t+1].from_id==s;)n=u(e[t+1].id,e[t+1].msg,e[t+1].has_images,e[t+1].has_files,e[t+1].has_dropDown),t++;return n}(a,e,t.from_id)),n=n+('<div class="conversation-name"><span class="d-none name">'+s.name+'</span><small class="text-muted time">'+t.datetime)+'</small> <span class="text-success check-message-icon"><i class="bx bx-check-double"></i></span></div></div>                </div>            </li>',document.getElementById(c+"-conversation").innerHTML+=n)})),b.querySelectorAll(".delete-item").forEach(function(e){e.addEventListener("click",function(){(2==e.closest(".user-chat-content").childElementCount?e.closest(".chat-list"):e.closest(".ctext-wrap")).remove()})}),S(),w(),e=b.querySelectorAll(".reply-message"),s=document.querySelector(".replyCard"),n=document.querySelector("#close_toggle"),e.forEach(function(t){t.addEventListener("click",function(){o=!0,s.classList.add("show"),n.addEventListener("click",function(){s.classList.remove("show")});var e=t.closest(".ctext-wrap").children[0].children[0].innerText,e=(document.querySelector(".replyCard .replymessage-block .flex-grow-1 .mb-0").innerText=e,document.querySelector(".user-chat-topbar .text-truncate .username").innerHTML),e=!t.closest(".chat-list")||t.closest(".chat-list").classList.contains("left")?e:"You";document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerText=e})}),t=E.querySelectorAll(".reply-message"),l=document.querySelector(".replyCard"),i=document.querySelector("#close_toggle"),t.forEach(function(t){t.addEventListener("click",function(){o=!0,l.classList.add("show"),i.addEventListener("click",function(){l.classList.remove("show")});var e=t.closest(".ctext-wrap").children[0].children[0].innerText,e=(document.querySelector(".replyCard .replymessage-block .flex-grow-1 .mb-0").innerText=e,t.closest(".user-chat-content").querySelector(".conversation-name .name").innerText),e=!t.closest(".chat-list")||t.closest(".chat-list").classList.contains("left")?e:"You";document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerText=e})}),b.querySelectorAll(".copy-message").forEach(function(t){t.addEventListener("click",function(){var e=t.closest(".ctext-wrap").children[0]?t.closest(".ctext-wrap").children[0].children[0].innerText:"";navigator.clipboard.writeText(e)})}),E.querySelectorAll(".copy-message").forEach(function(t){t.addEventListener("click",function(){var e=t.closest(".ctext-wrap").children[0]?t.closest(".ctext-wrap").children[0].children[0].innerText:"";navigator.clipboard.writeText(e)})}),document.querySelectorAll(".copy-message").forEach(function(e){e.addEventListener("click",function(){document.getElementById("copyClipBoard").style.display="block",document.getElementById("copyClipBoardChannel").style.display="block",setTimeout(function(){document.getElementById("copyClipBoard").style.display="none",document.getElementById("copyClipBoardChannel").style.display="none"},1e3)})}),v("users-chat"),
-+// Inicializar GLightbox solo si existe
-+function _maybeInitLightbox(){
-+    if (typeof window.GLightbox !== 'undefined'){
-+        try{ GLightbox({selector: ".popup-img", title: false}); }
-+        catch(err){ console.warn('GLightbox init failed:', err); }
-+    } else {
-+        console.warn('GLightbox not present; skipping lightbox init.');
-+    }
-+}
-+_maybeInitLightbox();
-+(s=new XMLHttpRequest).open("GET",e,!0),s.responseType="json",s.onload=function(){var e=s.status;200===e?(document.getElementById("elmLoader").innerHTML="",t(null,s.response)):t(e,s.response)},s.send()}function v(s){setTimeout(function(){var e=document.getElementById(s).querySelector("#chat-conversation .simplebar-content-wrapper")?document.getElementById(s).querySelector("#chat-conversation .simplebar-content-wrapper"):"",t=document.getElementsByClassName("chat-conversation-list")[0]?document.getElementById(s).getElementsByClassName("chat-conversation-list")[0].scrollHeight-window.innerHeight+335:0;t&&e.scrollTo({top:t,behavior:"smooth"})},100)}e("chat-users-list.json",function(e,t){null!==e?console.log("Something went wrong: "+e):(t[0].users.forEach(function(e,t){var s=e.profile?'<img src="'+e.profile+'" class="rounded-circle img-fluid userprofile" alt=""><span class="user-status"></span>':'<div class="avatar-title rounded-circle bg-primary text-white fs-10">'+e.nickname+'</div><span class="user-status"></span>',n=e.messagecount?'<div class="ms-auto"><span class="badge bg-dark-subtle text-body rounded p-1">'+e.messagecount+"</span></div>":"",a=e.messagecount?'<a href="javascript: void(0);" class="unread-msg-user">':'<a href="javascript: void(0);">',r=1===e.id?"active":"";document.getElementById("userList").innerHTML+='<li id="contact-id-'+e.id+'" data-name="direct-message" class="'+r+'">                '+a+'                 <div class="d-flex align-items-center">                    <div class="flex-shrink-0 chat-user-img '+e.status+' align-self-center me-2 ms-0">                        <div class="avatar-xxs">                        '+s+'                        </div>                    </div>                    <div class="flex-grow-1 overflow-hidden">                        <p class="text-truncate mb-0">'+e.name+"</p>                    </div>                    "+n+"                </div>            </a>        </li>"} ),t[0].channels.forEach(function(e,t){var s=e.messagecount?'<div class="flex-shrink-0 ms-2"><span class="badge bg-dark-subtle text-body rounded p-1">'+e.messagecount+"</span></div>":"",n=(e.messagecount&&e.messagecount,e.messagecount?'<a href="javascript: void(0);" class="unread-msg-user">':'<a href="javascript: void(0);">');document.getElementById("channelList").innerHTML+='<li id="contact-id-'+e.id+'" data-name="channel">            '+n+'                 <div class="d-flex align-items-center">                    <div class="flex-shrink-0 chat-user-img align-self-center me-2 ms-0">                        <div class="avatar-xxs">                            <div class="avatar-title bg-light rounded-circle text-body">#</div>                        </div>                    </div>                    <div class="flex-grow-1 overflow-hidden">                        <p class="text-truncate mb-0">'+e.name+"</p>                    </div>                    <div>"+s+"</div>                    </div>            </a>        </li>"})),s(),document.querySelectorAll("#userList li").forEach(function(n){n.addEventListener("click",function(){c="users",p(),a="users-chat";var t,e=n.getAttribute("id"),s=n.querySelector(".text-truncate").innerHTML;document.querySelector(".user-chat-topbar .text-truncate .username").innerHTML=s,document.querySelector(".profile-offcanvas .username").innerHTML=s,1==o&&(o=!1,document.querySelector(".replyCard").classList.remove("show")),document.getElementById(e).querySelector(".userprofile")?(t=document.getElementById(e).querySelector(".userprofile").getAttribute("src"),document.querySelector(".user-chat-topbar .avatar-xs").setAttribute("src",t),document.querySelector(".profile-offcanvas .avatar-lg").setAttribute("src",t)):(document.querySelector(".user-chat-topbar .avatar-xs").setAttribute("src",r),document.querySelector(".profile-offcanvas .avatar-lg").setAttribute("src",r)),document.getElementById("users-conversation").querySelectorAll(".left .chat-avatar").forEach(function(e){t?e.querySelector("img").setAttribute("src",t):e.querySelector("img").setAttribute("src",r)}),window.stop()})}),document.querySelectorAll("#channelList li").forEach(function(s){s.addEventListener("click",function(){a="channel-chat",c="channel",p();var e=s.querySelector(".text-truncate").innerHTML,t=document.getElementById("channel-chat");t.querySelector(".user-chat-topbar .text-truncate .username").innerHTML=e,document.querySelector(".profile-offcanvas .username").innerHTML=e,t.querySelector(".user-chat-topbar .avatar-xs").setAttribute("src",n),document.querySelector(".profile-offcanvas .avatar-lg").setAttribute("src",n),1==o&&(o=!1,document.querySelector(".replyCard").classList.remove("show"))})})}),p();var f=document.querySelector("#chatinput-form"),g=document.querySelector("#chat-input"),h=document.querySelector(".chat-input-feedback");function y(){var e=12<=(new Date).getHours()?"pm":"am",t=12<(new Date).getHours()?(new Date).getHours()%12:(new Date).getHours(),s=(new Date).getMinutes()<10?"0"+(new Date).getMinutes():(new Date).getMinutes();return t<10?"0"+t+":"+s+" "+e:t+":"+s+" "+e}setInterval(y,1e3);var x=0;f&&f.addEventListener("submit",function(e){e.preventDefault();var e=a,t=a,s=g.value;0===s.length?(h.classList.add("show"),setTimeout(function(){h.classList.remove("show")},2e3)):(1==o?(k(t,s),o=!1):q(e,s),v(e||t)),g.value="",document.getElementById("close_toggle").click()});var b=document.querySelector(".chat-conversation-list");function w(){b.querySelectorAll(".chat-conversation-list .chat-list").forEach(function(e){e.querySelectorAll(".delete-image").forEach(function(e){e.addEventListener("click",function(){(1==e.closest(".message-img").childElementCount?e.closest(".chat-list"):e.closest(".message-img-list")).remove()})})})}w();var E=document.querySelector("#channel-conversation");function S(){(channelChatList=E.querySelectorAll(".delete-item")).forEach(function(e){e.addEventListener("click",function(){(2==e.closest(".user-chat-content").childElementCount?e.closest(".chat-list"):e.closest(".ctext-wrap")).remove()})})}S();var q=function(e,t){x++;var s=document.getElementById(e).querySelector(".chat-conversation-list"),n=(null!=t&&s.insertAdjacentHTML("beforeend",'<li class="chat-list right" id="chat-list-'+x+'" >                <div class="conversation-list">                    <div class="user-chat-content">                        <div class="ctext-wrap">                            <div class="ctext-wrap-content">                                <p class="mb-0 ctext-content">                                    '+t+'                                </p>                            </div>                            <div class="dropdown align-self-start message-box-drop">                                <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">                                    <i class="ri-more-2-fill"></i>                                </a>                                <div class="dropdown-menu">                                    <a class="dropdown-item reply-message" href="#"><i class="ri-reply-line me-2 text-muted align-bottom"></i>Reply</a>                                    <a class="dropdown-item" href="#"><i class="ri-share-line me-2 text-muted align-bottom"></i>Forward</a>                                    <a class="dropdown-item copy-message" href="#""><i class="ri-file-copy-line me-2 text-muted align-bottom"></i>Copy</a>                                    <a class="dropdown-item" href="#"><i class="ri-bookmark-line me-2 text-muted align-bottom"></i>Bookmark</a>                                    <a class="dropdown-item delete-item" href="#"><i class="ri-delete-bin-5-line me-2 text-muted align-bottom"></i>Delete</a>                            </div>                        </div>                    </div>                    <div class="conversation-name">                        <small class="text-muted time">'+y()+'</small>                        <span class="text-success check-message-icon"><i class="bx bx-check"></i></span>                    </div>                </div>            </div>        </li>'),document.getElementById("chat-list-"+x));n.querySelectorAll(".delete-item").forEach(function(e){e.addEventListener("click",function(){s.removeChild(n)})}),n.querySelectorAll(".copy-message").forEach(function(e){e.addEventListener("click",function(){var e=n.childNodes[1].firstElementChild.firstElementChild.firstElementChild.firstElementChild.innerText;navigator.clipboard.writeText(e)})}),n.querySelectorAll(".copy-message").forEach(function(e){e.addEventListener("click",function(){document.getElementById("copyClipBoard").style.display="block",setTimeout(function(){document.getElementById("copyClipBoard").style.display="none"},1e3)})}),n.querySelectorAll(".reply-message").forEach(function(a){a.addEventListener("click",function(){var e=document.querySelector(".replyCard"),t=document.querySelector("#close_toggle"),s=a.closest(".ctext-wrap").children[0].children[0].innerText,n=document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerHTML,t=(o=!0,e.classList.add("show"),t.addEventListener("click",function(){e.classList.remove("show")}),!a.closest(".chat-list")||a.closest(".chat-list").classList.contains("left")?n:"You");document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerText=t,document.querySelector(".replyCard .replymessage-block .flex-grow-1 .mb-0").innerText=s})})},k=function(e,t){var s=document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerHTML,n=document.querySelector(".replyCard .replymessage-block .flex-grow-1 .mb-0").innerText;x++;var e=document.getElementById(e).querySelector(".chat-conversation-list"),a=(null!=t&&(e.insertAdjacentHTML("beforeend",'<li class="chat-list right" id="chat-list-'+x+'" >                <div class="conversation-list">                    <div class="user-chat-content">                        <div class="ctext-wrap">                            <div class="ctext-wrap-content">                            <div class="replymessage-block mb-0 d-flex align-items-start">                        <div class="flex-grow-1">                            <h5 class="conversation-name">'+s+'</h5>                            <p class="mb-0">'+n+'</p>                        </div>                        <div class="flex-shrink-0">                            <button type="button" class="btn btn-sm btn-link mt-n2 me-n3 font-size-18">                            </button>                        </div>                    </div>                                <p class="mb-0 ctext-content mt-1">                                    '+t+'                                </p>                            </div>                            <div class="dropdown align-self-start message-box-drop">                                <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">                                    <i class="ri-more-2-fill"></i>                                </a>                                <div class="dropdown-menu">                                    <a class="dropdown-item reply-message" href="#"><i class="ri-reply-line me-2 text-muted align-bottom"></i>Reply</a>                                    <a class="dropdown-item" href="#"><i class="ri-share-line me-2 text-muted align-bottom"></i>Forward</a>                                    <a class="dropdown-item copy-message" href="#"><i class="ri-file-copy-line me-2 text-muted align-bottom"></i>Copy</a>                                    <a class="dropdown-item" href="#"><i class="ri-bookmark-line me-2 text-muted align-bottom"></i>Bookmark</a>                                    <a class="dropdown-item delete-item" href="#"><i class="ri-delete-bin-5-line me-2 text-muted align-bottom"></i>Delete</a>                            </div>                        </div>                    </div>                    <div class="conversation-name">                        <small class="text-muted time">'+y()+'</small>                        <span class="text-success check-message-icon"><i class="bx bx-check"></i></span>                    </div>                </div>            </div>        </li>'),0),document.getElementById("chat-list-"+x));a.querySelectorAll(".delete-item").forEach(function(e){e.addEventListener("click",function(){b.removeChild(a)})}),a.querySelectorAll(".copy-message").forEach(function(e){e.addEventListener("click",function(){document.getElementById("copyClipBoard").style.display="block",document.getElementById("copyClipBoardChannel").style.display="block",setTimeout(function(){document.getElementById("copyClipBoard").style.display="none",document.getElementById("copyClipBoardChannel").style.display="none"},1e3)})}),a.querySelectorAll(".reply-message").forEach(function(s){s.addEventListener("click",function(){var e=s.closest(".ctext-wrap").children[0].children[0].innerText,t=document.querySelector(".user-chat-topbar .text-truncate .username").innerHTML,e=(document.querySelector(".replyCard .replymessage-block .flex-grow-1 .mb-0").innerText=e,!s.closest(".chat-list")||s.closest(".chat-list").classList.contains("left")?t:"You");document.querySelector(".replyCard .replymessage-block .flex-grow-1 .conversation-name").innerText=e})}),a.querySelectorAll(".copy-message").forEach(function(e){e.addEventListener("click",function(){a.childNodes[1].children[1].firstElementChild.firstElementChild.getAttribute("id"),isText=a.childNodes[1].children[1].firstElementChild.firstElementChild.innerText,navigator.clipboard.writeText(isText)})})
-+
-+// Inicializar FgEmojiPicker solo si está disponible; ocultar el botón si no
-+if (typeof window.FgEmojiPicker !== 'undefined') {
-+    try {
-+        new FgEmojiPicker({
-+            trigger: [".emoji-btn"],
-+            removeOnSelection: false,
-+            closeButton: true,
-+            position: ["top", "right"],
-+            preFetch: true,
-+            dir: "/static/js/pages/plugins/json",
-+            insertInto: document.querySelector(".chat-input")
-+        });
-+    } catch (err) {
-+        console.warn('FgEmojiPicker init failed:', err);
-+        var _btn = document.getElementById("emoji-btn");
-+        if (_btn) { _btn.style.display = 'none'; _btn.setAttribute('aria-hidden', 'true'); }
-+    }
-+} else {
-+    var _btn = document.getElementById("emoji-btn");
-+    if (_btn) { _btn.style.display = 'none'; _btn.setAttribute('aria-hidden', 'true'); }
-+}
-+
-+// Registrar listener del botón emoji solo si existe
-+var emojiBtn = document.getElementById("emoji-btn");
-+if (emojiBtn) {
-+    emojiBtn.addEventListener("click", function(){
-+        setTimeout(function(){
-+            var e, t = document.getElementsByClassName("fg-emoji-picker")[0];
-+            if (t) {
-+                e = window.getComputedStyle(t) ? window.getComputedStyle(t).getPropertyValue("left") : "";
-+                if (e) { e = e.replace("px", ""); t.style.left = e = e - 40 + "px"; }
-+            }
-+        }, 0);
-+    });
-+}
-+
-+}();var scrollEl=new SimpleBar(document.getElementById("chat-conversation"));scrollEl.getScrollElement().scrollTop=document.getElementById("users-conversation").scrollHeight;
+/* chat.init.js - versión mínima segura
+   Solo inicializa GLightbox y FgEmojiPicker cuando existen.
+   Evita ReferenceError si las librerías no están cargadas.
+*/
+(function(){
+    'use strict';
+
+    // Inicializar GLightbox si está disponible
+    try{
+        if (typeof window !== 'undefined' && typeof window.GLightbox !== 'undefined'){
+            try{ GLightbox({ selector: '.popup-img', title: false }); }
+            catch(err){ console.warn('GLightbox init error:', err); }
+        }
+    }catch(e){ console.warn('GLightbox guard failed', e); }
+
+    // Inicializar FgEmojiPicker si está disponible; ocultar botón si no
+    try{
+        var emojiBtn = document.getElementById('emoji-btn');
+        if (typeof window !== 'undefined' && typeof window.FgEmojiPicker !== 'undefined'){
+            try{
+                new FgEmojiPicker({
+                    trigger: ['.emoji-btn'],
+                    removeOnSelection: false,
+                    closeButton: true,
+                    position: ['top','right'],
+                    preFetch: true
+                });
+            }catch(err){ console.warn('FgEmojiPicker init error:', err); if (emojiBtn) emojiBtn.style.display='none'; }
+        } else {
+            if (emojiBtn) { emojiBtn.style.display = 'none'; emojiBtn.setAttribute('aria-hidden','true'); }
+        }
+    }catch(e){ console.warn('FgEmojiPicker guard failed', e); }
+
+    // Chat WS integration (minimal)
+    try {
+        var usersChat = document.getElementById('users-chat');
+        var convId = usersChat && usersChat.getAttribute('data-conversation-id') ? usersChat.getAttribute('data-conversation-id') : '';
+        var currentUsername = usersChat && usersChat.getAttribute('data-current-username') ? usersChat.getAttribute('data-current-username') : '';
+        if (convId) {
+            var wsProtocol = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+            var wsUrl = wsProtocol + '//' + location.host + '/ws/chat/' + encodeURIComponent(convId) + '/';
+            var socket = null;
+            var reconnectAttempts = 0;
+            var connected = false;
+
+            function connectSocket(){
+                socket = new WebSocket(wsUrl);
+                socket.addEventListener('open', function(){
+                    connected = true;
+                    reconnectAttempts = 0;
+                });
+                socket.addEventListener('message', function(e){
+                    try{
+                        var data = JSON.parse(e.data);
+                    }catch(err){ return; }
+                    if(!data || !data.content) return;
+                    renderMessage(data);
+                });
+                socket.addEventListener('close', function(){
+                    connected = false;
+                    reconnectAttempts++;
+                    var delays = [1000, 3000, 5000, 10000];
+                    var idx = Math.min(Math.max(reconnectAttempts-1,0), delays.length-1);
+                    var delay = delays[idx];
+                    setTimeout(function(){
+                        var stillConv = usersChat && usersChat.getAttribute('data-conversation-id');
+                        if(stillConv === convId){ connectSocket(); }
+                    }, delay);
+                });
+                socket.addEventListener('error', function(){
+                    try{ socket.close(); }catch(e){}
+                });
+            }
+
+            function renderMessage(payload){
+                var container = document.getElementById('users-conversation');
+                if(!container) return;
+                var last = container.querySelector('li.chat-list');
+                var li;
+                if(last){
+                    li = last.cloneNode(true);
+                    li.className = li.className.replace(/\bright\b|\bleft\b/g,'').trim();
+                } else {
+                    li = document.createElement('li');
+                    li.className = 'chat-list';
+                    var conv = document.createElement('div'); conv.className='conversation-list';
+                    var contentWrap = document.createElement('div'); contentWrap.className='user-chat-content';
+                    var ctext = document.createElement('div'); ctext.className='ctext-wrap';
+                    var ctextContent = document.createElement('div'); ctextContent.className='ctext-wrap-content';
+                    var p = document.createElement('p'); p.className='mb-0';
+                    var time = document.createElement('p'); time.className='chat-time mb-0';
+                    var small = document.createElement('small');
+                    time.appendChild(small);
+                    ctextContent.appendChild(p);
+                    ctextContent.appendChild(time);
+                    ctext.appendChild(ctextContent);
+                    contentWrap.appendChild(ctext);
+                    conv.appendChild(contentWrap);
+                    li.appendChild(conv);
+                }
+                var contentEl = li.querySelector('.ctext-wrap-content p.mb-0') || li.querySelector('.ctext-wrap-content p');
+                if(contentEl) contentEl.textContent = payload.content || '';
+                var timeEl = li.querySelector('.chat-time small');
+                if(timeEl){
+                    var d = new Date();
+                    var hh = ('0'+d.getHours()).slice(-2);
+                    var mm = ('0'+d.getMinutes()).slice(-2);
+                    timeEl.textContent = hh+':'+mm;
+                }
+                if(payload.sender_username && currentUsername && payload.sender_username === currentUsername){
+                    li.classList.add('right');
+                } else {
+                    li.classList.add('left');
+                }
+                container.appendChild(li);
+                try{
+                    var conversation = document.getElementById('chat-conversation');
+                    if(conversation) conversation.scrollTop = conversation.scrollHeight;
+                }catch(err){}
+            }
+
+            var form = document.getElementById('chatinput-form');
+            var input = document.getElementById('chat-input');
+            if(form && input){
+                form.addEventListener('submit', function(e){
+                    if(connected && socket && socket.readyState === WebSocket.OPEN){
+                        e.preventDefault();
+                        var text = input.value ? input.value.trim() : '';
+                        if(!text) return;
+                        try{ socket.send(JSON.stringify({type: 'message', content: text})); }catch(err){}
+                        input.value = '';
+                    }
+                });
+            }
+
+            connectSocket();
+        }
+    } catch(e){ console.warn('Chat WS guard failed', e); }
+
+})();

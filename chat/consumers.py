@@ -3,6 +3,10 @@ from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import Conversacion, Mensaje
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 User = get_user_model()
@@ -22,6 +26,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         try:
             user = self.scope.get('user')
             if not user or not user.is_authenticated:
+                logger.warning("chat.ws.connect denied user=%s conv_id=%s", getattr(user, 'id', None), None)
                 await self.close()
                 return
 
@@ -37,11 +42,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Validar existencia y que el usuario participa en la conversación
             conversation = await database_sync_to_async(self._get_conversation)(conversation_id)
             if conversation is None or not getattr(conversation, 'empresa_id', None):
+                logger.warning("chat.ws.connect denied user=%s conv_id=%s", getattr(user, 'id', None), conversation_id)
                 await self.close()
                 return
 
             is_participant = await database_sync_to_async(self._is_participant)(conversation, user.id)
             if not is_participant:
+                logger.warning("chat.ws.connect denied user=%s conv_id=%s", getattr(user, 'id', None), conversation_id)
                 await self.close()
                 return
 
@@ -50,6 +57,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.empresa_id = int(conversation.empresa_id)
             self.group_name = f'chat_empresa_{self.empresa_id}conv{self.conversation_id}'
             await self.channel_layer.group_add(self.group_name, self.channel_name)
+            logger.info("chat.ws.connect ok user_id=%s conv_id=%s", self.scope.get('user').id, self.conversation_id)
             await self.accept()
         except Exception:
             # Nunca propagar excepciones al servidor ASGI
@@ -78,6 +86,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Ignorar otros tipos por ahora
             return
 
+        logger.info("chat.ws.receive user_id=%s conv_id=%s keys=%s", self.scope.get('user').id, getattr(self, 'conversation_id', None), list(data.keys()))
+
         content = data.get('content')
         if not content or not isinstance(content, str) or not content.strip():
             await self.send(text_data=json.dumps({'error': 'empty_message'}))
@@ -103,6 +113,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         # Guardar mensaje (nunca confiar en empresa enviada por cliente)
+        logger.info("chat.ws.persist user_id=%s conv_id=%s content_len=%s", self.scope.get('user').id, self.conversation_id, len(content or ""))
         mensaje_obj = await database_sync_to_async(self._create_message)(conversation, user, content)
 
         payload = {
@@ -114,6 +125,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }
 
         # Difundir al grupo
+        logger.info("chat.ws.broadcast user_id=%s conv_id=%s", self.scope.get('user').id, self.conversation_id)
         await self.channel_layer.group_send(self.group_name, {
             'type': 'chat.message',
             'payload': payload,
@@ -122,6 +134,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def chat_message(self, event):
         payload = event.get('payload')
         if payload:
+            try:
+                logger.info("chat.ws.send_to_client conv_id=%s payload_keys=%s", getattr(self, 'conversation_id', None), list(payload.keys()))
+            except Exception:
+                pass
             await self.send(text_data=json.dumps(payload))
 
     # Helper sync DB methods

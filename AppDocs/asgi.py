@@ -16,12 +16,15 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'AppDocs.settings')
 
-# Import chat routing here to keep routing encapsulated in the chat app
+# Ensure Django app registry is loaded before importing app routing
+django_asgi_app = get_asgi_application()
+
+# Import chat routing after the application is initialized
 import chat.routing
 
 application = ProtocolTypeRouter({
 	# HTTP -> Django ASGI application
-	"http": get_asgi_application(),
+	"http": django_asgi_app,
 	# WebSocket -> route to chat (AuthMiddlewareStack provides request.user)
 	"websocket": AuthMiddlewareStack(
 		URLRouter(

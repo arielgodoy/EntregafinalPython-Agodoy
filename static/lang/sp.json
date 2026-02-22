@@ -35,6 +35,7 @@
     "chat.no_active":"Sin conversación seleccionada",
     "chat.status.online":"En línea",
     "chat.copy":"Mensaje copiado",
+    "chat.you":"Yo",
     "chat.input.required":"Ingresa un mensaje",
     "chat.input.placeholder":"Escribe tu mensaje...",
     "chat.action.view_profile":"Ver perfil",
