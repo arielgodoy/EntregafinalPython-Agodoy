@@ -857,4 +857,7 @@
 "access_request.email.error": "Error",
 "access_request.grant.missing_data": "Faltan datos para otorgar el acceso",
 "access_request.grant.success": "Acceso otorgado correctamente"
+,
+"view_deleted_success": "Vista eliminada correctamente",
+"company_deleted_success": "Empresa eliminada correctamente"
 }

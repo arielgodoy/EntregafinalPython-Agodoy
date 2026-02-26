@@ -330,6 +330,51 @@ class VistaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     vista_nombre = "Control de Acceso - Maestro Vistas"
     permiso_requerido = "eliminar"
 
+    def post(self, request, *args, **kwargs):
+        """Manejar eliminación vía AJAX conforme a AJAX_DELETION_PATTERN.md
+
+        - Detectar solicitud AJAX/JSON
+        - Validar scoping multiempresa si el objeto tiene empresa_id
+        - Usar transaction.atomic()
+        - Retornar JsonResponse para AJAX
+        - Caer al flujo tradicional si no es AJAX
+        """
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    # Validar scoping por empresa si aplica
+                    empresa_activa = request.session.get('empresa_id')
+                    if hasattr(self.object, 'empresa_id') and getattr(self.object, 'empresa_id', None) is not None:
+                        if empresa_activa and self.object.empresa_id != empresa_activa:
+                            return JsonResponse({
+                                'success': False,
+                                'message': 'permission_delete_forbidden'
+                            }, status=403)
+
+                    nombre = getattr(self.object, 'nombre', str(self.object))
+                    self.object.delete()
+
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'view_deleted_success',
+                        'deleted_name': nombre,
+                    })
+            except Exception as e:
+                logger.exception('Error eliminando Vista (AJAX)')
+                return JsonResponse({
+                    'success': False,
+                    'message': 'request_error',
+                }, status=500)
+
+        return super().post(request, *args, **kwargs)
+
 
 
 class PermisoListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
@@ -455,6 +500,33 @@ class EmpresaEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('access_control:empresas_lista')
     vista_nombre = "Control de Acceso - Maestro Empresas"
     permiso_requerido = "eliminar"
+
+    def post(self, request, *args, **kwargs):
+        """Handle AJAX deletion for Empresa similar to project pattern."""
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    # Empresa is a top-level resource; if it had empresa_id attribute check scoping
+                    empresa_activa = request.session.get('empresa_id')
+                    if hasattr(self.object, 'empresa_id') and getattr(self.object, 'empresa_id', None) is not None:
+                        if empresa_activa and self.object.empresa_id != empresa_activa:
+                            return JsonResponse({'success': False, 'message': 'permission_delete_forbidden'}, status=403)
+
+                    nombre = getattr(self.object, 'descripcion', str(self.object))
+                    self.object.delete()
+                    return JsonResponse({'success': True, 'message': 'company_deleted_success', 'deleted_name': nombre})
+            except Exception as e:
+                logger.exception('Error deleting Empresa (AJAX)')
+                return JsonResponse({'success': False, 'message': 'request_error'}, status=500)
+
+        return super().post(request, *args, **kwargs)
 
 
 class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):

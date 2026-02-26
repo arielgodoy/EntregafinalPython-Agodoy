@@ -896,4 +896,7 @@
 "access_request.email.error": "Error",
 "access_request.grant.missing_data": "Missing data to grant access",
 "access_request.grant.success": "Access granted successfully"
+,
+"view_deleted_success": "View deleted successfully",
+"company_deleted_success": "Company deleted successfully"
 }

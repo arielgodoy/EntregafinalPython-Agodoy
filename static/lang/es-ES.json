@@ -239,4 +239,8 @@
         "removeTitle": "Remover Estado",
         "renameTitle": "Cambiar Nombre Estado"
     }
+    ,
+    "view_deleted_success": "Vista eliminada correctamente",
+    "company_deleted_success": "Empresa eliminada correctamente",
+    "request_error": "Error en la solicitud"
 }

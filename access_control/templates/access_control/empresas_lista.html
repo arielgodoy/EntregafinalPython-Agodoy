@@ -43,9 +43,9 @@
                                         <a href="{% url 'access_control:empresa_editar' empresa.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> <span data-key="buttons.edit">Editar</span>
                                         </a>
-                                        <a href="{% url 'access_control:empresa_eliminar' empresa.id %}" class="btn btn-danger btn-sm" onclick="return confirm(document.getElementById('i18n-empresas-delete-confirm').textContent || '¿Seguro que deseas eliminar esta empresa?');">
+                                        <button type="button" class="btn btn-danger btn-sm btn-eliminar-empresa" data-bs-toggle="modal" data-bs-target="#deleteEmpresaModal" data-empresa-id="{{ empresa.id }}" data-empresa-nombre="{{ empresa.descripcion }}" data-delete-url="{% url 'access_control:empresa_eliminar' empresa.id %}">
                                             <i class="bi bi-trash"></i> <span data-key="buttons.delete">Eliminar</span>
-                                        </a>
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -61,6 +61,29 @@
     <!-- i18n: access_control.empresas_lista: confirmar eliminación de empresa -->
     <span id="i18n-empresas-delete-confirm" style="display:none;" data-key="access_control.empresas_lista.confirm_delete">¿Seguro que deseas eliminar esta empresa?</span>
 
+    <!-- Modal de Confirmación para Eliminar Empresa -->
+    <div class="modal fade" id="deleteEmpresaModal" tabindex="-1" aria-labelledby="deleteEmpresaModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteEmpresaModalLabel" data-key="empresas.delete.confirm_title">Confirmar Eliminación</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p data-key="empresas.delete.confirm_text">¿Estás seguro de que deseas eliminar la empresa <strong id="empresaNombre"></strong>?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="t-cancel">Cancelar</button>
+                    <form id="deleteEmpresaForm" method="post" action="">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger" data-key="t-delete">Eliminar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/datatables_includes.html' %}
     <script>
     $(document).ready(function () {
         $('#empresas-table').DataTable({
@@ -72,4 +95,69 @@
         });
     });
 </script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function(){
+        const deleteModal = document.getElementById('deleteEmpresaModal');
+        const deleteForm = document.getElementById('deleteEmpresaForm');
+        const empresaNombreEl = document.getElementById('empresaNombre');
+        if(!deleteForm) return;
+
+        function setDeleteActionFromButton(button){
+            if(!button) return;
+            const empresaId = button.getAttribute('data-empresa-id') || button.dataset.empresaId;
+            const empresaNombre = button.getAttribute('data-empresa-nombre') || button.dataset.empresaNombre;
+            const deleteUrl = button.getAttribute('data-delete-url') || button.dataset.deleteUrl;
+            if(empresaNombreEl && empresaNombre) try{ empresaNombreEl.textContent = empresaNombre; } catch(e){}
+            if(deleteUrl) deleteForm.action = deleteUrl;
+            else if(empresaId) deleteForm.action = "{% url 'access_control:empresa_eliminar' 0 %}".replace('0', empresaId);
+        }
+
+        document.addEventListener('click', function(e){
+            var btn = null;
+            try{ btn = e.target.closest && e.target.closest('.btn-eliminar-empresa'); } catch(err){ btn = null; }
+            if(btn){ window._lastDeleteButton = btn; setDeleteActionFromButton(btn); }
+        });
+
+        if(deleteModal && deleteModal.addEventListener){
+            deleteModal.addEventListener('show.bs.modal', function(event){ const btn = event && event.relatedTarget ? event.relatedTarget : null; setDeleteActionFromButton(btn); });
+        }
+
+        deleteForm.addEventListener('submit', function(e){
+            e.preventDefault();
+            const url = deleteForm.action; if(!url) return;
+            const csrfInput = deleteForm.querySelector('[name=csrfmiddlewaretoken]'); const csrf = csrfInput ? csrfInput.value : '';
+            const submitBtn = deleteForm.querySelector('button[type=submit]'); if(submitBtn) submitBtn.disabled = true;
+            const formData = new FormData(deleteForm);
+
+            fetch(url, { method: 'POST', headers: { 'X-Requested-With':'XMLHttpRequest', 'Accept':'application/json', 'X-CSRFToken': csrf }, body: formData, credentials: 'same-origin' })
+            .then(function(response){ if(!response.ok) return response.json().then(j=>{ throw j; }); return response.json().catch(()=>({success:true})); })
+            .then(function(data){
+                    if(data && data.success){
+                    try{ const bs = bootstrap.Modal.getInstance(deleteModal); if(bs) bs.hide(); }catch(e){}
+                    const dt = (typeof $ !== 'undefined' && $.fn && $.fn.DataTable && $.fn.DataTable.isDataTable && $.fn.DataTable.isDataTable('#empresas-table')) ? $('#empresas-table').DataTable() : null;
+                    let tr = null;
+                    if(window._lastDeleteButton && window._lastDeleteButton.closest) tr = window._lastDeleteButton.closest('tr');
+                    if(!tr && url.match(/(\d+)/)){
+                        const id = url.match(/(\d+)/)[0]; const btn = document.querySelector('[data-empresa-id="' + id + '"]'); if(btn) tr = btn.closest('tr');
+                    }
+                    if(tr){ if(dt){ try{ dt.row(tr).remove().draw(false); }catch(e){ tr.remove(); } } else { tr.remove(); } }
+                    try{
+                        let toastText;
+                        if(data && data.message){
+                            toastText = (typeof t === 'function') ? t(data.message) : data.message;
+                        } else {
+                            toastText = (typeof t === 'function') ? t('company_deleted_success') : 'Eliminado';
+                        }
+                        Toastify({ text: toastText, duration:3000, gravity:'top', position:'right', backgroundColor:'linear-gradient(to right, #00b09b, #96c93d)' }).showToast();
+                    }catch(e){}
+                } else { try{ Toastify({ text: (data && data.message) || 'Error', duration:3000, gravity:'top', position:'right', backgroundColor:'linear-gradient(to right, #ff5f6d, #ffc371)' }).showToast(); }catch(e){} }
+            }).catch(function(err){ try{ Toastify({ text: (err && (err.detail || err.message)) || 'Error de red', duration:3000, gravity:'top', position:'right', backgroundColor:'linear-gradient(to right, #ff5f6d, #ffc371)' }).showToast(); }catch(e){} })
+            .catch(function(err){
+                let netMsg = (err && (err.detail || err.message)) ? ((typeof t === 'function') ? t(err.detail || err.message) : (err.detail || err.message)) : ((typeof t === 'function') ? t('request_error') : 'Error de red');
+                try{ Toastify({ text: netMsg, duration:3000, gravity:'top', position:'right', backgroundColor:'linear-gradient(to right, #ff5f6d, #ffc371)' }).showToast(); }catch(e){}
+            })
+            .finally(function(){ if(submitBtn) submitBtn.disabled = false; try{ window._lastDeleteButton = null;}catch(e){} });
+        });
+    });
+    </script>
 {% endblock content %}
