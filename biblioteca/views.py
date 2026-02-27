@@ -20,6 +20,7 @@ from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.views.generic.list import ListView
 from django.views.decorators.http import require_POST
+import logging
 
 from .forms import PropiedadForm, PropietarioForm, TipoDocumentoForm
 from .models import Documento, Propiedad, Propietario, TipoDocumento
@@ -314,50 +315,53 @@ class EliminarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DeleteVie
     success_url = reverse_lazy("biblioteca:listar_propiedades")
     vista_nombre = "Biblioteca - Eliminar Propiedad"
     permiso_requerido = "eliminar"
-    def delete(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        """Manejar eliminación vía AJAX de forma robusta. Si no es AJAX, delegar al flujo tradicional."""
         from auditoria.helpers import audit_log
         from auditoria.services import AuditoriaService
-        self.object = self.get_object()
-        nombre = getattr(self.object, 'rol', str(self.object))
 
-        try:
-            with transaction.atomic():
-                before_snapshot = AuditoriaService.model_to_snapshot(self.object)
-                self.object.delete()
+        # Detección robusta de petición AJAX/fetch: X-Requested-With o Accept: application/json
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH') or request.headers.get('X-Requested-With', '')
+        accept = request.META.get('HTTP_ACCEPT', '') or request.headers.get('Accept', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
 
-                audit_log(
-                    request=request,
-                    action="DELETE",
-                    app_label="biblioteca",
-                    obj=self.object,
-                    before=before_snapshot,
-                    vista_nombre=self.vista_nombre,
-                    status_code=200,
-                    meta={"entity": "Propiedad"},
-                )
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    self.object = self.get_object()
 
-            # Detección robusta de petición AJAX/fetch: X-Requested-With o Accept: application/json
-            xrw = request.headers.get('X-Requested-With', '')
-            accept = request.headers.get('Accept', '')
-            is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
-            if is_ajax:
+                    # Validar scoping por empresa si aplica
+                    empresa_activa = request.session.get('empresa_id')
+                    if hasattr(self.object, 'empresa_id') and getattr(self.object, 'empresa_id', None) is not None:
+                        if empresa_activa and self.object.empresa_id != empresa_activa:
+                            return JsonResponse({
+                                'success': False,
+                                'message': 'permission_delete_forbidden'
+                            }, status=403)
+
+                    nombre = getattr(self.object, 'rol', str(self.object))
+
+                    before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                    self.object.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="biblioteca",
+                        obj=self.object,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Propiedad"},
+                    )
+
                 return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
-
-            messages.success(request, 'biblioteca.propiedad.delete.success')
-            return redirect(self.success_url)
-
-        except Exception as e:
-            xrw = request.headers.get('X-Requested-With', '')
-            accept = request.headers.get('Accept', '')
-            is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
-            if is_ajax:
+            except Exception as e:
+                logging.exception('Error eliminando Propiedad (AJAX)')
                 return JsonResponse({'success': False, 'error': str(e)}, status=400)
-            messages.error(request, f'Error al eliminar: {str(e)}')
-            return redirect(self.success_url)
 
-    def post(self, request, *args, **kwargs):
-        # Llamar directamente a delete() para asegurar que se ejecuta nuestro flujo
-        return self.delete(request, *args, **kwargs)
+        # No-AJAX: delegar al flujo original (DeleteView)
+        return super().post(request, *args, **kwargs)
 
 
 ###########################################################################
@@ -442,7 +446,6 @@ class EliminarPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, DeleteV
     success_url = reverse_lazy("biblioteca:listar_propietarios")
     vista_nombre = "Biblioteca - Eliminar Propietario"
     permiso_requerido = "eliminar"
-
     def form_valid(self, form):
         from auditoria.helpers import audit_log
         from auditoria.services import AuditoriaService
@@ -464,6 +467,41 @@ class EliminarPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, DeleteV
         )
 
         return response
+
+    def post(self, request, *args, **kwargs):
+        """Soporte AJAX: eliminar dentro de transaction.atomic() y devolver JsonResponse."""
+        from auditoria.helpers import audit_log
+        from auditoria.services import AuditoriaService
+
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH') or request.headers.get('X-Requested-With', '')
+        accept = request.META.get('HTTP_ACCEPT', '') or request.headers.get('Accept', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    obj = self.get_object()
+                    nombre = getattr(obj, 'nombre', str(obj))
+                    before_snapshot = AuditoriaService.model_to_snapshot(obj)
+                    obj.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="biblioteca",
+                        obj=obj,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Propietario"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logging.exception('Error eliminando Propietario (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)
 
 
 ###########################################################################
@@ -553,6 +591,36 @@ class EliminarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View)
         from auditoria.helpers import audit_log
         from auditoria.services import AuditoriaService
 
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH') or request.headers.get('X-Requested-With', '')
+        accept = request.META.get('HTTP_ACCEPT', '') or request.headers.get('Accept', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
+                    nombre = getattr(tipo_documento, 'nombre', str(tipo_documento))
+                    before_snapshot = AuditoriaService.model_to_snapshot(tipo_documento)
+
+                    tipo_documento.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="biblioteca",
+                        obj=tipo_documento,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "TipoDocumento"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logging.exception('Error eliminando TipoDocumento (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        # No-AJAX: comportamiento tradicional
         tipo_documento = get_object_or_404(TipoDocumento, pk=pk)
         before_snapshot = AuditoriaService.model_to_snapshot(tipo_documento)
 
@@ -725,3 +793,40 @@ class EliminarDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteVie
     def get_success_url(self):
         documento = self.object
         return reverse_lazy("biblioteca:detalle_propiedad", kwargs={"pk": documento.propiedad.pk})
+
+    def post(self, request, *args, **kwargs):
+        """Soporte AJAX para eliminación de Documento: transaction, audit_log, JsonResponse."""
+        from auditoria.helpers import audit_log
+        from auditoria.services import AuditoriaService
+
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH') or request.headers.get('X-Requested-With', '')
+        accept = request.META.get('HTTP_ACCEPT', '') or request.headers.get('Accept', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                with transaction.atomic():
+                    obj = self.get_object()
+                    nombre = getattr(obj, 'nombre_documento', str(obj))
+                    before_snapshot = AuditoriaService.model_to_snapshot(obj)
+
+                    obj.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="biblioteca",
+                        obj=obj,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Documento"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+
+            except Exception as e:
+                logging.exception('Error eliminando Documento (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)

@@ -63,8 +63,11 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 empresa_id = request.session.get("empresa_id")
                 if not empresa_id:
                     return redirect("access_control:seleccionar_empresa")
-                # Intentar obtener la vista por nombre EXACTO. Si no existe, crearla.
+
+                # Intentar obtener la vista por nombre EXACTO.
                 vista = Vista.objects.filter(nombre=vista_nombre).first()
+
+                # Si aún no existe, crear la vista con el nombre completo
                 if not vista:
                     vista, _ = Vista.objects.get_or_create(nombre=vista_nombre)
 
@@ -80,9 +83,6 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                     empresa=empresa,
                     vista=vista
                 ).first()
-                # Si no existe permiso para la `vista` buscada, se creará más abajo
-                # un permiso vacío (deny-by-default) o un permiso auto-concedido
-                # para vistas listadas en `vistas_auto_permiso`.
 
                 # Auto-crear o actualizar permisos para vistas de usuario
                 vistas_auto_permiso = ["Settings - Theme preference", "Accounts - Editar Perfil"]
@@ -100,15 +100,14 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                             supervisor=False
                         )
                     elif not permiso.modificar:
-                        # Actualizar permiso existente para vistas de usuario
                         permiso.modificar = True
                         permiso.ingresar = True
                         permiso.save(update_fields=['modificar', 'ingresar'])
                 elif not permiso:
-                    # Crear permiso sin acceso para otras vistas
+                    # Crear permiso sin acceso para otras vistas (deny-by-default)
                     logger = logging.getLogger(__name__)
                     logger.warning(
-                            "access_control: creating fallback empty Permiso for user=%s empresa=%s vista=%s (all flags False) resolver.url_name=%s",
+                            "access_control: creating fallback empty Permiso for user=%s empresa=%s vista=%s resolver.url_name=%s",
                             getattr(request.user, 'username', None),
                             getattr(empresa, 'id', None),
                             getattr(vista, 'nombre', vista_nombre),

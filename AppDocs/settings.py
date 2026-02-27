@@ -280,6 +280,7 @@ CONFIGURACIONES = {
 }
 CSRF_TRUSTED_ORIGINS = [
     "https://biblioteca.eltit.cl",
+    "http://192.168.0.185:8000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://localhost:8000:*",

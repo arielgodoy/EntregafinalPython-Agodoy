@@ -178,22 +178,43 @@
       };
 
       const originalDocumentQuerySelector = Document.prototype.querySelector;
-      Document.prototype.querySelector = function (selector) {
-        if (selector === '#') {
-          console.warn('querySelector ignorado para selector inválido "#"');
-          return null;
-        }
-        return originalDocumentQuerySelector.call(this, selector);
-      };
-
       const originalElementQuerySelector = Element.prototype.querySelector;
-      Element.prototype.querySelector = function (selector) {
-        if (selector === '#') {
-          console.warn('querySelector ignorado para selector inválido "#"');
-          return null;
+      (function(){
+        // Silently intercept selectors que sean exactamente '#'
+        Document.prototype.querySelector = function (selector) {
+          try {
+            if ((selector || '').toString().trim() === '#') return null;
+          } catch (e) { return null; }
+          return originalDocumentQuerySelector.call(this, selector);
+        };
+
+        Element.prototype.querySelector = function (selector) {
+          try {
+            if ((selector || '').toString().trim() === '#') return null;
+          } catch (e) { return null; }
+          return originalElementQuerySelector.call(this, selector);
+        };
+
+        // También interceptar querySelectorAll para devolver NodeList vacío cuando corresponda
+        if (Document.prototype.querySelectorAll) {
+          const originalDocumentQuerySelectorAll = Document.prototype.querySelectorAll;
+          Document.prototype.querySelectorAll = function (selector) {
+            try {
+              if ((selector || '').toString().trim() === '#') return document.createDocumentFragment().querySelectorAll('x');
+            } catch (e) { return document.createDocumentFragment().querySelectorAll('x'); }
+            return originalDocumentQuerySelectorAll.call(this, selector);
+          };
         }
-        return originalElementQuerySelector.call(this, selector);
-      };
+        if (Element.prototype.querySelectorAll) {
+          const originalElementQuerySelectorAll = Element.prototype.querySelectorAll;
+          Element.prototype.querySelectorAll = function (selector) {
+            try {
+              if ((selector || '').toString().trim() === '#') return document.createDocumentFragment().querySelectorAll('x');
+            } catch (e) { return document.createDocumentFragment().querySelectorAll('x'); }
+            return originalElementQuerySelectorAll.call(this, selector);
+          };
+        }
+      })();
 
       function sanitizeAllCollapseTriggers(root) {
         const scope = root || document;
@@ -203,6 +224,27 @@
 
       const runInitialSanitize = function () {
         sanitizeAllCollapseTriggers(document);
+        // Reemplazar anchors con href="#" que tienen data-bs-toggle (evita que Bootstrap intente usar "#" como selector)
+        document.querySelectorAll('a[href="#"][data-bs-toggle]').forEach(a => {
+          try {
+            a.setAttribute('href', 'javascript:void(0)');
+          } catch (e) {}
+        });
+        // Reemplazar cualquier elemento cuyo data-bs-target sea '#' (incluso con espacios)
+        document.querySelectorAll('[data-bs-target]').forEach(el => {
+          try {
+            const v = (el.getAttribute('data-bs-target') || '').toString().trim();
+            if (v === '#') {
+              if (el.getAttribute && el.getAttribute('data-bs-toggle') === 'collapse') {
+                el.removeAttribute('data-bs-toggle');
+                el.removeAttribute('data-bs-target');
+                el.removeAttribute('aria-controls');
+              } else {
+                el.setAttribute('data-bs-target', 'javascript:void(0)');
+              }
+            }
+          } catch (e) { }
+        });
       };
 
       if (document.readyState === 'loading') {

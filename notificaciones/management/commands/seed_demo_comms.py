@@ -235,27 +235,33 @@ class Command(BaseCommand):
             user_ids = payload.get("users", [])
             perfil_ids = payload.get("perfiles", [])
 
-            if notification_ids:
-                deleted_notifications += Notification.objects.filter(id__in=notification_ids).delete()[0]
-            if chat_keys:
-                deleted_notifications += Notification.objects.filter(dedupe_key__in=chat_keys).delete()[0]
-            if message_ids:
-                deleted_messages += Mensaje.objects.filter(id__in=message_ids).delete()[0]
-            if conversation_ids:
-                deleted_conversations += Conversacion.objects.filter(id__in=conversation_ids).delete()[0]
-            if userperfil_ids:
-                deleted_userperfil += UsuarioPerfilEmpresa.objects.filter(id__in=userperfil_ids).delete()[0]
-            if user_ids:
-                user_model = get_user_model()
-                for user_id in user_ids:
-                    if not UsuarioPerfilEmpresa.objects.filter(usuario_id=user_id).exists():
-                        deleted_users += user_model.objects.filter(id=user_id).delete()[0]
-            if perfil_ids:
-                for perfil_id in perfil_ids:
-                    if not UsuarioPerfilEmpresa.objects.filter(perfil_id=perfil_id).exists():
-                        deleted_perfiles += PerfilAcceso.objects.filter(id=perfil_id).delete()[0]
+            try:
+                with transaction.atomic():
+                    if notification_ids:
+                        deleted_notifications += Notification.objects.filter(id__in=notification_ids).delete()[0]
+                    if chat_keys:
+                        deleted_notifications += Notification.objects.filter(dedupe_key__in=chat_keys).delete()[0]
+                    if message_ids:
+                        deleted_messages += Mensaje.objects.filter(id__in=message_ids).delete()[0]
+                    if conversation_ids:
+                        deleted_conversations += Conversacion.objects.filter(id__in=conversation_ids).delete()[0]
+                    if userperfil_ids:
+                        deleted_userperfil += UsuarioPerfilEmpresa.objects.filter(id__in=userperfil_ids).delete()[0]
+                    if user_ids:
+                        user_model = get_user_model()
+                        for user_id in user_ids:
+                            if not UsuarioPerfilEmpresa.objects.filter(usuario_id=user_id).exists():
+                                deleted_users += user_model.objects.filter(id=user_id).delete()[0]
+                    if perfil_ids:
+                        for perfil_id in perfil_ids:
+                            if not UsuarioPerfilEmpresa.objects.filter(perfil_id=perfil_id).exists():
+                                deleted_perfiles += PerfilAcceso.objects.filter(id=perfil_id).delete()[0]
 
-            log.delete()
+                    log.delete()
+            except Exception as e:
+                # Registrar el error y continuar con el siguiente log para evitar abortar todo el reset
+                self.stdout.write(f"Error al eliminar datos de log {log.id}: {str(e)}")
+                continue
 
         self.stdout.write(
             "Reset demo completado. "

@@ -67,6 +67,25 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Modal de confirmación de eliminación de tarea -->
+            <div class="modal fade" id="deleteModalTarea" tabindex="-1" aria-labelledby="deleteModalTareaLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title" id="deleteModalTareaLabel">Confirmar Eliminación</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>¿Estás seguro de que deseas eliminar esta tarea?</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-danger" id="confirmDeleteTarea">Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -75,4 +94,35 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 {% include "control_de_proyectos/partials/tareas_accordion_js.html" %}
+<script>
+    // Sanitización localizada para esta vista: evita selectores '#' inválidos dentro del acordeón de tareas
+    (function(){
+        try {
+            document.addEventListener('DOMContentLoaded', function(){
+                const acordeonId = 'acordeonTareas-proyecto-{{ proyecto.id }}';
+                const root = document.getElementById(acordeonId);
+                if (!root) return;
+                // Corregir anchors con href="#" y triggers con data-bs-target="#"
+                root.querySelectorAll('a[href="#"], [data-bs-target]').forEach(el => {
+                    try {
+                        const href = el.getAttribute && el.getAttribute('href');
+                        if (href && href.toString().trim() === '#') {
+                            el.setAttribute('href', 'javascript:void(0)');
+                        }
+                        const target = el.getAttribute && el.getAttribute('data-bs-target');
+                        if (target && target.toString().trim() === '#') {
+                            if (el.getAttribute && el.getAttribute('data-bs-toggle') === 'collapse') {
+                                el.removeAttribute('data-bs-toggle');
+                                el.removeAttribute('data-bs-target');
+                                el.removeAttribute('aria-controls');
+                            } else {
+                                el.setAttribute('data-bs-target', 'javascript:void(0)');
+                            }
+                        }
+                    } catch (e) { /* ignore individual element errors */ }
+                });
+            });
+        } catch (e) {}
+    })();
+</script>
 {% endblock extra_js %}

@@ -13,6 +13,8 @@ Proyectos
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
+                <!-- CSRF token helper (oculto) para asegurar cookie csrf en la página -->
+                <form id="csrf-helper-form" style="display:none;">{% csrf_token %}</form>
             <div class="row mb-3">
                 <div class="col-md-6">
                     <h4 class="fw-bold">Proyectos</h4>
@@ -42,7 +44,7 @@ Proyectos
                                 </thead>
                                 <tbody>
                                     {% for proyecto in proyectos %}
-                                    <tr data-proyecto-id="{{ proyecto.id }}">
+                                    <tr id="proyecto-row-{{ proyecto.id }}" data-proyecto-id="{{ proyecto.id }}">
                                         <td><strong>{{ proyecto.nombre }}</strong></td>
                                         <td>{{ proyecto.cliente.nombre }}</td>
                                         <td><span class="badge bg-info">{{ proyecto.tipo_ref.nombre }}</span></td>
@@ -105,6 +107,14 @@ Proyectos
                                                 <i class="bx bx-edit"></i>
                                                 <span class="ms-1 d-none d-md-inline">Editar</span>
                                             </a>
+                                            <button type="button" class="btn btn-sm btn-danger btn-eliminar-proyecto" 
+                                                data-proyecto-id="{{ proyecto.id }}"
+                                                data-proyecto-nombre="{{ proyecto.nombre }}"
+                                                data-delete-url="{% url 'control_de_proyectos:eliminar_proyecto' proyecto.id %}"
+                                                title="Eliminar">
+                                                <i class="bx bx-trash"></i>
+                                                <span class="ms-1 d-none d-md-inline">Eliminar</span>
+                                            </button>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -212,8 +222,108 @@ Proyectos
             // Restaurar íconos de botones
             $('.btn-toggle-tareas i').removeClass('bx-chevron-up').addClass('bx-list-ul');
         });
+
+        // Eliminación via Modal + AJAX (patrón)
+        let deleteProyectoUrl = '';
+        let deleteProyectoId = '';
+
+        $(document).on('click', '.btn-eliminar-proyecto', function(e) {
+            e.preventDefault();
+            deleteProyectoId = $(this).data('proyecto-id');
+            const proyectoNombre = $(this).data('proyecto-nombre');
+            deleteProyectoUrl = $(this).data('delete-url');
+
+            $('#proyectoNombre').text(proyectoNombre);
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteModalProyecto'));
+            deleteModal.show();
+        });
+
+        $('#confirmDeleteProyecto').on('click', function() {
+            if (!deleteProyectoUrl) return;
+
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Eliminando...');
+
+            $.ajax({
+                url: deleteProyectoUrl,
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                success: function(response) {
+                    bootstrap.Modal.getInstance(document.getElementById('deleteModalProyecto')).hide();
+                    const row = table.row('#proyecto-row-' + deleteProyectoId);
+                    row.remove().draw();
+
+                    Toastify({
+                        text: response.message || 'Eliminado exitosamente',
+                        duration: 3000,
+                        gravity: 'top',
+                        position: 'right',
+                        backgroundColor: 'linear-gradient(to right, #00b09b, #96c93d)'
+                    }).showToast();
+                },
+                error: function(xhr) {
+                    let errorMsg = 'Error al eliminar';
+                    if (xhr.responseJSON && xhr.responseJSON.error) errorMsg = xhr.responseJSON.error;
+
+                    Toastify({
+                        text: errorMsg,
+                        duration: 3000,
+                        gravity: 'top',
+                        position: 'right',
+                        backgroundColor: 'linear-gradient(to right, #ff5f6d, #ffc371)'
+                    }).showToast();
+                },
+                complete: function() {
+                    $btn.prop('disabled', false).text('Eliminar');
+                }
+            });
+        });
+
+        // Función auxiliar para obtener CSRF token de cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
     });
 </script>
 
 {% include "control_de_proyectos/partials/tareas_accordion_js.html" %}
+
+<!-- Modal de confirmación de eliminación (Proyectos) -->
+<div class="modal fade" id="deleteModalProyecto" tabindex="-1" aria-labelledby="deleteModalProyectoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalProyectoLabel" data-key="confirm_delete">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p data-key="delete_confirmation">¿Estás seguro de que deseas eliminar <strong id="proyectoNombre"></strong>?</p>
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong data-key="warning">Advertencia:</strong>
+                    <span data-key="delete_warning">Esta acción es irreversible.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="cancel">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteProyecto" data-key="delete">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock extra_js %}

@@ -1,6 +1,7 @@
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView, View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import models
+from django.db import transaction
 from django.db.models import Avg
 from django.urls import reverse_lazy
 from django.shortcuts import render, redirect, get_object_or_404
@@ -15,6 +16,9 @@ from .models import Proyecto, Tarea, ClienteEmpresa, Profesional, TipoProyecto, 
 from .forms import ProyectoForm, TareaForm, ClienteEmpresaForm, ProfesionalForm, TipoTareaForm, TareaDocumentoForm
 import json
 from control_operacional.services.alerts import notify_project_created, notify_project_overdue
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_empresa_id(request):
@@ -206,6 +210,49 @@ class EliminarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView
             return Proyecto.objects.none()
         return Proyecto.objects.filter(empresa_interna_id=empresa_id)
 
+    def post(self, request, *args, **kwargs):
+        """Manejar eliminación vía AJAX conforme a AJAX_DELETION_PATTERN.md; fallback al flujo tradicional."""
+        # Detección robusta de petición AJAX/fetch
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH')
+        accept = request.META.get('HTTP_ACCEPT', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                from auditoria.helpers import audit_log
+                from auditoria.services import AuditoriaService
+
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    # Validar scoping por empresa
+                    empresa_activa = _get_empresa_id(request) or request.session.get('empresa_id')
+                    if hasattr(self.object, 'empresa_interna_id') and getattr(self.object, 'empresa_interna_id', None) is not None:
+                        if empresa_activa and self.object.empresa_interna_id != empresa_activa:
+                            return JsonResponse({'success': False, 'message': 'permission_delete_forbidden'}, status=403)
+
+                    nombre = str(self.object)
+                    before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                    self.object.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="control_de_proyectos",
+                        obj=self.object,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Proyecto"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logger.exception('Error eliminando Proyecto (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)
+
 
 class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Tarea
@@ -307,6 +354,47 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse_lazy('control_de_proyectos:detalle_proyecto', kwargs={'pk': self.object.proyecto.pk})
 
+    def post(self, request, *args, **kwargs):
+        # Soportar eliminación vía AJAX/fetch con respuesta JSON y auditoría
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH')
+        accept = request.META.get('HTTP_ACCEPT', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                from auditoria.helpers import audit_log
+                from auditoria.services import AuditoriaService
+
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    empresa_activa = _get_empresa_id(request) or request.session.get('empresa_id')
+                    if hasattr(self.object, 'proyecto') and getattr(self.object, 'proyecto', None) is not None:
+                        if empresa_activa and getattr(self.object.proyecto, 'empresa_interna_id', None) != empresa_activa:
+                            return JsonResponse({'success': False, 'message': 'permission_delete_forbidden'}, status=403)
+
+                    nombre = str(self.object)
+                    before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                    self.object.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="control_de_proyectos",
+                        obj=self.object,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Tarea"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logger.exception('Error eliminando Tarea (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)
+
 
 class EliminarTareaView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Tarea
@@ -323,6 +411,48 @@ class EliminarTareaView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse_lazy('control_de_proyectos:detalle_proyecto', kwargs={'pk': self.object.proyecto.pk})
+    
+    def post(self, request, *args, **kwargs):
+        """Soporta eliminación vía AJAX conforme a AJAX_DELETION_PATTERN.md; fallback al flujo tradicional."""
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH')
+        accept = request.META.get('HTTP_ACCEPT', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                from auditoria.helpers import audit_log
+                from auditoria.services import AuditoriaService
+
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    empresa_activa = _get_empresa_id(request) or request.session.get('empresa_id')
+                    if hasattr(self.object, 'proyecto') and getattr(self.object, 'proyecto', None) is not None:
+                        proyecto = getattr(self.object, 'proyecto')
+                        if empresa_activa and getattr(proyecto, 'empresa_interna_id', None) != empresa_activa:
+                            return JsonResponse({'success': False, 'message': 'permission_delete_forbidden'}, status=403)
+
+                    nombre = str(self.object)
+                    before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                    self.object.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="control_de_proyectos",
+                        obj=self.object,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Tarea"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logger.exception('Error eliminando Tarea (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)
 
 
 class ListarClientesView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
@@ -475,7 +605,7 @@ class EditarProfesionalView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVie
 
 # Endpoints para sugerencias autocomplete (AJAX)
 @login_required
-@verificar_permiso("Control de Proyectos - Autocomplete tipos de proyecto", "ingresar")
+@verificar_permiso("Control de Proyectos - Proyectos", "ingresar")
 def sugerir_tipos_proyecto(request):
     """Retorna tipos de proyecto existentes para autocomplete"""
     query = request.GET.get('query', '').strip()
@@ -486,7 +616,7 @@ def sugerir_tipos_proyecto(request):
 
 
 @login_required
-@verificar_permiso("Control de Proyectos - Autocomplete especialidades", "ingresar")
+@verificar_permiso("Control de Proyectos - Proyectos", "ingresar")
 def sugerir_especialidades(request):
     """Retorna especialidades existentes para autocomplete"""
     query = request.GET.get('query', '').strip()

@@ -20,6 +20,7 @@ from .services.empresa import get_empresa_activa_id, assert_empresa_activa
 from .services.messages import create_message
 from .services.unread import mark_conversation_read
 import logging
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,42 @@ class EliminarConversacionView(VerificarPermisoMixin, LoginRequiredMixin, Delete
             empresa_id=empresa_id,
             participantes=self.request.user,
         )
+
+    def post(self, request, *args, **kwargs):
+        # Support AJAX deletion with JSON response and audit
+        xrw = request.META.get('HTTP_X_REQUESTED_WITH')
+        accept = request.META.get('HTTP_ACCEPT', '')
+        is_ajax = (xrw == 'XMLHttpRequest') or ('application/json' in accept)
+
+        if is_ajax:
+            try:
+                from auditoria.helpers import audit_log
+                from auditoria.services import AuditoriaService
+
+                with transaction.atomic():
+                    self.object = self.get_object()
+
+                    nombre = str(self.object)
+                    before_snapshot = AuditoriaService.model_to_snapshot(self.object)
+                    self.object.delete()
+
+                    audit_log(
+                        request=request,
+                        action="DELETE",
+                        app_label="chat",
+                        obj=self.object,
+                        before=before_snapshot,
+                        vista_nombre=self.vista_nombre,
+                        status_code=200,
+                        meta={"entity": "Conversacion"},
+                    )
+
+                return JsonResponse({'success': True, 'message': f'"{nombre}" eliminado exitosamente'})
+            except Exception as e:
+                logger.exception('Error eliminando Conversación (AJAX)')
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        return super().post(request, *args, **kwargs)
 
 
 def ws_debug_view(request, conversation_id):

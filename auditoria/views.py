@@ -15,11 +15,11 @@ from access_control.models import Vista, Permiso
 
 class AuditoriaBibliotecaListView(VerificarPermisoMixin, ListView):
     model = AuditoriaBibliotecaEvent
-    template_name = "auditoria/auditoria_list.html"
+    template_name = "auditoria/auditoria_biblioteca_list.html"
     context_object_name = "eventos"
     paginate_by = 25
     permiso_requerido = "ingresar"
-    vista_nombre = "Auditoría - Listar"
+    vista_nombre = "Auditoría - Biblioteca"
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
@@ -31,12 +31,13 @@ class AuditoriaBibliotecaListView(VerificarPermisoMixin, ListView):
 
         # verificar existencia de Vista y permiso asignado (diagnóstico)
         try:
-            vista = Vista.objects.filter(nombre="Auditoría - Listar").first()
+            vista_nombre_lookup = getattr(self, "vista_nombre", "Auditoría - Biblioteca")
+            vista = Vista.objects.filter(nombre=vista_nombre_lookup).first()
             if vista:
                 has_perm = Permiso.objects.filter(usuario=request.user, empresa_id=request.session.get('empresa_id'), vista=vista, ingresar=True).exists()
             else:
                 has_perm = False
-            logger.info("AUDIT_CHECK vista_exists=%s has_ingresar=%s vista_nombre=%s", bool(vista), has_perm, getattr(vista, 'nombre', None))
+            logger.info("AUDIT_CHECK vista_exists=%s has_ingresar=%s vista_nombre=%s", bool(vista), has_perm, vista_nombre_lookup)
         except Exception as e:
             logger.info("AUDIT_CHECK error=%s", e)
 
@@ -144,14 +145,43 @@ class AuditoriaBibliotecaListView(VerificarPermisoMixin, ListView):
 
 class AuditoriaBibliotecaDetailView(VerificarPermisoMixin, DetailView):
     model = AuditoriaBibliotecaEvent
-    template_name = "auditoria/auditoria_detail.html"
+    template_name = "auditoria/auditoria_biblioteca_detail.html"
     context_object_name = "evento"
     permiso_requerido = "ingresar"
-    vista_nombre = "Auditoría - Detalle"
+    vista_nombre = "Auditoría - Biblioteca Detalle"
 
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
-        return super().dispatch(request, *args, **kwargs)
+        logger.info("AUDIT_EXEC_START path=%s user=%s empresa_id=%s",
+                    request.path,
+                    getattr(request.user, "username", None),
+                    request.session.get("empresa_id"))
+
+        try:
+            vista_nombre_lookup = getattr(self, "vista_nombre", "Auditoría - Biblioteca Detalle")
+            vista = Vista.objects.filter(nombre=vista_nombre_lookup).first()
+            if vista:
+                has_perm = Permiso.objects.filter(usuario=request.user, empresa_id=request.session.get('empresa_id'), vista=vista, ingresar=True).exists()
+            else:
+                has_perm = False
+            logger.info("AUDIT_CHECK vista_exists=%s has_ingresar=%s vista_nombre=%s", bool(vista), has_perm, vista_nombre_lookup)
+        except Exception as e:
+            logger.info("AUDIT_CHECK error=%s", e)
+
+        response = super().dispatch(request, *args, **kwargs)
+
+        try:
+            status = getattr(response, 'status_code', None)
+            cls_name = response.__class__.__name__
+            template_name = getattr(response, 'template_name', None)
+            redirect_url = getattr(response, 'url', None)
+            logger.info("AUDIT_EXEC_END status=%s response_class=%s template=%s url=%s", status, cls_name, template_name, redirect_url)
+            if status in (302, 403):
+                logger.info("AUDIT_INTERCEPTED redirect_or_forbidden status=%s", status)
+        except Exception as e:
+            logger.info("AUDIT_EXEC_END error=%s", e)
+
+        return response
 
     def get_object(self, queryset=None):
         empresa_id = self.request.session.get("empresa_id")

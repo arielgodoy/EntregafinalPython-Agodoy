@@ -53,6 +53,11 @@
                             <a href="{% url 'control_de_proyectos:editar_tarea' tarea.pk %}" class="btn btn-sm btn-warning">
                                 <i class="bx bx-edit"></i> Editar
                             </a>
+                            <button type="button" class="btn btn-sm btn-danger btn-eliminar-tarea ms-1"
+                                data-tarea-id="{{ tarea.id }}"
+                                data-delete-url="{% url 'control_de_proyectos:eliminar_tarea' tarea.id %}">
+                                <i class="bx bx-trash"></i> Eliminar
+                            </button>
                         </div>
                     </div>
 
