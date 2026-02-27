@@ -514,20 +514,45 @@ class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
             'ATOMIC_REQUESTS': False,
         })
 
-        # If alias exists but is incomplete (missing required keys), replace it entirely
-        existing = connections.databases.get(alias)
-        needs_replace = False
-        if existing is None:
-            needs_replace = True
-        else:
-            required_keys = ('ATOMIC_REQUESTS', 'CONN_MAX_AGE', 'ENGINE', 'NAME', 'USER', 'PASSWORD', 'HOST', 'PORT', 'OPTIONS')
-            for k in required_keys:
-                if k not in existing:
-                    needs_replace = True
-                    break
+        # Prepare new complete config
+        new_config = complete_cfg
 
-        if needs_replace:
-            connections.databases[alias] = complete_cfg
+        # If alias exists, compare key connection fields (excluding password)
+        existing = connections.databases.get(alias)
+        if existing is not None:
+            try:
+                same_connection = (
+                    str(existing.get('NAME', '')) == str(new_config.get('NAME', '')) and
+                    str(existing.get('HOST', '')) == str(new_config.get('HOST', '')) and
+                    str(existing.get('USER', '')) == str(new_config.get('USER', '')) and
+                    str(existing.get('PORT', '')) == str(new_config.get('PORT', ''))
+                )
+            except Exception:
+                same_connection = False
+
+            if not same_connection:
+                # Close any existing connection for this alias before replacing
+                try:
+                    connections[alias].close()
+                except Exception:
+                    pass
+                connections.databases[alias] = new_config
+            else:
+                # Ensure required runtime keys exist; if any missing, replace entirely
+                required_keys = ('ATOMIC_REQUESTS', 'CONN_MAX_AGE', 'ENGINE', 'NAME', 'USER', 'PASSWORD', 'HOST', 'PORT', 'OPTIONS')
+                missing = any(k not in existing for k in required_keys)
+                if missing:
+                    try:
+                        connections[alias].close()
+                    except Exception:
+                        pass
+                    connections.databases[alias] = new_config
+                else:
+                    # reuse existing
+                    pass
+        else:
+            # alias not present: register complete config
+            connections.databases[alias] = new_config
 
         try:
             with connections[alias].cursor() as cursor:
