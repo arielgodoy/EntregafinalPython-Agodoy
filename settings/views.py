@@ -25,6 +25,14 @@ from access_control.decorators import verificar_permiso
 from access_control.views import VerificarPermisoMixin
 from access_control.models import Vista, Permiso
 from access_control.services.access_requests import build_access_request_context
+from .models import SettingsMySQLConnection
+from .forms import SettingsMySQLConnectionForm
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+from django.urls import reverse_lazy
+from django.http import HttpResponse
+from django.db import connections
+import hashlib
+from django.conf import settings
 
 
 def _require_empresa_activa_for_view(request, vista_nombre):
@@ -350,3 +358,191 @@ def guardar_preferencias(request):
         prefs.save(update_fields=[field_map[key] for key in updated])
 
     return JsonResponse({"success": True, "updated": updated})
+
+
+# ============================================================================
+# MySQL Connections CRUD
+# ============================================================================
+
+
+class MySQLConnectionListView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
+    model = SettingsMySQLConnection
+    template_name = 'settings/mysql_connections_list.html'
+    context_object_name = 'connections'
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'ingresar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        empresa_id = self.request.session.get('empresa_id')
+        return SettingsMySQLConnection.objects.filter(empresa_id=empresa_id)
+
+
+class MySQLConnectionCreateView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
+    model = SettingsMySQLConnection
+    form_class = SettingsMySQLConnectionForm
+    template_name = 'settings/mysql_connection_form.html'
+    success_url = reverse_lazy('mysql_connections_list')
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'crear'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        empresa_id = self.request.session.get('empresa_id')
+        form.instance.empresa_id = empresa_id
+        return super().form_valid(form)
+
+
+class MySQLConnectionUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
+    model = SettingsMySQLConnection
+    form_class = SettingsMySQLConnectionForm
+    template_name = 'settings/mysql_connection_form.html'
+    success_url = reverse_lazy('mysql_connections_list')
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'modificar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        # Ensure object belongs to empresa
+        obj = self.get_object()
+        if obj.empresa_id != empresa_id:
+            return render(request, 'access_control/403_forbidden.html', build_access_request_context(request, self.vista_nombre, 'Acceso denegado'), status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class MySQLConnectionDeleteView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
+    model = SettingsMySQLConnection
+    template_name = 'settings/mysql_connection_confirm_delete.html'
+    success_url = reverse_lazy('mysql_connections_list')
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'eliminar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        obj = self.get_object()
+        if obj.empresa_id != empresa_id:
+            return render(request, 'access_control/403_forbidden.html', build_access_request_context(request, self.vista_nombre, 'Acceso denegado'), status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+        try:
+            self.object = self.get_object()
+            nombre = str(self.object)
+            self.object.delete()
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': 'connection_deleted', 'deleted_name': nombre})
+            return redirect(self.success_url)
+        except Exception as e:
+            if is_ajax:
+                return JsonResponse({'success': False, 'message': 'request_error'}, status=500)
+            return redirect(self.success_url)
+
+
+class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'ingresar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+
+        pk = kwargs.get('pk')
+        try:
+            obj = SettingsMySQLConnection.objects.get(pk=pk)
+        except SettingsMySQLConnection.DoesNotExist:
+            return JsonResponse({'success': False, 'tables': [], 'count': 0, 'message_key': 'settings.mysql_connections.test_error'}, status=404)
+
+        if obj.empresa_id != empresa_id:
+            return JsonResponse({'success': False, 'tables': [], 'count': 0, 'message_key': 'settings.mysql_connections.forbidden'}, status=403)
+
+        self.obj = obj
+        self.empresa_id = empresa_id
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        # Prepare alias
+        alias_base = f"test_mysql_{self.empresa_id}_{self.obj.pk}"
+        alias = alias_base
+
+        cfg = self.obj
+
+        # Build complete DB config based on settings.DATABASES['default']
+        base_config = {}
+        try:
+            base_config = settings.DATABASES.get('default', {}).copy()
+        except Exception:
+            base_config = {}
+
+        # Ensure base_config is a dict and does not contain None
+        if not isinstance(base_config, dict):
+            base_config = {}
+
+        complete_cfg = base_config.copy()
+        complete_cfg.update({
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': cfg.db_name,
+            'USER': cfg.user,
+            'PASSWORD': cfg.password,
+            'HOST': cfg.host,
+            'PORT': str(cfg.port or ''),
+            'OPTIONS': {'charset': 'utf8mb4'},
+            'CONN_MAX_AGE': 0,
+            'ATOMIC_REQUESTS': False,
+        })
+
+        # If alias exists but is incomplete (missing required keys), replace it entirely
+        existing = connections.databases.get(alias)
+        needs_replace = False
+        if existing is None:
+            needs_replace = True
+        else:
+            required_keys = ('ATOMIC_REQUESTS', 'CONN_MAX_AGE', 'ENGINE', 'NAME', 'USER', 'PASSWORD', 'HOST', 'PORT', 'OPTIONS')
+            for k in required_keys:
+                if k not in existing:
+                    needs_replace = True
+                    break
+
+        if needs_replace:
+            connections.databases[alias] = complete_cfg
+
+        try:
+            with connections[alias].cursor() as cursor:
+                cursor.execute("SHOW TABLES")
+                rows = cursor.fetchall()
+                tables = [r[0] for r in rows][:20]
+                count = len(rows)
+        except Exception:
+            # Do not expose error details
+            return JsonResponse({'success': False, 'tables': [], 'count': 0, 'message_key': 'settings.mysql_connections.test_error'})
+        finally:
+            try:
+                connections[alias].close()
+            except Exception:
+                pass
+
+        return JsonResponse({'success': True, 'tables': tables, 'count': count, 'message_key': 'settings.mysql_connections.test_success'})
+

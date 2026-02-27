@@ -147,3 +147,35 @@ class ThemePreferences(models.Model):
 
     def __str__(self):
         return f"ThemePreferences for {self.user.username} @ {self.empresa.codigo}"
+
+
+class SettingsMySQLConnection(models.Model):
+    """Conexiones MySQL por empresa.
+
+    Almacenamos por ahora las credenciales en BD (ver notas de seguridad).
+    """
+    TIPOS_CHOICES = [
+        ("ventas", "ventas"),
+        ("gestion", "gestion"),
+        ("remuneraciones", "remuneraciones"),
+    ]
+
+    empresa = models.ForeignKey('access_control.Empresa', on_delete=models.CASCADE)
+    nombre_logico = models.CharField(max_length=100)
+    engine = models.CharField(max_length=100, default="django.db.backends.mysql")
+    host = models.CharField(max_length=255)
+    port = models.PositiveIntegerField(default=3306)
+    user = models.CharField(max_length=150)
+    password = models.CharField(max_length=255)
+    db_name = models.CharField(max_length=255)
+    charset = models.CharField(max_length=50, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("empresa", "nombre_logico")
+        ordering = ["empresa_id", "nombre_logico"]
+
+    def __str__(self):
+        return f"{self.empresa.codigo}::{self.nombre_logico} -> {self.db_name} ({self.host})"

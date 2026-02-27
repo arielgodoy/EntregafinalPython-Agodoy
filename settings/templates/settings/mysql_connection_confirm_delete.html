@@ -1,0 +1,21 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Eliminar Conexión{% endblock title %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="card p-4">
+        <h3 data-key="settings.mysql_connections.delete_title">Eliminar Conexión</h3>
+        <p data-key="settings.mysql_connections.delete_confirm">¿Desea eliminar la conexión {{ object.nombre_logico }}?</p>
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger" data-key="buttons.confirm_delete">Eliminar</button>
+          <a href="{% url 'mysql_connections_list' %}" class="btn btn-secondary" data-key="buttons.cancel">Cancelar</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

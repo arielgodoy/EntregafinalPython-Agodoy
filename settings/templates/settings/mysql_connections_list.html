@@ -1,0 +1,170 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Conexiones MySQL{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="settings.mysql_connections.title" pagetitle_key="menu.settings" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 data-key="settings.mysql_connections.list_title">Conexiones MySQL</h3>
+                    <a href="{% url 'mysql_connections_create' %}" class="btn btn-primary" data-key="settings.mysql_connections.add">Añadir conexión</a>
+                </div>
+
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th data-key="settings.mysql_connections.col_name">Nombre</th>
+                            <th data-key="settings.mysql_connections.col_db">Base de datos</th>
+                            <th data-key="settings.mysql_connections.col_host">Host</th>
+                            <th data-key="settings.mysql_connections.col_user">Usuario</th>
+                            <th data-key="settings.mysql_connections.col_active">Activo</th>
+                            <th data-key="settings.mysql_connections.col_actions">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in connections %}
+                        <tr>
+                            <td>{{ c.nombre_logico }}</td>
+                            <td>{{ c.db_name }}</td>
+                            <td>{{ c.host }}</td>
+                            <td>{{ c.user }}</td>
+                            <td>{% if c.is_active %}<span data-key="settings.mysql_connections.active_yes">Si</span>{% else %}<span data-key="settings.mysql_connections.active_no">No</span>{% endif %}</td>
+                            <td>
+                                <a href="{% url 'mysql_connections_edit' c.pk %}" class="btn btn-sm btn-secondary" data-key="buttons.edit">Editar</a>
+                                <button class="btn btn-sm btn-danger btn-delete-connection" data-url="{% url 'mysql_connections_delete' c.pk %}" data-name="{{ c.nombre_logico }}" data-key="buttons.delete">Eliminar</button>
+                                <button class="btn btn-sm btn-info btn-test-connection" data-url="{% url 'mysql_connections_test' c.pk %}" data-key="buttons.test">Test</button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" data-key="settings.mysql_connections.no_items">No hay conexiones configuradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal" tabindex="-1" id="deleteModal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" data-key="settings.mysql_connections.delete_title">Confirmar eliminación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="deleteModalBody" data-key="settings.mysql_connections.delete_body">¿Desea eliminar la conexión?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
+        <button type="button" id="confirmDeleteBtn" class="btn btn-danger" data-key="buttons.confirm_delete">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Test Modal -->
+<div class="modal" tabindex="-1" id="testModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" data-key="settings.mysql_connections.test_title">Resultado Test</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testResultContent">
+                    <p data-key="settings.mysql_connections.testing">Probando...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.close">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    let deleteUrl = null;
+    let deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    document.querySelectorAll('.btn-delete-connection').forEach(btn => {
+        btn.addEventListener('click', function(){
+            deleteUrl = this.dataset.url;
+            const name = this.dataset.name || '';
+            document.getElementById('deleteModalBody').textContent = (name ? name + ': ' : '') + '¿Desea eliminar la conexión?';
+            deleteModal.show();
+        });
+    });
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function(){
+        if(!deleteUrl) return;
+        fetch(deleteUrl, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': (function(){
+                    const v = document.cookie.match('(^|;)\\s*' + 'csrftoken' + '\\s*=\\s*([^;]+)');
+                    return v ? v.pop() : '';
+                })(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        }).then(r => r.json()).then(res => {
+            if(res.success){
+                location.reload();
+            } else {
+                alert('Error');
+            }
+        }).catch(()=> alert('Error'));
+    });
+    // Test connection
+    let testModal = new bootstrap.Modal(document.getElementById('testModal'));
+    document.querySelectorAll('.btn-test-connection').forEach(btn => {
+        btn.addEventListener('click', function(){
+            const url = this.dataset.url;
+            const originalText = this.textContent;
+            this.disabled = true;
+            this.textContent = 'Probando...';
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            }).then(r => r.json()).then(res => {
+                let container = document.getElementById('testResultContent');
+                if(res.success){
+                    const count = res.count || 0;
+                    const tables = res.tables || [];
+                    let html = '<p data-key="settings.mysql_connections.tables_found">Tablas encontradas: ' + count + '</p>';
+                    html += '<ul class="list-group">';
+                    tables.forEach(t => { html += '<li class="list-group-item">' + t + '</li>'; });
+                    html += '</ul>';
+                    container.innerHTML = html;
+                } else {
+                    const key = res.message_key || 'settings.mysql_connections.test_error';
+                    container.innerHTML = '<p data-key="'+key+'">Error en la prueba de conexión.</p>';
+                }
+                testModal.show();
+            }).catch(()=>{
+                let container = document.getElementById('testResultContent');
+                container.innerHTML = '<p data-key="settings.mysql_connections.test_error">Error en la prueba de conexión.</p>';
+                testModal.show();
+            }).finally(()=>{
+                this.disabled = false;
+                this.textContent = originalText;
+            });
+        });
+    });
+});
+</script>
+{% endblock extra_js %}

@@ -8,6 +8,42 @@ from django.db import models as django_models
 
 os.environ.setdefault('RUNNING_TESTS', '1')
 
+# Compatibility shim: ensure TextChoices exists in django.db.models for older Django
+try:
+    import enum as _enum
+    if not hasattr(django_models, 'TextChoices'):
+        class TextChoicesMeta(_enum.EnumMeta):
+            def __new__(mcls, name, bases, namespace, **kwargs):
+                enum_cls = super().__new__(mcls, name, bases, namespace)
+                try:
+                    choices = tuple((member.value, getattr(member, 'label', member.name.title())) for member in enum_cls)
+                except Exception:
+                    choices = tuple()
+                setattr(enum_cls, 'choices', choices)
+                return enum_cls
+
+        class TextChoices(str, _enum.Enum, metaclass=TextChoicesMeta):
+            def __new__(cls, value, label=None):
+                obj = str.__new__(cls, value)
+                obj._value_ = value
+                obj.label = label or value
+                return obj
+
+        django_models.TextChoices = TextChoices
+except Exception:
+    pass
+
+# Compatibility shim: JSONField for older Django versions
+try:
+    if not hasattr(django_models, 'JSONField'):
+        class JSONField(django_models.TextField):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+        django_models.JSONField = JSONField
+except Exception:
+    pass
+
 
 def _ensure_ckeditor_stub():
     if 'ckeditor' in sys.modules:
@@ -160,6 +196,11 @@ try:
     import PIL  # noqa: F401
 except ImportError:
     SILENCED_SYSTEM_CHECKS = ['fields.E210']
+
+try:
+    import channels  # noqa: F401
+except ImportError:
+    INSTALLED_APPS = [app for app in INSTALLED_APPS if app != 'channels']
 
 MIGRATION_MODULES = {
     'access_control': None,
