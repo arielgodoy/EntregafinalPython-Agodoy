@@ -15,6 +15,8 @@ from .views import (
     MySQLConnectionUpdateView,
     MySQLConnectionDeleteView,
     MySQLConnectionTestView,
+    MySQLConnectionsExportView,
+    MySQLConnectionsImportView,
 )
 
 urlpatterns = [
@@ -31,6 +33,8 @@ urlpatterns = [
     path('mysql-connections/<int:pk>/edit/', MySQLConnectionUpdateView.as_view(), name='mysql_connections_edit'),
     path('mysql-connections/<int:pk>/delete/', MySQLConnectionDeleteView.as_view(), name='mysql_connections_delete'),
     path('mysql-connections/<int:pk>/test/', MySQLConnectionTestView.as_view(), name='mysql_connections_test'),
+    path('mysql-connections/export/', MySQLConnectionsExportView.as_view(), name='mysql_connections_export'),
+    path('mysql-connections/import/', MySQLConnectionsImportView.as_view(), name='mysql_connections_import'),
 ]
 
 

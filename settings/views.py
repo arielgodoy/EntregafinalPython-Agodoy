@@ -12,6 +12,7 @@ import re
 import imaplib
 import poplib
 import smtplib
+from django.db import transaction
 from django.http import JsonResponse
 from email.utils import formatdate, make_msgid
 from email.message import EmailMessage
@@ -570,4 +571,169 @@ class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 pass
 
         return JsonResponse({'success': True, 'tables': tables, 'count': count, 'message_key': 'settings.mysql_connections.test_success'})
+
+
+class MySQLConnectionsExportView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'ingresar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        qs = SettingsMySQLConnection.objects.filter(empresa_id=empresa_id)
+        connections = []
+        for c in qs:
+            connections.append({
+                'nombre_logico': c.nombre_logico,
+                'host': c.host,
+                'port': int(c.port or 3306),
+                'user': c.user,
+                'password': c.password,
+                'db_name': c.db_name,
+                'is_active': bool(c.is_active),
+            })
+
+        payload = {
+            'version': 1,
+            'empresa_id': empresa_id,
+            'exported_at': formatdate(localtime=True),
+            'connections': connections,
+        }
+
+        content = json.dumps(payload, ensure_ascii=False)
+        resp = HttpResponse(content, content_type='application/json; charset=utf-8')
+        resp['Content-Disposition'] = 'attachment; filename="conexionesMysql.cfg"'
+        return resp
+
+
+class MySQLConnectionsImportView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = 'Settings - Conexiones MySQL'
+    permiso_requerido = 'modificar'
+
+    def dispatch(self, request, *args, **kwargs):
+        empresa_id = request.session.get('empresa_id')
+        if not empresa_id:
+            contexto = build_access_request_context(request, self.vista_nombre, 'Empresa activa requerida')
+            return render(request, 'access_control/403_forbidden.html', contexto, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        is_ajax = (
+            request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest' or
+            'application/json' in request.META.get('HTTP_ACCEPT', '')
+        )
+
+        uploaded = request.FILES.get('conexionesMysql.cfg') or (next(iter(request.FILES.values()), None))
+        if not uploaded:
+            if is_ajax:
+                return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_error',}, status=400)
+            messages.error(request, 'Import file missing')
+            return redirect('mysql_connections_list')
+
+        max_size = 1 * 1024 * 1024
+        try:
+            if uploaded.size > max_size:
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_file_too_large'}, status=400)
+                messages.error(request, 'Archivo demasiado grande')
+                return redirect('mysql_connections_list')
+        except Exception:
+            pass
+
+        try:
+            raw = uploaded.read()
+            data = json.loads(raw.decode('utf-8'))
+        except Exception:
+            if is_ajax:
+                return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_invalid_format'}, status=400)
+            messages.error(request, 'Formato inválido')
+            return redirect('mysql_connections_list')
+
+        if not isinstance(data, dict) or 'connections' not in data or not isinstance(data.get('connections'), list):
+            if is_ajax:
+                return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_invalid_format'}, status=400)
+            messages.error(request, 'Formato inválido')
+            return redirect('mysql_connections_list')
+
+        conns = data.get('connections', [])
+        seen = set()
+        normalized = []
+        import re as _re
+        name_re = _re.compile(r'^[a-z0-9_]+$')
+        for idx, item in enumerate(conns):
+            if not isinstance(item, dict):
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_invalid_format'}, status=400)
+                messages.error(request, 'Formato inválido')
+                return redirect('mysql_connections_list')
+
+            required = ('nombre_logico', 'host', 'port', 'user', 'password', 'db_name')
+            for r in required:
+                if r not in item:
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_missing_fields'}, status=400)
+                    messages.error(request, 'Faltan campos')
+                    return redirect('mysql_connections_list')
+
+            name = str(item.get('nombre_logico') or '').lower().strip()
+            if not name_re.match(name):
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_invalid_name'}, status=400)
+                messages.error(request, 'Nombre inválido')
+                return redirect('mysql_connections_list')
+
+            if name in seen:
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_duplicate_names'}, status=400)
+                messages.error(request, 'Nombres duplicados en archivo')
+                return redirect('mysql_connections_list')
+
+            seen.add(name)
+            try:
+                port = int(item.get('port') or 3306)
+            except Exception:
+                port = 3306
+
+            normalized.append({
+                'nombre_logico': name,
+                'host': str(item.get('host') or ''),
+                'port': port,
+                'user': str(item.get('user') or ''),
+                'password': str(item.get('password') or ''),
+                'db_name': str(item.get('db_name') or ''),
+                'is_active': bool(item.get('is_active', True)),
+            })
+
+        empresa_id = request.session.get('empresa_id')
+        try:
+            with transaction.atomic():
+                SettingsMySQLConnection.objects.filter(empresa_id=empresa_id).delete()
+                for row in normalized:
+                    SettingsMySQLConnection.objects.create(
+                        empresa_id=empresa_id,
+                        nombre_logico=row['nombre_logico'],
+                        engine='django.db.backends.mysql',
+                        host=row['host'],
+                        port=row['port'],
+                        user=row['user'],
+                        password=row['password'],
+                        db_name=row['db_name'],
+                        is_active=row['is_active'],
+                    )
+        except Exception:
+            if is_ajax:
+                return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_error'}, status=500)
+            messages.error(request, 'Error al importar')
+            return redirect('mysql_connections_list')
+
+        if is_ajax:
+            return JsonResponse({'success': True, 'message_key': 'settings.mysql_connections.import_success'})
+        messages.success(request, 'Import completed')
+        return redirect('mysql_connections_list')
 

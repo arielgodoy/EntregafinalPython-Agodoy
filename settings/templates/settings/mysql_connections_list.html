@@ -46,6 +46,12 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                <div class="d-flex justify-content-end mt-3">
+                    <div class="btn-group" role="group">
+                        <a href="{% url 'mysql_connections_export' %}" class="btn btn-outline-secondary" data-key="settings.mysql_connections.export">Exportar</a>
+                        <button type="button" class="btn btn-outline-secondary" id="btnImportConnections" data-key="settings.mysql_connections.import">Importar</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -70,6 +76,25 @@
   </div>
 </div>
 
+<!-- Import Modal -->
+<div class="modal" tabindex="-1" id="importModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" data-key="settings.mysql_connections.import_modal_title">Importar Conexiones MySQL</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p data-key="settings.mysql_connections.import_modal_warning">Esto sobrescribe todas las conexiones actuales de esta empresa.</p>
+                <input type="file" id="importFileInput" accept="application/json" class="form-control" />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
+                <button type="button" id="confirmImportBtn" class="btn btn-primary" data-key="settings.mysql_connections.import_confirm">Importar y sobrescribir</button>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Test Modal -->
 <div class="modal" tabindex="-1" id="testModal">
     <div class="modal-dialog modal-lg">
@@ -164,6 +189,43 @@ document.addEventListener('DOMContentLoaded', function(){
                 this.textContent = originalText;
             });
         });
+    });
+    // Import connections
+    let importModal = new bootstrap.Modal(document.getElementById('importModal'));
+    document.getElementById('btnImportConnections').addEventListener('click', function(){
+        document.getElementById('importFileInput').value = '';
+        importModal.show();
+    });
+
+    document.getElementById('confirmImportBtn').addEventListener('click', function(){
+        const fileInput = document.getElementById('importFileInput');
+        if(!fileInput.files || !fileInput.files[0]){
+            alert('No file selected');
+            return;
+        }
+        const f = fileInput.files[0];
+        const fd = new FormData();
+        fd.append('conexionesMysql.cfg', f);
+
+        const importUrl = "{% url 'mysql_connections_import' %}";
+        fetch(importUrl, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': (function(){
+                    const v = document.cookie.match('(^|;)\\s*' + 'csrftoken' + '\\s*=\\s*([^;]+)');
+                    return v ? v.pop() : '';
+                })(),
+            },
+            body: fd
+        }).then(r => r.json()).then(res => {
+            if(res && res.success){
+                location.reload();
+            } else {
+                const key = (res && res.message_key) ? res.message_key : 'settings.mysql_connections.import_error';
+                alert(key);
+            }
+        }).catch(()=> alert('settings.mysql_connections.import_error'));
     });
 });
 </script>
