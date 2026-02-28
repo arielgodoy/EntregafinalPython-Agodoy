@@ -63,8 +63,17 @@
                     {% for conversation in conversations %}
                       <li class="{% if active_conversation and conversation.id == active_conversation.id %}active{% endif %}">
                         <a href="{% url 'chat_inbox' %}?conversation_id={{ conversation.id }}" class="d-flex">
+                          <div class="flex-shrink-0 me-3">
+                            {% if conversation.ui_avatar_url %}
+                              <img src="{{ conversation.ui_avatar_url }}" class="rounded-circle avatar-xs" alt="">
+                            {% else %}
+                              <div class="avatar-xs">
+                                <span class="avatar-title rounded-circle bg-secondary text-white">{{ conversation.ui_title|slice:":1"|upper }}</span>
+                              </div>
+                            {% endif %}
+                          </div>
                           <div class="flex-grow-1 overflow-hidden">
-                            <h5 class="text-truncate mb-1">{{ conversation.display_title }}</h5>
+                            <h5 class="text-truncate mb-1">{{ conversation.ui_title }}</h5>
                           </div>
                         </a>
                       </li>
@@ -98,6 +107,19 @@
                     {% for contact in contacts %}
                       <li>
                         <div class="d-flex align-items-center">
+                          <div class="flex-shrink-0 me-3">
+                            {% if contact.avatar %}
+                              <img src="{{ contact.avatar.imagen.url }}" class="rounded-circle avatar-xs" alt="">
+                            {% elif contact.avatar_url %}
+                              <img src="{{ contact.avatar_url }}" class="rounded-circle avatar-xs" alt="">
+                            {% elif contact.profile and contact.profile.avatar %}
+                              <img src="{{ contact.profile.avatar.imagen.url }}" class="rounded-circle avatar-xs" alt="">
+                            {% else %}
+                              <div class="avatar-xs">
+                                <span class="avatar-title rounded-circle bg-secondary text-white">{{ contact.username|slice:":1"|upper }}</span>
+                              </div>
+                            {% endif %}
+                          </div>
                           <div class="flex-grow-1 overflow-hidden">
                             <h5 class="text-truncate mb-0">{{ contact.username }}</h5>
                           </div>
@@ -126,12 +148,15 @@
                         </div>
                         <div class="flex-grow-1 overflow-hidden">
                           <div class="d-flex align-items-center">
+                            
                             <div class="flex-shrink-0 chat-user-img online user-own-img align-self-center me-3 ms-0">
-                              {% if active_conversation and active_conversation.avatar_url %}
-                                <img src="{{ active_conversation.avatar_url }}" class="rounded-circle avatar-xs" alt="">
-                              {% else %}
-                                <img src="{% static 'images/users/avatar-2.jpg' %}" class="rounded-circle avatar-xs" alt="">
-                              {% endif %}
+                                {% if active_avatar_url_resolved %}
+                                  <img src="{{ active_avatar_url_resolved }}" class="rounded-circle avatar-xs" alt="">
+                                {% else %}
+                                  <div class="avatar-xs">
+                                    <span class="avatar-title rounded-circle bg-secondary text-white">{{ active_title|slice:":1"|upper }}</span>
+                                  </div>
+                                {% endif %}
                               <span class="user-status"></span>
                             </div>
                             <div class="flex-grow-1 overflow-hidden">

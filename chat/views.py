@@ -51,8 +51,52 @@ class ChatInboxView(VerificarPermisoMixin, LoginRequiredMixin, View):
             participantes=request.user,
         ).prefetch_related('participantes')
 
+        def resolve_user_avatar_url(u):
+            try:
+                if not u:
+                    return None
+                # 1) prefer a direct avatar_url string if present
+                direct = getattr(u, 'avatar_url', None)
+                if direct:
+                    return direct
+                # 2) prefer relational avatar (avatar.imagen.url)
+                a = getattr(u, 'avatar', None)
+                if a is not None:
+                    url = getattr(a, 'imagen', None)
+                    if url:
+                        return getattr(url, 'url', None)
+                # 3) fallback to profile.avatar
+                profile = getattr(u, 'profile', None)
+                if profile is not None:
+                    pa = getattr(profile, 'avatar', None)
+                    if pa is not None:
+                        p_url = getattr(pa, 'imagen', None)
+                        if p_url:
+                            return getattr(p_url, 'url', None)
+            except Exception:
+                return None
+            return None
+
         for conversacion in conversaciones:
+            # ui_title: reuse existing display logic
             conversacion.display_title = _get_conversacion_titulo(conversacion, request.user)
+            conversacion.ui_title = conversacion.display_title
+            # default ui fields
+            conversacion.ui_avatar_url = None
+            conversacion.ui_other_user = None
+            try:
+                if not getattr(conversacion, 'is_group', False):
+                    others = [p for p in conversacion.participantes.all() if p.id != request.user.id]
+                    other = others[0] if others else None
+                    conversacion.ui_other_user = other
+                    conversacion.ui_avatar_url = resolve_user_avatar_url(other)
+                else:
+                    # group: prefer conversation.avatar_url if present
+                    conversacion.ui_other_user = None
+                    conversacion.ui_avatar_url = getattr(conversacion, 'avatar_url', None)
+            except Exception:
+                conversacion.ui_other_user = None
+                conversacion.ui_avatar_url = getattr(conversacion, 'avatar_url', None)
 
         active_conversation = None
         conversation_id = request.GET.get("conversation_id")
@@ -60,9 +104,33 @@ class ChatInboxView(VerificarPermisoMixin, LoginRequiredMixin, View):
             active_conversation = conversaciones.filter(id=int(conversation_id)).first()
         if not active_conversation:
             active_conversation = conversaciones.first()
+        active_other_user = None
+        active_avatar_url_resolved = None
 
         if active_conversation:
             mark_conversation_read(active_conversation, request.user)
+            # determine other user for DM conversations using the prefetched participantes
+            try:
+                if not getattr(active_conversation, 'is_group', False):
+                    participants = list(active_conversation.participantes.all())
+                    other = None
+                    for p in participants:
+                        if p.id != request.user.id:
+                            other = p
+                            break
+                    active_other_user = other
+                else:
+                    active_other_user = None
+            except Exception:
+                active_other_user = getattr(active_conversation, 'ui_other_user', None)
+
+            # resolve active avatar: if group use conversation.avatar_url, else use other user's avatar
+            if getattr(active_conversation, 'is_group', False):
+                conv_avatar = getattr(active_conversation, 'avatar_url', None)
+                active_avatar_url_resolved = conv_avatar if conv_avatar else None
+            else:
+                # DM: prefer resolve_user_avatar_url(active_other_user)
+                active_avatar_url_resolved = resolve_user_avatar_url(active_other_user)
 
         mensajes = (
             Mensaje.objects.filter(conversacion=active_conversation)
@@ -83,6 +151,8 @@ class ChatInboxView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "conversations": conversaciones,
             "active_conversation": active_conversation,
             "active_title": _get_conversacion_titulo(active_conversation, request.user),
+            "active_avatar_url_resolved": active_avatar_url_resolved,
+            "active_other_user": active_other_user,
             "messages": mensajes,
             "contacts": contactos,
             "unread_count": {},
@@ -113,9 +183,49 @@ class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
             empresa_id=empresa_id,
             participantes=request.user,
         ).prefetch_related('participantes')
+        def resolve_user_avatar_url(u):
+            try:
+                if not u:
+                    return None
+                # 1) prefer a direct avatar_url string if present
+                direct = getattr(u, 'avatar_url', None)
+                if direct:
+                    return direct
+                # 2) prefer relational avatar (avatar.imagen.url)
+                a = getattr(u, 'avatar', None)
+                if a is not None:
+                    url = getattr(a, 'imagen', None)
+                    if url:
+                        return getattr(url, 'url', None)
+                # 3) fallback to profile.avatar
+                profile = getattr(u, 'profile', None)
+                if profile is not None:
+                    pa = getattr(profile, 'avatar', None)
+                    if pa is not None:
+                        p_url = getattr(pa, 'imagen', None)
+                        if p_url:
+                            return getattr(p_url, 'url', None)
+            except Exception:
+                return None
+            return None
 
         for conversacion in conversaciones:
             conversacion.display_title = _get_conversacion_titulo(conversacion, request.user)
+            conversacion.ui_title = conversacion.display_title
+            conversacion.ui_avatar_url = None
+            conversacion.ui_other_user = None
+            try:
+                if not getattr(conversacion, 'is_group', False):
+                    others = [p for p in conversacion.participantes.all() if p.id != request.user.id]
+                    other = others[0] if others else None
+                    conversacion.ui_other_user = other
+                    conversacion.ui_avatar_url = resolve_user_avatar_url(other)
+                else:
+                    conversacion.ui_other_user = None
+                    conversacion.ui_avatar_url = getattr(conversacion, 'avatar_url', None)
+            except Exception:
+                conversacion.ui_other_user = None
+                conversacion.ui_avatar_url = getattr(conversacion, 'avatar_url', None)
 
         if search_query:
             mensaje_ids = Mensaje.objects.filter(
@@ -157,6 +267,31 @@ class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
         if active_conversation and search_query:
             mensajes = mensajes.filter(contenido__icontains=search_query)
 
+        active_other_user = None
+        active_avatar_url_resolved = None
+        if active_conversation:
+            # determine other user for DM using prefetched participantes
+            try:
+                if not getattr(active_conversation, 'is_group', False):
+                    participants = list(active_conversation.participantes.all())
+                    other = None
+                    for p in participants:
+                        if p.id != request.user.id:
+                            other = p
+                            break
+                    active_other_user = other
+                else:
+                    active_other_user = None
+            except Exception:
+                active_other_user = getattr(active_conversation, 'ui_other_user', None)
+
+            # resolve avatar: group uses conversation.avatar_url, DM uses other user's avatar
+            if getattr(active_conversation, 'is_group', False):
+                conv_avatar = getattr(active_conversation, 'avatar_url', None)
+                active_avatar_url_resolved = conv_avatar if conv_avatar else None
+            else:
+                active_avatar_url_resolved = resolve_user_avatar_url(active_other_user)
+
         contacto_ids = UsuarioPerfilEmpresa.objects.filter(
             empresa_id=empresa_id,
         ).values_list('usuario_id', flat=True)
@@ -169,6 +304,8 @@ class ChatCentroMensajesView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "conversations": conversaciones,
             "active_conversation": active_conversation,
             "active_title": _get_conversacion_titulo(active_conversation, request.user),
+            "active_avatar_url_resolved": active_avatar_url_resolved,
+            "active_other_user": active_other_user,
             "messages": mensajes,
             "contacts": contactos,
             "unread_count": {},
