@@ -160,6 +160,23 @@ class SettingsMySQLConnection(models.Model):
         ("remuneraciones", "remuneraciones"),
     ]
 
+    # Tipos controlados de conexión (mantener engine como compatibilidad hacia atrás)
+    ENGINE_DJANGO_MYSQL = "django.db.backends.mysql"
+    ENGINE_LEGACY_PYMYSQL = "legacy_pymysql"
+    ENGINE_API_REMOTA = "api_remota"
+
+    ENGINE_DEFAULT = ENGINE_DJANGO_MYSQL
+    ENGINE_ALLOWED = (
+        ENGINE_DJANGO_MYSQL,
+        ENGINE_LEGACY_PYMYSQL,
+        ENGINE_API_REMOTA,
+    )
+
+    @classmethod
+    def normalize_engine(cls, value):
+        val = (value or "").strip()
+        return val or cls.ENGINE_DEFAULT
+
     empresa = models.ForeignKey('access_control.Empresa', on_delete=models.CASCADE)
     nombre_logico = models.CharField(max_length=100)
     engine = models.CharField(max_length=100, default="django.db.backends.mysql")

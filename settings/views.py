@@ -35,6 +35,11 @@ from django.db import connections
 import hashlib
 from django.conf import settings
 
+try:
+    import pymysql
+except Exception:
+    pymysql = None
+
 
 def _require_empresa_activa_for_view(request, vista_nombre):
     """Verifica que el usuario tenga empresa activa en sesión."""
@@ -491,6 +496,65 @@ class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
         cfg = self.obj
 
+        engine = SettingsMySQLConnection.normalize_engine(getattr(cfg, 'engine', None))
+        if engine == SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL:
+            if pymysql is None:
+                return JsonResponse(
+                    {
+                        'success': False,
+                        'tables': [],
+                        'count': 0,
+                        'message_key': 'settings.mysql_connections.test_missing_pymysql',
+                    },
+                    status=400
+                )
+
+            conn = None
+            cursor = None
+            try:
+                charset = (getattr(cfg, 'charset', None) or 'utf8').strip() or 'utf8'
+                conn = pymysql.connect(
+                    host=cfg.host,
+                    port=int(cfg.port or 3306),
+                    user=cfg.user,
+                    password=cfg.password,
+                    database=cfg.db_name,
+                    charset=charset,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10,
+                )
+                cursor = conn.cursor()
+                cursor.execute('SHOW TABLES')
+                rows = cursor.fetchall() or []
+                tables = [str(r[0]) for r in rows if r][:20]
+                count = len(rows)
+                return JsonResponse({'success': True, 'tables': tables, 'count': count, 'message_key': 'settings.mysql_connections.test_success'})
+            except Exception:
+                return JsonResponse({'success': False, 'tables': [], 'count': 0, 'message_key': 'settings.mysql_connections.test_error'})
+            finally:
+                try:
+                    if cursor is not None:
+                        cursor.close()
+                except Exception:
+                    pass
+                try:
+                    if conn is not None:
+                        conn.close()
+                except Exception:
+                    pass
+
+        if engine == SettingsMySQLConnection.ENGINE_API_REMOTA:
+            return JsonResponse(
+                {
+                    'success': False,
+                    'tables': [],
+                    'count': 0,
+                    'message_key': 'settings.mysql_connections.test_not_implemented_api_remota',
+                },
+                status=400
+            )
+
         # Build complete DB config based on settings.DATABASES['default']
         base_config = {}
         try:
@@ -570,6 +634,12 @@ class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
             except Exception:
                 pass
 
+            # Limpieza defensiva: evitar dejar aliases de test registrados
+            try:
+                connections.databases.pop(alias, None)
+            except Exception:
+                pass
+
         return JsonResponse({'success': True, 'tables': tables, 'count': count, 'message_key': 'settings.mysql_connections.test_success'})
 
 
@@ -591,6 +661,7 @@ class MySQLConnectionsExportView(VerificarPermisoMixin, LoginRequiredMixin, View
         for c in qs:
             connections.append({
                 'nombre_logico': c.nombre_logico,
+                'engine': SettingsMySQLConnection.normalize_engine(getattr(c, 'engine', None)),
                 'host': c.host,
                 'port': int(c.port or 3306),
                 'user': c.user,
@@ -700,8 +771,16 @@ class MySQLConnectionsImportView(VerificarPermisoMixin, LoginRequiredMixin, View
             except Exception:
                 port = 3306
 
+            engine_val = SettingsMySQLConnection.normalize_engine(item.get('engine'))
+            if 'engine' in item and engine_val not in SettingsMySQLConnection.ENGINE_ALLOWED:
+                if is_ajax:
+                    return JsonResponse({'success': False, 'message_key': 'settings.mysql_connections.import_invalid_engine'}, status=400)
+                messages.error(request, 'Engine inválido')
+                return redirect('mysql_connections_list')
+
             normalized.append({
                 'nombre_logico': name,
+                'engine': engine_val,
                 'host': str(item.get('host') or ''),
                 'port': port,
                 'user': str(item.get('user') or ''),
@@ -718,7 +797,7 @@ class MySQLConnectionsImportView(VerificarPermisoMixin, LoginRequiredMixin, View
                     SettingsMySQLConnection.objects.create(
                         empresa_id=empresa_id,
                         nombre_logico=row['nombre_logico'],
-                        engine='django.db.backends.mysql',
+                        engine=SettingsMySQLConnection.normalize_engine(row.get('engine')),
                         host=row['host'],
                         port=row['port'],
                         user=row['user'],

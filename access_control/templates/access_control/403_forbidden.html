@@ -111,7 +111,7 @@ Acceso Denegado
                         <strong>{{ empresa_nombre }}</strong>
                     </p>
                     <input type="hidden" name="vista_nombre" value="{{ vista_nombre }}">
-                    <input type="hidden" name="empresa_id" value="{{ empresa_id|default:request.session.empresa_id }}">
+                    <input type="hidden" name="empresa_id" value="{{ empresa_id|default:'' }}">
                     <div class="mb-3">
                         <label for="motivo" class="form-label" data-key="access.request.motivo.label">Motivo</label>
                         <textarea id="motivo" name="motivo" class="form-control" rows="4" minlength="10" required placeholder="Describe el motivo" data-key="access.request.motivo.placeholder"></textarea>

@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 def is_user_mail_enabled(user):
-    if not (user and (user.email or "").strip()):
+    if not (user and getattr(user, "is_authenticated", False)):
+        return False
+    if not (getattr(user, "email", "") or "").strip():
         return False
     prefs = UserPreferences.objects.filter(user=user).first()
     if prefs is None:
@@ -37,12 +39,17 @@ def build_access_request_context(request, vista_nombre, mensaje):
     empresa_nombre = request.session.get("empresa_nombre") or (
         f"{empresa.codigo} - {empresa.descripcion or 'Sin descripción'}" if empresa else "No definida"
     )
-    pending = AccessRequest.objects.filter(
-        solicitante=request.user,
-        empresa=empresa,
-        vista_nombre=vista_nombre,
-        status=AccessRequest.Status.PENDING,
-    ).order_by("-created_at")[:5]
+
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        pending = AccessRequest.objects.filter(
+            solicitante=user,
+            empresa=empresa,
+            vista_nombre=vista_nombre,
+            status=AccessRequest.Status.PENDING,
+        ).order_by("-created_at")[:5]
+    else:
+        pending = AccessRequest.objects.none()
     # Construir URL para que el personal pueda otorgar acceso (si existe al menos una solicitud)
     staff_grant_url = None
     try:

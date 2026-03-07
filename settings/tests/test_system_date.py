@@ -11,7 +11,7 @@ class SystemDateTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="user1", password="pass123")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa")
-        self.vista = Vista.objects.get_or_create(nombre="Listado de Propiedades")[0]
+        self.vista = Vista.objects.get_or_create(nombre="Biblioteca - Listar Propiedades")[0]
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

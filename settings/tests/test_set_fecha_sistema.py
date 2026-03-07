@@ -4,12 +4,27 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
+from access_control.models import Empresa, Permiso, Vista
 from settings.models import UserPreferences
 
 
 class SetFechaSistemaTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="user2", password="pass123")
+        self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa")
+
+        vista, _ = Vista.objects.get_or_create(nombre="Settings - Establecer Fecha Sistema")
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=vista,
+            ingresar=True,
+        )
+
+    def _set_empresa_activa(self):
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session.save()
 
     def test_post_sin_login_redirige(self):
         response = self.client.post(
@@ -21,6 +36,7 @@ class SetFechaSistemaTests(TestCase):
 
     def test_post_fecha_valida_actualiza_prefs_y_sesion(self):
         self.client.force_login(self.user)
+        self._set_empresa_activa()
         response = self.client.post(
             reverse("set_fecha_sistema"),
             {"fecha_sistema": "2026-02-13"},
@@ -37,6 +53,7 @@ class SetFechaSistemaTests(TestCase):
 
     def test_post_fecha_invalida_rechaza(self):
         self.client.force_login(self.user)
+        self._set_empresa_activa()
         response = self.client.post(
             reverse("set_fecha_sistema"),
             {"fecha_sistema": "2026-13-40"},
@@ -48,6 +65,7 @@ class SetFechaSistemaTests(TestCase):
 
     def test_post_formato_invalido_rechaza(self):
         self.client.force_login(self.user)
+        self._set_empresa_activa()
         response = self.client.post(
             reverse("set_fecha_sistema"),
             {"fecha_sistema": "13-02-2026"},
