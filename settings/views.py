@@ -12,7 +12,7 @@ import re
 import imaplib
 import poplib
 import smtplib
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.http import JsonResponse
 from email.utils import formatdate, make_msgid
 from email.message import EmailMessage
@@ -405,10 +405,19 @@ class MySQLConnectionCreateView(VerificarPermisoMixin, LoginRequiredMixin, Creat
             return render(request, 'access_control/403_forbidden.html', contexto, status=403)
         return super().dispatch(request, *args, **kwargs)
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['empresa_id'] = self.request.session.get('empresa_id')
+        return kwargs
+
     def form_valid(self, form):
         empresa_id = self.request.session.get('empresa_id')
         form.instance.empresa_id = empresa_id
-        return super().form_valid(form)
+        try:
+            return super().form_valid(form)
+        except IntegrityError:
+            form.add_error('nombre_logico', SettingsMySQLConnectionForm.ERROR_DUPLICATE_NOMBRE_LOGICO)
+            return self.form_invalid(form)
 
 
 class MySQLConnectionUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
@@ -429,6 +438,21 @@ class MySQLConnectionUpdateView(VerificarPermisoMixin, LoginRequiredMixin, Updat
         if obj.empresa_id != empresa_id:
             return render(request, 'access_control/403_forbidden.html', build_access_request_context(request, self.vista_nombre, 'Acceso denegado'), status=403)
         return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['empresa_id'] = self.request.session.get('empresa_id')
+        return kwargs
+
+    def form_valid(self, form):
+        empresa_id = self.request.session.get('empresa_id')
+        if empresa_id:
+            form.instance.empresa_id = empresa_id
+        try:
+            return super().form_valid(form)
+        except IntegrityError:
+            form.add_error('nombre_logico', SettingsMySQLConnectionForm.ERROR_DUPLICATE_NOMBRE_LOGICO)
+            return self.form_invalid(form)
 
 
 class MySQLConnectionDeleteView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):

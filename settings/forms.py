@@ -26,6 +26,8 @@ class EngineSelect(forms.Select):
 
 
 class SettingsMySQLConnectionForm(forms.ModelForm):
+    ERROR_DUPLICATE_NOMBRE_LOGICO = 'Ya existe una conexión con ese nombre lógico para la empresa activa.'
+
     ENGINE_CHOICES = (
         (SettingsMySQLConnection.ENGINE_DJANGO_MYSQL, "MySQL Django"),
         (SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL, "MySQL Legacy PyMySQL"),
@@ -50,7 +52,11 @@ class SettingsMySQLConnectionForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.empresa_id = kwargs.pop('empresa_id', None)
         super().__init__(*args, **kwargs)
+
+        if self.empresa_id and not getattr(self.instance, 'empresa_id', None):
+            self.instance.empresa_id = self.empresa_id
 
         choices = list(self.ENGINE_CHOICES)
 
@@ -76,6 +82,14 @@ class SettingsMySQLConnectionForm(forms.ModelForm):
         val = (self.cleaned_data.get('nombre_logico') or '').strip().lower()
         if not re.match(r'^[a-z0-9_]+$', val):
             raise forms.ValidationError('Nombre lógico inválido. Solo letras minúsculas, números y guion bajo.')
+
+        empresa_id = self.empresa_id or getattr(self.instance, 'empresa_id', None)
+        if empresa_id:
+            qs = SettingsMySQLConnection.objects.filter(empresa_id=empresa_id, nombre_logico=val)
+            if getattr(self.instance, 'pk', None):
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(self.ERROR_DUPLICATE_NOMBRE_LOGICO)
         return val
 
     def clean_engine(self):

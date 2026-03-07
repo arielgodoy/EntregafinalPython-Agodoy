@@ -1,4 +1,10 @@
+import logging
 import json
+import socket
+from datetime import date as date_cls
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urljoin
+from urllib.request import Request, urlopen
 
 from rest_framework import viewsets
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -6,7 +12,7 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.decorators import login_required
 from .models import Contratopublicidad,LmovimientosDetalle19
 from biblioteca.models import Propietario
@@ -15,6 +21,9 @@ from django.conf import settings
 from common.utils import crear_conexion,sql_sistema
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.invite import invite_user_flow
+from .services.buk_api import BukAPIError
+
+logger = logging.getLogger(__name__)
 
 
 # class TrabajadoresViewSet(ReadOnlyModelViewSet):
@@ -197,4 +206,115 @@ def invite_user(request):
         return JsonResponse({'detail': result.get('error')}, status=400)
 
     return JsonResponse({'status': 'ok', 'message': f"Invitación enviada a {email}."})
+
+
+def _parse_bool_param(value, *, default=False):
+    if value is None or value == '':
+        return default
+
+    normalized = str(value).strip().lower()
+    if normalized in ('true', '1'):
+        return True
+    if normalized in ('false', '0'):
+        return False
+
+    raise ValueError('invalid boolean')
+
+
+@login_required
+@require_GET
+def employees_active(request):
+    logger.info("========== API employees_active ==========")
+
+    # URL que llamó el cliente
+    logger.info(f"Request URL: {request.build_absolute_uri()}")
+
+    # Parámetros recibidos
+    logger.info(f"Query params: {request.GET.dict()}")
+
+    date_str = (request.GET.get('date') or '').strip()
+    if not date_str:
+        return JsonResponse({'detail': 'date es obligatorio.'}, status=400)
+
+    try:
+        date_cls.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse({'detail': 'date debe tener formato YYYY-MM-DD.'}, status=400)
+
+    try:
+        exclude_pending = _parse_bool_param(request.GET.get('exclude_pending'), default=False)
+    except ValueError:
+        return JsonResponse({'detail': 'exclude_pending debe ser true/false/1/0.'}, status=400)
+
+    try:
+        base_url = (getattr(settings, 'BUK_API_BASE_URL', '') or '').strip()
+        token = (getattr(settings, 'BUK_API_AUTH_TOKEN', '') or '').strip()
+        if not base_url or not token:
+            raise BukAPIError('Integración Buk no configurada.', status_code=500)
+
+        if not base_url.endswith('/'):
+            base_url += '/'
+
+        endpoint = urljoin(base_url, 'employees/active')
+        params = {
+            'date': date_str,
+            'exclude_pending': 'true' if exclude_pending else 'false',
+        }
+        buk_url = f"{endpoint}?{urlencode(params)}"
+        logger.info(f"BUK URL: {buk_url}")
+
+        req = Request(
+            buk_url,
+            headers={
+                'Accept': 'application/json',
+                'auth_token': token,
+            },
+            method='GET',
+        )
+
+        try:
+            resp = urlopen(req, timeout=10)
+            try:
+                status_code = getattr(resp, 'status', None) or resp.getcode()
+                body = resp.read()
+            finally:
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+        except HTTPError as exc:
+            try:
+                exc.read()
+            except Exception:
+                pass
+            logger.info(f"BUK status: {getattr(exc, 'code', None)}")
+            raise BukAPIError(
+                'Error al consultar Buk.',
+                status_code=502,
+                upstream_status=getattr(exc, 'code', None),
+            ) from None
+        except (URLError, socket.timeout, TimeoutError, OSError):
+            raise BukAPIError('No se pudo conectar con Buk.', status_code=502) from None
+
+        logger.info(f"BUK status: {status_code}")
+
+        try:
+            text = body.decode('utf-8')
+        except Exception:
+            raise BukAPIError('Respuesta inválida desde Buk.', status_code=502) from None
+
+        if not text:
+            data = {}
+        else:
+            try:
+                data = json.loads(text)
+            except ValueError:
+                raise BukAPIError('Respuesta inválida desde Buk.', status_code=502) from None
+    except BukAPIError as exc:
+        payload = {'detail': exc.detail}
+        if exc.upstream_status is not None:
+            payload['upstream_status'] = exc.upstream_status
+        return JsonResponse(payload, status=exc.status_code)
+
+    return JsonResponse({'data': data}, status=200)
 

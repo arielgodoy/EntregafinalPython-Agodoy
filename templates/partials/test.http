@@ -1,5 +1,0 @@
-### prueba de API de buk
-GET https://empresaseltit.buk.cl/api/v1/chile/employees/active
-Accept: application/json
-auth_token: hjQD522SEjmiqLfNUSN5Qdhw
-

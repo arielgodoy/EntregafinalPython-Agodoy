@@ -13,6 +13,15 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 
+# Carga opcional de variables desde .env (solo si python-dotenv está instalado)
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -260,6 +269,10 @@ LOGGING = {
             'class': 'logging.StreamHandler',
         },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
     'loggers': {
         'django.db.backends': {
             'handlers': ['console'],
@@ -288,4 +301,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
+
+
+# Integración Buk (configurable por variables de entorno)
+BUK_API_BASE_URL = os.getenv('BUK_API_BASE_URL', '').strip()
+BUK_API_AUTH_TOKEN = os.getenv('BUK_API_AUTH_TOKEN', '').strip()
 

@@ -1,0 +1,34 @@
+
+
+### prueba de API de buk activos funcionando
+GET https://empresaseltit.buk.cl/api/v1/chile/employees/active
+Accept: application/json
+auth_token: hjQD522SEjmiqLfNUSN5Qdhw
+
+### prueba de api buk con fecha funcionando
+GET https://empresaseltit.buk.cl/api/v1/chile/employees/active?date=2026-03-07&exclude_pending=true
+Accept: application/json
+auth_token: hjQD522SEjmiqLfNUSN5Qdhw
+
+
+### prueba de api buk con fecha y sin pendientes por variables   (no funciona)
+GET https://empresaseltit.buk.cl/api/v1/chile/employees/active
+Accept: application/json
+auth_token: hjQD522SEjmiqLfNUSN5Qdhw
+{
+    "date": "2026-03-07",
+    "exclude_pending": true
+}
+
+@baseUrl = https://empresaseltit.buk.cl/api/v1
+@token = hjQD522SEjmiqLfNUSN5Qdhw
+@fecha = 2026-03-07
+@excludePending = true
+
+### prueba api buk con variables
+GET {{baseUrl}}/chile/employees/active?date={{fecha}}&exclude_pending={{excludePending}}
+Accept: application/json
+auth_token: {{token}}
+
+
+

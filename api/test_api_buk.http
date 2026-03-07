@@ -1,0 +1,53 @@
+###############################################################################
+# VARIABLES
+###############################################################################
+
+@baseUrl = http://127.0.0.1:8000
+@fecha = 2026-03-07
+@sessionid = 0znpb4t589qok7oc18stuaynl2dgjvr8
+@csrftoken = 0LHF78UwhtuUodN3aD5CqirQX93IhAiT
+
+###############################################################################
+# 1️⃣ EMPLOYEES ACTIVE (PROXY A BUK)
+###############################################################################
+### employees active
+GET {{baseUrl}}/api/v1/employees/active/?date={{fecha}}
+Accept: application/json
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+
+###############################################################################
+# 2️⃣ EMPLOYEES ACTIVE SIN FECHA
+###############################################################################
+
+GET {{baseUrl}}/api/v1/employees/active/
+Accept: application/json
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+
+###############################################################################
+# 3️⃣ TEST PAGINACIÓN
+###############################################################################
+
+@page = 1
+
+GET {{baseUrl}}/api/v1/employees/active/?date={{fecha}}&page={{page}}
+Accept: application/json
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+
+###############################################################################
+# 4️⃣ TEST INVITE USER
+###############################################################################
+
+POST {{baseUrl}}/auth/invite/
+Content-Type: application/json
+Accept: application/json
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+{
+    "email": "usuario@test.cl",
+    "first_name": "Usuario",
+    "last_name": "Prueba"
+}
