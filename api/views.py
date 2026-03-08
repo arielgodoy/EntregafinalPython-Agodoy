@@ -14,16 +14,21 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
 from .models import Contratopublicidad,LmovimientosDetalle19
 from biblioteca.models import Propietario
 from .serializers import PropietarioSerializer
 from django.conf import settings
 from common.utils import crear_conexion,sql_sistema
 from access_control.models import Empresa, Permiso, Vista
+from access_control.decorators import verificar_permiso
 from access_control.services.invite import invite_user_flow
 from .services.buk_api import BukAPIError
 
 logger = logging.getLogger(__name__)
+
+
+API_HOME_VISTA_NOMBRE = "APIs - Inicio"
 
 
 # class TrabajadoresViewSet(ReadOnlyModelViewSet):
@@ -317,4 +322,11 @@ def employees_active(request):
         return JsonResponse(payload, status=exc.status_code)
 
     return JsonResponse({'data': data}, status=200)
+
+
+@require_GET
+@login_required
+@verificar_permiso(API_HOME_VISTA_NOMBRE, "ingresar")
+def api_home(request):
+    return render(request, "api/api_home.html")
 

@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from api.views import PropietarioViewSet, TrabajadoresViewSet, invite_user, employees_active
+from api.views import PropietarioViewSet, TrabajadoresViewSet, invite_user, employees_active, api_home
 from . import views_maestros
 
 router = routers.DefaultRouter()
@@ -10,6 +10,8 @@ router.register(r'trabajadores', TrabajadoresViewSet, basename='trabajadores')
 
 
 urlpatterns = [
+
+    path('ui/', api_home, name='api_home'),
 
     path(
         "maestros/rubros/",

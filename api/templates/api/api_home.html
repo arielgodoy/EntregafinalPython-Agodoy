@@ -1,0 +1,430 @@
+{% extends "partials/base.html" %}
+
+{% block title %}APIs{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="menu.apis" pagetitle_key="menu.system" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="mb-2" data-key="menu.apis">APIs</h3>
+                    <p class="text-muted" data-key="apis.home.subtitle">Consola interna para probar endpoints.</p>
+
+                    <div class="accordion" id="apisAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="apisAccordionHeadingRubros">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#apisAccordionCollapseRubros" aria-expanded="true"
+                                    aria-controls="apisAccordionCollapseRubros">
+                                    <span data-key="apis.accordion.rubros.title">Maestros / Rubros</span>
+                                </button>
+                            </h2>
+                            <div id="apisAccordionCollapseRubros" class="accordion-collapse collapse show"
+                                aria-labelledby="apisAccordionHeadingRubros" data-bs-parent="#apisAccordion">
+                                <div class="accordion-body">
+                                    <p class="text-muted mb-3" data-key="apis.rubros.description">Prueba CRUD (GET/POST/PUT/DELETE) sobre /api/v1/maestros/rubros/.</p>
+
+                                    <div class="card border mb-3">
+                                        <div class="card-header py-2">
+                                            <span class="fw-semibold" data-key="apis.rubros.tech.title">Información Técnica de la API</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.endpoint_base.title">Endpoint base</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.rubros.tech.endpoint_base.value">/api/v1/maestros/rubros/</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.methods.title">Métodos soportados</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.rubros.tech.methods.value">GET
+POST
+PUT
+DELETE</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.auth.title">Autenticación</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.rubros.tech.auth.body">La API usa sesión autenticada del sistema (cookie sessionid). Para métodos POST/PUT/DELETE se requiere CSRF token. No se utiliza API key externa.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.headers.title">Headers requeridos</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.rubros.tech.headers.common">Accept: application/json
+X-Requested-With: XMLHttpRequest</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.rubros.tech.headers.unsafe">X-CSRFToken: &lt;csrftoken&gt;</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.company_context.title">Contexto de empresa</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.rubros.tech.company_context.body">El sistema es multiempresa: la empresa activa se obtiene desde la sesión del usuario. empresa_id se resuelve internamente en el backend. Un cliente externo debe autenticarse primero en el sistema.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.params.title">Parámetros del recurso Rubro</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.rubros.tech.params.value">codigo (string)
+nombre (string)
+ip (string)
+localmatriz (string)
+apostrofe (string)
+colacion (boolean)</pre>
+                                                </div>
+
+                                                <div class="col-12">
+                                                    <h6 class="mb-1" data-key="apis.rubros.tech.examples.title">Ejemplos de llamadas</h6>
+                                                                                                        <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.rubros.tech.examples.requests">GET /api/v1/maestros/rubros/
+
+GET /api/v1/maestros/rubros/01/
+
+POST /api/v1/maestros/rubros/
+
+body JSON ejemplo:
+{
+    "codigo": "05",
+    "nombre": "FRUTAS",
+    "ip": "192.168.1.20",
+    "localmatriz": "01",
+    "apostrofe": "N",
+    "colacion": false
+}
+
+PUT /api/v1/maestros/rubros/05/
+
+DELETE /api/v1/maestros/rubros/05/</pre>
+                                                                                                        <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.rubros.tech.examples.responses">GET (200)
+[
+    {
+        "codigo": "01",
+        "nombre": "ABARROTES",
+        "ip": "192.168.1.10",
+        "localmatriz": "01",
+        "apostrofe": "N",
+        "colacion": true
+    }
+]
+
+POST (201) / PUT (200)
+{
+    "codigo": "05",
+    "nombre": "FRUTAS",
+    "ip": "192.168.1.20",
+    "localmatriz": "01",
+    "apostrofe": "N",
+    "colacion": false
+}
+
+DELETE (204)</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <form id="rubrosConsoleForm" autocomplete="off">
+                                        {% csrf_token %}
+
+                                        <div class="row g-3">
+                                            <div class="col-12 col-lg-4">
+                                                <div class="mb-2">
+                                                    <label for="rubrosAction" class="form-label" data-key="apis.console.action.label">Acción</label>
+                                                    <select id="rubrosAction" class="form-select">
+                                                        <option value="list" data-key="apis.rubros.action.list">Listar (GET)</option>
+                                                        <option value="get" data-key="apis.rubros.action.get">Obtener por código (GET)</option>
+                                                        <option value="create" data-key="apis.rubros.action.create">Crear (POST)</option>
+                                                        <option value="update" data-key="apis.rubros.action.update">Actualizar (PUT)</option>
+                                                        <option value="delete" data-key="apis.rubros.action.delete">Eliminar (DELETE)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="rubrosCodigo" class="form-label" data-key="apis.rubros.field.codigo">Código</label>
+                                                    <input id="rubrosCodigo" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="rubrosNombre" class="form-label" data-key="apis.rubros.field.nombre">Nombre</label>
+                                                    <input id="rubrosNombre" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="rubrosIp" class="form-label" data-key="apis.rubros.field.ip">IP</label>
+                                                    <input id="rubrosIp" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="rubrosLocalMatriz" class="form-label" data-key="apis.rubros.field.localmatriz">Local matriz</label>
+                                                    <input id="rubrosLocalMatriz" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="rubrosApostrofe" class="form-label" data-key="apis.rubros.field.apostrofe">Apóstrofe</label>
+                                                    <input id="rubrosApostrofe" class="form-control" type="text" maxlength="1">
+                                                </div>
+
+                                                <div class="form-check mb-3">
+                                                    <input id="rubrosColacion" class="form-check-input" type="checkbox">
+                                                    <label for="rubrosColacion" class="form-check-label" data-key="apis.rubros.field.colacion">Colación</label>
+                                                </div>
+
+                                                <button id="rubrosSendBtn" class="btn btn-primary w-100" type="submit" data-key="apis.console.send">Ejecutar</button>
+
+                                                <div id="rubrosClientErrors" class="d-none">
+                                                    <span id="rubrosMsgMissingCode" data-key="apis.console.error.missing_code">Debes ingresar un código.</span>
+                                                    <span id="rubrosMsgMissingCsrf" data-key="apis.console.error.missing_csrf">No se encontró CSRF token.</span>
+                                                    <span id="rubrosMsgNetworkError" data-key="apis.console.error.network">Error de red al ejecutar la solicitud.</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-lg-8">
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                                    <span class="fw-semibold" data-key="apis.console.status.label">Estado</span>
+                                                    <span id="rubrosStatusIdle" class="badge bg-secondary" data-key="apis.console.status.idle">Listo</span>
+                                                    <span id="rubrosStatusRunning" class="badge bg-info d-none" data-key="apis.console.status.running">Ejecutando</span>
+                                                    <span id="rubrosStatusSuccess" class="badge bg-success d-none" data-key="apis.console.status.success">Completado</span>
+                                                    <span id="rubrosStatusError" class="badge bg-danger d-none" data-key="apis.console.status.error">Error</span>
+
+                                                    <span class="ms-auto text-muted small">
+                                                        <span data-key="apis.console.http_status.label">HTTP</span>:
+                                                        <span id="rubrosHttpStatus"><span data-key="apis.console.http_status.empty">—</span></span>
+                                                    </span>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <span class="text-muted" data-key="apis.console.response.label">Respuesta (JSON)</span>
+                                                </div>
+
+                                                <pre id="rubrosResponse" class="p-3 border rounded bg-light mb-0 font-monospace"><span data-key="apis.console.response.empty">Aún no se ha ejecutado ninguna solicitud.</span></pre>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        function byId(id) {
+            return document.getElementById(id);
+        }
+
+        function setVisible(el, visible) {
+            if (!el) return;
+            el.classList.toggle('d-none', !visible);
+        }
+
+        function getCsrfToken(formEl) {
+            try {
+                const input = formEl && formEl.querySelector('input[name="csrfmiddlewaretoken"]');
+                return input ? input.value : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setStatus(state, els) {
+            setVisible(els.idle, state === 'idle');
+            setVisible(els.running, state === 'running');
+            setVisible(els.success, state === 'success');
+            setVisible(els.error, state === 'error');
+        }
+
+        function setHttpStatus(text, els) {
+            if (!els.httpStatus) return;
+            els.httpStatus.textContent = (text == null ? '' : String(text));
+        }
+
+        function setResponseText(text, els) {
+            if (!els.response) return;
+            els.response.textContent = (text == null ? '' : String(text));
+        }
+
+        function tryParseJson(text) {
+            if (typeof text !== 'string') return { ok: false, value: null };
+            const trimmed = text.trim();
+            if (!trimmed) return { ok: false, value: null };
+            try {
+                return { ok: true, value: JSON.parse(trimmed) };
+            } catch (e) {
+                return { ok: false, value: null };
+            }
+        }
+
+        async function sendRubrosRequest(params, els) {
+            const { method, url, body, csrfToken } = params;
+
+            const headers = {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            };
+
+            const unsafe = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+            if (unsafe) {
+                if (!csrfToken) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingCsrf ? els.msgMissingCsrf.textContent : '', els);
+                    return;
+                }
+                headers['X-CSRFToken'] = csrfToken;
+            }
+
+            if (body != null) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            setStatus('running', els);
+            setHttpStatus('—', els);
+            setResponseText('', els);
+            if (els.sendBtn) els.sendBtn.disabled = true;
+
+            try {
+                const resp = await fetch(url, {
+                    method,
+                    headers,
+                    credentials: 'same-origin',
+                    body: body != null ? JSON.stringify(body) : undefined
+                });
+
+                setHttpStatus(resp.status, els);
+
+                const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+                let rawText = '';
+                try {
+                    rawText = await resp.text();
+                } catch (e) {
+                    rawText = '';
+                }
+
+                if (resp.status === 204 && (!rawText || rawText.trim() === '')) {
+                    rawText = '{}';
+                }
+
+                const isJson = contentType.includes('application/json');
+                const parsed = isJson ? tryParseJson(rawText) : { ok: false, value: null };
+                if (parsed.ok) {
+                    setResponseText(JSON.stringify(parsed.value, null, 2), els);
+                } else {
+                    setResponseText(rawText, els);
+                }
+
+                if (!isJson || !resp.ok) {
+                    setStatus('error', els);
+                } else {
+                    setStatus('success', els);
+                }
+            } catch (e) {
+                setStatus('error', els);
+                setHttpStatus('—', els);
+                setResponseText(els.msgNetworkError ? els.msgNetworkError.textContent : '', els);
+            } finally {
+                if (els.sendBtn) els.sendBtn.disabled = false;
+            }
+        }
+
+        function init() {
+            const form = byId('rubrosConsoleForm');
+            if (!form) return;
+
+            const els = {
+                action: byId('rubrosAction'),
+                codigo: byId('rubrosCodigo'),
+                nombre: byId('rubrosNombre'),
+                ip: byId('rubrosIp'),
+                localmatriz: byId('rubrosLocalMatriz'),
+                apostrofe: byId('rubrosApostrofe'),
+                colacion: byId('rubrosColacion'),
+                sendBtn: byId('rubrosSendBtn'),
+                response: byId('rubrosResponse'),
+                httpStatus: byId('rubrosHttpStatus'),
+                idle: byId('rubrosStatusIdle'),
+                running: byId('rubrosStatusRunning'),
+                success: byId('rubrosStatusSuccess'),
+                error: byId('rubrosStatusError'),
+                msgMissingCode: byId('rubrosMsgMissingCode'),
+                msgMissingCsrf: byId('rubrosMsgMissingCsrf'),
+                msgNetworkError: byId('rubrosMsgNetworkError')
+            };
+
+            setStatus('idle', els);
+
+            const baseUrl = '/api/v1/maestros/rubros/';
+
+            form.addEventListener('submit', function (evt) {
+                evt.preventDefault();
+
+                const action = (els.action && els.action.value) ? els.action.value : 'list';
+                const codigo = (els.codigo && els.codigo.value) ? els.codigo.value.trim() : '';
+
+                const csrfToken = getCsrfToken(form);
+
+                let method = 'GET';
+                let url = baseUrl;
+                let body = null;
+
+                const needsCodigo = (action === 'get' || action === 'update' || action === 'delete');
+                const needsCodigoInBody = (action === 'create');
+
+                if ((needsCodigo || needsCodigoInBody) && !codigo) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingCode ? els.msgMissingCode.textContent : '', els);
+                    try { if (els.codigo) els.codigo.focus(); } catch (e) { }
+                    return;
+                }
+
+                if (action === 'list') {
+                    method = 'GET';
+                    url = baseUrl;
+                } else if (action === 'get') {
+                    method = 'GET';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                } else if (action === 'create') {
+                    method = 'POST';
+                    url = baseUrl;
+                    body = {
+                        codigo: codigo,
+                        nombre: (els.nombre && els.nombre.value) ? els.nombre.value : '',
+                        ip: (els.ip && els.ip.value) ? els.ip.value : '',
+                        localmatriz: (els.localmatriz && els.localmatriz.value) ? els.localmatriz.value : '',
+                        apostrofe: (els.apostrofe && els.apostrofe.value) ? els.apostrofe.value : '',
+                        colacion: !!(els.colacion && els.colacion.checked)
+                    };
+                } else if (action === 'update') {
+                    method = 'PUT';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                    body = {
+                        nombre: (els.nombre && els.nombre.value) ? els.nombre.value : '',
+                        ip: (els.ip && els.ip.value) ? els.ip.value : '',
+                        localmatriz: (els.localmatriz && els.localmatriz.value) ? els.localmatriz.value : '',
+                        apostrofe: (els.apostrofe && els.apostrofe.value) ? els.apostrofe.value : '',
+                        colacion: !!(els.colacion && els.colacion.checked)
+                    };
+                } else if (action === 'delete') {
+                    method = 'DELETE';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                }
+
+                sendRubrosRequest({ method, url, body, csrfToken }, els);
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+</script>
+{% endblock extra_js %}
