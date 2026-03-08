@@ -1,86 +1,150 @@
 {% extends "partials/base.html" %}
 
 {% block extra_css %}
-<!-- Flatpickr CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<!-- Toastify CSS -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.4.1/css/responsive.dataTables.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock extra_css %}
 
 {% block title %}
-Gestión de Permisos
+Importar Personas
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Gestión de Permisos" pagetitle="Permisos" %}
+{% include "partials/page-title.html" with title_key="menu.evaluations.import_people" pagetitle_key="menu.evaluations" %}
 {% endblock pagetitle %}
 
 {% block content %}
-<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
             <div class="card">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="card-title" data-key="permissions_management">Gestión de Permisos</h4>
-                        <a href="{% url 'access_control:permiso_crear' %}" class="btn btn-success" data-key="create_new_permission">Crear Nuevo Permiso</a>
+                    <div class="mb-3">
+                        <h4 class="card-title mb-0" data-key="evaluaciones.personas.title">Personas</h4>
+                        <small class="text-muted">
+                            <span data-key="evaluaciones.personas.showing_label">Mostrando</span>
+                            {{ personas|length }}
+                            <span data-key="evaluaciones.personas.of_label">de</span>
+                            {{ personas_total }}
+                        </small>
                     </div>
 
-                <div class="d-none" aria-hidden="true">
-                    <span id="i18n-permissions-delete-confirm" data-key="permissions.delete.confirm">¿Seguro que deseas eliminar este permiso?</span>
-                </div>
+                    <form method="post" class="mb-3" id="import-personas-form" data-start-url="{% url 'evaluaciones:importar_personas_start' %}" data-status-url="{% url 'evaluaciones:importar_personas_status' %}">
+                        {% csrf_token %}
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label for="importDate" class="form-label" data-key="evaluaciones.personas.import.date_label">Fecha</label>
+                                <input type="date" class="form-control" id="importDate" name="date" value="{{ import_date|default:'' }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="excludePending" name="exclude_pending" {% if exclude_pending %}checked{% endif %}>
+                                    <label class="form-check-label" for="excludePending" data-key="evaluaciones.personas.import.exclude_pending_label">Excluir pendientes</label>
+                                </div>
+                            </div>
+                            <div class="col-md-5 text-end">
+                                <button type="submit" class="btn btn-success" id="import-personas-submit">
+                                    <i class="bi bi-play-circle"></i> <span data-key="evaluaciones.personas.import.submit_button">Ejecutar importación</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="mb-3 d-none" id="import-progress-banner" aria-live="polite">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border text-primary me-2" role="status" aria-hidden="true" id="import-spinner"></div>
+                            <div>
+                                <div class="fw-semibold">
+                                    <span data-key="evaluaciones.personas.import.progress_title">Progreso de importación</span>
+                                </div>
+                                <div class="text-muted">
+                                    <span id="import-status-starting" data-key="evaluaciones.personas.import.progress_starting">Iniciando importación...</span>
+                                    <span id="import-status-running" class="d-none" data-key="evaluaciones.personas.import.in_progress">Importación en curso...</span>
+                                    <span id="import-status-success" class="d-none" data-key="evaluaciones.personas.import.progress_finished">Importación completada.</span>
+                                    <span id="import-status-error" class="d-none" data-key="evaluaciones.personas.import.progress_failed">No se pudo completar la importación.</span>
+                                    <span id="import-status-forbidden" class="d-none" data-key="error_403_message">No tienes permisos suficientes para acceder a esta página.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if import_success_key %}
+                    <div class="alert alert-success" role="alert">
+                        <span data-key="{{ import_success_key }}">{{ import_success_text }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if import_error_key %}
+                    <div class="alert alert-danger" role="alert">
+                        <span data-key="{{ import_error_key }}">{{ import_error_text }}</span>
+                    </div>
+                    {% endif %}
+
+                    <div class="alert alert-success d-none" role="alert" id="import-success-alert">
+                        <span data-key="evaluaciones.personas.import.progress_finished">Importación completada.</span>
+                    </div>
+                    <div class="alert alert-danger d-none" role="alert" id="import-error-alert">
+                        <span id="import-error-text-generic" data-key="evaluaciones.personas.import.progress_failed">No se pudo completar la importación.</span>
+                        <span id="import-error-text-forbidden" class="d-none" data-key="error_403_message">No tienes permisos suficientes para acceder a esta página.</span>
+                    </div>
+
+                    <div class="card mb-3 {% if not import_result %}d-none{% endif %}" id="import-summary-card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3" data-key="evaluaciones.personas.import.results_title">Resumen de importación</h5>
+                            <div class="row g-3">
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.total">Recibidos</div>
+                                    <div><strong id="import-total-received">{{ import_result.total_recibidos|default:0 }}</strong></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.created">Creados</div>
+                                    <div><strong id="import-total-created">{{ import_result.creados|default:0 }}</strong></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.updated">Actualizados</div>
+                                    <div><strong id="import-total-updated">{{ import_result.actualizados|default:0 }}</strong></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.omitted">Omitidos</div>
+                                    <div><strong id="import-total-omitted">{{ import_result.omitidos|default:0 }}</strong></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.errors">Errores</div>
+                                    <div><strong id="import-total-errors">{{ import_result.errores|default:0 }}</strong></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-muted" data-key="evaluaciones.personas.import.results.pages">Páginas</div>
+                                    <div><strong><span id="import-current-page">{{ import_result.paginas_procesadas|default:0 }}</span></strong><span class="text-muted"> / </span><strong><span id="import-total-pages">-</span></strong></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="table-responsive">
-                        <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="permisos-table">
+                        <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="personas-table">
                             <thead>
                                 <tr>
-                                    <th data-key="user">Usuario</th>
-                                    <th data-key="company">Empresa</th>
-                                    <th data-key="view">Vista</th>
-                                    <th class="text-center" data-key="perm_i">I</th>
-                                    <th class="text-center" data-key="perm_c">C</th>
-                                    <th class="text-center" data-key="perm_m">M</th>
-                                    <th class="text-center" data-key="perm_e">E</th>
-                                    <th class="text-center" data-key="perm_a">A</th>
-                                    <th class="text-center" data-key="perm_s">S</th>
-                                    <th data-key="actions">Acciones</th>
+                                    <th data-key="evaluaciones.personas.columns.person_id">ID</th>
+                                    <th data-key="evaluaciones.personas.columns.full_name">Nombre</th>
+                                    <th data-key="evaluaciones.personas.columns.rut">RUT</th>
+                                    <th data-key="evaluaciones.personas.columns.email">Email</th>
+                                    <th data-key="evaluaciones.personas.columns.status">Estado</th>
+                                    <th data-key="evaluaciones.personas.columns.period">Periodo</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for permiso in permisos %}
+                                {% for p in personas %}
                                 <tr>
-                                    <td>{{ permiso.usuario.username }}</td>
-                                    <td>{{ permiso.empresa.codigo }}</td>
-                                    <td>{{ permiso.vista.nombre }}</td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.ingresar %}checked{% endif %} disabled>
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.crear %}checked{% endif %} disabled>
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.modificar %}checked{% endif %} disabled>
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.eliminar %}checked{% endif %} disabled>
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.autorizar %}checked{% endif %} disabled>
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" {% if permiso.supervisor %}checked{% endif %} disabled>
-                                    </td>
-                                    <td>
-                                        <a href="{% url 'access_control:permiso_editar' permiso.id %}" class="btn btn-primary btn-sm">
-                                            <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>
-                                        </a>
-                                        <a href="{% url 'access_control:permiso_eliminar' permiso.id %}" class="btn btn-danger btn-sm" onclick="return confirm(document.getElementById('i18n-permissions-delete-confirm').textContent || '¿Seguro que deseas eliminar este permiso?');">
-                                            <i class="bi bi-trash"></i> <span data-key="delete">Eliminar</span>
-                                        </a>
-                                    </td>
+                                    <td>{{ p.person_id }}</td>
+                                    <td>{{ p.full_name }}</td>
+                                    <td>{{ p.rut }}</td>
+                                    <td>{{ p.email|default_if_none:"" }}</td>
+                                    <td>{{ p.status }}</td>
+                                    <td>{{ p.mes }}/{{ p.anio }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center" data-key="evaluaciones.personas.empty">Sin personas cargadas.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -98,12 +162,361 @@ Gestión de Permisos
 <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        $('#permisos-table').DataTable({
+        $('#personas-table').DataTable({
             language: {
                 url: "/static/lang/es-ES.json"
             },
             responsive: true,
             autoWidth: false,
+            pageLength: 50,
+            lengthMenu: [
+                [10, 25, 50, 100],
+                [10, 25, 50, 100]
+            ],
+        });
+
+        const form = document.getElementById('import-personas-form');
+        if (!form) {
+            return;
+        }
+
+        const startUrl = form.getAttribute('data-start-url') || '';
+        const statusUrl = form.getAttribute('data-status-url') || '';
+
+        const submitBtn = document.getElementById('import-personas-submit');
+
+        const banner = document.getElementById('import-progress-banner');
+        const spinner = document.getElementById('import-spinner');
+
+        const statusStarting = document.getElementById('import-status-starting');
+        const statusRunning = document.getElementById('import-status-running');
+        const statusSuccess = document.getElementById('import-status-success');
+        const statusError = document.getElementById('import-status-error');
+        const statusForbidden = document.getElementById('import-status-forbidden');
+
+        const alertSuccess = document.getElementById('import-success-alert');
+        const alertError = document.getElementById('import-error-alert');
+        const errorTextGeneric = document.getElementById('import-error-text-generic');
+        const errorTextForbidden = document.getElementById('import-error-text-forbidden');
+
+        const summaryCard = document.getElementById('import-summary-card');
+        const elReceived = document.getElementById('import-total-received');
+        const elCreated = document.getElementById('import-total-created');
+        const elUpdated = document.getElementById('import-total-updated');
+        const elOmitted = document.getElementById('import-total-omitted');
+        const elErrors = document.getElementById('import-total-errors');
+        const elCurrentPage = document.getElementById('import-current-page');
+        const elTotalPages = document.getElementById('import-total-pages');
+
+        let pollTimer = null;
+        let lastLoggedPage = null;
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function setBannerVisible(visible) {
+            if (!banner) return;
+            banner.classList.toggle('d-none', !visible);
+        }
+
+        function setSpinnerVisible(visible) {
+            if (!spinner) return;
+            spinner.classList.toggle('d-none', !visible);
+        }
+
+        function setStatusLabel(kind) {
+            if (!statusStarting || !statusRunning || !statusSuccess || !statusError) return;
+
+            statusStarting.classList.toggle('d-none', kind !== 'starting');
+            statusRunning.classList.toggle('d-none', kind !== 'running');
+            statusSuccess.classList.toggle('d-none', kind !== 'success');
+            statusError.classList.toggle('d-none', kind !== 'error');
+            if (statusForbidden) {
+                statusForbidden.classList.toggle('d-none', kind !== 'forbidden');
+            }
+        }
+
+        function setErrorAlertKind(kind) {
+            if (errorTextGeneric) {
+                errorTextGeneric.classList.toggle('d-none', kind !== 'generic');
+            }
+            if (errorTextForbidden) {
+                errorTextForbidden.classList.toggle('d-none', kind !== 'forbidden');
+            }
+        }
+
+        function setButtonDisabled(disabled) {
+            if (!submitBtn) return;
+            submitBtn.disabled = !!disabled;
+        }
+
+        function hideAjaxAlerts() {
+            if (alertSuccess) alertSuccess.classList.add('d-none');
+            if (alertError) alertError.classList.add('d-none');
+            setErrorAlertKind('generic');
+        }
+
+        function showAjaxSuccess() {
+            if (alertSuccess) alertSuccess.classList.remove('d-none');
+        }
+
+        function showAjaxError() {
+            if (alertError) alertError.classList.remove('d-none');
+        }
+
+        function toInt(value, fallback = 0) {
+            const n = parseInt(value, 10);
+            return Number.isFinite(n) ? n : fallback;
+        }
+
+        function setText(el, value) {
+            if (!el) return;
+            el.textContent = String(value);
+        }
+
+        function renderProgress(status) {
+            if (!status || typeof status !== 'object') {
+                return;
+            }
+
+            if (status.status === 'idle') {
+                setBannerVisible(false);
+                setSpinnerVisible(false);
+                setButtonDisabled(false);
+                hideAjaxAlerts();
+                return;
+            }
+
+            const currentPage = toInt(status.current_page, 0);
+            const totalPages = status.total_pages === null || status.total_pages === undefined || status.total_pages === ''
+                ? '-'
+                : String(status.total_pages);
+
+            setText(elCurrentPage, currentPage);
+            setText(elTotalPages, totalPages);
+            setText(elReceived, toInt(status.total_received, 0));
+            setText(elCreated, toInt(status.created, 0));
+            setText(elUpdated, toInt(status.updated, 0));
+            setText(elOmitted, toInt(status.omitted, 0));
+            setText(elErrors, toInt(status.errors, 0));
+
+            if (summaryCard) {
+                summaryCard.classList.remove('d-none');
+            }
+
+            if (status.status === 'running') {
+                setBannerVisible(true);
+                setSpinnerVisible(true);
+                setStatusLabel('running');
+                setButtonDisabled(true);
+
+                startPolling();
+
+                if (lastLoggedPage !== currentPage) {
+                    lastLoggedPage = currentPage;
+                    console.log('Progreso importación: página ' + currentPage + ' de ' + totalPages);
+                    console.log(
+                        'Totales parciales: recibidos ' + toInt(status.total_received, 0) +
+                        ', creados ' + toInt(status.created, 0) +
+                        ', actualizados ' + toInt(status.updated, 0) +
+                        ', errores ' + toInt(status.errors, 0)
+                    );
+                }
+
+                return;
+            }
+
+            if (status.status === 'success') {
+                setBannerVisible(true);
+                setSpinnerVisible(false);
+                setStatusLabel('success');
+                setButtonDisabled(false);
+                hideAjaxAlerts();
+                showAjaxSuccess();
+                console.log('Importación completada');
+                return;
+            }
+
+            if (status.status === 'error') {
+                setBannerVisible(true);
+                setSpinnerVisible(false);
+                setStatusLabel('error');
+                setButtonDisabled(false);
+                hideAjaxAlerts();
+                showAjaxError();
+                console.log('Importación con error controlado');
+                return;
+            }
+
+            // idle
+            setBannerVisible(false);
+            setSpinnerVisible(false);
+            setButtonDisabled(false);
+        }
+
+        function stopPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        function startPolling() {
+            if (pollTimer) {
+                return;
+            }
+            pollTimer = setInterval(fetchStatus, 1000);
+        }
+
+        async function fetchStatus() {
+            if (!statusUrl) {
+                return;
+            }
+
+            try {
+                const resp = await fetch(statusUrl, {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (!resp.ok) {
+                    if (resp.status === 403) {
+                        stopPolling();
+                        setBannerVisible(true);
+                        setSpinnerVisible(false);
+                        setStatusLabel('forbidden');
+                        setButtonDisabled(false);
+                        hideAjaxAlerts();
+                        setErrorAlertKind('forbidden');
+                        showAjaxError();
+                    }
+                    return;
+                }
+
+                const data = await resp.json();
+                if (!data || typeof data !== 'object') {
+                    return;
+                }
+                if (data.success !== true) {
+                    return;
+                }
+
+                if (data.status === 'running') {
+                    startPolling();
+                }
+
+                renderProgress(data);
+
+                if (data.status === 'success' || data.status === 'error' || data.status === 'idle') {
+                    stopPolling();
+                }
+            } catch (e) {
+                // Sin strings visibles; solo logging de consola
+                console.log('Error consultando estado de importación');
+            }
+        }
+
+        async function startImport(formData) {
+            if (!startUrl) {
+                return { ok: false };
+            }
+
+            const csrfToken = (form.querySelector('input[name=csrfmiddlewaretoken]') || {}).value || getCookie('csrftoken') || '';
+            const body = new URLSearchParams(formData);
+
+            try {
+                const resp = await fetch(startUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: body,
+                });
+
+                const payload = await resp.json().catch(function () { return null; });
+                if (!resp.ok || !payload || payload.success !== true) {
+                    return { ok: false, status: resp.status, payload: payload };
+                }
+
+                return { ok: true, status: resp.status, payload: payload };
+            } catch (e) {
+                return { ok: false };
+            }
+        }
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            hideAjaxAlerts();
+            lastLoggedPage = null;
+
+            setBannerVisible(true);
+            setSpinnerVisible(true);
+            setStatusLabel('starting');
+            setButtonDisabled(true);
+
+            if (summaryCard) {
+                summaryCard.classList.remove('d-none');
+            }
+            setText(elCurrentPage, '0');
+            setText(elTotalPages, '-');
+            setText(elReceived, '0');
+            setText(elCreated, '0');
+            setText(elUpdated, '0');
+            setText(elOmitted, '0');
+            setText(elErrors, '0');
+
+            console.log('Importación de personas iniciada');
+
+            const formData = new FormData(form);
+            const started = await startImport(formData);
+            if (!started.ok) {
+                setSpinnerVisible(false);
+                setButtonDisabled(false);
+                if (started.status === 403) {
+                    setStatusLabel('forbidden');
+                    hideAjaxAlerts();
+                    setErrorAlertKind('forbidden');
+                    showAjaxError();
+                    console.log('Importación denegada por permisos');
+                    return;
+                }
+
+                setStatusLabel('error');
+                hideAjaxAlerts();
+                setErrorAlertKind('generic');
+                showAjaxError();
+                console.log('Importación con error controlado');
+                return;
+            }
+
+            setStatusLabel('running');
+            startPolling();
+            fetchStatus();
+        });
+
+        // Recuperar estado si el usuario refresca la página durante una importación
+        fetchStatus().then(function () {
+            // Si queda running, el polling seguirá activo
         });
     });
 </script>
