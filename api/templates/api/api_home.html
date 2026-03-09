@@ -204,6 +204,256 @@ DELETE (204)</pre>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="apisAccordionHeadingLocales">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#apisAccordionCollapseLocales" aria-expanded="false"
+                                    aria-controls="apisAccordionCollapseLocales">
+                                    <span data-key="apis.accordion.locales.title">Maestros / Locales</span>
+                                </button>
+                            </h2>
+                            <div id="apisAccordionCollapseLocales" class="accordion-collapse collapse"
+                                aria-labelledby="apisAccordionHeadingLocales" data-bs-parent="#apisAccordion">
+                                <div class="accordion-body">
+                                    <h5 class="mb-2" data-key="apis.locales.console.title">CRUD Locales</h5>
+
+                                    <div class="mb-3">
+                                        <h6 class="mb-1" data-key="apis.locales.console.base_route.title">Ruta base</h6>
+                                        <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.console.base_route.value">/api/v1/maestros/locales/</pre>
+                                    </div>
+
+                                    <p class="text-muted mb-3" data-key="apis.locales.description">Consola interna para probar visualmente el CRUD de locales/sucursales expuesto por el sistema interno.</p>
+
+                                    <div class="card border mb-3">
+                                        <div class="card-header py-2">
+                                            <span class="fw-semibold" data-key="apis.locales.tech.title">Información Técnica de la API</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.endpoint_base.title">Endpoint base</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.tech.endpoint_base.value">/api/v1/maestros/locales/</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.methods.title">Métodos soportados</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.tech.methods.value">GET
+POST
+PUT
+DELETE</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.auth.title">Autenticación</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.locales.tech.auth.body">La API usa sesión autenticada del sistema (cookie sessionid). Para métodos POST/PUT/DELETE se requiere CSRF token. No se utiliza API key externa ni token manual.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.headers.title">Headers requeridos</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.locales.tech.headers.common">Accept: application/json
+X-Requested-With: XMLHttpRequest</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.tech.headers.unsafe">X-CSRFToken: &lt;csrftoken&gt;</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.company_context.title">Contexto de empresa</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.locales.tech.company_context.body">El sistema es multiempresa: la empresa activa se obtiene desde la sesión del usuario. empresa_id se resuelve internamente en el backend. Esta consola consume exclusivamente endpoints internos del proyecto.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.params.title">Parámetros del recurso Local</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.tech.params.value">codigo (string)
+nombre (string)
+direccion (string)
+comuna (string)
+ciudad (string)
+rut (string)
+giro (string)
+rubro (string)
+nombrelocal (string)
+ipremota (string)
+ipmaster (string)
+colacion (number)</pre>
+                                                </div>
+
+                                                <div class="col-12">
+                                                    <h6 class="mb-1" data-key="apis.locales.tech.examples.title">Ejemplos de llamadas</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.locales.tech.examples.requests">GET /api/v1/maestros/locales/
+
+GET /api/v1/maestros/locales/01/
+
+POST /api/v1/maestros/locales/
+
+body JSON ejemplo:
+{
+    "codigo": "01",
+    "nombre": "Empresa",
+    "direccion": "Dirección",
+    "comuna": "Comuna",
+    "ciudad": "Ciudad",
+    "rut": "1-9",
+    "giro": "Giro",
+    "rubro": "01",
+    "nombrelocal": "Local 1",
+    "ipremota": "10.0.0.1",
+    "ipmaster": "10.0.0.2",
+    "colacion": 1200.0
+}
+
+PUT /api/v1/maestros/locales/01/
+
+DELETE /api/v1/maestros/locales/01/</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.locales.tech.examples.responses">GET (200)
+[
+    {
+        "codigo": "01",
+        "nombre": "Empresa",
+        "direccion": "Dirección",
+        "comuna": "Comuna",
+        "ciudad": "Ciudad",
+        "rut": "1-9",
+        "giro": "Giro",
+        "rubro": "01",
+        "nombrelocal": "Local 1",
+        "ipremota": "10.0.0.1",
+        "ipmaster": "10.0.0.2",
+        "colacion": 1200.0
+    }
+]
+
+POST (201) / PUT (200)
+{
+    "codigo": "01",
+    "nombre": "Empresa",
+    "direccion": "Dirección",
+    "comuna": "Comuna",
+    "ciudad": "Ciudad",
+    "rut": "1-9",
+    "giro": "Giro",
+    "rubro": "01",
+    "nombrelocal": "Local 1",
+    "ipremota": "10.0.0.1",
+    "ipmaster": "10.0.0.2",
+    "colacion": 1200.0
+}
+
+DELETE (204)</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <form id="localesConsoleForm" autocomplete="off">
+                                        {% csrf_token %}
+
+                                        <div class="row g-3">
+                                            <div class="col-12 col-lg-4">
+                                                <div class="mb-2">
+                                                    <label for="localesAction" class="form-label" data-key="apis.console.action.label">Acción</label>
+                                                    <select id="localesAction" class="form-select">
+                                                        <option value="list" data-key="apis.locales.action.list">Listar (GET)</option>
+                                                        <option value="get" data-key="apis.locales.action.get">Obtener por código (GET)</option>
+                                                        <option value="create" data-key="apis.locales.action.create">Crear (POST)</option>
+                                                        <option value="update" data-key="apis.locales.action.update">Actualizar (PUT)</option>
+                                                        <option value="delete" data-key="apis.locales.action.delete">Eliminar (DELETE)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesCodigo" class="form-label" data-key="apis.locales.field.codigo">Código</label>
+                                                    <input id="localesCodigo" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesNombre" class="form-label" data-key="apis.locales.field.nombre">Nombre</label>
+                                                    <input id="localesNombre" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesDireccion" class="form-label" data-key="apis.locales.field.direccion">Dirección</label>
+                                                    <input id="localesDireccion" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesComuna" class="form-label" data-key="apis.locales.field.comuna">Comuna</label>
+                                                    <input id="localesComuna" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesCiudad" class="form-label" data-key="apis.locales.field.ciudad">Ciudad</label>
+                                                    <input id="localesCiudad" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesRut" class="form-label" data-key="apis.locales.field.rut">RUT</label>
+                                                    <input id="localesRut" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesGiro" class="form-label" data-key="apis.locales.field.giro">Giro</label>
+                                                    <input id="localesGiro" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesRubro" class="form-label" data-key="apis.locales.field.rubro">Rubro</label>
+                                                    <input id="localesRubro" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesNombreLocal" class="form-label" data-key="apis.locales.field.nombrelocal">Nombre local</label>
+                                                    <input id="localesNombreLocal" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesIpRemota" class="form-label" data-key="apis.locales.field.ipremota">IP remota</label>
+                                                    <input id="localesIpRemota" class="form-control" type="text" maxlength="30">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="localesIpMaster" class="form-label" data-key="apis.locales.field.ipmaster">IP master</label>
+                                                    <input id="localesIpMaster" class="form-control" type="text" maxlength="30">
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="localesColacion" class="form-label" data-key="apis.locales.field.colacion">Colación</label>
+                                                    <input id="localesColacion" class="form-control" type="number" step="any">
+                                                </div>
+
+                                                <button id="localesSendBtn" class="btn btn-primary w-100" type="submit" data-key="apis.console.send">Ejecutar</button>
+
+                                                <div id="localesClientErrors" class="d-none">
+                                                    <span id="localesMsgMissingCode" data-key="apis.console.error.missing_code">Debes ingresar un código.</span>
+                                                    <span id="localesMsgMissingCsrf" data-key="apis.console.error.missing_csrf">No se encontró CSRF token.</span>
+                                                    <span id="localesMsgNetworkError" data-key="apis.console.error.network">Error de red al ejecutar la solicitud.</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-lg-8">
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                                    <span class="fw-semibold" data-key="apis.console.status.label">Estado</span>
+                                                    <span id="localesStatusIdle" class="badge bg-secondary" data-key="apis.console.status.idle">Listo</span>
+                                                    <span id="localesStatusRunning" class="badge bg-info d-none" data-key="apis.console.status.running">Ejecutando</span>
+                                                    <span id="localesStatusSuccess" class="badge bg-success d-none" data-key="apis.console.status.success">Completado</span>
+                                                    <span id="localesStatusError" class="badge bg-danger d-none" data-key="apis.console.status.error">Error</span>
+
+                                                    <span class="ms-auto text-muted small">
+                                                        <span data-key="apis.console.http_status.label">HTTP</span>:
+                                                        <span id="localesHttpStatus"><span data-key="apis.console.http_status.empty">—</span></span>
+                                                    </span>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <span class="text-muted" data-key="apis.console.response.label">Respuesta (JSON)</span>
+                                                </div>
+
+                                                <pre id="localesResponse" class="p-3 border rounded bg-light mb-0 font-monospace"><span data-key="apis.console.response.empty">Aún no se ha ejecutado ninguna solicitud.</span></pre>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -261,7 +511,7 @@ DELETE (204)</pre>
             }
         }
 
-        async function sendRubrosRequest(params, els) {
+        async function sendConsoleRequest(params, els) {
             const { method, url, body, csrfToken } = params;
 
             const headers = {
@@ -290,6 +540,10 @@ DELETE (204)</pre>
             if (els.sendBtn) els.sendBtn.disabled = true;
 
             try {
+                try {
+                    console.info('[api_console] request', method, url);
+                } catch (e) { }
+
                 const resp = await fetch(url, {
                     method,
                     headers,
@@ -324,6 +578,10 @@ DELETE (204)</pre>
                 } else {
                     setStatus('success', els);
                 }
+
+                try {
+                    console.info('[api_console] response', method, url, resp.status);
+                } catch (e) { }
             } catch (e) {
                 setStatus('error', els);
                 setHttpStatus('—', els);
@@ -333,7 +591,15 @@ DELETE (204)</pre>
             }
         }
 
-        function init() {
+        async function sendRubrosRequest(params, els) {
+            return sendConsoleRequest(params, els);
+        }
+
+        async function sendLocalesRequest(params, els) {
+            return sendConsoleRequest(params, els);
+        }
+
+        function initRubrosConsole() {
             const form = byId('rubrosConsoleForm');
             if (!form) return;
 
@@ -418,6 +684,120 @@ DELETE (204)</pre>
 
                 sendRubrosRequest({ method, url, body, csrfToken }, els);
             });
+        }
+
+        function initLocalesConsole() {
+            const form = byId('localesConsoleForm');
+            if (!form) return;
+
+            const els = {
+                action: byId('localesAction'),
+                codigo: byId('localesCodigo'),
+                nombre: byId('localesNombre'),
+                direccion: byId('localesDireccion'),
+                comuna: byId('localesComuna'),
+                ciudad: byId('localesCiudad'),
+                rut: byId('localesRut'),
+                giro: byId('localesGiro'),
+                rubro: byId('localesRubro'),
+                nombrelocal: byId('localesNombreLocal'),
+                ipremota: byId('localesIpRemota'),
+                ipmaster: byId('localesIpMaster'),
+                colacion: byId('localesColacion'),
+                sendBtn: byId('localesSendBtn'),
+                response: byId('localesResponse'),
+                httpStatus: byId('localesHttpStatus'),
+                idle: byId('localesStatusIdle'),
+                running: byId('localesStatusRunning'),
+                success: byId('localesStatusSuccess'),
+                error: byId('localesStatusError'),
+                msgMissingCode: byId('localesMsgMissingCode'),
+                msgMissingCsrf: byId('localesMsgMissingCsrf'),
+                msgNetworkError: byId('localesMsgNetworkError')
+            };
+
+            setStatus('idle', els);
+
+            const baseUrl = '/api/v1/maestros/locales/';
+
+            form.addEventListener('submit', function (evt) {
+                evt.preventDefault();
+
+                const action = (els.action && els.action.value) ? els.action.value : 'list';
+                const codigo = (els.codigo && els.codigo.value) ? els.codigo.value.trim() : '';
+
+                const csrfToken = getCsrfToken(form);
+
+                let method = 'GET';
+                let url = baseUrl;
+                let body = null;
+
+                const needsCodigo = (action === 'get' || action === 'update' || action === 'delete');
+                const needsCodigoInBody = (action === 'create');
+
+                if ((needsCodigo || needsCodigoInBody) && !codigo) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingCode ? els.msgMissingCode.textContent : '', els);
+                    try { if (els.codigo) els.codigo.focus(); } catch (e) { }
+                    return;
+                }
+
+                const colacionValue = (els.colacion && els.colacion.value != null) ? String(els.colacion.value).trim() : '';
+                let colacionNumber = parseFloat(colacionValue);
+                if (!isFinite(colacionNumber)) colacionNumber = 0.0;
+
+                if (action === 'list') {
+                    method = 'GET';
+                    url = baseUrl;
+                } else if (action === 'get') {
+                    method = 'GET';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                } else if (action === 'create') {
+                    method = 'POST';
+                    url = baseUrl;
+                    body = {
+                        codigo: codigo,
+                        nombre: (els.nombre && els.nombre.value) ? els.nombre.value : '',
+                        direccion: (els.direccion && els.direccion.value) ? els.direccion.value : '',
+                        comuna: (els.comuna && els.comuna.value) ? els.comuna.value : '',
+                        ciudad: (els.ciudad && els.ciudad.value) ? els.ciudad.value : '',
+                        giro: (els.giro && els.giro.value) ? els.giro.value : '',
+                        rut: (els.rut && els.rut.value) ? els.rut.value : '',
+                        ipremota: (els.ipremota && els.ipremota.value) ? els.ipremota.value : '',
+                        ipmaster: (els.ipmaster && els.ipmaster.value) ? els.ipmaster.value : '',
+                        rubro: (els.rubro && els.rubro.value) ? els.rubro.value : '',
+                        nombrelocal: (els.nombrelocal && els.nombrelocal.value) ? els.nombrelocal.value : '',
+                        colacion: colacionNumber
+                    };
+                } else if (action === 'update') {
+                    method = 'PUT';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                    body = {
+                        nombre: (els.nombre && els.nombre.value) ? els.nombre.value : '',
+                        direccion: (els.direccion && els.direccion.value) ? els.direccion.value : '',
+                        comuna: (els.comuna && els.comuna.value) ? els.comuna.value : '',
+                        ciudad: (els.ciudad && els.ciudad.value) ? els.ciudad.value : '',
+                        giro: (els.giro && els.giro.value) ? els.giro.value : '',
+                        rut: (els.rut && els.rut.value) ? els.rut.value : '',
+                        ipremota: (els.ipremota && els.ipremota.value) ? els.ipremota.value : '',
+                        ipmaster: (els.ipmaster && els.ipmaster.value) ? els.ipmaster.value : '',
+                        rubro: (els.rubro && els.rubro.value) ? els.rubro.value : '',
+                        nombrelocal: (els.nombrelocal && els.nombrelocal.value) ? els.nombrelocal.value : '',
+                        colacion: colacionNumber
+                    };
+                } else if (action === 'delete') {
+                    method = 'DELETE';
+                    url = baseUrl + encodeURIComponent(codigo) + '/';
+                }
+
+                sendLocalesRequest({ method, url, body, csrfToken }, els);
+            });
+        }
+
+        function init() {
+            initRubrosConsole();
+            initLocalesConsole();
         }
 
         if (document.readyState === 'loading') {

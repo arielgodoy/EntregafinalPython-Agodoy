@@ -24,6 +24,18 @@ urlpatterns = [
         views_maestros.maestros_rubros_detail,
         name="api_maestros_rubros_detail"
     ),
+
+    path(
+        "maestros/locales/",
+        views_maestros.maestros_locales_list,
+        name="api_maestros_locales_list"
+    ),
+
+    path(
+        "maestros/locales/<str:codigo>/",
+        views_maestros.maestros_locales_detail,
+        name="api_maestros_locales_detail"
+    ),
     
     path('', include(router.urls)),
     path('employees/active/', employees_active, name='employees_active'),

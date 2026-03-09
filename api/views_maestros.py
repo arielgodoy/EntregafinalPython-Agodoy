@@ -55,10 +55,145 @@ SQL_MAESTROS_RUBROS_DELETE = """DELETE FROM g_maestrorubros
 WHERE codigo=%s"""
 
 
+SQL_MAESTROS_LOCALES_LIST = """SELECT
+codigo,
+nombre,
+direccion,
+comuna,
+ciudad,
+giro,
+rut,
+ipremota,
+ipmaster,
+rubro,
+nombrelocal,
+colacion
+FROM g_maestroempresas
+ORDER BY codigo"""
+
+
+SQL_MAESTROS_LOCALES_GET = """SELECT
+codigo,
+nombre,
+direccion,
+comuna,
+ciudad,
+giro,
+rut,
+ipremota,
+ipmaster,
+rubro,
+nombrelocal,
+colacion
+FROM g_maestroempresas
+WHERE codigo=%s"""
+
+
+SQL_MAESTROS_LOCALES_INSERT = """INSERT INTO g_maestroempresas
+(codigo,nombre,direccion,comuna,ciudad,giro,rut,ipremota,ipmaster,rubro,nombrelocal,colacion,
+codigocomerciotbk,puntoscada,vendegas,cantidadacumulacioncajera,mts,ciudad_grupo,cuotassininteres,sobreplazomeses,
+tesoreria,descuentoefectivo,montominimodescuento,interesconvencional,facturadorelectronico,codigosucursalventa,
+cuentailanoazucar,montosensible,diasmaximoretiro)
+VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+
+
+SQL_MAESTROS_LOCALES_UPDATE = """UPDATE g_maestroempresas
+SET
+nombre=%s,
+direccion=%s,
+comuna=%s,
+ciudad=%s,
+giro=%s,
+rut=%s,
+ipremota=%s,
+ipmaster=%s,
+rubro=%s,
+nombrelocal=%s,
+colacion=%s
+WHERE codigo=%s"""
+
+
+SQL_MAESTROS_LOCALES_DELETE = """DELETE FROM g_maestroempresas
+WHERE codigo=%s"""
+
+
 VISTA_NOMBRE = "API - Maestros Rubros"
+
+VISTA_NOMBRE_LOCALES = "API - Maestros Locales"
 
 DB_ALIAS = "eltit_gestion"
 _DB_ALIAS_LOCK = threading.Lock()
+
+ENGINE_DJANGO_MYSQL = "django.db.backends.mysql"
+ENGINE_LEGACY_PYMYSQL = "legacy_pymysql"
+ENGINE_API_REMOTA = "api_remota"
+
+_SETTINGS_MYSQL_CONNECTION_TABLE = "settings_settingsmysqlconnection"
+
+
+def _cfg_get(cfg, key, default=""):
+    if cfg is None:
+        return default
+    if isinstance(cfg, dict):
+        return cfg.get(key, default)
+    return getattr(cfg, key, default)
+
+
+def _normalize_engine(value):
+    val = (value or "").strip()
+    return val or ENGINE_DJANGO_MYSQL
+
+
+def _fetch_settings_mysql_connection_cfg(*, empresa_id, nombre_logico):
+    """Obtiene configuración de SettingsMySQLConnection sin ORM (SQL directo sobre DB default)."""
+
+    nombre_logico = (nombre_logico or "").strip().lower()
+    if not nombre_logico:
+        return None
+
+    try:
+        default_conn = connections["default"]
+        user_col = default_conn.ops.quote_name("user")
+        table = default_conn.ops.quote_name(_SETTINGS_MYSQL_CONNECTION_TABLE)
+
+        sql = f"""SELECT
+nombre_logico,
+engine,
+host,
+port,
+{user_col} as user,
+password,
+db_name,
+charset,
+is_active
+FROM {table}
+WHERE empresa_id = %s AND nombre_logico = %s
+LIMIT 1"""
+
+        with default_conn.cursor() as cursor:
+            cursor.execute(sql, [empresa_id, nombre_logico])
+            row = cursor.fetchone()
+            if not row:
+                return None
+            columns = [c[0] for c in cursor.description]
+            data = dict(zip(columns, row))
+    except Exception:
+        return None
+
+    try:
+        data["is_active"] = bool(data.get("is_active"))
+    except Exception:
+        data["is_active"] = False
+
+    return data
+
+
+def _get_active_mysql_connection_cfg_for_empresa(empresa_id):
+    for nombre_logico in (DB_ALIAS, "gestion"):
+        cfg = _fetch_settings_mysql_connection_cfg(empresa_id=empresa_id, nombre_logico=nombre_logico)
+        if cfg and cfg.get("is_active"):
+            return cfg
+    return None
 
 
 def _db_alias_not_configured_response():
@@ -104,12 +239,12 @@ def _ensure_django_alias_configured_from_cfg(cfg) -> bool:
     complete_cfg = base_config.copy()
     complete_cfg.update(
         {
-            "ENGINE": "django.db.backends.mysql",
-            "NAME": getattr(cfg, "db_name", ""),
-            "USER": getattr(cfg, "user", ""),
-            "PASSWORD": getattr(cfg, "password", ""),
-            "HOST": getattr(cfg, "host", ""),
-            "PORT": str(getattr(cfg, "port", "") or ""),
+            "ENGINE": ENGINE_DJANGO_MYSQL,
+            "NAME": _cfg_get(cfg, "db_name", ""),
+            "USER": _cfg_get(cfg, "user", ""),
+            "PASSWORD": _cfg_get(cfg, "password", ""),
+            "HOST": _cfg_get(cfg, "host", ""),
+            "PORT": str(_cfg_get(cfg, "port", "") or ""),
             "OPTIONS": {"charset": "utf8mb4"},
             "CONN_MAX_AGE": 0,
             "ATOMIC_REQUESTS": False,
@@ -212,42 +347,20 @@ def _resolve_db_for_request(request):
         except Exception:
             return None
 
-    try:
-        from settings.models import SettingsMySQLConnection
-    except Exception:
+    cfg = _get_active_mysql_connection_cfg_for_empresa(empresa_id)
+
+    if not cfg:
         try:
             _ = connections[DB_ALIAS]
             return ("django", None)
         except Exception:
             return None
 
-    cfg = None
-    for nombre_logico in (DB_ALIAS, "gestion"):
-        try:
-            cfg = SettingsMySQLConnection.objects.get(
-                empresa_id=empresa_id,
-                nombre_logico=(nombre_logico or "").strip().lower(),
-            )
-            break
-        except SettingsMySQLConnection.DoesNotExist:
-            cfg = None
-            continue
-        except Exception:
-            cfg = None
-            break
-
-    if not cfg or not getattr(cfg, "is_active", False):
-        try:
-            _ = connections[DB_ALIAS]
-            return ("django", None)
-        except Exception:
-            return None
-
-    engine = SettingsMySQLConnection.normalize_engine(getattr(cfg, "engine", None))
-    if engine == SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL:
+    engine = _normalize_engine(_cfg_get(cfg, "engine", None))
+    if engine == ENGINE_LEGACY_PYMYSQL:
         return ("legacy_pymysql", cfg)
 
-    if engine == SettingsMySQLConnection.ENGINE_API_REMOTA:
+    if engine == ENGINE_API_REMOTA:
         return None
 
     if not _ensure_django_alias_configured_from_cfg(cfg):
@@ -268,13 +381,13 @@ def _legacy_pymysql_connection(cfg):
     conn = None
     cursor = None
     try:
-        charset = (getattr(cfg, "charset", None) or "utf8").strip() or "utf8"
+        charset = (_cfg_get(cfg, "charset", None) or "utf8").strip() or "utf8"
         conn = pymysql.connect(
-            host=cfg.host,
-            port=int(cfg.port or 3306),
-            user=cfg.user,
-            password=cfg.password,
-            database=cfg.db_name,
+            host=_cfg_get(cfg, "host", ""),
+            port=int(_cfg_get(cfg, "port", 3306) or 3306),
+            user=_cfg_get(cfg, "user", ""),
+            password=_cfg_get(cfg, "password", ""),
+            database=_cfg_get(cfg, "db_name", ""),
             charset=charset,
             connect_timeout=5,
             read_timeout=10,
@@ -339,6 +452,16 @@ def _rows_to_dicts(cursor, rows):
             item["colacion"] = _to_bool(item["colacion"])
         data.append(item)
     return data
+
+
+def _row_to_dict_raw(cursor, row):
+    columns = [col[0] for col in cursor.description]
+    return dict(zip(columns, row))
+
+
+def _rows_to_dicts_raw(cursor, rows):
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in rows]
 
 
 def _validate_codigo(codigo):
@@ -409,6 +532,370 @@ def _validate_payload_update(payload):
     }
 
 
+_LOCALES_INSERT_REQUIRED_DEFAULTS = {
+    "codigocomerciotbk": "",
+    "puntoscada": 0.0,
+    "vendegas": 0,
+    "cantidadacumulacioncajera": 0.0,
+    "mts": 0.0,
+    "ciudad_grupo": "",
+    "cuotassininteres": 0.0,
+    "sobreplazomeses": 0.0,
+    "tesoreria": "",
+    "descuentoefectivo": 0.0,
+    "montominimodescuento": 0.0,
+    "interesconvencional": 0.0,
+    "facturadorelectronico": 0,
+    "codigosucursalventa": "",
+    "cuentailanoazucar": "",
+    "montosensible": 0.0,
+    "diasmaximoretiro": 0.0,
+}
+
+
+def _validate_locales_payload_create(payload):
+    required = (
+        "codigo",
+        "nombre",
+        "direccion",
+        "comuna",
+        "ciudad",
+        "giro",
+        "rut",
+        "ipremota",
+        "ipmaster",
+        "rubro",
+        "nombrelocal",
+        "colacion",
+    )
+    for key in required:
+        if key not in payload:
+            raise ValueError("Body inválido.")
+
+    codigo = _validate_codigo(payload.get("codigo"))
+    rubro = _validate_codigo(payload.get("rubro"))
+
+    string_fields = {
+        "nombre": (50, True),
+        "direccion": (50, True),
+        "comuna": (50, True),
+        "ciudad": (50, True),
+        "giro": (50, True),
+        "rut": (10, True),
+        "ipremota": (30, True),
+        "ipmaster": (30, True),
+        "nombrelocal": (20, False),
+    }
+
+    clean = {"codigo": codigo, "rubro": rubro}
+    for field_name, (max_len, allow_blank) in string_fields.items():
+        value = payload.get(field_name)
+        if not isinstance(value, str):
+            raise ValueError("Body inválido.")
+        value = value.strip()
+        if not allow_blank and not value:
+            raise ValueError(f"{field_name} inválido.")
+        if len(value) > max_len:
+            raise ValueError(f"{field_name} inválido.")
+        clean[field_name] = value
+
+    colacion = payload.get("colacion")
+    if isinstance(colacion, bool) or not isinstance(colacion, (int, float)):
+        raise ValueError("colacion inválido.")
+    clean["colacion"] = float(colacion)
+
+    return clean
+
+
+def _validate_locales_payload_update(payload):
+    required = (
+        "nombre",
+        "direccion",
+        "comuna",
+        "ciudad",
+        "giro",
+        "rut",
+        "ipremota",
+        "ipmaster",
+        "rubro",
+        "nombrelocal",
+        "colacion",
+    )
+    for key in required:
+        if key not in payload:
+            raise ValueError("Body inválido.")
+
+    rubro = _validate_codigo(payload.get("rubro"))
+
+    string_fields = {
+        "nombre": (50, True),
+        "direccion": (50, True),
+        "comuna": (50, True),
+        "ciudad": (50, True),
+        "giro": (50, True),
+        "rut": (10, True),
+        "ipremota": (30, True),
+        "ipmaster": (30, True),
+        "nombrelocal": (20, False),
+    }
+
+    clean = {"rubro": rubro}
+    for field_name, (max_len, allow_blank) in string_fields.items():
+        value = payload.get(field_name)
+        if not isinstance(value, str):
+            raise ValueError("Body inválido.")
+        value = value.strip()
+        if not allow_blank and not value:
+            raise ValueError(f"{field_name} inválido.")
+        if len(value) > max_len:
+            raise ValueError(f"{field_name} inválido.")
+        clean[field_name] = value
+
+    colacion = payload.get("colacion")
+    if isinstance(colacion, bool) or not isinstance(colacion, (int, float)):
+        raise ValueError("colacion inválido.")
+    clean["colacion"] = float(colacion)
+
+    return clean
+
+
+@verificar_permiso(VISTA_NOMBRE_LOCALES, "ingresar")
+def _locales_list(request):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (_conn, cursor):
+                cursor.execute(SQL_MAESTROS_LOCALES_LIST)
+                rows = cursor.fetchall()
+                data = _rows_to_dicts_raw(cursor, rows)
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            logger.error("maestros_locales_list legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "Error interno."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_LOCALES_LIST)
+            rows = cursor.fetchall()
+            data = _rows_to_dicts_raw(cursor, rows)
+        return JsonResponse(data, safe=False)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_locales_list error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "Error interno."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_LOCALES, "ingresar")
+def _locales_get(request, codigo):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        codigo = _validate_codigo(codigo)
+    except ValueError:
+        return JsonResponse({"detail": "codigo inválido."}, status=400)
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (_conn, cursor):
+                cursor.execute(SQL_MAESTROS_LOCALES_GET, [codigo])
+                row = cursor.fetchone()
+                if not row:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                item = _row_to_dict_raw(cursor, row)
+            return JsonResponse(item, safe=True)
+        except Exception as e:
+            logger.error("maestros_locales_get legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "Error interno."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_LOCALES_GET, [codigo])
+            row = cursor.fetchone()
+            if not row:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+            item = _row_to_dict_raw(cursor, row)
+        return JsonResponse(item, safe=True)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_locales_get error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "Error interno."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_LOCALES, "crear")
+def _locales_create(request):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        payload = _parse_json_object(request)
+        clean = _validate_locales_payload_create(payload)
+    except ValueError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+
+    extra_defaults = _LOCALES_INSERT_REQUIRED_DEFAULTS
+    params = [
+        clean["codigo"],
+        clean["nombre"],
+        clean["direccion"],
+        clean["comuna"],
+        clean["ciudad"],
+        clean["giro"],
+        clean["rut"],
+        clean["ipremota"],
+        clean["ipmaster"],
+        clean["rubro"],
+        clean["nombrelocal"],
+        clean["colacion"],
+        extra_defaults["codigocomerciotbk"],
+        extra_defaults["puntoscada"],
+        extra_defaults["vendegas"],
+        extra_defaults["cantidadacumulacioncajera"],
+        extra_defaults["mts"],
+        extra_defaults["ciudad_grupo"],
+        extra_defaults["cuotassininteres"],
+        extra_defaults["sobreplazomeses"],
+        extra_defaults["tesoreria"],
+        extra_defaults["descuentoefectivo"],
+        extra_defaults["montominimodescuento"],
+        extra_defaults["interesconvencional"],
+        extra_defaults["facturadorelectronico"],
+        extra_defaults["codigosucursalventa"],
+        extra_defaults["cuentailanoazucar"],
+        extra_defaults["montosensible"],
+        extra_defaults["diasmaximoretiro"],
+    ]
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_LOCALES_INSERT, params)
+                conn.commit()
+            return JsonResponse(clean, status=201)
+        except Exception as e:
+            logger.error("maestros_locales_create legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo crear local."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_LOCALES_INSERT, params)
+        connections[DB_ALIAS].commit()
+        return JsonResponse(clean, status=201)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_locales_create error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo crear local."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_LOCALES, "modificar")
+def _locales_update(request, codigo):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        codigo = _validate_codigo(codigo)
+    except ValueError:
+        return JsonResponse({"detail": "codigo inválido."}, status=400)
+
+    try:
+        payload = _parse_json_object(request)
+        clean = _validate_locales_payload_update(payload)
+    except ValueError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+
+    params = [
+        clean["nombre"],
+        clean["direccion"],
+        clean["comuna"],
+        clean["ciudad"],
+        clean["giro"],
+        clean["rut"],
+        clean["ipremota"],
+        clean["ipmaster"],
+        clean["rubro"],
+        clean["nombrelocal"],
+        clean["colacion"],
+        codigo,
+    ]
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_LOCALES_UPDATE, params)
+                if cursor.rowcount == 0:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                conn.commit()
+            return JsonResponse({"codigo": codigo, **clean})
+        except Exception as e:
+            logger.error("maestros_locales_update legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo actualizar local."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_LOCALES_UPDATE, params)
+            if cursor.rowcount == 0:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+        connections[DB_ALIAS].commit()
+        return JsonResponse({"codigo": codigo, **clean})
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_locales_update error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo actualizar local."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_LOCALES, "eliminar")
+def _locales_delete(request, codigo):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        codigo = _validate_codigo(codigo)
+    except ValueError:
+        return JsonResponse({"detail": "codigo inválido."}, status=400)
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_LOCALES_DELETE, [codigo])
+                if cursor.rowcount == 0:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                conn.commit()
+            return JsonResponse({}, status=204)
+        except Exception as e:
+            logger.error("maestros_locales_delete legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo eliminar local."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_LOCALES_DELETE, [codigo])
+            if cursor.rowcount == 0:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+        connections[DB_ALIAS].commit()
+        return JsonResponse({}, status=204)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_locales_delete error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo eliminar local."}, status=500)
+
+
+
 @verificar_permiso(VISTA_NOMBRE, "ingresar")
 def _rubros_list(request):
     resolved = _resolve_db_for_request(request)
@@ -423,8 +910,8 @@ def _rubros_list(request):
                 rows = cursor.fetchall()
                 data = _rows_to_dicts(cursor, rows)
             return JsonResponse(data, safe=False)
-        except Exception:
-            logger.exception("maestros_rubros_list legacy_pymysql error")
+        except Exception as e:
+            logger.error("maestros_rubros_list legacy_pymysql error (%s)", type(e).__name__)
             return JsonResponse({"detail": "Error interno."}, status=500)
 
     try:
@@ -435,8 +922,8 @@ def _rubros_list(request):
         return JsonResponse(data, safe=False)
     except ConnectionDoesNotExist:
         return _db_alias_not_configured_response()
-    except Exception:
-        logger.exception("maestros_rubros_list error")
+    except Exception as e:
+        logger.error("maestros_rubros_list error (%s)", type(e).__name__)
         return JsonResponse({"detail": "Error interno."}, status=500)
 
 
@@ -461,8 +948,8 @@ def _rubros_get(request, codigo):
                     return JsonResponse({"detail": "No encontrado."}, status=404)
                 item = _row_to_dict(cursor, row)
             return JsonResponse(item, safe=True)
-        except Exception:
-            logger.exception("maestros_rubros_get legacy_pymysql error")
+        except Exception as e:
+            logger.error("maestros_rubros_get legacy_pymysql error (%s)", type(e).__name__)
             return JsonResponse({"detail": "Error interno."}, status=500)
 
     try:
@@ -475,8 +962,8 @@ def _rubros_get(request, codigo):
         return JsonResponse(item, safe=True)
     except ConnectionDoesNotExist:
         return _db_alias_not_configured_response()
-    except Exception:
-        logger.exception("maestros_rubros_get error")
+    except Exception as e:
+        logger.error("maestros_rubros_get error (%s)", type(e).__name__)
         return JsonResponse({"detail": "Error interno."}, status=500)
 
 
@@ -513,8 +1000,8 @@ def _rubros_create(request):
                 "colacion": bool(clean["colacion"]),
             }
             return JsonResponse(response_item, status=201)
-        except Exception:
-            logger.exception("maestros_rubros_create legacy_pymysql error")
+        except Exception as e:
+            logger.error("maestros_rubros_create legacy_pymysql error (%s)", type(e).__name__)
             return JsonResponse({"detail": "No se pudo crear rubro."}, status=500)
 
     try:
@@ -538,8 +1025,8 @@ def _rubros_create(request):
         return JsonResponse(response_item, status=201)
     except ConnectionDoesNotExist:
         return _db_alias_not_configured_response()
-    except Exception:
-        logger.exception("maestros_rubros_create error")
+    except Exception as e:
+        logger.error("maestros_rubros_create error (%s)", type(e).__name__)
         return JsonResponse({"detail": "No se pudo crear rubro."}, status=500)
 
 
@@ -585,8 +1072,8 @@ def _rubros_update(request, codigo):
                 "colacion": bool(clean["colacion"]),
             }
             return JsonResponse(response_item)
-        except Exception:
-            logger.exception("maestros_rubros_update legacy_pymysql error")
+        except Exception as e:
+            logger.error("maestros_rubros_update legacy_pymysql error (%s)", type(e).__name__)
             return JsonResponse({"detail": "No se pudo actualizar rubro."}, status=500)
 
     try:
@@ -614,8 +1101,8 @@ def _rubros_update(request, codigo):
         return JsonResponse(response_item)
     except ConnectionDoesNotExist:
         return _db_alias_not_configured_response()
-    except Exception:
-        logger.exception("maestros_rubros_update error")
+    except Exception as e:
+        logger.error("maestros_rubros_update error (%s)", type(e).__name__)
         return JsonResponse({"detail": "No se pudo actualizar rubro."}, status=500)
 
 
@@ -639,8 +1126,8 @@ def _rubros_delete(request, codigo):
                     return JsonResponse({"detail": "No encontrado."}, status=404)
                 conn.commit()
             return JsonResponse({}, status=204)
-        except Exception:
-            logger.exception("maestros_rubros_delete legacy_pymysql error")
+        except Exception as e:
+            logger.error("maestros_rubros_delete legacy_pymysql error (%s)", type(e).__name__)
             return JsonResponse({"detail": "No se pudo eliminar rubro."}, status=500)
 
     try:
@@ -652,8 +1139,8 @@ def _rubros_delete(request, codigo):
         return JsonResponse({}, status=204)
     except ConnectionDoesNotExist:
         return _db_alias_not_configured_response()
-    except Exception:
-        logger.exception("maestros_rubros_delete error")
+    except Exception as e:
+        logger.error("maestros_rubros_delete error (%s)", type(e).__name__)
         return JsonResponse({"detail": "No se pudo eliminar rubro."}, status=500)
 
 
@@ -676,3 +1163,24 @@ def maestros_rubros_detail(request, codigo):
         return _rubros_update(request, codigo)
 
     return _rubros_delete(request, codigo)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def maestros_locales_list(request):
+    if request.method == "GET":
+        return _locales_list(request)
+
+    return _locales_create(request)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def maestros_locales_detail(request, codigo):
+    if request.method == "GET":
+        return _locales_get(request, codigo)
+
+    if request.method == "PUT":
+        return _locales_update(request, codigo)
+
+    return _locales_delete(request, codigo)
