@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework import routers
 from api.views import PropietarioViewSet, TrabajadoresViewSet, invite_user, employees_active, api_home
 from . import views_maestros
+from . import views_movimientos
 
 router = routers.DefaultRouter()
 
@@ -47,6 +48,18 @@ urlpatterns = [
         "maestros/locales/<str:codigo>/",
         views_maestros.maestros_locales_detail,
         name="api_maestros_locales_detail"
+    ),
+
+    path(
+        "movimientos/cabeza/",
+        views_movimientos.movimientos_cabeza_list,
+        name="api_movimientos_cabeza_list",
+    ),
+
+    path(
+        "movimientos/cabeza/<str:tipo>/<str:numero>/",
+        views_movimientos.movimientos_cabeza_detail,
+        name="api_movimientos_cabeza_detail",
     ),
     
     path('', include(router.urls)),

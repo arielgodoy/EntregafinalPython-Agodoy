@@ -659,6 +659,308 @@ DELETE (204)</pre>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="apisAccordionHeadingMovimientosCabeza">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#apisAccordionCollapseMovimientosCabeza" aria-expanded="false"
+                                    aria-controls="apisAccordionCollapseMovimientosCabeza">
+                                    <span data-key="apis.accordion.movimientos_cabeza.title">Movimientos / Cabeza</span>
+                                </button>
+                            </h2>
+                            <div id="apisAccordionCollapseMovimientosCabeza" class="accordion-collapse collapse"
+                                aria-labelledby="apisAccordionHeadingMovimientosCabeza" data-bs-parent="#apisAccordion">
+                                <div class="accordion-body">
+                                    <h5 class="mb-2" data-key="apis.movimientos_cabeza.console.title">CRUD Movimientos Cabeza</h5>
+
+                                    <div class="mb-3">
+                                        <h6 class="mb-1" data-key="apis.movimientos_cabeza.console.base_route.title">Ruta base</h6>
+                                        <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.console.base_route.value">/api/v1/movimientos/cabeza/</pre>
+                                    </div>
+
+                                    <p class="text-muted mb-3" data-key="apis.movimientos_cabeza.description">Consola interna para probar visualmente el CRUD del encabezado de documentos/movimientos del sistema legacy.</p>
+
+                                    <div class="card border mb-3">
+                                        <div class="card-header py-2">
+                                            <span class="fw-semibold" data-key="apis.movimientos_cabeza.tech.title">Información Técnica de la API</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.endpoint_base.title">Endpoint base</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.endpoint_base.value">/api/v1/movimientos/cabeza/</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.methods.title">Métodos soportados</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.methods.value">GET
+POST
+PUT
+DELETE</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.auth.title">Autenticación</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.movimientos_cabeza.tech.auth.body">La API usa sesión autenticada del sistema (cookie sessionid). Para métodos POST/PUT/DELETE se requiere CSRF token. No requiere token externo manual.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.headers.title">Headers requeridos</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.movimientos_cabeza.tech.headers.common">Accept: application/json
+X-Requested-With: XMLHttpRequest</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.headers.unsafe">X-CSRFToken: &lt;csrftoken&gt;</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.company_context.title">Contexto de empresa</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.movimientos_cabeza.tech.company_context.body">El sistema es multiempresa: la empresa activa se obtiene desde la sesión del usuario. Esta consola consume exclusivamente endpoints internos del proyecto.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.resolution.title">Resolución dinámica rubro/local</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.resolution.value">rubro y local son obligatorios.
+base = eltit_gestion + rubro
+tabla = l_movimientos_cabeza_ + local</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.pk_note.title">Nota sobre la PK legacy</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.movimientos_cabeza.tech.pk_note.body">La PK real del legacy es tipo + numero + fecha. Esta API opera por tipo + numero y devuelve 409 si existe ambigüedad por múltiples fechas.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.params.title">Parámetros del recurso Movimientos Cabeza</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.params.value">rubro (string)
+local (string)
+tipo (string)
+numero (string)
+rut
+sucursal
+origen
+localorigen
+destino
+localdestino
+centroconsumo
+centroproduccion
+fecha
+monto
+montocancelado
+glosa
+impresion
+tipodocumento
+tipoglosa
+autorizacancelacion
+fechaautorizacionpago
+automatica
+recepcionautomatica</pre>
+                                                </div>
+
+                                                <div class="col-12">
+                                                    <h6 class="mb-1" data-key="apis.movimientos_cabeza.tech.examples.title">Ejemplos de llamadas</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.movimientos_cabeza.tech.examples.requests">GET /api/v1/movimientos/cabeza/?rubro=02&local=19
+
+GET /api/v1/movimientos/cabeza/FC/12345/?rubro=02&local=19
+
+POST /api/v1/movimientos/cabeza/
+
+PUT /api/v1/movimientos/cabeza/FC/12345/?rubro=02&local=19
+
+DELETE /api/v1/movimientos/cabeza/FC/12345/?rubro=02&local=19</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.movimientos_cabeza.tech.examples.responses">GET (200)
+[
+  {
+    "tipo": "FC",
+    "numero": "12345",
+    "fecha": "2026-01-01"
+  }
+]
+
+GET detalle (200)
+{
+  "tipo": "FC",
+  "numero": "12345",
+  "fecha": "2026-01-01"
+}
+
+Ambigüedad (409)
+{
+  "detail": "Ambigüedad: múltiples fechas para tipo/numero."
+}</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <form id="movimientosCabezaConsoleForm" autocomplete="off">
+                                        {% csrf_token %}
+
+                                        <div class="row g-3">
+                                            <div class="col-12 col-lg-4">
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaAction" class="form-label" data-key="apis.console.action.label">Acción</label>
+                                                    <select id="movimientosCabezaAction" class="form-select">
+                                                        <option value="list" data-key="apis.movimientos_cabeza.action.list">Listar (GET)</option>
+                                                        <option value="get" data-key="apis.movimientos_cabeza.action.get">Obtener por tipo y número (GET)</option>
+                                                        <option value="create" data-key="apis.movimientos_cabeza.action.create">Crear (POST)</option>
+                                                        <option value="update" data-key="apis.movimientos_cabeza.action.update">Actualizar (PUT)</option>
+                                                        <option value="delete" data-key="apis.movimientos_cabeza.action.delete">Eliminar (DELETE)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaRubro" class="form-label" data-key="apis.movimientos_cabeza.field.rubro">rubro</label>
+                                                    <input id="movimientosCabezaRubro" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaLocal" class="form-label" data-key="apis.movimientos_cabeza.field.local">local</label>
+                                                    <input id="movimientosCabezaLocal" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaTipo" class="form-label" data-key="apis.movimientos_cabeza.field.tipo">tipo</label>
+                                                    <input id="movimientosCabezaTipo" class="form-control" type="text" maxlength="5">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaNumero" class="form-label" data-key="apis.movimientos_cabeza.field.numero">numero</label>
+                                                    <input id="movimientosCabezaNumero" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaRut" class="form-label" data-key="apis.movimientos_cabeza.field.rut">rut</label>
+                                                    <input id="movimientosCabezaRut" class="form-control" type="text" maxlength="12">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaSucursal" class="form-label" data-key="apis.movimientos_cabeza.field.sucursal">sucursal</label>
+                                                    <input id="movimientosCabezaSucursal" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaOrigen" class="form-label" data-key="apis.movimientos_cabeza.field.origen">origen</label>
+                                                    <input id="movimientosCabezaOrigen" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaLocalOrigen" class="form-label" data-key="apis.movimientos_cabeza.field.localorigen">localorigen</label>
+                                                    <input id="movimientosCabezaLocalOrigen" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaDestino" class="form-label" data-key="apis.movimientos_cabeza.field.destino">destino</label>
+                                                    <input id="movimientosCabezaDestino" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaLocalDestino" class="form-label" data-key="apis.movimientos_cabeza.field.localdestino">localdestino</label>
+                                                    <input id="movimientosCabezaLocalDestino" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaCentroConsumo" class="form-label" data-key="apis.movimientos_cabeza.field.centroconsumo">centroconsumo</label>
+                                                    <input id="movimientosCabezaCentroConsumo" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaCentroProduccion" class="form-label" data-key="apis.movimientos_cabeza.field.centroproduccion">centroproduccion</label>
+                                                    <input id="movimientosCabezaCentroProduccion" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaFecha" class="form-label" data-key="apis.movimientos_cabeza.field.fecha">fecha</label>
+                                                    <input id="movimientosCabezaFecha" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaMonto" class="form-label" data-key="apis.movimientos_cabeza.field.monto">monto</label>
+                                                    <input id="movimientosCabezaMonto" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaMontoCancelado" class="form-label" data-key="apis.movimientos_cabeza.field.montocancelado">montocancelado</label>
+                                                    <input id="movimientosCabezaMontoCancelado" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaGlosa" class="form-label" data-key="apis.movimientos_cabeza.field.glosa">glosa</label>
+                                                    <input id="movimientosCabezaGlosa" class="form-control" type="text">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaImpresion" class="form-label" data-key="apis.movimientos_cabeza.field.impresion">impresion</label>
+                                                    <input id="movimientosCabezaImpresion" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaTipoDocumento" class="form-label" data-key="apis.movimientos_cabeza.field.tipodocumento">tipodocumento</label>
+                                                    <input id="movimientosCabezaTipoDocumento" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaTipoGlosa" class="form-label" data-key="apis.movimientos_cabeza.field.tipoglosa">tipoglosa</label>
+                                                    <input id="movimientosCabezaTipoGlosa" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaAutorizaCancelacion" class="form-label" data-key="apis.movimientos_cabeza.field.autorizacancelacion">autorizacancelacion</label>
+                                                    <input id="movimientosCabezaAutorizaCancelacion" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaFechaAutorizaPago" class="form-label" data-key="apis.movimientos_cabeza.field.fechaautorizacionpago">fechaautorizacionpago</label>
+                                                    <input id="movimientosCabezaFechaAutorizaPago" class="form-control" type="text" maxlength="20">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="movimientosCabezaAutomatica" class="form-label" data-key="apis.movimientos_cabeza.field.automatica">automatica</label>
+                                                    <input id="movimientosCabezaAutomatica" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="movimientosCabezaRecepcionAutomatica" class="form-label" data-key="apis.movimientos_cabeza.field.recepcionautomatica">recepcionautomatica</label>
+                                                    <input id="movimientosCabezaRecepcionAutomatica" class="form-control" type="text" maxlength="10">
+                                                </div>
+
+                                                <button id="movimientosCabezaSendBtn" class="btn btn-primary w-100" type="submit" data-key="apis.console.send">Ejecutar</button>
+
+                                                <div id="movimientosCabezaClientErrors" class="d-none">
+                                                    <span id="movimientosCabezaMsgMissingRubro" data-key="apis.movimientos_cabeza.error.missing_rubro">Debes ingresar rubro (2 dígitos).</span>
+                                                    <span id="movimientosCabezaMsgMissingLocal" data-key="apis.movimientos_cabeza.error.missing_local">Debes ingresar local (2 dígitos).</span>
+                                                    <span id="movimientosCabezaMsgMissingTipo" data-key="apis.movimientos_cabeza.error.missing_tipo">Debes ingresar tipo.</span>
+                                                    <span id="movimientosCabezaMsgMissingNumero" data-key="apis.movimientos_cabeza.error.missing_numero">Debes ingresar número.</span>
+                                                    <span id="movimientosCabezaMsgMissingFecha" data-key="apis.movimientos_cabeza.error.missing_fecha">Debes ingresar fecha.</span>
+                                                    <span id="movimientosCabezaMsgMissingUpdateFields" data-key="apis.movimientos_cabeza.error.missing_update_fields">Debes ingresar al menos un campo para actualizar.</span>
+                                                    <span id="movimientosCabezaMsgMissingCsrf" data-key="apis.console.error.missing_csrf">No se encontró CSRF token.</span>
+                                                    <span id="movimientosCabezaMsgNetworkError" data-key="apis.console.error.network">Error de red al ejecutar la solicitud.</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-lg-8">
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                                    <span class="fw-semibold" data-key="apis.console.status.label">Estado</span>
+                                                    <span id="movimientosCabezaStatusIdle" class="badge bg-secondary" data-key="apis.console.status.idle">Listo</span>
+                                                    <span id="movimientosCabezaStatusRunning" class="badge bg-info d-none" data-key="apis.console.status.running">Ejecutando</span>
+                                                    <span id="movimientosCabezaStatusSuccess" class="badge bg-success d-none" data-key="apis.console.status.success">Completado</span>
+                                                    <span id="movimientosCabezaStatusError" class="badge bg-danger d-none" data-key="apis.console.status.error">Error</span>
+
+                                                    <span class="ms-auto text-muted small">
+                                                        <span data-key="apis.console.http_status.label">HTTP</span>:
+                                                        <span id="movimientosCabezaHttpStatus"><span data-key="apis.console.http_status.empty">—</span></span>
+                                                    </span>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <span class="text-muted" data-key="apis.console.response.label">Respuesta (JSON)</span>
+                                                </div>
+
+                                                <pre id="movimientosCabezaResponse" class="p-3 border rounded bg-light mb-0 font-monospace"><span data-key="apis.console.response.empty">Aún no se ha ejecutado ninguna solicitud.</span></pre>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -805,6 +1107,10 @@ DELETE (204)</pre>
         }
 
         async function sendTiposDocumentosRequest(params, els) {
+            return sendConsoleRequest(params, els);
+        }
+
+        async function sendMovimientosCabezaRequest(params, els) {
             return sendConsoleRequest(params, els);
         }
 
@@ -1094,10 +1400,225 @@ DELETE (204)</pre>
             });
         }
 
+        function initMovimientosCabezaConsole() {
+            const form = byId('movimientosCabezaConsoleForm');
+            if (!form) return;
+
+            const els = {
+                action: byId('movimientosCabezaAction'),
+                rubro: byId('movimientosCabezaRubro'),
+                local: byId('movimientosCabezaLocal'),
+                tipo: byId('movimientosCabezaTipo'),
+                numero: byId('movimientosCabezaNumero'),
+                rut: byId('movimientosCabezaRut'),
+                sucursal: byId('movimientosCabezaSucursal'),
+                origen: byId('movimientosCabezaOrigen'),
+                localorigen: byId('movimientosCabezaLocalOrigen'),
+                destino: byId('movimientosCabezaDestino'),
+                localdestino: byId('movimientosCabezaLocalDestino'),
+                centroconsumo: byId('movimientosCabezaCentroConsumo'),
+                centroproduccion: byId('movimientosCabezaCentroProduccion'),
+                fecha: byId('movimientosCabezaFecha'),
+                monto: byId('movimientosCabezaMonto'),
+                montocancelado: byId('movimientosCabezaMontoCancelado'),
+                glosa: byId('movimientosCabezaGlosa'),
+                impresion: byId('movimientosCabezaImpresion'),
+                tipodocumento: byId('movimientosCabezaTipoDocumento'),
+                tipoglosa: byId('movimientosCabezaTipoGlosa'),
+                autorizacancelacion: byId('movimientosCabezaAutorizaCancelacion'),
+                fechaautorizacionpago: byId('movimientosCabezaFechaAutorizaPago'),
+                automatica: byId('movimientosCabezaAutomatica'),
+                recepcionautomatica: byId('movimientosCabezaRecepcionAutomatica'),
+                sendBtn: byId('movimientosCabezaSendBtn'),
+                response: byId('movimientosCabezaResponse'),
+                httpStatus: byId('movimientosCabezaHttpStatus'),
+                idle: byId('movimientosCabezaStatusIdle'),
+                running: byId('movimientosCabezaStatusRunning'),
+                success: byId('movimientosCabezaStatusSuccess'),
+                error: byId('movimientosCabezaStatusError'),
+                msgMissingRubro: byId('movimientosCabezaMsgMissingRubro'),
+                msgMissingLocal: byId('movimientosCabezaMsgMissingLocal'),
+                msgMissingTipo: byId('movimientosCabezaMsgMissingTipo'),
+                msgMissingNumero: byId('movimientosCabezaMsgMissingNumero'),
+                msgMissingFecha: byId('movimientosCabezaMsgMissingFecha'),
+                msgMissingUpdateFields: byId('movimientosCabezaMsgMissingUpdateFields'),
+                msgMissingCsrf: byId('movimientosCabezaMsgMissingCsrf'),
+                msgNetworkError: byId('movimientosCabezaMsgNetworkError')
+            };
+
+            setStatus('idle', els);
+
+            const baseUrl = '/api/v1/movimientos/cabeza/';
+
+            function getTrimmedValue(inputEl) {
+                const v = (inputEl && inputEl.value != null) ? String(inputEl.value) : '';
+                const t = v.trim();
+                return t;
+            }
+
+            function addIfNonEmpty(obj, key, val) {
+                const t = (val == null) ? '' : String(val).trim();
+                if (!t) return;
+                obj[key] = t;
+            }
+
+            form.addEventListener('submit', function (evt) {
+                evt.preventDefault();
+
+                const action = (els.action && els.action.value) ? els.action.value : 'list';
+
+                const rubro = getTrimmedValue(els.rubro);
+                const local = getTrimmedValue(els.local);
+                const tipo = getTrimmedValue(els.tipo);
+                const numero = getTrimmedValue(els.numero);
+                const fecha = getTrimmedValue(els.fecha);
+
+                const csrfToken = getCsrfToken(form);
+
+                if (!rubro) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingRubro ? els.msgMissingRubro.textContent : '', els);
+                    try { if (els.rubro) els.rubro.focus(); } catch (e) { }
+                    return;
+                }
+
+                if (!local) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingLocal ? els.msgMissingLocal.textContent : '', els);
+                    try { if (els.local) els.local.focus(); } catch (e) { }
+                    return;
+                }
+
+                const needsTipoNumero = (action === 'get' || action === 'update' || action === 'delete');
+                if (needsTipoNumero && !tipo) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingTipo ? els.msgMissingTipo.textContent : '', els);
+                    try { if (els.tipo) els.tipo.focus(); } catch (e) { }
+                    return;
+                }
+
+                if (needsTipoNumero && !numero) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingNumero ? els.msgMissingNumero.textContent : '', els);
+                    try { if (els.numero) els.numero.focus(); } catch (e) { }
+                    return;
+                }
+
+                let method = 'GET';
+                let url = baseUrl;
+                let body = null;
+
+                const qs = new URLSearchParams();
+                qs.set('rubro', rubro);
+                qs.set('local', local);
+                const queryUrl = qs.toString();
+
+                if (action === 'list') {
+                    method = 'GET';
+                    url = baseUrl + '?' + queryUrl;
+                } else if (action === 'get') {
+                    method = 'GET';
+                    url = baseUrl + encodeURIComponent(tipo) + '/' + encodeURIComponent(numero) + '/' + '?' + queryUrl;
+                } else if (action === 'create') {
+                    if (!tipo) {
+                        setStatus('error', els);
+                        setHttpStatus('—', els);
+                        setResponseText(els.msgMissingTipo ? els.msgMissingTipo.textContent : '', els);
+                        try { if (els.tipo) els.tipo.focus(); } catch (e) { }
+                        return;
+                    }
+                    if (!numero) {
+                        setStatus('error', els);
+                        setHttpStatus('—', els);
+                        setResponseText(els.msgMissingNumero ? els.msgMissingNumero.textContent : '', els);
+                        try { if (els.numero) els.numero.focus(); } catch (e) { }
+                        return;
+                    }
+                    if (!fecha) {
+                        setStatus('error', els);
+                        setHttpStatus('—', els);
+                        setResponseText(els.msgMissingFecha ? els.msgMissingFecha.textContent : '', els);
+                        try { if (els.fecha) els.fecha.focus(); } catch (e) { }
+                        return;
+                    }
+
+                    method = 'POST';
+                    url = baseUrl;
+                    body = {
+                        rubro: rubro,
+                        local: local,
+                        tipo: tipo,
+                        numero: numero,
+                        fecha: fecha
+                    };
+
+                    addIfNonEmpty(body, 'rut', getTrimmedValue(els.rut));
+                    addIfNonEmpty(body, 'sucursal', getTrimmedValue(els.sucursal));
+                    addIfNonEmpty(body, 'origen', getTrimmedValue(els.origen));
+                    addIfNonEmpty(body, 'localorigen', getTrimmedValue(els.localorigen));
+                    addIfNonEmpty(body, 'destino', getTrimmedValue(els.destino));
+                    addIfNonEmpty(body, 'localdestino', getTrimmedValue(els.localdestino));
+                    addIfNonEmpty(body, 'centroconsumo', getTrimmedValue(els.centroconsumo));
+                    addIfNonEmpty(body, 'centroproduccion', getTrimmedValue(els.centroproduccion));
+                    addIfNonEmpty(body, 'monto', getTrimmedValue(els.monto));
+                    addIfNonEmpty(body, 'montocancelado', getTrimmedValue(els.montocancelado));
+                    addIfNonEmpty(body, 'glosa', getTrimmedValue(els.glosa));
+                    addIfNonEmpty(body, 'impresion', getTrimmedValue(els.impresion));
+                    addIfNonEmpty(body, 'tipodocumento', getTrimmedValue(els.tipodocumento));
+                    addIfNonEmpty(body, 'tipoglosa', getTrimmedValue(els.tipoglosa));
+                    addIfNonEmpty(body, 'autorizacancelacion', getTrimmedValue(els.autorizacancelacion));
+                    addIfNonEmpty(body, 'fechaautorizacionpago', getTrimmedValue(els.fechaautorizacionpago));
+                    addIfNonEmpty(body, 'automatica', getTrimmedValue(els.automatica));
+                    addIfNonEmpty(body, 'recepcionautomatica', getTrimmedValue(els.recepcionautomatica));
+                } else if (action === 'update') {
+                    method = 'PUT';
+                    url = baseUrl + encodeURIComponent(tipo) + '/' + encodeURIComponent(numero) + '/' + '?' + queryUrl;
+
+                    const updates = {};
+                    addIfNonEmpty(updates, 'rut', getTrimmedValue(els.rut));
+                    addIfNonEmpty(updates, 'sucursal', getTrimmedValue(els.sucursal));
+                    addIfNonEmpty(updates, 'origen', getTrimmedValue(els.origen));
+                    addIfNonEmpty(updates, 'localorigen', getTrimmedValue(els.localorigen));
+                    addIfNonEmpty(updates, 'destino', getTrimmedValue(els.destino));
+                    addIfNonEmpty(updates, 'localdestino', getTrimmedValue(els.localdestino));
+                    addIfNonEmpty(updates, 'centroconsumo', getTrimmedValue(els.centroconsumo));
+                    addIfNonEmpty(updates, 'centroproduccion', getTrimmedValue(els.centroproduccion));
+                    addIfNonEmpty(updates, 'monto', getTrimmedValue(els.monto));
+                    addIfNonEmpty(updates, 'montocancelado', getTrimmedValue(els.montocancelado));
+                    addIfNonEmpty(updates, 'glosa', getTrimmedValue(els.glosa));
+                    addIfNonEmpty(updates, 'impresion', getTrimmedValue(els.impresion));
+                    addIfNonEmpty(updates, 'tipodocumento', getTrimmedValue(els.tipodocumento));
+                    addIfNonEmpty(updates, 'tipoglosa', getTrimmedValue(els.tipoglosa));
+                    addIfNonEmpty(updates, 'autorizacancelacion', getTrimmedValue(els.autorizacancelacion));
+                    addIfNonEmpty(updates, 'fechaautorizacionpago', getTrimmedValue(els.fechaautorizacionpago));
+                    addIfNonEmpty(updates, 'automatica', getTrimmedValue(els.automatica));
+                    addIfNonEmpty(updates, 'recepcionautomatica', getTrimmedValue(els.recepcionautomatica));
+
+                    if (!Object.keys(updates).length) {
+                        setStatus('error', els);
+                        setHttpStatus('—', els);
+                        setResponseText(els.msgMissingUpdateFields ? els.msgMissingUpdateFields.textContent : '', els);
+                        return;
+                    }
+                    body = updates;
+                } else if (action === 'delete') {
+                    method = 'DELETE';
+                    url = baseUrl + encodeURIComponent(tipo) + '/' + encodeURIComponent(numero) + '/' + '?' + queryUrl;
+                }
+
+                sendMovimientosCabezaRequest({ method, url, body, csrfToken }, els);
+            });
+        }
+
         function init() {
             initRubrosConsole();
             initLocalesConsole();
             initTiposDocumentosConsole();
+            initMovimientosCabezaConsole();
         }
 
         if (document.readyState === 'loading') {
