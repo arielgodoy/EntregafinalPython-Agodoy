@@ -454,6 +454,211 @@ DELETE (204)</pre>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="apisAccordionHeadingTiposDocumentos">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#apisAccordionCollapseTiposDocumentos" aria-expanded="false"
+                                    aria-controls="apisAccordionCollapseTiposDocumentos">
+                                    <span data-key="apis.accordion.tipos_documentos.title">Maestros / Tipos de Documentos</span>
+                                </button>
+                            </h2>
+                            <div id="apisAccordionCollapseTiposDocumentos" class="accordion-collapse collapse"
+                                aria-labelledby="apisAccordionHeadingTiposDocumentos" data-bs-parent="#apisAccordion">
+                                <div class="accordion-body">
+                                    <h5 class="mb-2" data-key="apis.tipos_documentos.console.title">CRUD Tipos de Documentos</h5>
+
+                                    <div class="mb-3">
+                                        <h6 class="mb-1" data-key="apis.tipos_documentos.console.base_route.title">Ruta base</h6>
+                                        <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.console.base_route.value">/api/v1/maestros/tipos-documentos/</pre>
+                                    </div>
+
+                                    <p class="text-muted mb-3" data-key="apis.tipos_documentos.description">Consola interna para probar visualmente el CRUD del catálogo de tipos de documentos expuesto por el sistema interno.</p>
+
+                                    <div class="card border mb-3">
+                                        <div class="card-header py-2">
+                                            <span class="fw-semibold" data-key="apis.tipos_documentos.tech.title">Información Técnica de la API</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.endpoint_base.title">Endpoint base</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.tech.endpoint_base.value">/api/v1/maestros/tipos-documentos/</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.methods.title">Métodos soportados</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.tech.methods.value">GET
+POST
+PUT
+DELETE</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.auth.title">Autenticación</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.tipos_documentos.tech.auth.body">La API usa sesión autenticada del sistema (cookie sessionid). Para métodos POST/PUT/DELETE se requiere CSRF token. No se utiliza API key externa ni token manual.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.headers.title">Headers requeridos</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.tipos_documentos.tech.headers.common">Accept: application/json
+X-Requested-With: XMLHttpRequest</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.tech.headers.unsafe">X-CSRFToken: &lt;csrftoken&gt;</pre>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.company_context.title">Contexto de empresa</h6>
+                                                    <p class="text-muted mb-0" data-key="apis.tipos_documentos.tech.company_context.body">El sistema es multiempresa: la empresa activa se obtiene desde la sesión del usuario. empresa_id se resuelve internamente en el backend. Esta consola consume exclusivamente endpoints internos del proyecto.</p>
+                                                </div>
+
+                                                <div class="col-12 col-lg-6">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.params.title">Parámetros del recurso Tipos de Documentos</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.tech.params.value">tipos (string)
+nombredocumento (string)
+operacion (string)
+tipodos (string)
+cuentadebe (string)
+cuentahaber (string)
+costo (string)</pre>
+                                                </div>
+
+                                                <div class="col-12">
+                                                    <h6 class="mb-1" data-key="apis.tipos_documentos.tech.examples.title">Ejemplos de llamadas</h6>
+                                                    <pre class="p-2 border rounded bg-light mb-2 font-monospace small" data-key="apis.tipos_documentos.tech.examples.requests">GET /api/v1/maestros/tipos-documentos/
+
+GET /api/v1/maestros/tipos-documentos/01/
+
+POST /api/v1/maestros/tipos-documentos/
+
+body JSON ejemplo:
+{
+    "tipos": "01",
+    "nombredocumento": "FACTURA",
+    "operacion": "V",
+    "tipodos": "A",
+    "cuentadebe": "11000001",
+    "cuentahaber": "41000001",
+    "costo": "N"
+}
+
+PUT /api/v1/maestros/tipos-documentos/01/
+
+DELETE /api/v1/maestros/tipos-documentos/01/</pre>
+                                                    <pre class="p-2 border rounded bg-light mb-0 font-monospace small" data-key="apis.tipos_documentos.tech.examples.responses">GET (200)
+[
+    {
+        "tipos": "01",
+        "nombredocumento": "FACTURA",
+        "operacion": "V",
+        "tipodos": "A",
+        "cuentadebe": "11000001",
+        "cuentahaber": "41000001",
+        "costo": "N"
+    }
+]
+
+POST (201) / PUT (200)
+{
+    "tipos": "01",
+    "nombredocumento": "FACTURA",
+    "operacion": "V",
+    "tipodos": "A",
+    "cuentadebe": "11000001",
+    "cuentahaber": "41000001",
+    "costo": "N"
+}
+
+DELETE (204)</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <form id="tiposDocumentosConsoleForm" autocomplete="off">
+                                        {% csrf_token %}
+
+                                        <div class="row g-3">
+                                            <div class="col-12 col-lg-4">
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosAction" class="form-label" data-key="apis.console.action.label">Acción</label>
+                                                    <select id="tiposDocumentosAction" class="form-select">
+                                                        <option value="list" data-key="apis.tipos_documentos.action.list">Listar (GET)</option>
+                                                        <option value="get" data-key="apis.tipos_documentos.action.get">Obtener por tipos (GET)</option>
+                                                        <option value="create" data-key="apis.tipos_documentos.action.create">Crear (POST)</option>
+                                                        <option value="update" data-key="apis.tipos_documentos.action.update">Actualizar (PUT)</option>
+                                                        <option value="delete" data-key="apis.tipos_documentos.action.delete">Eliminar (DELETE)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosTipos" class="form-label" data-key="apis.tipos_documentos.field.tipos">tipos</label>
+                                                    <input id="tiposDocumentosTipos" class="form-control" type="text" maxlength="2">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosNombreDocumento" class="form-label" data-key="apis.tipos_documentos.field.nombredocumento">nombredocumento</label>
+                                                    <input id="tiposDocumentosNombreDocumento" class="form-control" type="text" maxlength="30">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosOperacion" class="form-label" data-key="apis.tipos_documentos.field.operacion">operacion</label>
+                                                    <input id="tiposDocumentosOperacion" class="form-control" type="text" maxlength="1">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosTipoDos" class="form-label" data-key="apis.tipos_documentos.field.tipodos">tipodos</label>
+                                                    <input id="tiposDocumentosTipoDos" class="form-control" type="text" maxlength="1">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosCuentaDebe" class="form-label" data-key="apis.tipos_documentos.field.cuentadebe">cuentadebe</label>
+                                                    <input id="tiposDocumentosCuentaDebe" class="form-control" type="text" maxlength="8">
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <label for="tiposDocumentosCuentaHaber" class="form-label" data-key="apis.tipos_documentos.field.cuentahaber">cuentahaber</label>
+                                                    <input id="tiposDocumentosCuentaHaber" class="form-control" type="text" maxlength="8">
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="tiposDocumentosCosto" class="form-label" data-key="apis.tipos_documentos.field.costo">costo</label>
+                                                    <input id="tiposDocumentosCosto" class="form-control" type="text" maxlength="1">
+                                                </div>
+
+                                                <button id="tiposDocumentosSendBtn" class="btn btn-primary w-100" type="submit" data-key="apis.console.send">Ejecutar</button>
+
+                                                <div id="tiposDocumentosClientErrors" class="d-none">
+                                                    <span id="tiposDocumentosMsgMissingCode" data-key="apis.console.error.missing_code">Debes ingresar un código.</span>
+                                                    <span id="tiposDocumentosMsgMissingCsrf" data-key="apis.console.error.missing_csrf">No se encontró CSRF token.</span>
+                                                    <span id="tiposDocumentosMsgNetworkError" data-key="apis.console.error.network">Error de red al ejecutar la solicitud.</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-12 col-lg-8">
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                                    <span class="fw-semibold" data-key="apis.console.status.label">Estado</span>
+                                                    <span id="tiposDocumentosStatusIdle" class="badge bg-secondary" data-key="apis.console.status.idle">Listo</span>
+                                                    <span id="tiposDocumentosStatusRunning" class="badge bg-info d-none" data-key="apis.console.status.running">Ejecutando</span>
+                                                    <span id="tiposDocumentosStatusSuccess" class="badge bg-success d-none" data-key="apis.console.status.success">Completado</span>
+                                                    <span id="tiposDocumentosStatusError" class="badge bg-danger d-none" data-key="apis.console.status.error">Error</span>
+
+                                                    <span class="ms-auto text-muted small">
+                                                        <span data-key="apis.console.http_status.label">HTTP</span>:
+                                                        <span id="tiposDocumentosHttpStatus"><span data-key="apis.console.http_status.empty">—</span></span>
+                                                    </span>
+                                                </div>
+
+                                                <div class="mb-2">
+                                                    <span class="text-muted" data-key="apis.console.response.label">Respuesta (JSON)</span>
+                                                </div>
+
+                                                <pre id="tiposDocumentosResponse" class="p-3 border rounded bg-light mb-0 font-monospace"><span data-key="apis.console.response.empty">Aún no se ha ejecutado ninguna solicitud.</span></pre>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -596,6 +801,10 @@ DELETE (204)</pre>
         }
 
         async function sendLocalesRequest(params, els) {
+            return sendConsoleRequest(params, els);
+        }
+
+        async function sendTiposDocumentosRequest(params, els) {
             return sendConsoleRequest(params, els);
         }
 
@@ -795,9 +1004,100 @@ DELETE (204)</pre>
             });
         }
 
+        function initTiposDocumentosConsole() {
+            const form = byId('tiposDocumentosConsoleForm');
+            if (!form) return;
+
+            const els = {
+                action: byId('tiposDocumentosAction'),
+                tipos: byId('tiposDocumentosTipos'),
+                nombredocumento: byId('tiposDocumentosNombreDocumento'),
+                operacion: byId('tiposDocumentosOperacion'),
+                tipodos: byId('tiposDocumentosTipoDos'),
+                cuentadebe: byId('tiposDocumentosCuentaDebe'),
+                cuentahaber: byId('tiposDocumentosCuentaHaber'),
+                costo: byId('tiposDocumentosCosto'),
+                sendBtn: byId('tiposDocumentosSendBtn'),
+                response: byId('tiposDocumentosResponse'),
+                httpStatus: byId('tiposDocumentosHttpStatus'),
+                idle: byId('tiposDocumentosStatusIdle'),
+                running: byId('tiposDocumentosStatusRunning'),
+                success: byId('tiposDocumentosStatusSuccess'),
+                error: byId('tiposDocumentosStatusError'),
+                msgMissingCode: byId('tiposDocumentosMsgMissingCode'),
+                msgMissingCsrf: byId('tiposDocumentosMsgMissingCsrf'),
+                msgNetworkError: byId('tiposDocumentosMsgNetworkError')
+            };
+
+            setStatus('idle', els);
+
+            const baseUrl = '/api/v1/maestros/tipos-documentos/';
+
+            form.addEventListener('submit', function (evt) {
+                evt.preventDefault();
+
+                const action = (els.action && els.action.value) ? els.action.value : 'list';
+                const tipos = (els.tipos && els.tipos.value) ? els.tipos.value.trim() : '';
+
+                const csrfToken = getCsrfToken(form);
+
+                let method = 'GET';
+                let url = baseUrl;
+                let body = null;
+
+                const needsTipos = (action === 'get' || action === 'update' || action === 'delete');
+                const needsTiposInBody = (action === 'create');
+
+                if ((needsTipos || needsTiposInBody) && !tipos) {
+                    setStatus('error', els);
+                    setHttpStatus('—', els);
+                    setResponseText(els.msgMissingCode ? els.msgMissingCode.textContent : '', els);
+                    try { if (els.tipos) els.tipos.focus(); } catch (e) { }
+                    return;
+                }
+
+                if (action === 'list') {
+                    method = 'GET';
+                    url = baseUrl;
+                } else if (action === 'get') {
+                    method = 'GET';
+                    url = baseUrl + encodeURIComponent(tipos) + '/';
+                } else if (action === 'create') {
+                    method = 'POST';
+                    url = baseUrl;
+                    body = {
+                        tipos: tipos,
+                        nombredocumento: (els.nombredocumento && els.nombredocumento.value) ? els.nombredocumento.value : '',
+                        operacion: (els.operacion && els.operacion.value) ? els.operacion.value : '',
+                        tipodos: (els.tipodos && els.tipodos.value) ? els.tipodos.value : '',
+                        cuentadebe: (els.cuentadebe && els.cuentadebe.value) ? els.cuentadebe.value : '',
+                        cuentahaber: (els.cuentahaber && els.cuentahaber.value) ? els.cuentahaber.value : '',
+                        costo: (els.costo && els.costo.value) ? els.costo.value : ''
+                    };
+                } else if (action === 'update') {
+                    method = 'PUT';
+                    url = baseUrl + encodeURIComponent(tipos) + '/';
+                    body = {
+                        nombredocumento: (els.nombredocumento && els.nombredocumento.value) ? els.nombredocumento.value : '',
+                        operacion: (els.operacion && els.operacion.value) ? els.operacion.value : '',
+                        tipodos: (els.tipodos && els.tipodos.value) ? els.tipodos.value : '',
+                        cuentadebe: (els.cuentadebe && els.cuentadebe.value) ? els.cuentadebe.value : '',
+                        cuentahaber: (els.cuentahaber && els.cuentahaber.value) ? els.cuentahaber.value : '',
+                        costo: (els.costo && els.costo.value) ? els.costo.value : ''
+                    };
+                } else if (action === 'delete') {
+                    method = 'DELETE';
+                    url = baseUrl + encodeURIComponent(tipos) + '/';
+                }
+
+                sendTiposDocumentosRequest({ method, url, body, csrfToken }, els);
+            });
+        }
+
         function init() {
             initRubrosConsole();
             initLocalesConsole();
+            initTiposDocumentosConsole();
         }
 
         if (document.readyState === 'loading') {

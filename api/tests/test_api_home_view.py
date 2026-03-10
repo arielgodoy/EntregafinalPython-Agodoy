@@ -49,10 +49,13 @@ class ApiHomeViewTests(TestCase):
         self.assertContains(resp, 'id="apisAccordion"')
         self.assertContains(resp, 'data-key="apis.accordion.rubros.title"')
         self.assertContains(resp, 'data-key="apis.accordion.locales.title"')
+        self.assertContains(resp, 'data-key="apis.accordion.tipos_documentos.title"')
         self.assertContains(resp, 'data-key="apis.rubros.tech.title"')
         self.assertContains(resp, 'data-key="apis.locales.tech.title"')
+        self.assertContains(resp, 'data-key="apis.tipos_documentos.tech.title"')
         self.assertContains(resp, 'id="rubrosConsoleForm"')
         self.assertContains(resp, 'id="localesConsoleForm"')
+        self.assertContains(resp, 'id="tiposDocumentosConsoleForm"')
         self.assertContains(resp, 'data-key="apis.console.send"')
 
         content = resp.content.decode("utf-8")
@@ -64,4 +67,9 @@ class ApiHomeViewTests(TestCase):
         self.assertLess(
             content.find('data-key="apis.locales.tech.title"'),
             content.find('id="localesConsoleForm"'),
+        )
+
+        self.assertLess(
+            content.find('data-key="apis.tipos_documentos.tech.title"'),
+            content.find('id="tiposDocumentosConsoleForm"'),
         )

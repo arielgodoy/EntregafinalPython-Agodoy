@@ -117,9 +117,55 @@ SQL_MAESTROS_LOCALES_DELETE = """DELETE FROM g_maestroempresas
 WHERE codigo=%s"""
 
 
+SQL_MAESTROS_TIPOS_DOCUMENTOS_LIST = """SELECT
+tipos,
+nombredocumento,
+operacion,
+tipodos,
+cuentadebe,
+cuentahaber,
+costo
+FROM g_maestrotipodedocumentos
+ORDER BY tipos"""
+
+
+SQL_MAESTROS_TIPOS_DOCUMENTOS_GET = """SELECT
+tipos,
+nombredocumento,
+operacion,
+tipodos,
+cuentadebe,
+cuentahaber,
+costo
+FROM g_maestrotipodedocumentos
+WHERE tipos = %s"""
+
+
+SQL_MAESTROS_TIPOS_DOCUMENTOS_INSERT = """INSERT INTO g_maestrotipodedocumentos
+(tipos,nombredocumento,operacion,tipodos,cuentadebe,cuentahaber,costo)
+VALUES (%s,%s,%s,%s,%s,%s,%s)"""
+
+
+SQL_MAESTROS_TIPOS_DOCUMENTOS_UPDATE = """UPDATE g_maestrotipodedocumentos
+SET
+nombredocumento=%s,
+operacion=%s,
+tipodos=%s,
+cuentadebe=%s,
+cuentahaber=%s,
+costo=%s
+WHERE tipos = %s"""
+
+
+SQL_MAESTROS_TIPOS_DOCUMENTOS_DELETE = """DELETE FROM g_maestrotipodedocumentos
+WHERE tipos = %s"""
+
+
 VISTA_NOMBRE = "API - Maestros Rubros"
 
 VISTA_NOMBRE_LOCALES = "API - Maestros Locales"
+
+VISTA_NOMBRE_TIPOS_DOCUMENTOS = "API - Maestros Tipos Documentos"
 
 DB_ALIAS = "eltit_gestion"
 _DB_ALIAS_LOCK = threading.Lock()
@@ -659,6 +705,335 @@ def _validate_locales_payload_update(payload):
     return clean
 
 
+def _validate_tipos_documentos_payload_create(payload):
+    required = (
+        "tipos",
+        "nombredocumento",
+        "operacion",
+        "tipodos",
+        "cuentadebe",
+        "cuentahaber",
+        "costo",
+    )
+    for key in required:
+        if key not in payload:
+            raise ValueError("Body inválido.")
+
+    try:
+        tipos = _validate_codigo(payload.get("tipos"))
+    except ValueError as e:
+        raise ValueError("tipos inválido.") from e
+
+    nombredocumento = payload.get("nombredocumento")
+    operacion = payload.get("operacion")
+    tipodos = payload.get("tipodos")
+    cuentadebe = payload.get("cuentadebe")
+    cuentahaber = payload.get("cuentahaber")
+    costo = payload.get("costo")
+
+    if not all(isinstance(v, str) for v in (nombredocumento, operacion, tipodos, cuentadebe, cuentahaber, costo)):
+        raise ValueError("Body inválido.")
+
+    nombredocumento = nombredocumento.strip()
+    if not nombredocumento or len(nombredocumento) > 30:
+        raise ValueError("nombredocumento inválido.")
+
+    operacion = operacion.strip()
+    if len(operacion) != 1:
+        raise ValueError("operacion inválido.")
+
+    tipodos = tipodos.strip()
+    if len(tipodos) != 1:
+        raise ValueError("tipodos inválido.")
+
+    cuentadebe = cuentadebe.strip()
+    if len(cuentadebe) > 8:
+        raise ValueError("cuentadebe inválido.")
+
+    cuentahaber = cuentahaber.strip()
+    if len(cuentahaber) > 8:
+        raise ValueError("cuentahaber inválido.")
+
+    costo = costo.strip()
+    if len(costo) != 1:
+        raise ValueError("costo inválido.")
+
+    return {
+        "tipos": tipos,
+        "nombredocumento": nombredocumento,
+        "operacion": operacion,
+        "tipodos": tipodos,
+        "cuentadebe": cuentadebe,
+        "cuentahaber": cuentahaber,
+        "costo": costo,
+    }
+
+
+def _validate_tipos_documentos_payload_update(payload):
+    required = (
+        "nombredocumento",
+        "operacion",
+        "tipodos",
+        "cuentadebe",
+        "cuentahaber",
+        "costo",
+    )
+    for key in required:
+        if key not in payload:
+            raise ValueError("Body inválido.")
+
+    nombredocumento = payload.get("nombredocumento")
+    operacion = payload.get("operacion")
+    tipodos = payload.get("tipodos")
+    cuentadebe = payload.get("cuentadebe")
+    cuentahaber = payload.get("cuentahaber")
+    costo = payload.get("costo")
+
+    if not all(isinstance(v, str) for v in (nombredocumento, operacion, tipodos, cuentadebe, cuentahaber, costo)):
+        raise ValueError("Body inválido.")
+
+    nombredocumento = nombredocumento.strip()
+    if not nombredocumento or len(nombredocumento) > 30:
+        raise ValueError("nombredocumento inválido.")
+
+    operacion = operacion.strip()
+    if len(operacion) != 1:
+        raise ValueError("operacion inválido.")
+
+    tipodos = tipodos.strip()
+    if len(tipodos) != 1:
+        raise ValueError("tipodos inválido.")
+
+    cuentadebe = cuentadebe.strip()
+    if len(cuentadebe) > 8:
+        raise ValueError("cuentadebe inválido.")
+
+    cuentahaber = cuentahaber.strip()
+    if len(cuentahaber) > 8:
+        raise ValueError("cuentahaber inválido.")
+
+    costo = costo.strip()
+    if len(costo) != 1:
+        raise ValueError("costo inválido.")
+
+    return {
+        "nombredocumento": nombredocumento,
+        "operacion": operacion,
+        "tipodos": tipodos,
+        "cuentadebe": cuentadebe,
+        "cuentahaber": cuentahaber,
+        "costo": costo,
+    }
+
+
+@verificar_permiso(VISTA_NOMBRE_TIPOS_DOCUMENTOS, "ingresar")
+def _tipos_documentos_list(request):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (_conn, cursor):
+                cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_LIST)
+                rows = cursor.fetchall()
+                data = _rows_to_dicts_raw(cursor, rows)
+            return JsonResponse(data, safe=False)
+        except Exception as e:
+            logger.error("maestros_tipos_documentos_list legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "Error interno."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_LIST)
+            rows = cursor.fetchall()
+            data = _rows_to_dicts_raw(cursor, rows)
+        return JsonResponse(data, safe=False)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_tipos_documentos_list error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "Error interno."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_TIPOS_DOCUMENTOS, "ingresar")
+def _tipos_documentos_get(request, tipos):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        tipos = _validate_codigo(tipos)
+    except ValueError:
+        return JsonResponse({"detail": "tipos inválido."}, status=400)
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (_conn, cursor):
+                cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_GET, [tipos])
+                row = cursor.fetchone()
+                if not row:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                item = _row_to_dict_raw(cursor, row)
+            return JsonResponse(item, safe=True)
+        except Exception as e:
+            logger.error("maestros_tipos_documentos_get legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "Error interno."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_GET, [tipos])
+            row = cursor.fetchone()
+            if not row:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+            item = _row_to_dict_raw(cursor, row)
+        return JsonResponse(item, safe=True)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_tipos_documentos_get error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "Error interno."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_TIPOS_DOCUMENTOS, "crear")
+def _tipos_documentos_create(request):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        payload = _parse_json_object(request)
+        clean = _validate_tipos_documentos_payload_create(payload)
+    except ValueError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+
+    params = [
+        clean["tipos"],
+        clean["nombredocumento"],
+        clean["operacion"],
+        clean["tipodos"],
+        clean["cuentadebe"],
+        clean["cuentahaber"],
+        clean["costo"],
+    ]
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_INSERT, params)
+                conn.commit()
+            return JsonResponse(clean, status=201)
+        except Exception as e:
+            logger.error("maestros_tipos_documentos_create legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo crear tipo de documento."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_INSERT, params)
+        connections[DB_ALIAS].commit()
+        return JsonResponse(clean, status=201)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_tipos_documentos_create error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo crear tipo de documento."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_TIPOS_DOCUMENTOS, "modificar")
+def _tipos_documentos_update(request, tipos):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        tipos = _validate_codigo(tipos)
+    except ValueError:
+        return JsonResponse({"detail": "tipos inválido."}, status=400)
+
+    try:
+        payload = _parse_json_object(request)
+        clean = _validate_tipos_documentos_payload_update(payload)
+    except ValueError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+
+    params = [
+        clean["nombredocumento"],
+        clean["operacion"],
+        clean["tipodos"],
+        clean["cuentadebe"],
+        clean["cuentahaber"],
+        clean["costo"],
+        tipos,
+    ]
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_UPDATE, params)
+                if cursor.rowcount == 0:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                conn.commit()
+            return JsonResponse({"tipos": tipos, **clean})
+        except Exception as e:
+            logger.error("maestros_tipos_documentos_update legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo actualizar tipo de documento."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_UPDATE, params)
+            if cursor.rowcount == 0:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+        connections[DB_ALIAS].commit()
+        return JsonResponse({"tipos": tipos, **clean})
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_tipos_documentos_update error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo actualizar tipo de documento."}, status=500)
+
+
+@verificar_permiso(VISTA_NOMBRE_TIPOS_DOCUMENTOS, "eliminar")
+def _tipos_documentos_delete(request, tipos):
+    resolved = _resolve_db_for_request(request)
+    if not resolved:
+        return _db_alias_not_configured_response()
+
+    mode, cfg = resolved
+    try:
+        tipos = _validate_codigo(tipos)
+    except ValueError:
+        return JsonResponse({"detail": "tipos inválido."}, status=400)
+
+    if mode == "legacy_pymysql":
+        try:
+            with _legacy_pymysql_connection(cfg) as (conn, cursor):
+                cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_DELETE, [tipos])
+                if cursor.rowcount == 0:
+                    return JsonResponse({"detail": "No encontrado."}, status=404)
+                conn.commit()
+            return JsonResponse({}, status=204)
+        except Exception as e:
+            logger.error("maestros_tipos_documentos_delete legacy_pymysql error (%s)", type(e).__name__)
+            return JsonResponse({"detail": "No se pudo eliminar tipo de documento."}, status=500)
+
+    try:
+        with connections[DB_ALIAS].cursor() as cursor:
+            cursor.execute(SQL_MAESTROS_TIPOS_DOCUMENTOS_DELETE, [tipos])
+            if cursor.rowcount == 0:
+                return JsonResponse({"detail": "No encontrado."}, status=404)
+        connections[DB_ALIAS].commit()
+        return JsonResponse({}, status=204)
+    except ConnectionDoesNotExist:
+        return _db_alias_not_configured_response()
+    except Exception as e:
+        logger.error("maestros_tipos_documentos_delete error (%s)", type(e).__name__)
+        return JsonResponse({"detail": "No se pudo eliminar tipo de documento."}, status=500)
+
+
 @verificar_permiso(VISTA_NOMBRE_LOCALES, "ingresar")
 def _locales_list(request):
     resolved = _resolve_db_for_request(request)
@@ -1163,6 +1538,27 @@ def maestros_rubros_detail(request, codigo):
         return _rubros_update(request, codigo)
 
     return _rubros_delete(request, codigo)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def maestros_tipos_documentos_list(request):
+    if request.method == "GET":
+        return _tipos_documentos_list(request)
+
+    return _tipos_documentos_create(request)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def maestros_tipos_documentos_detail(request, tipos):
+    if request.method == "GET":
+        return _tipos_documentos_get(request, tipos)
+
+    if request.method == "PUT":
+        return _tipos_documentos_update(request, tipos)
+
+    return _tipos_documentos_delete(request, tipos)
 
 
 @login_required

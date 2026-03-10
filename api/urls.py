@@ -26,6 +26,18 @@ urlpatterns = [
     ),
 
     path(
+        "maestros/tipos-documentos/",
+        views_maestros.maestros_tipos_documentos_list,
+        name="api_maestros_tipos_documentos_list"
+    ),
+
+    path(
+        "maestros/tipos-documentos/<str:tipos>/",
+        views_maestros.maestros_tipos_documentos_detail,
+        name="api_maestros_tipos_documentos_detail"
+    ),
+
+    path(
         "maestros/locales/",
         views_maestros.maestros_locales_list,
         name="api_maestros_locales_list"
