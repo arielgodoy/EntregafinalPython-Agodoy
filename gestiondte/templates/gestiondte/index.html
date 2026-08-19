@@ -1,0 +1,28 @@
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Gestión DTE{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Gestión DTE" title_key="menu.gestion_dte" pagetitle_key="menu.gestion_dte" %}
+                {% endblock pagetitle %}
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <p data-key="gestion_dte.welcome">Bienvenido al módulo de Gestión de Documentos Tributarios Electrónicos (DTE).</p>
+                                <a href="{% url 'gestion_dte:cesiones' %}" class="btn btn-primary" data-key="gestion_dte.go_cesiones">Ir a Control de Cesiones</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+{% endblock content %}

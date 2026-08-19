@@ -1,0 +1,2406 @@
+{
+  "status": "ok",
+  "note": "total_records_page1=775",
+  "results": [
+    {
+      "person_id": 16047,
+      "rut_masked": "17***-k",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55379,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57896,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57896,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57896,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57896,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63144,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 54569,
+      "rut_masked": "20***-8",
+      "start_date": "2026-06-01",
+      "end_date": "2026-06-30",
+      "checks": {
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60268,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 61915,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-06-30",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-02": {
+          "appears": true,
+          "current_job_id": 61915,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-06-30",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-29": {
+          "appears": true,
+          "current_job_id": 61915,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-06-30",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-30": {
+          "appears": true,
+          "current_job_id": 61915,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-06-30",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-01": {
+          "appears": true,
+          "current_job_id": 63399,
+          "current_job_start_date": "2026-07-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16460,
+      "rut_masked": "11***-6",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55380,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57898,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57898,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57898,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57898,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62696,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16051,
+      "rut_masked": "18***-5",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55381,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57900,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57900,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57900,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57900,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62572,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 17605,
+      "rut_masked": "22***-3",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55382,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57901,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57901,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57901,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57901,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63167,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16756,
+      "rut_masked": "16***-7",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55383,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57903,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57903,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57903,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57903,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62539,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 17263,
+      "rut_masked": "11***-6",
+      "start_date": "2026-02-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-01-31": {
+          "appears": true,
+          "current_job_id": 57906,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-01-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-01": {
+          "appears": true,
+          "current_job_id": 59840,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-02": {
+          "appears": true,
+          "current_job_id": 59840,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 59840,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 59840,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 61906,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 50858,
+      "rut_masked": "11***-5",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55387,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57908,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57908,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57908,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57908,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62265,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16059,
+      "rut_masked": "20***-5",
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-02-28": {
+          "appears": true,
+          "current_job_id": 57602,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-01": {
+          "appears": true,
+          "current_job_id": 60326,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-02": {
+          "appears": true,
+          "current_job_id": 60326,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 60326,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60326,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62740,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16099,
+      "rut_masked": "18***-8",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55389,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57910,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57910,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57910,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57910,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62939,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16074,
+      "rut_masked": "20***-1",
+      "start_date": "2026-02-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-01-31": {
+          "appears": true,
+          "current_job_id": 57911,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-01-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-01": {
+          "appears": true,
+          "current_job_id": 59854,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-02": {
+          "appears": true,
+          "current_job_id": 59854,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 59854,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 59854,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62036,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 52388,
+      "rut_masked": "22***-6",
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-02-28": {
+          "appears": true,
+          "current_job_id": 60120,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-01": {
+          "appears": true,
+          "current_job_id": 60389,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-02": {
+          "appears": true,
+          "current_job_id": 60389,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 60389,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60389,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62266,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 56339,
+      "rut_masked": "14***-k",
+      "start_date": "2026-06-01",
+      "end_date": "2026-07-31",
+      "checks": {
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 61066,
+          "current_job_start_date": "2026-05-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63168,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-02": {
+          "appears": true,
+          "current_job_id": 63168,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-30": {
+          "appears": true,
+          "current_job_id": 63168,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-31": {
+          "appears": true,
+          "current_job_id": 63168,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-08-01": {
+          "appears": true,
+          "current_job_id": 63885,
+          "current_job_start_date": "2026-08-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16936,
+      "rut_masked": "19***-9",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55391,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57912,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57912,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57912,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57912,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62908,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 51221,
+      "rut_masked": "21***-0",
+      "start_date": "2026-03-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-02-28": {
+          "appears": true,
+          "current_job_id": 57758,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-01": {
+          "appears": true,
+          "current_job_id": 60354,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-02": {
+          "appears": true,
+          "current_job_id": 60354,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 60354,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60354,
+          "current_job_start_date": "2026-03-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62267,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 17211,
+      "rut_masked": "16***-6",
+      "start_date": "2026-02-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-01-31": {
+          "appears": true,
+          "current_job_id": 57913,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-01-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-01": {
+          "appears": true,
+          "current_job_id": 60008,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-02": {
+          "appears": true,
+          "current_job_id": 60008,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 60008,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60008,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62860,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16060,
+      "rut_masked": "14***-k",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55394,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57915,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57915,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57915,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57915,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63098,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16500,
+      "rut_masked": "17***-k",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55395,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57916,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57916,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57916,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57916,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62734,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16174,
+      "rut_masked": "20***-7",
+      "start_date": "2026-04-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-03-31": {
+          "appears": true,
+          "current_job_id": 57918,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-03-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-04-01": {
+          "appears": true,
+          "current_job_id": 61023,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-04-02": {
+          "appears": true,
+          "current_job_id": 61023,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 61023,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 61023,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62268,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16357,
+      "rut_masked": "14***-6",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55175,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57919,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57919,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57919,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57919,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63169,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16499,
+      "rut_masked": "19***-4",
+      "start_date": "2026-04-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2026-03-31": {
+          "appears": true,
+          "current_job_id": 59800,
+          "current_job_start_date": "2026-02-01",
+          "current_job_end_date": "2026-03-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-04-01": {
+          "appears": true,
+          "current_job_id": 60724,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-04-02": {
+          "appears": true,
+          "current_job_id": 60724,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 60724,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 60724,
+          "current_job_start_date": "2026-04-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 61837,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 6,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 54987,
+      "rut_masked": "22***-5",
+      "start_date": "2026-01-01",
+      "end_date": "2026-02-28",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 56901,
+          "current_job_start_date": "2025-12-04",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57921,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57921,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-27": {
+          "appears": true,
+          "current_job_id": 57921,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-02-28": {
+          "appears": true,
+          "current_job_id": 57921,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-02-28",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-03-01": {
+          "appears": true,
+          "current_job_id": 60358,
+          "current_job_start_date": "2026-03-11",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 56304,
+      "rut_masked": "20***-k",
+      "start_date": "2026-06-01",
+      "end_date": "2026-07-31",
+      "checks": {
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 61073,
+          "current_job_start_date": "2026-05-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63170,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-02": {
+          "appears": true,
+          "current_job_id": 63170,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-30": {
+          "appears": true,
+          "current_job_id": 63170,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-31": {
+          "appears": true,
+          "current_job_id": 63170,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-08-01": {
+          "appears": true,
+          "current_job_id": 63882,
+          "current_job_start_date": "2026-08-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 15,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16801,
+      "rut_masked": "19***-9",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55318,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57922,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57922,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57922,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57922,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62694,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 17332,
+      "rut_masked": "17***-2",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55398,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57923,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57923,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57923,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57923,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62679,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 17361,
+      "rut_masked": "21***-k",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55399,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57924,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57924,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57924,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57924,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62269,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 4,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16064,
+      "rut_masked": "17***-1",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55400,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57925,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57925,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57925,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57925,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62507,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 14,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 51082,
+      "rut_masked": "22***-7",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 56697,
+          "current_job_start_date": "2025-12-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57928,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57928,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57928,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57928,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 63171,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 3,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16188,
+      "rut_masked": "20***-1",
+      "start_date": "2026-01-01",
+      "end_date": "2026-05-31",
+      "checks": {
+        "2025-12-31": {
+          "appears": true,
+          "current_job_id": 55402,
+          "current_job_start_date": "2025-11-01",
+          "current_job_end_date": "2025-12-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-01": {
+          "appears": true,
+          "current_job_id": 57870,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-01-02": {
+          "appears": true,
+          "current_job_id": 57870,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-30": {
+          "appears": true,
+          "current_job_id": 57870,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57870,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62556,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    },
+    {
+      "person_id": 16229,
+      "rut_masked": "12***-2",
+      "start_date": "2026-06-01",
+      "end_date": "2026-07-31",
+      "checks": {
+        "2026-05-31": {
+          "appears": true,
+          "current_job_id": 57930,
+          "current_job_start_date": "2026-01-01",
+          "current_job_end_date": "2026-05-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-01": {
+          "appears": true,
+          "current_job_id": 62019,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-06-02": {
+          "appears": true,
+          "current_job_id": 62019,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-30": {
+          "appears": true,
+          "current_job_id": 62019,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-07-31": {
+          "appears": true,
+          "current_job_id": 62019,
+          "current_job_start_date": "2026-06-01",
+          "current_job_end_date": "2026-07-31",
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        },
+        "2026-08-01": {
+          "appears": true,
+          "current_job_id": 64062,
+          "current_job_start_date": "2026-08-01",
+          "current_job_end_date": null,
+          "previous_job_id": null,
+          "company_id": 12,
+          "role_id": null,
+          "role_code": null,
+          "recinto_asistencia_code": null,
+          "ctrlit_recinto": null
+        }
+      }
+    }
+  ]
+}

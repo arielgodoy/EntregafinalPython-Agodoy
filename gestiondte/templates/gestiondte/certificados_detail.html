@@ -1,0 +1,64 @@
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Detalle Certificados PFX-DTE - {{ codigoempresa }}{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include 'partials/page-title.html' with pagetitle='Gestión DTE' title='Certificados PFX-DTE' %}
+                {% endblock pagetitle %}
+
+                <div class="card">
+                    <div class="card-body">
+                        <h5 data-key="gestion_dte.certificados.detail.title">Certificados para empresa {{ codigoempresa }}</h5>
+                        {% if empresa %}
+                            <p><strong data-key="gestion_dte.certificados.detail.label.nombre">Nombre:</strong> {{ empresa.nombre }}</p>
+                            <p><strong data-key="gestion_dte.certificados.detail.label.rut">RUT:</strong> {{ empresa.rut }}</p>
+                        {% endif %}
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th data-key="gestion_dte.certificados.detail.table.archivo">Archivo</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.titular">Titular</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.rut_titular">RUT titular</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.emisor">Emisor</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.serial">Nº serie</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.valido_desde">Válido desde</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.valido_hasta">Válido hasta</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.estado">Estado</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.password_set">Contraseña configurada</th>
+                                    <th data-key="gestion_dte.certificados.detail.table.actions">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in certificados %}
+                                    <tr>
+                                        <td>{{ c.archivo.name }}</td>
+                                        <td>{{ c.titular }}</td>
+                                        <td>{{ c.rut_titular }}</td>
+                                        <td>{{ c.emisor_certificado }}</td>
+                                        <td>{{ c.numero_serie }}</td>
+                                        <td>{{ c.valido_desde|date:'d-m-Y' }}</td>
+                                        <td>{{ c.valido_hasta|date:'d-m-Y' }}</td>
+                                        <td>{{ c.estado_vigencia }}</td>
+                                        <td>{% if c.password_encrypted %}Sí{% else %}No{% endif %}</td>
+                                        <td>
+                                            <a href="{% url 'gestion_dte:certificados_toggle_active' c.pk %}" class="btn btn-sm btn-outline-secondary">Toggle</a>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr><td colspan="10">No existe ningún certificado para esta empresa.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+{% endblock %}

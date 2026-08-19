@@ -1,0 +1,61 @@
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+{% extends 'partials/base.html' %}
+{% load static %}
+{% load permisos_tags %}
+
+{% has_permiso 'Gestión DTE - Certificados PFX-DTE' 'crear' as can_create_tag %}
+
+{% block title %}Certificados PFX-DTE{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include 'partials/page-title.html' with pagetitle='Gestión DTE' title='Certificados PFX-DTE' %}
+                {% endblock pagetitle %}
+
+                <div class="card">
+                    <div class="card-body">
+                        {% if can_create_context or can_create_tag %}
+                        <a href="{% url 'gestion_dte:certificados_cargar' %}" class="btn btn-primary mb-3" data-key="gestion_dte.certificados.button.add">+ Agregar certificado</a>
+                        {% endif %}
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th data-key="gestion_dte.certificados.table.empresa">Empresa</th>
+                                    <th data-key="gestion_dte.certificados.table.file">Archivo</th>
+                                    <th data-key="gestion_dte.certificados.table.activo">Activo</th>
+                                    <th data-key="gestion_dte.certificados.table.vencimiento">Vencimiento</th>
+                                    <th>Estado</th>
+                                    <th data-key="gestion_dte.certificados.table.actions">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in certificados %}
+                                    <tr>
+                                        <td>{{ c.empresa_codigo }}</td>
+                                        <td>{{ c.archivo.name }}</td>
+                                        <td data-key="gestion_dte.certificados.table.value.activo">{% if c.activo %}Sí{% else %}No{% endif %}</td>
+                                        <td>{{ c.valido_hasta|date:'d-m-Y' }}</td>
+                                        <td data-key="gestion_dte.certificados.table.value.estado">{{ c.estado_vigencia }}</td>
+                                        <td>
+                                            {% if can_create_context or can_create_tag %}
+                                            <a href="{% url 'gestion_dte:certificados_toggle_active' c.pk %}" class="btn btn-sm btn-outline-secondary" data-key="gestion_dte.certificados.action.toggle">Toggle</a>
+                                            <a href="{% url 'gestion_dte:certificados_probar_conexion' c.pk %}" class="btn btn-sm btn-outline-warning" data-key="gestion_dte.certificados.action.probar">Probar conexión SII</a>
+                                            {% endif %}
+                                            <a href="{% url 'gestion_dte:certificados_detail' c.empresa_codigo %}" class="btn btn-sm btn-outline-primary" data-key="gestion_dte.certificados.action.view">Ver</a>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr><td colspan="6" data-key="gestion_dte.certificados.empty">No hay certificados cargados.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+{% endblock %}

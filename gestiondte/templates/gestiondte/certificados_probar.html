@@ -1,0 +1,93 @@
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Prueba Conexión SII{% endblock title %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% block pagetitle %}
+                {% include 'partials/page-title.html' with pagetitle='Gestión DTE' title='Prueba Conexión SII' %}
+            {% endblock pagetitle %}
+
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-body">
+
+                            {% if success %}
+                            <div class="alert alert-success" role="alert">
+                                <h5 class="alert-heading" data-key="gestion_dte.probar.success.title">Conexión SII exitosa</h5>
+                                <p data-key="gestion_dte.probar.success.subtitle">La autenticación se completó correctamente.</p>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-danger" role="alert">
+                                <h5 class="alert-heading" data-key="gestion_dte.probar.error.title">No fue posible autenticar contra el SII</h5>
+                                {% if error %}
+                                    <p>{{ error }}</p>
+                                {% endif %}
+                                {% if http_status %}
+                                    <p><small data-key="gestion_dte.probar.error.http">Código HTTP SII:</small> {{ http_status }}</p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <table class="table table-bordered mt-3">
+                                <tbody>
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.empresa">Código empresa</th>
+                                        <td>{{ cert.empresa_codigo }}</td>
+                                    </tr>
+                                    {% if empresa %}
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.nombre_empresa">Nombre empresa</th>
+                                        <td>{{ empresa.nombre }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.rut_empresa">RUT empresa</th>
+                                        <td>{{ empresa.rut }}</td>
+                                    </tr>
+                                    {% endif %}
+                                    {% if rut_envio_sii %}
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.rut_envio_sii">RUT envío SII</th>
+                                        <td>{{ rut_envio_sii }}</td>
+                                    </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.titular">Titular del certificado</th>
+                                        <td>{{ cert.titular }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.estado">Estado certificado</th>
+                                        <td>{{ cert.estado_vigencia }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.token_obtenido">Token obtenido</th>
+                                        <td>{% if token_obtenido %}<span data-key="gestion_dte.probar.table.si">Sí</span>{% else %}<span data-key="gestion_dte.probar.table.no">No</span>{% endif %}</td>
+                                    </tr>
+                                    {% if token_expira %}
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.token_expira">Token válido hasta</th>
+                                        <td>{{ token_expira|date:'d-m-Y H:i:s' }}</td>
+                                    </tr>
+                                    {% endif %}
+                                    <tr>
+                                        <th data-key="gestion_dte.probar.table.fecha_prueba">Fecha/hora de prueba</th>
+                                        <td>{{ fecha_prueba|date:'d-m-Y H:i:s' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <a href="{% url 'gestion_dte:certificados' %}" class="btn btn-secondary mt-2" data-key="gestion_dte.probar.button.volver">← Volver al listado</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

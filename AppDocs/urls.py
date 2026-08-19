@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path("", include("biblioteca.urls")),
+    path('gestiondte/', include('gestiondte.urls', namespace='gestion_dte')),
     path('acounts/',include('acounts.urls')),
     path('auth/', include('acounts.activation_urls')),
     path('chat/',include('chat.urls')),

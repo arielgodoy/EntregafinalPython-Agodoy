@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'biblioteca',
+    'gestiondte',
     'acounts',
     'chat',
     'ckeditor',
@@ -306,4 +307,13 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 # Integración Buk (configurable por variables de entorno)
 BUK_API_BASE_URL = os.getenv('BUK_API_BASE_URL', '').strip()
 BUK_API_AUTH_TOKEN = os.getenv('BUK_API_AUTH_TOKEN', '').strip()
+
+# API-RPETC SII: solo el contenido Base64 de Authorization Basic.
+# El header se construye como: Authorization: Basic <SII_RPETC_BASIC_AUTH>.
+# Producción requiere la credencial OAuth publicada y habilitada por el SII.
+SII_RPETC_BASIC_AUTH = os.getenv('SII_RPETC_BASIC_AUTH', '').strip()
+SII_RPETC_BASE_URL = os.getenv(
+    'SII_RPETC_BASE_URL',
+    'https://api.sii.cl/api/api-rpetc',
+).strip()
 

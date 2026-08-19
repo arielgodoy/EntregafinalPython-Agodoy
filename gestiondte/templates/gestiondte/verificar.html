@@ -1,0 +1,47 @@
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Verificar Cesión{% endblock title %}
+
+{% block content %}
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                {% block pagetitle %}
+                    {% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Verificar Cesión" title_key="gestion_dte.index" pagetitle_key="menu.gestion_dte" %}
+                {% endblock pagetitle %}
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title" data-key="gestion_dte.verify.title">Consultar Cesión</h5>
+                                <form class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" data-key="gestion_dte.verify.rut">RUT emisor/proveedor</label>
+                                        <input type="text" class="form-control" name="rut" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" data-key="gestion_dte.verify.tipo">Tipo DTE</label>
+                                        <select class="form-select" name="tipo">
+                                            <option value="">--</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" data-key="gestion_dte.verify.folio">Folio</label>
+                                        <input type="text" class="form-control" name="folio" />
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button type="button" class="btn btn-primary" disabled data-key="gestion_dte.verify.consultar">Consultar cesión</button>
+                                    </div>
+                                </form>
+                                <p class="mt-3 text-muted" data-key="gestion_dte.verify.note">Esta consulta es un placeholder; no realiza llamadas al SII.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+{% endblock content %}
