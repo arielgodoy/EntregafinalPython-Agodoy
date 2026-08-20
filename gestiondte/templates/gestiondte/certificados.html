@@ -4,6 +4,7 @@
 {% load permisos_tags %}
 
 {% has_permiso 'Gestión DTE - Certificados PFX-DTE' 'crear' as can_create_tag %}
+{% has_permiso 'Gestión DTE - Certificados PFX-DTE' 'eliminar' as can_delete_tag %}
 
 {% block title %}Certificados PFX-DTE{% endblock title %}
 
@@ -44,6 +45,11 @@
                                             <a href="{% url 'gestion_dte:certificados_toggle_active' c.pk %}" class="btn btn-sm btn-outline-secondary" data-key="gestion_dte.certificados.action.toggle">Toggle</a>
                                             <a href="{% url 'gestion_dte:certificados_probar_conexion' c.pk %}" class="btn btn-sm btn-outline-warning" data-key="gestion_dte.certificados.action.probar">Probar conexión SII</a>
                                             {% endif %}
+                                            {% if can_delete_context or can_delete_tag %}
+                                            {% if c.empresa_codigo == active_empresa_codigo %}
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-certificado" data-bs-toggle="modal" data-bs-target="#deleteCertificadoModal" data-certificado-nombre="{{ c.archivo.name }}" data-delete-url="{% url 'gestion_dte:certificados_eliminar' c.pk %}" data-key="gestion_dte.certificados.action.delete">Eliminar</button>
+                                            {% endif %}
+                                            {% endif %}
                                             <a href="{% url 'gestion_dte:certificados_detail' c.empresa_codigo %}" class="btn btn-sm btn-outline-primary" data-key="gestion_dte.certificados.action.view">Ver</a>
                                         </td>
                                     </tr>
@@ -55,7 +61,68 @@
                     </div>
                 </div>
 
+                <div class="modal fade" id="deleteCertificadoModal" tabindex="-1" aria-labelledby="deleteCertificadoModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title" id="deleteCertificadoModalLabel" data-key="gestion_dte.certificados.delete.title">Confirmar eliminación</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p data-key="gestion_dte.certificados.delete.confirm">¿Deseas eliminar este certificado?</p>
+                                <strong id="certificadoNombreEliminar"></strong>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="t-cancel">Cancelar</button>
+                                <form id="deleteCertificadoForm" method="post" action="">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger" data-key="t-delete">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('deleteCertificadoModal');
+        const form = document.getElementById('deleteCertificadoForm');
+        const nombre = document.getElementById('certificadoNombreEliminar');
+        if (!modal || !form) return;
+        document.addEventListener('click', function (event) {
+            const button = event.target.closest('.btn-eliminar-certificado');
+            if (!button) return;
+            form.action = button.dataset.deleteUrl || '';
+            nombre.textContent = button.dataset.certificadoNombre || '';
+        });
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            const submit = form.querySelector('button[type="submit"]');
+            submit.disabled = true;
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: new FormData(form),
+                credentials: 'same-origin'
+            }).then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok || !data.success) throw data;
+                    window.location.reload();
+                });
+            }).catch(function (error) {
+                if (typeof Toastify === 'function') {
+                    Toastify({text: error.error || 'No se pudo eliminar el certificado.', duration: 3000, gravity: 'top', position: 'right'}).showToast();
+                }
+                submit.disabled = false;
+            });
+        });
+    });
+    </script>
 {% endblock %}

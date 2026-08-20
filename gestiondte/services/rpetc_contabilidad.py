@@ -1,0 +1,188 @@
+"""Lecturas batch de estados contables para cesiones RPETC."""
+from __future__ import annotations
+
+import re
+from decimal import Decimal
+from typing import Any, Iterable
+
+from settings.models import SettingsMySQLConnection
+
+try:
+    import pymysql
+except ImportError:  # pragma: no cover - el entorno productivo debe incluirlo
+    pymysql = None
+
+
+TIPO_DTE_LEGACY = {"33": "FC"}
+_SCHEMA_RE = re.compile(r"^[0-9]{2}$")
+_SELECT_FIELDS = (
+    "rutctacte, tipodocumento, numerodocumento, monto, dh, fecha, "
+    "fechadocumento, fechavencimiento, glosacontable, creadopor, "
+    "fechacreacion, horacreacion"
+)
+
+
+class ContabilidadLegacyError(RuntimeError):
+    """Error controlado de lectura del ERP legacy."""
+
+
+def _validar_codigo_empresa(codigo: Any) -> str:
+    codigo = str(codigo or "").strip()
+    if not _SCHEMA_RE.fullmatch(codigo):
+        raise ContabilidadLegacyError("Código de empresa inválido para consulta legacy.")
+    return codigo
+
+
+def _schema_empresa(codigo: Any) -> str:
+    return f"eltit_conta{_validar_codigo_empresa(codigo)}"
+
+
+def normalizar_rut_legacy(rut: Any, dv: Any) -> str | None:
+    if rut is None or dv is None:
+        return None
+    cuerpo = re.sub(r"[.\-\s]", "", str(rut).strip())
+    verificador = str(dv).strip().upper()
+    if not cuerpo.isdigit() or len(verificador) != 1 or not re.fullmatch(r"[0-9K]", verificador):
+        return None
+    return f"{cuerpo}{verificador}".zfill(10)
+
+
+def normalizar_folio_legacy(folio: Any, tipo_legacy: str) -> str | None:
+    if folio is None:
+        return None
+    value = str(folio).strip()
+    if not value:
+        return None
+    if tipo_legacy == "FC":
+        return value.zfill(10)
+    return None
+
+
+def _config_legacy() -> SettingsMySQLConnection:
+    config = SettingsMySQLConnection.objects.filter(
+        is_active=True,
+        engine=SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL,
+        db_name="eltit_conta",
+    ).order_by("pk").first()
+    if not config:
+        raise ContabilidadLegacyError("No existe conexión legacy contable activa.")
+    if pymysql is None:
+        raise ContabilidadLegacyError("La librería de conexión legacy no está disponible.")
+    return config
+
+
+def _movimiento_dicts(cursor) -> list[dict[str, Any]]:
+    names = [column[0] for column in cursor.description]
+    return [dict(zip(names, row)) for row in cursor.fetchall()]
+
+
+def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str]]) -> list[dict[str, Any]]:
+    if not keys:
+        return []
+    config = _config_legacy()
+    schema = _schema_empresa(empresa_codigo)
+    table = f"`{schema}`.`movimientoscontables`"
+    clauses = []
+    params: list[str] = []
+    for rutctacte, tipo, folio, dh in sorted(keys):
+        clauses.append("(rutctacte=%s AND tipodocumento=%s AND numerodocumento=%s AND dh=%s)")
+        params.extend((rutctacte, tipo, folio, dh))
+    sql = f"SELECT {_SELECT_FIELDS} FROM {table} WHERE " + " OR ".join(clauses)
+    connection = None
+    try:
+        connection = pymysql.connect(
+            host=config.host,
+            port=int(config.port or 3306),
+            user=config.user,
+            password=config.password,
+            database=config.db_name,
+            charset=(config.charset or "latin1"),
+            connect_timeout=5,
+            read_timeout=15,
+            write_timeout=10,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            return _movimiento_dicts(cursor)
+    except Exception as exc:
+        raise ContabilidadLegacyError("No fue posible consultar el ERP legacy.") from exc
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def _key_for(cesion, role: str) -> tuple[str, str, str, str] | None:
+    tipo = TIPO_DTE_LEGACY.get(str(cesion.tipo_doc))
+    if not tipo:
+        return None
+    if role == "contabilizacion":
+        rut = normalizar_rut_legacy(cesion.cedente_rut, cesion.cedente_dv)
+        dh = "H"
+    else:
+        rut = normalizar_rut_legacy(cesion.cesionario_rut, cesion.cesionario_dv)
+        dh = "D"
+    folio = normalizar_folio_legacy(cesion.folio_doc, tipo)
+    return (rut, tipo, folio, dh) if rut and folio else None
+
+
+def _classify(movements: list[dict[str, Any]], expected: Decimal | None, found_state: str) -> dict[str, Any]:
+    result = {
+        "estado": "NO_CONTABILIZADA" if found_state == "H" else "NO_PAGADA",
+        "cantidad_movimientos": len(movements),
+        "monto_coincide": False,
+        "monto_rpetc": expected,
+        "monto_legacy": None,
+        "movimientos": movements,
+    }
+    if len(movements) != 1:
+        if len(movements) > 1:
+            result["estado"] = "REVISAR"
+        return result
+    try:
+        legacy_amount = Decimal(str(movements[0].get("monto")))
+    except Exception:
+        result["estado"] = "REVISAR"
+        return result
+    result["monto_legacy"] = legacy_amount
+    result["monto_coincide"] = expected is not None and legacy_amount == expected
+    if result["monto_coincide"]:
+        result["estado"] = "CONTABILIZADA" if found_state == "H" else "PAGADA"
+    else:
+        result["estado"] = "REVISAR"
+    return result
+
+
+def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[Any]) -> dict[Any, dict[str, Any]]:
+    """Resuelve estados de todas las cesiones con una consulta OR batch."""
+    _validar_codigo_empresa(empresa_codigo)
+    cesiones = list(cesiones)
+    result: dict[Any, dict[str, Any]] = {}
+    keys: set[tuple[str, str, str, str]] = set()
+    key_by_cesion: dict[Any, dict[str, tuple[str, str, str, str] | None]] = {}
+    for cesion in cesiones:
+        key_by_cesion[cesion.pk] = {
+            "contabilizacion": _key_for(cesion, "contabilizacion"),
+            "pago": _key_for(cesion, "pago"),
+        }
+        keys.update(key for key in key_by_cesion[cesion.pk].values() if key)
+        result[cesion.pk] = {
+            "contabilizacion": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["contabilizacion"] else None, "cantidad_movimientos": 0, "movimientos": []},
+            "pago": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["pago"] else None, "cantidad_movimientos": 0, "movimientos": []},
+        }
+    indexed = {}
+    for movement in _query_movimientos(empresa_codigo, keys):
+        key = (movement["rutctacte"], movement["tipodocumento"], movement["numerodocumento"], movement["dh"])
+        indexed.setdefault(key, []).append(movement)
+    for cesion in cesiones:
+        for role, state in (("contabilizacion", "H"), ("pago", "D")):
+            key = key_by_cesion[cesion.pk][role]
+            if key:
+                expected = cesion.monto_total if role == "contabilizacion" else cesion.monto_cesion
+                result[cesion.pk][role] = _classify(indexed.get(key, []), expected, state)
+    return result
+
+
+def obtener_detalle_contable_cesion(empresa_codigo: str, cesion) -> dict[str, Any]:
+    """Obtiene ambos bloques de movimientos para una cesión concreta."""
+    states = obtener_estados_contables_cesiones(empresa_codigo, [cesion])
+    return states[cesion.pk]

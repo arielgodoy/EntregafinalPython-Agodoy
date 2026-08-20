@@ -1,252 +1,52 @@
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 {% extends 'partials/base.html' %}
-{% load static %}
-{% load humanize %}
+{% load static humanize %}
 
 {% block title %}Control de Cesiones DTE{% endblock title %}
-
 {% block content %}
-    <!-- i18n: Los textos visibles de este bloque usan data-key. -->
-    <div class="main-content">
-        <div class="page-content">
-            <div class="container-fluid">
-                {% block pagetitle %}
-                    {% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Control de Cesiones DTE" title_key="menu.gestion_dte" pagetitle_key="menu.gestion_dte" %}
-                {% endblock pagetitle %}
+<div class="main-content"><div class="page-content"><div class="container-fluid">
+  {% block pagetitle %}{% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Control de Cesiones DTE" title_key="menu.gestion_dte" pagetitle_key="menu.gestion_dte" %}{% endblock pagetitle %}
 
-                <!-- KPI Cards -->
-                <div class="row">
-                    <div class="col-md-6 col-xl-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted" data-key="gestion_dte.kpi.revisados">Documentos revisados</h6>
-                                <h3 class="mb-0">{{ kpis.documentos_revisados }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-xl-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted" data-key="gestion_dte.kpi.cedidos">Documentos cedidos</h6>
-                                <h3 class="mb-0">{{ kpis.documentos_cedidos }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-xl-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted" data-key="gestion_dte.kpi.no_cedidos">Documentos sin cesión</h6>
-                                <h3 class="mb-0">{{ kpis.documentos_no_cedidos }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-xl-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h6 class="text-muted" data-key="gestion_dte.kpi.pendientes">Pendientes de revisión</h6>
-                                <h3 class="mb-0">{{ kpis.pendientes_revision }}</h3>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <div><div class="text-muted small" data-key="gestion_dte.filter.company_active">Empresa activa</div><div class="fw-semibold">{% if empresa_activa %}{{ empresa_activa.codigo }} - {{ empresa_activa.descripcion }}{% else %}-{% endif %}</div>{% if ultima_sincronizacion %}<div class="text-muted small mt-1"><span data-key="gestion_dte.rpetc.history.title">Última sincronización</span>: {{ ultima_sincronizacion.consultada_en|date:"d/m/Y H:i" }} · {{ ultima_sincronizacion.estado }} · {{ ultima_sincronizacion.cantidad_lineas|default:"-" }} <span data-key="gestion_dte.rpetc.history.lines">líneas</span></div>{% endif %}</div>
+    {% if can_sync_rpetc %}<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#syncRpetcModal" data-key="gestion_dte.rpetc.sync.submit">Sincronizar cesiones</button>{% endif %}
+  </div>
+  {% if sync_error %}<div class="alert alert-danger py-2" role="alert">{{ sync_error }}</div>{% endif %}
+  {% if sync_form.non_field_errors %}<div class="alert alert-danger py-2" role="alert">{{ sync_form.non_field_errors }}</div>{% endif %}
+  {% if sync_result %}<div class="alert alert-success py-2" role="status"><strong data-key="gestion_dte.rpetc.sync.completed">Sincronización completada</strong>{% if sync_result.registros_recibidos == 0 %}<span data-key="gestion_dte.rpetc.sync.no_records"> · No existen cesiones registradas por el SII para este período.</span>{% endif %} · <span data-key="gestion_dte.rpetc.sync.records">Registros</span>: {{ sync_result.registros_recibidos }} · <span data-key="gestion_dte.rpetc.sync.transitions">Transiciones</span>: {{ sync_result.transiciones_estado }}</div>{% endif %}
 
-                <!-- Filters -->
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title mb-3" data-key="gestion_dte.filters.title">Filtros</h5>
-                                <form class="row g-3" method="get" action="{% url 'gestion_dte:cesiones' %}">
-                                    <div class="col-md-3">
-                                        <label class="form-label" data-key="gestion_dte.filter.company_active">Empresa activa</label>
-                                        <div class="form-control bg-light">{% if empresa_activa %}{{ empresa_activa.codigo }} - {{ empresa_activa.descripcion }}{% else %}-{% endif %}</div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label" data-key="gestion_dte.filter.rut">RUT proveedor</label>
-                                        <input type="text" class="form-control" name="rut_proveedor" value="{{ filtros.rut_proveedor|default:'' }}" placeholder="77575300-5" />
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label" data-key="gestion_dte.filter.tipo">Tipo DTE</label>
-                                        <select class="form-select" name="tipo_doc">
-                                            <option value="">--</option>
-                                            {% for tipo in tipos_doc_filtro %}<option value="{{ tipo }}"{% if filtros.tipo_doc == tipo %} selected{% endif %}>{{ tipo }}</option>{% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label" data-key="gestion_dte.filter.folio">Folio</label>
-                                        <input type="text" class="form-control" name="folio" value="{{ filtros.folio|default:'' }}" />
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label" data-key="gestion_dte.filter.estado">Estado cesión</label>
-                                        <select class="form-select" name="estado">
-                                            <option value="">--</option>
-                                            {% for estado in estados_filtro %}<option value="{{ estado }}"{% if filtros.estado == estado %} selected{% endif %}>{{ estado }}</option>{% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label" data-key="gestion_dte.filter.fecha_desde">Fecha desde</label>
-                                        <input type="date" class="form-control" name="fecha_desde" value="{{ filtros.fecha_desde|date:'Y-m-d' }}" />
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label" data-key="gestion_dte.filter.fecha_hasta">Fecha hasta</label>
-                                        <input type="date" class="form-control" name="fecha_hasta" value="{{ filtros.fecha_hasta|date:'Y-m-d' }}" />
-                                    </div>
-                                    <div class="col-12">
-                                        <button type="submit" class="btn btn-primary" data-key="gestion_dte.filter.search">Buscar</button>
-                                        <a href="{% url 'gestion_dte:cesiones' %}" class="btn btn-outline-secondary" data-key="gestion_dte.filter.clear">Limpiar</a>
-                                    </div>
-                                    {% if filtros_error %}<div class="col-12"><div class="alert alert-danger mb-0">{{ filtros_error }}</div></div>{% endif %}
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+  <div class="card mb-3"><div class="card-body">
+    <h5 class="card-title mb-3" data-key="gestion_dte.filters.title">Filtros</h5>
+    <form class="row g-3" method="get" action="{% url 'gestion_dte:cesiones' %}" id="cesiones-filtros-form">
+      <div class="col-md-3"><label class="form-label" data-key="gestion_dte.filter.company_active">Empresa activa</label><div class="form-control bg-light">{% if empresa_activa %}{{ empresa_activa.codigo }} - {{ empresa_activa.descripcion }}{% else %}-{% endif %}</div></div>
+      <div class="col-md-3"><label class="form-label" data-key="gestion_dte.filter.rut">RUT proveedor</label><select class="form-select" name="rut_proveedor"><option value="" data-key="gestion_dte.filter.all_suppliers">Todos los proveedores</option>{% for proveedor in proveedores_filtro %}<option value="{{ proveedor.value }}"{% if filtros.rut_proveedor == proveedor.value %} selected{% endif %}>{{ proveedor.label }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><label class="form-label" data-key="gestion_dte.filter.tipo">Tipo DTE</label><select class="form-select" name="tipo_doc"><option value="">--</option>{% for tipo in tipos_doc_filtro %}<option value="{{ tipo }}"{% if filtros.tipo_doc == tipo %} selected{% endif %}>{{ tipo }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><label class="form-label" data-key="gestion_dte.filter.folio">Folio</label><input type="text" class="form-control" name="folio" value="{{ filtros.folio|default:'' }}" /></div>
+      <div class="col-md-2"><label class="form-label" data-key="gestion_dte.filter.estado">Estado cesión</label><select class="form-select" name="estado"><option value="">--</option>{% for estado in estados_filtro %}<option value="{{ estado }}"{% if filtros.estado == estado %} selected{% endif %}>{{ estado }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label" data-key="gestion_dte.filter.fecha_desde">Fecha desde</label><input type="date" class="form-control" name="fecha_desde" value="{{ filtros.fecha_desde|date:'Y-m-d' }}" /></div>
+      <div class="col-md-3"><label class="form-label" data-key="gestion_dte.filter.fecha_hasta">Fecha hasta</label><input type="date" class="form-control" name="fecha_hasta" value="{{ filtros.fecha_hasta|date:'Y-m-d' }}" /></div>
+      <div class="col-12"><button type="submit" class="btn btn-primary" data-key="gestion_dte.filter.search">Buscar</button> <a href="{% url 'gestion_dte:cesiones' %}" class="btn btn-outline-secondary" data-key="gestion_dte.filter.clear">Limpiar</a></div>
+      {% if filtros_error %}<div class="col-12"><div class="alert alert-danger mb-0">{{ filtros_error }}</div></div>{% endif %}
+    </form>
+  </div></div>
 
-                <!-- Cesiones agrupadas por fecha real de cesion -->
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title" data-key="gestion_dte.rpetc.documents.title">Documentos cedidos</h5>
-                                <p class="text-muted mb-3"><span data-key="gestion_dte.rpetc.documents.results">Resultados</span>: {{ total_cesiones_rpetc|intcomma }} <span data-key="gestion_dte.rpetc.documents.filtered">cesiones</span> · <span data-key="gestion_dte.rpetc.documents.amount">Monto cedido</span>: ${{ monto_total_cedido|floatformat:0|intcomma }}</p>
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-4">
-                                        <div class="text-muted small" data-key="gestion_dte.rpetc.documents.total">Total cesiones</div>
-                                        <div class="fs-4">{{ total_cesiones_rpetc|intcomma }}</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="text-muted small" data-key="gestion_dte.rpetc.documents.amount">Monto total cedido</div>
-                                        <div class="fs-4">${{ monto_total_cedido|floatformat:0|intcomma }}</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="text-muted small" data-key="gestion_dte.rpetc.documents.last">Última cesión</div>
-                                        <div class="fs-6">{% if ultima_cesion %}{{ ultima_cesion.fecha_cesion|date:"d/m/Y H:i" }}{% else %}-{% endif %}</div>
-                                    </div>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table align-middle table-nowrap mb-0" id="cesionesRpetcTable">
-                                        <thead>
-                                            <tr>
-                                                <th data-key="gestion_dte.rpetc.documents.date">Fecha de cesión</th>
-                                                <th data-key="gestion_dte.rpetc.documents.count">Documentos</th>
-                                                <th data-key="gestion_dte.rpetc.documents.amount">Monto cedido</th>
-                                                <th data-key="gestion_dte.rpetc.documents.detail">Detalle</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                        {% for grupo in cesiones_por_fecha %}
-                                            <tr class="{% if grupo.fecha == fecha_cesion_seleccionada %}table-active{% endif %}">
-                                                <td>{{ grupo.fecha|date:"d/m/Y" }}</td>
-                                                <td>{{ grupo.cantidad|intcomma }}</td>
-                                                <td>${{ grupo.monto|floatformat:0|intcomma }}</td>
-                                                <td><a class="btn btn-sm btn-outline-primary" href="{% url 'gestion_dte:cesiones' %}{% if filtros_querystring %}?{{ filtros_querystring }}&amp;fecha_cesion={{ grupo.fecha|date:'Y-m-d' }}{% else %}?fecha_cesion={{ grupo.fecha|date:'Y-m-d' }}{% endif %}" data-key="gestion_dte.rpetc.documents.open">Ver documentos</a></td>
-                                            </tr>
-                                            {% if grupo.fecha == fecha_cesion_seleccionada %}
-                                            <tr>
-                                                <td colspan="4">
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm mb-0">
-                                                            <thead><tr>
-                                                                <th data-key="gestion_dte.rpetc.detail.type">Tipo</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.folio">Folio</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.cedente">Cedente</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.cesionario">Cesionario</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.date">Fecha y hora</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.amount">Monto</th>
-                                                                <th data-key="gestion_dte.rpetc.detail.status">Estado</th>
-                                                            </tr></thead>
-                                                            <tbody>
-                                                            {% for cesion in cesiones_detalle %}
-                                                                <tr>
-                                                                    <td>{{ cesion.tipo_doc }}</td>
-                                                                    <td>{{ cesion.folio_doc }}</td>
-                                                                    <td>{{ cesion.cedente_rut }}{% if cesion.cedente_dv %}-{{ cesion.cedente_dv }}{% endif %}</td>
-                                                                    <td>{{ cesion.cesionario_rut }}{% if cesion.cesionario_dv %}-{{ cesion.cesionario_dv }}{% endif %}</td>
-                                                                    <td>{{ cesion.fecha_cesion|date:"d/m/Y H:i" }}</td>
-                                                                    <td>${{ cesion.monto_cesion|floatformat:0|intcomma }}</td>
-                                                                    <td>{{ cesion.estado_cesion }}</td>
-                                                                </tr>
-                                                            {% endfor %}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            {% endif %}
-                                        {% empty %}
-                                            <tr><td colspan="4" class="text-center text-muted" data-key="gestion_dte.rpetc.documents.no_results">No se encontraron documentos cedidos con los filtros seleccionados.</td></tr>
-                                        {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+  <div class="card"><div class="card-body"><h5 class="card-title" data-key="gestion_dte.rpetc.documents.title">Documentos cedidos</h5><p class="text-muted mb-3"><span data-key="gestion_dte.rpetc.documents.results">Resultados</span>: <span data-rpetc-results>{{ total_cesiones_rpetc|intcomma }}</span> <span data-key="gestion_dte.rpetc.documents.filtered">cesiones</span> · <span data-key="gestion_dte.rpetc.documents.amount">Monto cedido</span>: <span data-rpetc-amount>${{ monto_total_cedido|floatformat:0|intcomma }}</span></p>
+    <div class="table-responsive w-100"><table class="table table-striped table-hover align-middle w-100" id="cesionesRpetcTable"><thead><tr><th data-key="gestion_dte.rpetc.documents.date">Fecha cesión</th><th data-key="gestion_dte.rpetc.detail.type">Tipo DTE</th><th data-key="gestion_dte.rpetc.detail.folio">Folio</th><th data-key="gestion_dte.rpetc.detail.cedente">Cedente</th><th data-key="gestion_dte.rpetc.detail.cesionario">Cesionario</th><th data-key="gestion_dte.rpetc.detail.amount">Monto cedido</th><th data-key="gestion_dte.rpetc.detail.status">Estado cesión</th><th data-key="gestion_dte.rpetc.accounting.status">Contabilizada</th><th data-key="gestion_dte.rpetc.accounting.paid">Pagada</th></tr></thead><tbody></tbody></table></div>
+  </div></div>
 
-                {% if can_sync_rpetc %}
-                <div class="row mt-3">
-                    <div class="col-lg-5">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <h5 class="card-title" data-key="gestion_dte.rpetc.sync.title">Sincronizar RPETC</h5>
-                                <p class="text-muted" data-key="gestion_dte.rpetc.sync.help">Consulta las cesiones del deudor en el SII. Puede tardar algunos segundos y permite un rango máximo de un mes.</p>
-                                <form method="post" action="{% url 'gestion_dte:sincronizar_cesiones_rpetc' %}" id="rpetc-sync-form">
-                                    {% csrf_token %}
-                                    {% if sync_form.non_field_errors %}<div class="alert alert-danger">{{ sync_form.non_field_errors }}</div>{% endif %}
-                                    <div class="mb-3">
-                                        <label class="form-label" for="id_fecha_desde" data-key="gestion_dte.rpetc.sync.from">Desde</label>
-                                        {{ sync_form.fecha_desde }}
-                                        {% for error in sync_form.fecha_desde.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label" for="id_fecha_hasta" data-key="gestion_dte.rpetc.sync.to">Hasta</label>
-                                        {{ sync_form.fecha_hasta }}
-                                        {% for error in sync_form.fecha_hasta.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                                    </div>
-                                    <button type="submit" class="btn btn-primary" id="rpetc-sync-submit" data-key="gestion_dte.rpetc.sync.submit">Sincronizar cesiones</button>
-                                </form>
-                                {% if sync_error %}<div class="alert alert-danger mt-3" role="alert">{{ sync_error }}</div>{% endif %}
-                                {% if sync_result %}
-                                <div class="alert alert-success mt-3" role="status">
-                                    <strong data-key="gestion_dte.rpetc.sync.completed">Sincronización completada</strong>
-                                    <div data-key="gestion_dte.rpetc.sync.records">Registros procesados: {{ sync_result.registros_recibidos }}</div>
-                                    <div data-key="gestion_dte.rpetc.sync.created">Cesiones nuevas: {{ sync_result.cesiones_creadas }}</div>
-                                    <div data-key="gestion_dte.rpetc.sync.updated">Cesiones actualizadas: {{ sync_result.cesiones_actualizadas }}</div>
-                                    <div data-key="gestion_dte.rpetc.sync.unchanged">Cesiones sin cambios: {{ sync_result.cesiones_sin_cambios }}</div>
-                                    <div data-key="gestion_dte.rpetc.sync.transitions">Transiciones de estado: {{ sync_result.transiciones_estado }}</div>
-                                    <div data-key="gestion_dte.rpetc.sync.period">Período: {{ sync_result.periodo }}</div>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-7">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <h5 class="card-title" data-key="gestion_dte.rpetc.history.title">Última sincronización</h5>
-                                {% if ultima_sincronizacion %}
-                                    <p class="mb-1"><strong data-key="gestion_dte.rpetc.history.date">Fecha</strong>: {{ ultima_sincronizacion.consultada_en|date:"d/m/Y H:i" }}</p>
-                                    <p class="mb-1"><strong data-key="gestion_dte.rpetc.history.status">Estado</strong>: {{ ultima_sincronizacion.estado }}</p>
-                                    <p class="mb-1"><strong data-key="gestion_dte.rpetc.history.lines">Registros</strong>: {{ ultima_sincronizacion.cantidad_lineas|default:"-" }}</p>
-                                {% else %}
-                                    <p class="text-muted" data-key="gestion_dte.rpetc.history.empty">No existe una sincronización registrada.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-
-            </div>
-        </div>
-    </div>
-    <script>
-        document.getElementById('rpetc-sync-form')?.addEventListener('submit', function () {
-            const button = document.getElementById('rpetc-sync-submit');
-            if (button) {
-                button.disabled = true;
-                button.textContent = 'Procesando...';
-            }
-        });
-    </script>
+  <div class="modal fade" id="detalleContableModal" tabindex="-1" aria-labelledby="detalleContableModalLabel" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="detalleContableModalLabel" data-key="gestion_dte.rpetc.accounting.modal.title">Detalle contable</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><div id="detalleContableContenido" class="table-responsive"><span data-key="gestion_dte.rpetc.accounting.modal.loading">Cargando...</span></div></div></div></div></div>
+  <div class="modal fade" id="syncRpetcModal" tabindex="-1" aria-labelledby="syncRpetcModalLabel" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="syncRpetcModalLabel" data-key="gestion_dte.rpetc.sync.modal.title">Sincronizar cesiones RPETC</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><form method="post" action="{% url 'gestion_dte:sincronizar_cesiones_rpetc' %}" id="rpetc-sync-form">{% csrf_token %}<div class="modal-body"><p class="text-muted" data-key="gestion_dte.rpetc.sync.help">Consulta las cesiones del deudor en el SII. Puede tardar algunos segundos y permite un rango máximo de un mes.</p><div class="mb-3"><label class="form-label" for="id_fecha_desde" data-key="gestion_dte.rpetc.sync.from">Desde</label>{{ sync_form.fecha_desde }}</div><div class="mb-3"><label class="form-label" for="id_fecha_hasta" data-key="gestion_dte.rpetc.sync.to">Hasta</label>{{ sync_form.fecha_hasta }}</div><div class="form-label mb-2" data-key="gestion_dte.rpetc.sync.months">Mes</div><div class="d-flex flex-wrap gap-1" id="rpetc-months"><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="0">Ene</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="1">Feb</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="2">Mar</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="3">Abr</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="4">May</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="5">Jun</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="6">Jul</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="7">Ago</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="8">Sep</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="9">Oct</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="10">Nov</button><button type="button" class="btn btn-sm btn-outline-secondary rpetc-month" data-month="11">Dic</button></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="t-cancel">Cancelar</button><button type="submit" class="btn btn-primary" id="rpetc-sync-submit" data-key="gestion_dte.rpetc.sync.submit">Sincronizar</button></div></form></div></div></div>
+</div></div></div>
+{% include 'partials/datatables_includes.html' %}
+<script>
+$(function(){function badge(v,s,id){var st=(v||{}).estado||'NO_DISPONIBLE',l={CONTABILIZADA:'✓ Contabilizada',PAGADA:'✓ Pagada',REVISAR:'Revisar',TIPO_NO_SOPORTADO:'No disponible'};if(['CONTABILIZADA','PAGADA','REVISAR'].indexOf(st)>=0)return '<button type="button" class="btn btn-sm '+(st==='REVISAR'?'btn-warning':'btn-success')+' btn-detalle-contable" data-cesion-id="'+id+'" data-section="'+s+'">'+(l[st]||st)+'</button>';return '<span class="badge bg-secondary">'+(l[st]||'Pendiente')+'</span>';}
+$('#cesionesRpetcTable').DataTable({serverSide:true,processing:true,pageLength:25,lengthMenu:[[25,50,100],[25,50,100]],order:[[0,'desc']],responsive:true,autoWidth:false,language:{url:'/static/lang/es-ES.json'},ajax:{url:'{% url "gestion_dte:cesiones_data" %}',data:function(d){var f=document.getElementById('cesiones-filtros-form');if(f)new FormData(f).forEach(function(v,k){d[k]=v;});},dataSrc:function(j){var s=j.summary||{};document.querySelector('[data-rpetc-results]').textContent=s.cantidad||0;document.querySelector('[data-rpetc-amount]').textContent='$'+(s.monto_total||0);return j.data||[];}},columns:[{data:'fecha_cesion'},{data:'tipo_doc'},{data:'folio_doc'},{data:null,render:function(d){return (d.cedente_nombre||'-')+'<small class="d-block text-muted">'+(d.cedente_rut||'-')+'</small>';}},{data:null,render:function(d){return (d.cesionario_nombre||'-')+'<small class="d-block text-muted">'+(d.cesionario_rut||'-')+'</small>';}},{data:'monto_cesion',render:function(d){return '$'+Number(d||0).toLocaleString('es-CL');}},{data:'estado_cesion'},{data:'contabilizacion',orderable:false,render:function(d,t,r){return badge(d,'contabilizacion',r.id);}},{data:'pago',orderable:false,render:function(d,t,r){return badge(d,'pago',r.id);}}]});
+$('#cesiones-filtros-form').on('submit',function(e){e.preventDefault();$('#cesionesRpetcTable').DataTable().ajax.reload();});
+$(document).on('click','.btn-detalle-contable',function(){var b=$(this),url='{% url "gestion_dte:detalle_contable_cesion" 0 %}'.replace('/0/','/'+b.data('cesion-id')+'/');fetch(url,{headers:{Accept:'application/json'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){var rows=d[b.data('section')]||[],box=document.getElementById('detalleContableContenido');box.innerHTML='';if(!rows.length){box.textContent='No hay movimientos contables.';return;}var t=document.createElement('table');t.className='table table-sm';t.innerHTML='<thead><tr><th>RUT</th><th>Documento</th><th>Monto</th><th>Fecha</th><th>Glosa</th><th>Usuario</th></tr></thead><tbody></tbody>';rows.forEach(function(m){var tr=document.createElement('tr');[m.rutctacte,m.tipodocumento+' / '+m.numerodocumento,m.monto,m.fechadocumento,m.glosacontable,m.creadopor].forEach(function(v){var td=document.createElement('td');td.textContent=v||'-';tr.appendChild(td);});t.querySelector('tbody').appendChild(tr);});box.appendChild(t);bootstrap.Modal.getOrCreateInstance(document.getElementById('detalleContableModal')).show();}).catch(function(){document.getElementById('detalleContableContenido').textContent='No fue possible consultar el detalle contable.';});});
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){var modal=document.getElementById('syncRpetcModal'),from=document.getElementById('id_fecha_desde'),to=document.getElementById('id_fecha_hasta'),months=document.querySelectorAll('.rpetc-month');if(!modal||!from||!to)return;var y=new Date().getFullYear();function end(m){return new Date(y,m+1,0).getDate();}function iso(m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}function active(){months.forEach(function(b){var m=+b.dataset.month;b.classList.toggle('active',from.value===iso(m,1)&&to.value===iso(m,end(m)));});}months.forEach(function(b){b.addEventListener('click',function(){var m=+b.dataset.month;from.value=iso(m,1);to.value=iso(m,end(m));active();});});from.addEventListener('change',active);to.addEventListener('change',active);modal.addEventListener('shown.bs.modal',active);});
+</script>
 {% endblock content %}
+*** End Patch

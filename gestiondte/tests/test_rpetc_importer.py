@@ -162,6 +162,17 @@ class RPETCImporterTest(TestCase):
         self.assertIsNone(tarea.parametros)
         self.assertEqual(tarea.parametros_raw, "no-json")
 
+    def test_resultado_valido_sin_registros_persiste_solo_tarea(self):
+        stats = self.importar(self.empresa_a, task(), [])
+        self.assertEqual(stats['registros_recibidos'], 0)
+        self.assertEqual(stats['cesiones_creadas'], 0)
+        self.assertEqual(stats['vinculos_creados'], 0)
+        self.assertEqual(stats['transiciones_estado'], 0)
+        self.assertEqual(TareaRPETC.objects.count(), 1)
+        self.assertEqual(CesionRPETC.objects.count(), 0)
+        self.assertEqual(TareaCesionRPETC.objects.count(), 0)
+        self.assertEqual(CesionRPETCHistorial.objects.count(), 0)
+
     def test_id_cesion_vacio_aborta_y_revierte_todo(self):
         with self.assertRaises(RPETCImportError):
             self.importar(self.empresa_a, task(), [row(), row(id_cesion="")])

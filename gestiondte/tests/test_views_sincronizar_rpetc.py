@@ -104,6 +104,37 @@ class SincronizarRPETCViewTest(TestCase):
         importer.assert_called_once()
         self.assertContains(response, 'Sincronización completada')
 
+    @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
+    @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')
+    @patch('gestiondte.services.rpetc.RPETCClient')
+    @patch('gestiondte.views.get_maestroempresa_by_codigo')
+    def test_resultado_deudor_valido_sin_registros_es_exitoso(self, maestro, client_class, parser, importer):
+        maestro.return_value = {'rut': '77575300-5', 'nombre': 'Empresa activa'}
+        client_class.return_value.obtener_cesiones_deudor.return_value = {
+            'tarea_inicial': self.initial,
+            'estado_final': self.final,
+            'resultado': {'bytes': b'contenido'},
+        }
+        parser.return_value = {
+            'consulta': {'TIPO_CONSULTA': 'DEUDOR', 'RUT': '77575300-5'},
+            'columnas': ['ID_CESION'],
+            'registros': [],
+            'cantidad_registros': 0,
+        }
+        importer.return_value = {
+            'registros_recibidos': 0, 'cesiones_creadas': 0,
+            'cesiones_actualizadas': 0, 'cesiones_sin_cambios': 0,
+            'vinculos_creados': 0, 'transiciones_estado': 0, 'errores': [],
+        }
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'fecha_desde': '2026-08-01', 'fecha_hasta': '2026-08-20',
+        })
+        self.assertEqual(response.status_code, 200)
+        importer.assert_called_once()
+        self.assertContains(response, 'Sincronización completada')
+        self.assertContains(response, 'No existen cesiones registradas por el SII para este período.')
+        self.assertNotContains(response, 'No fue posible completar la sincronización RPETC.')
+
     @patch('gestiondte.services.rpetc.RPETCClient')
     @patch('gestiondte.views.get_maestroempresa_by_codigo')
     def test_bloquea_tarea_local_en_progreso(self, maestro, client_class):
@@ -131,6 +162,70 @@ class SincronizarRPETCViewTest(TestCase):
         response = self.client.get(reverse('gestion_dte:cesiones'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['cesiones_por_fecha']), [])
+
+    @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
+    def test_sin_get_aplica_default_mes_actual_al_queryset(self, localdate):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-defaults', tipo_consulta='DEUDOR',
+            rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 8, 1),
+            fecha_hasta=date(2026, 8, 20), formato='TXT', estado='TERMINADO',
+        )
+        dentro = CesionRPETC.objects.create(
+            id_cesion='default-in', estado_cesion='Vigente', cedente_rut='11111111', cedente_dv='1',
+            cedente_razon_social='Proveedor A', deudor_rut='1', deudor_dv='9', tipo_doc='33', folio_doc='1',
+            fecha_cesion=datetime(2026, 8, 20, tzinfo=timezone.utc), monto_cesion=Decimal('100'),
+        )
+        fuera = CesionRPETC.objects.create(
+            id_cesion='default-out', estado_cesion='Vigente', cedente_rut='22222222', cedente_dv='2',
+            cedente_razon_social='Proveedor B', deudor_rut='1', deudor_dv='9', tipo_doc='33', folio_doc='2',
+            fecha_cesion=datetime(2026, 7, 31, tzinfo=timezone.utc), monto_cesion=Decimal('200'),
+        )
+        for cesion in (dentro, fuera):
+            TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 8, 1))
+        self.assertEqual(response.context['filtros']['fecha_hasta'], date(2026, 8, 20))
+        self.assertEqual(response.context['total_cesiones_rpetc'], 1)
+        self.assertEqual(response.context['cesiones_detalle'], [])
+        localdate.assert_called_once_with()
+
+    @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
+    def test_get_explicito_conserva_fechas(self, localdate):
+        response = self.client.get(reverse('gestion_dte:cesiones'), {
+            'fecha_desde': '2026-07-01', 'fecha_hasta': '2026-07-31',
+        })
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 7, 1))
+        self.assertEqual(response.context['filtros']['fecha_hasta'], date(2026, 7, 31))
+
+    def test_combo_proveedores_unico_ordenado_y_aislado(self):
+        tarea_a = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-suppliers-a', tipo_consulta='DEUDOR',
+            rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 8, 1),
+            fecha_hasta=date(2026, 8, 20), formato='TXT', estado='TERMINADO',
+        )
+        tarea_b = TareaRPETC.objects.create(
+            empresa=self.otra_empresa, id_tarea='task-suppliers-b', tipo_consulta='DEUDOR',
+            rut_consultado='2', dv_consultado='9', fecha_desde=date(2026, 8, 1),
+            fecha_hasta=date(2026, 8, 20), formato='TXT', estado='TERMINADO',
+        )
+        for index in range(2):
+            cesion = CesionRPETC.objects.create(
+                id_cesion=f'supplier-a-{index}', estado_cesion='Vigente', cedente_rut='11111111', cedente_dv='1',
+                cedente_razon_social='Proveedor A', deudor_rut='1', deudor_dv='9', tipo_doc='33', folio_doc=str(index),
+                fecha_cesion=datetime(2026, 8, 20, tzinfo=timezone.utc), monto_cesion=Decimal('100'),
+            )
+            TareaCesionRPETC.objects.create(tarea=tarea_a, cesion=cesion, rol_consulta='DEUDOR')
+        other = CesionRPETC.objects.create(
+            id_cesion='supplier-b', estado_cesion='Vigente', cedente_rut='99999999', cedente_dv='9',
+            cedente_razon_social='Proveedor Z', deudor_rut='2', deudor_dv='9', tipo_doc='33', folio_doc='9',
+            fecha_cesion=datetime(2026, 8, 20, tzinfo=timezone.utc), monto_cesion=Decimal('100'),
+        )
+        TareaCesionRPETC.objects.create(tarea=tarea_b, cesion=other, rol_consulta='DEUDOR')
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        suppliers = response.context['proveedores_filtro']
+        self.assertEqual(len(suppliers), 1)
+        self.assertEqual(suppliers[0]['value'], '11111111-1')
+        self.assertIn('Proveedor A', suppliers[0]['label'])
 
     def test_cesiones_se_agrupan_sin_duplicar_por_tareas(self):
         tareas = []
@@ -171,9 +266,10 @@ class SincronizarRPETCViewTest(TestCase):
                 monto_cesion=Decimal('100'),
             )
             TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
-        response = self.client.get(reverse('gestion_dte:cesiones'), {'fecha_cesion': '2026-08-19'})
-        self.assertEqual(len(response.context['cesiones_detalle']), 1)
-        self.assertEqual(response.context['cesiones_detalle'][0].folio_doc, 'one')
+        response = self.client.get(reverse('gestion_dte:cesiones'), {
+            'fecha_desde': '2026-08-19', 'fecha_hasta': '2026-08-19',
+        })
+        self.assertEqual(response.context['cesiones_detalle'], [])
 
     def _crear_cesiones_para_filtros(self):
         tarea = TareaRPETC.objects.create(
@@ -212,21 +308,20 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(response.context['total_cesiones_rpetc'], 1)
         self.assertEqual(response.context['monto_total_cedido'], Decimal('200'))
         self.assertEqual(response.context['cesiones_por_fecha'][0]['cantidad'], 1)
-        self.assertEqual(response.context['cesiones_detalle'][0].id_cesion, second.id_cesion)
-        self.assertNotIn(first.id_cesion, [item.id_cesion for item in response.context['cesiones_detalle']])
+        self.assertEqual(response.context['cesiones_detalle'], [])
 
     def test_rut_proveedor_considera_vendedor_distinto_de_cedente(self):
         first, _ = self._crear_cesiones_para_filtros()
         response = self.client.get(reverse('gestion_dte:cesiones'), {'rut_proveedor': '88888888'})
         self.assertEqual(response.context['total_cesiones_rpetc'], 1)
-        self.assertEqual(response.context['cesiones_detalle'][0].id_cesion, first.id_cesion)
+        self.assertEqual(response.context['cesiones_detalle'], [])
 
     def test_click_fecha_conserva_filtros_en_url(self):
         self._crear_cesiones_para_filtros()
         response = self.client.get(reverse('gestion_dte:cesiones'), {
             'rut_proveedor': '76376142', 'tipo_doc': '34',
         })
-        self.assertContains(response, 'rut_proveedor=76376142&amp;tipo_doc=34&amp;fecha_cesion=2026-08-18')
+        self.assertContains(response, 'id="cesionesRpetcTable"')
 
     def test_limpiar_filtros_vuelve_a_url_sin_query(self):
         self._crear_cesiones_para_filtros()
@@ -237,4 +332,121 @@ class SincronizarRPETCViewTest(TestCase):
         self._crear_cesiones_para_filtros()
         response = self.client.get(reverse('gestion_dte:cesiones'), {'folio': 'inexistente'})
         self.assertEqual(response.context['total_cesiones_rpetc'], 0)
-        self.assertContains(response, 'No se encontraron documentos cedidos con los filtros seleccionados.')
+        self.assertContains(response, 'id="cesionesRpetcTable"')
+
+    @patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones')
+    def test_detalle_visible_consulta_contabilidad_en_un_batch(self, accounting):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-accounting', tipo_consulta='DEUDOR',
+            rut_consultado='77575300', dv_consultado='5', fecha_desde=date(2026, 7, 1),
+            fecha_hasta=date(2026, 7, 31), formato='TXT', estado='TERMINADO',
+        )
+        cesion = CesionRPETC.objects.create(
+            id_cesion='accounting-1', estado_cesion='Cesion Vigente',
+            deudor_rut='77575300', deudor_dv='5', tipo_doc='33', folio_doc='2587',
+            cedente_rut='76376142', cedente_dv='8', cesionario_rut='76682670', cesionario_dv='9',
+            fecha_cesion=datetime(2026, 8, 19, 10, tzinfo=timezone.utc), monto_cesion=Decimal('100'),
+        )
+        TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        accounting.return_value = {cesion.pk: {
+            'contabilizacion': {'estado': 'CONTABILIZADA', 'cantidad_movimientos': 1, 'movimientos': []},
+            'pago': {'estado': 'PAGADA', 'cantidad_movimientos': 1, 'movimientos': []},
+        }}
+        response = self.client.get(reverse('gestion_dte:cesiones'), {'fecha_cesion': '2026-08-19'})
+        self.assertEqual(response.status_code, 200)
+        accounting.assert_not_called()
+        self.assertEqual(response.context['cesiones_detalle'], [])
+
+    @patch('gestiondte.services.rpetc_contabilidad.obtener_detalle_contable_cesion')
+    def test_endpoint_detalle_contable_respeta_empresa_activa(self, detail):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-detail', tipo_consulta='DEUDOR',
+            rut_consultado='77575300', dv_consultado='5', fecha_desde=date(2026, 7, 1),
+            fecha_hasta=date(2026, 7, 31), formato='TXT', estado='TERMINADO',
+        )
+        cesion = CesionRPETC.objects.create(
+            id_cesion='detail-1', estado_cesion='Cesion Vigente', deudor_rut='77575300',
+            deudor_dv='5', tipo_doc='33', folio_doc='2587', fecha_cesion=datetime(2026, 8, 19, tzinfo=timezone.utc),
+        )
+        TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        detail.return_value = {
+            'contabilizacion': {'movimientos': [{'rutctacte': '0763761428', 'monto': Decimal('100')}]},
+            'pago': {'movimientos': []},
+        }
+        response = self.client.get(reverse('gestion_dte:detalle_contable_cesion', args=[cesion.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['factura']['folio'], '2587')
+        self.assertNotIn('schema', response.json())
+        detail.assert_called_once_with('09', cesion)
+
+        other_tarea = TareaRPETC.objects.create(
+            empresa=self.otra_empresa, id_tarea='task-other-detail', tipo_consulta='DEUDOR',
+            rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 7, 1),
+            fecha_hasta=date(2026, 7, 31), formato='TXT', estado='TERMINADO',
+        )
+        other_cesion = CesionRPETC.objects.create(
+            id_cesion='other-detail', estado_cesion='Cesion Vigente', deudor_rut='1', deudor_dv='9',
+            tipo_doc='33', folio_doc='1',
+        )
+        TareaCesionRPETC.objects.create(tarea=other_tarea, cesion=other_cesion, rol_consulta='DEUDOR')
+        blocked = self.client.get(reverse('gestion_dte:detalle_contable_cesion', args=[other_cesion.pk]))
+        self.assertEqual(blocked.status_code, 404)
+
+    @patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones')
+    def test_server_side_endpoint_pagina_antes_de_contabilidad(self, accounting):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-server-side', tipo_consulta='DEUDOR',
+            rut_consultado='77575300', dv_consultado='5', fecha_desde=date(2026, 1, 1),
+            fecha_hasta=date(2026, 8, 20), formato='TXT', estado='TERMINADO',
+        )
+        for index in range(30):
+            cesion = CesionRPETC.objects.create(
+                id_cesion=f'server-{index}', estado_cesion='Vigente',
+                cedente_rut='11111111', cedente_dv='1', cedente_razon_social='Proveedor',
+                cesionario_rut='22222222', cesionario_dv='2', deudor_rut='77575300', deudor_dv='5',
+                tipo_doc='33', folio_doc=str(index),
+                fecha_cesion=datetime(2026, 8, 20, 10, index % 60, tzinfo=timezone.utc),
+                monto_cesion=Decimal('100'),
+            )
+            TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        accounting.return_value = {
+            cesion.pk: {
+                'contabilizacion': {'estado': 'NO_CONTABILIZADA', 'movimientos': []},
+                'pago': {'estado': 'NO_PAGADA', 'movimientos': []},
+            }
+            for cesion in CesionRPETC.objects.all()
+        }
+        response = self.client.get(reverse('gestion_dte:cesiones_data'), {
+            'draw': '4', 'start': '0', 'length': '25',
+            'fecha_desde': '2026-01-01', 'fecha_hasta': '2026-08-20',
+            'order[0][column]': '0', 'order[0][dir]': 'desc',
+        })
+        payload = response.json()
+        self.assertEqual(payload['draw'], 4)
+        self.assertEqual(payload['recordsTotal'], 30)
+        self.assertEqual(payload['recordsFiltered'], 30)
+        self.assertEqual(len(payload['data']), 25)
+        accounting.assert_called_once()
+        self.assertEqual(len(accounting.call_args.args[1]), 25)
+
+    def test_server_side_busqueda_y_pagina_siguiente(self):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-search', tipo_consulta='DEUDOR',
+            rut_consultado='77575300', dv_consultado='5', fecha_desde=date(2026, 8, 1),
+            fecha_hasta=date(2026, 8, 20), formato='TXT', estado='TERMINADO',
+        )
+        for index in range(3):
+            cesion = CesionRPETC.objects.create(
+                id_cesion=f'search-{index}', estado_cesion='Vigente',
+                cedente_rut='33333333', cedente_dv='3', cedente_razon_social='Proveedor Buscado',
+                deudor_rut='77575300', deudor_dv='5', tipo_doc='33', folio_doc=f'F-{index}',
+                fecha_cesion=datetime(2026, 8, 20, tzinfo=timezone.utc), monto_cesion=Decimal('50'),
+            )
+            TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        with patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones', return_value={}):
+            response = self.client.get(reverse('gestion_dte:cesiones_data'), {
+                'draw': '1', 'start': '1', 'length': '1', 'search[value]': 'Buscado',
+            })
+        payload = response.json()
+        self.assertEqual(payload['recordsFiltered'], 3)
+        self.assertEqual(len(payload['data']), 1)
