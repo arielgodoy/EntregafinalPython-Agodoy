@@ -14,11 +14,12 @@ except ImportError:  # pragma: no cover - el entorno productivo debe incluirlo
 
 
 TIPO_DTE_LEGACY = {"33": "FC"}
+CUENTA_CONTABLE_CESIONES = "23100026"
 _SCHEMA_RE = re.compile(r"^[0-9]{2}$")
 _SELECT_FIELDS = (
     "rutctacte, tipodocumento, numerodocumento, monto, dh, fecha, "
     "fechadocumento, fechavencimiento, glosacontable, creadopor, "
-    "fechacreacion, horacreacion"
+    "fechacreacion, horacreacion, tipo, codigocuenta"
 )
 
 
@@ -76,7 +77,7 @@ def _movimiento_dicts(cursor) -> list[dict[str, Any]]:
     return [dict(zip(names, row)) for row in cursor.fetchall()]
 
 
-def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str]]) -> list[dict[str, Any]]:
+def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, str]]) -> list[dict[str, Any]]:
     if not keys:
         return []
     config = _config_legacy()
@@ -84,9 +85,9 @@ def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str]]
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
     params: list[str] = []
-    for rutctacte, tipo, folio, dh in sorted(keys):
-        clauses.append("(rutctacte=%s AND tipodocumento=%s AND numerodocumento=%s AND dh=%s)")
-        params.extend((rutctacte, tipo, folio, dh))
+    for rutctacte, tipo, folio, dh, codigocuenta in sorted(keys):
+        clauses.append("(rutctacte=%s AND tipodocumento=%s AND numerodocumento=%s AND dh=%s AND codigocuenta=%s)")
+        params.extend((rutctacte, tipo, folio, dh, codigocuenta))
     sql = f"SELECT {_SELECT_FIELDS} FROM {table} WHERE " + " OR ".join(clauses)
     connection = None
     try:
@@ -111,21 +112,32 @@ def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str]]
             connection.close()
 
 
-def _key_for(cesion, role: str) -> tuple[str, str, str, str] | None:
+def _key_for(cesion, role: str) -> tuple[str, str, str, str, str] | None:
     tipo = TIPO_DTE_LEGACY.get(str(cesion.tipo_doc))
     if not tipo:
         return None
-    if role == "contabilizacion":
+    if role in {"contabilizacion", "pagada_proveedor"}:
         rut = normalizar_rut_legacy(cesion.cedente_rut, cesion.cedente_dv)
-        dh = "H"
+        dh = "H" if role == "contabilizacion" else "D"
     else:
         rut = normalizar_rut_legacy(cesion.cesionario_rut, cesion.cesionario_dv)
         dh = "D"
     folio = normalizar_folio_legacy(cesion.folio_doc, tipo)
-    return (rut, tipo, folio, dh) if rut and folio else None
+    return (rut, tipo, folio, dh, CUENTA_CONTABLE_CESIONES) if rut and folio else None
 
 
-def _classify(movements: list[dict[str, Any]], expected: Decimal | None, found_state: str) -> dict[str, Any]:
+def _classify(
+    movements: list[dict[str, Any]],
+    expected: Decimal | None,
+    found_state: str,
+    paid_state: str,
+    excluded_tipo: str | None = None,
+) -> dict[str, Any]:
+    if excluded_tipo:
+        movements = [
+            movement for movement in movements
+            if str(movement.get("tipo") or "").strip().upper() != excluded_tipo
+        ]
     result = {
         "estado": "NO_CONTABILIZADA" if found_state == "H" else "NO_PAGADA",
         "cantidad_movimientos": len(movements),
@@ -146,7 +158,7 @@ def _classify(movements: list[dict[str, Any]], expected: Decimal | None, found_s
     result["monto_legacy"] = legacy_amount
     result["monto_coincide"] = expected is not None and legacy_amount == expected
     if result["monto_coincide"]:
-        result["estado"] = "CONTABILIZADA" if found_state == "H" else "PAGADA"
+        result["estado"] = "CONTABILIZADA" if found_state == "H" else paid_state
     else:
         result["estado"] = "REVISAR"
     return result
@@ -157,28 +169,49 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
     _validar_codigo_empresa(empresa_codigo)
     cesiones = list(cesiones)
     result: dict[Any, dict[str, Any]] = {}
-    keys: set[tuple[str, str, str, str]] = set()
-    key_by_cesion: dict[Any, dict[str, tuple[str, str, str, str] | None]] = {}
+    keys: set[tuple[str, str, str, str, str]] = set()
+    key_by_cesion: dict[Any, dict[str, tuple[str, str, str, str, str] | None]] = {}
     for cesion in cesiones:
         key_by_cesion[cesion.pk] = {
             "contabilizacion": _key_for(cesion, "contabilizacion"),
-            "pago": _key_for(cesion, "pago"),
+            "pagada_factoring": _key_for(cesion, "pagada_factoring"),
+            "pagada_proveedor": _key_for(cesion, "pagada_proveedor"),
         }
         keys.update(key for key in key_by_cesion[cesion.pk].values() if key)
         result[cesion.pk] = {
             "contabilizacion": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["contabilizacion"] else None, "cantidad_movimientos": 0, "movimientos": []},
-            "pago": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["pago"] else None, "cantidad_movimientos": 0, "movimientos": []},
+            "pagada_factoring": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["pagada_factoring"] else None, "cantidad_movimientos": 0, "movimientos": []},
+            "pagada_proveedor": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["pagada_proveedor"] else None, "cantidad_movimientos": 0, "movimientos": []},
         }
     indexed = {}
     for movement in _query_movimientos(empresa_codigo, keys):
-        key = (movement["rutctacte"], movement["tipodocumento"], movement["numerodocumento"], movement["dh"])
+        key = (
+            movement["rutctacte"],
+            movement["tipodocumento"],
+            movement["numerodocumento"],
+            movement["dh"],
+            movement["codigocuenta"],
+        )
         indexed.setdefault(key, []).append(movement)
     for cesion in cesiones:
-        for role, state in (("contabilizacion", "H"), ("pago", "D")):
+        for role, state, paid_state, excluded_tipo in (
+            ("contabilizacion", "H", "PAGADA", None),
+            ("pagada_factoring", "D", "PAGADA_FACTORING", None),
+            ("pagada_proveedor", "D", "PAGADA_PROVEEDOR", "CT"),
+        ):
             key = key_by_cesion[cesion.pk][role]
             if key:
                 expected = cesion.monto_total if role == "contabilizacion" else cesion.monto_cesion
-                result[cesion.pk][role] = _classify(indexed.get(key, []), expected, state)
+                result[cesion.pk][role] = _classify(
+                    indexed.get(key, []),
+                    expected,
+                    state,
+                    paid_state,
+                    excluded_tipo,
+                )
+        result[cesion.pk]["pago"] = dict(result[cesion.pk]["pagada_factoring"])
+        if result[cesion.pk]["pago"]["estado"] == "PAGADA_FACTORING":
+            result[cesion.pk]["pago"]["estado"] = "PAGADA"
     return result
 
 

@@ -108,7 +108,8 @@ def _cesiones_rpetc_context(empresa_activa, fecha_seleccionada=None, filtros=Non
             contabilidad = {
                 cesion.pk: {
                     'contabilizacion': {'estado': 'NO_DISPONIBLE', 'cantidad_movimientos': 0, 'movimientos': []},
-                    'pago': {'estado': 'NO_DISPONIBLE', 'cantidad_movimientos': 0, 'movimientos': []},
+                    'pagada_factoring': {'estado': 'NO_DISPONIBLE', 'cantidad_movimientos': 0, 'movimientos': []},
+                    'pagada_proveedor': {'estado': 'NO_DISPONIBLE', 'cantidad_movimientos': 0, 'movimientos': []},
                 }
                 for cesion in detail
             }
@@ -298,7 +299,8 @@ def cesiones_data(request):
         states = {
             cesion.pk: {
                 'contabilizacion': {'estado': 'NO_DISPONIBLE', 'movimientos': []},
-                'pago': {'estado': 'NO_DISPONIBLE', 'movimientos': []},
+                'pagada_factoring': {'estado': 'NO_DISPONIBLE', 'movimientos': []},
+                'pagada_proveedor': {'estado': 'NO_DISPONIBLE', 'movimientos': []},
             }
             for cesion in page
         }
@@ -321,7 +323,8 @@ def cesiones_data(request):
             'monto_cesion': str(cesion.monto_cesion or 0),
             'estado_cesion': cesion.estado_cesion,
             'contabilizacion': {key: value for key, value in state.get('contabilizacion', {}).items() if key != 'movimientos'},
-            'pago': {key: value for key, value in state.get('pago', {}).items() if key != 'movimientos'},
+            'pagada_factoring': {key: value for key, value in state.get('pagada_factoring', state.get('pago', {})).items() if key != 'movimientos'},
+            'pagada_proveedor': {key: value for key, value in state.get('pagada_proveedor', {}).items() if key != 'movimientos'},
         }
 
     try:
@@ -369,7 +372,15 @@ def detalle_contable_cesion(request, pk):
         ],
         'pago': [
             {key: serializar(value) for key, value in movimiento.items()}
-            for movimiento in detalle['pago'].get('movimientos', [])
+            for movimiento in detalle.get('pagada_factoring', detalle.get('pago', {})).get('movimientos', [])
+        ],
+        'pagada_factoring': [
+            {key: serializar(value) for key, value in movimiento.items()}
+            for movimiento in detalle.get('pagada_factoring', {}).get('movimientos', [])
+        ],
+        'pagada_proveedor': [
+            {key: serializar(value) for key, value in movimiento.items()}
+            for movimiento in detalle.get('pagada_proveedor', {}).get('movimientos', [])
         ],
     })
 
