@@ -26,6 +26,47 @@ if load_dotenv is not None:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _env_bool(name, default=False, environ=None):
+    source = os.environ if environ is None else environ
+    value = source.get(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_list(name, default=None, environ=None):
+    source = os.environ if environ is None else environ
+    value = source.get(name)
+    if value is None or not value.strip():
+        return list(default or [])
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
+DEBUG = _env_bool('DJANGO_DEBUG', default=True)
+_DEFAULT_SECRET_KEY = 'django-insecure-$68j*l4_2(e8-p$)e@r!l#y^si%k8s@1nj9p@@t8zss2!9i#mb'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '').strip() or _DEFAULT_SECRET_KEY
+ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', default=['*'])
+
+SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=False)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=False)
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+SECURE_SSL_REDIRECT = False
+SECURE_PROXY_SSL_HEADER = (
+    ('HTTP_X_FORWARDED_PROTO', 'https')
+    if _env_bool('DJANGO_BEHIND_HTTPS_PROXY', default=False)
+    else None
+)
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+
+
 
 # # Redirige automáticamente a HTTPS
 # SECURE_SSL_REDIRECT = True
@@ -46,18 +87,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$68j*l4_2(e8-p$)e@r!l#y^si%k8s@1nj9p@@t8zss2!9i#mb'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-# settings.py
-
-ALLOWED_HOSTS = ['*']  # Agrega aquí las direcciones IP o nombres de host permitidos
-
-
 
 # Application definition
 
@@ -293,14 +322,17 @@ CONFIGURACIONES = {
     'APLICACION': 'My Application',  # Example value
     # Add more configurations as needed
 }
-CSRF_TRUSTED_ORIGINS = [
-    "https://biblioteca.eltit.cl",
-    "http://192.168.0.185:8000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000:*",
-    "http://127.0.0.1:8000:*"
-]
+CSRF_TRUSTED_ORIGINS = _env_list(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    default=[
+        'https://biblioteca.eltit.cl',
+        'http://192.168.0.185:8000',
+        'http://localhost:8000',
+        'http://127.0.0.1:8000',
+        'http://localhost:8000:*',
+        'http://127.0.0.1:8000:*',
+    ],
+)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100MB
 
