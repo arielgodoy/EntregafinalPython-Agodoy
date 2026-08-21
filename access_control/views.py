@@ -12,6 +12,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView,FormView
 from django.shortcuts import render
 from django.utils import timezone
+from django.db.models import Prefetch
 from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.utils.translation import gettext as _
@@ -765,6 +766,34 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     context_object_name = 'usuarios'
     vista_nombre = "Control de Acceso - Maestro Usuarios"
     permiso_requerido = "ingresar"
+
+    def get_queryset(self):
+        pending_tokens = UserEmailToken.objects.filter(
+            purpose=UserEmailTokenPurpose.ACTIVATE,
+            used_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        )
+        return User.objects.all().prefetch_related(
+            Prefetch('email_tokens', queryset=pending_tokens, to_attr='pending_activation_tokens')
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        for usuario in context['usuarios']:
+            has_pending_invitation = bool(getattr(usuario, 'pending_activation_tokens', []))
+            if usuario.is_active and usuario.has_usable_password():
+                usuario.estado_key = 'users.status.active'
+                usuario.estado_badge = 'success'
+                usuario.estado_label = 'Activo'
+            elif not usuario.is_active and not usuario.has_usable_password() and has_pending_invitation:
+                usuario.estado_key = 'users.status.pending_activation'
+                usuario.estado_badge = 'warning'
+                usuario.estado_label = 'Pendiente de activación'
+            else:
+                usuario.estado_key = 'users.status.inactive'
+                usuario.estado_badge = 'secondary'
+                usuario.estado_label = 'Inactivo / Deshabilitado'
+        return context
 
     def render_to_response(self, context, **response_kwargs):
         # Imprime el contexto para verificar los datos
