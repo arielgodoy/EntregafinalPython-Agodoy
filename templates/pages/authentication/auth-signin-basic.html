@@ -1,5 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 <html lang="en" {% block html %}data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"{% endblock html %}>
 <head>
     <meta charset="utf-8" />
@@ -92,7 +93,7 @@
                                         </div>
 
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="" id="auth-remember-check">
+                                            <input class="form-check-input" type="checkbox" name="remember_me" value="1" id="auth-remember-check">
                                             <label class="form-check-label" for="auth-remember-check" data-key="auth.login.remember">Recuerdame</label>
                                         </div>
                                         

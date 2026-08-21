@@ -189,6 +189,15 @@ class InviteUserFlowTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertRegex(mail.outbox[0].body, r'/auth/activate/[^/]+/')
 
+        body_text = mock_send.call_args.kwargs['body_text']
+        body_html = mock_send.call_args.kwargs['body_html']
+        self.assertIn('link@test.local', body_text)
+        self.assertIn('link@test.local', body_html)
+        self.assertIn('Activar cuenta', body_text)
+        self.assertIn('Activar cuenta', body_html)
+        self.assertNotIn('StrongPass123!', body_text)
+        self.assertNotIn('StrongPass123!', body_html)
+
     def test_invitar_usuario_sin_perfil_retiene_error(self):
         self._grant_invite_perm(allow_create=True)
         SystemConfig.objects.update_or_create(

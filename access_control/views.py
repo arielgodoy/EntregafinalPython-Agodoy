@@ -1343,7 +1343,7 @@ def seleccionar_empresa(request):
         empresa_id = request.POST.get("empresa_id")
         empresa = Empresa.objects.get(pk=empresa_id)
         set_empresa_activa_en_sesion(request, empresa)
-        return redirect("biblioteca:listar_propiedades")
+        return redirect("dashboard:dashboard_general")
 
     permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
     empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))

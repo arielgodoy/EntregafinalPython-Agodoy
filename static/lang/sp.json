@@ -680,6 +680,8 @@
 "activation.page.title": "Activar cuenta",
 "activation.header.title": "Activar cuenta",
 "activation.header.subtitle": "Crea tu contrasena para continuar.",
+"activation.fields.name.label": "Nombre",
+"activation.fields.username.label": "Nombre de usuario",
 "activation.fields.password1.label": "Nueva contrasena",
 "activation.fields.password2.label": "Confirmar contrasena",
 "activation.submit": "Activar cuenta",

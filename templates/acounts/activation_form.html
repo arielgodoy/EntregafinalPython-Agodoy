@@ -1,3 +1,4 @@
+<!-- ⚠️ TODO: Todos los textos visibles deben tener data-key para i18n -->
 {% load static %}
 <!DOCTYPE html>
 <html lang="en" {% block html %}data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"{% endblock html %}>
@@ -59,6 +60,17 @@
                                                 {% endfor %}
                                             </div>
                                         {% endif %}
+
+                                        <div class="alert alert-light border mb-4" role="status">
+                                            <div class="mb-3">
+                                                <div class="text-muted small" data-key="activation.fields.name.label">Nombre</div>
+                                                <div class="fw-medium">{{ user.get_full_name|default:user.username }}</div>
+                                            </div>
+                                            <div>
+                                                <div class="text-muted small" data-key="activation.fields.username.label">Nombre de usuario</div>
+                                                <div class="fw-medium text-break">{{ user.username }}</div>
+                                            </div>
+                                        </div>
 
                                         <div class="mb-3">
                                             <label for="id_password1" class="form-label" data-key="activation.fields.password1.label">Nueva contrasena</label>

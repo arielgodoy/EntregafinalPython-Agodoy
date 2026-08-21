@@ -41,6 +41,29 @@ class TestActivationFlow(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Activar cuenta')
+        self.assertContains(response, 'invited@test.local')
+
+    def test_post_no_permite_cambiar_username(self):
+        token_plain = generate_token(
+            self.user,
+            meta={'empresa_id': self.empresa.id},
+            created_by=self.user,
+        )
+        url = reverse('acounts_activation:activate', args=[token_plain])
+
+        response = self.client.post(
+            url,
+            data={
+                'username': 'otro-usuario',
+                'password1': 'StrongPass123!',
+                'password2': 'StrongPass123!',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'invited@test.local')
+        self.assertTrue(self.user.is_active)
 
     def test_post_valid_activates_user_and_consumes_token(self):
         token_plain = generate_token(

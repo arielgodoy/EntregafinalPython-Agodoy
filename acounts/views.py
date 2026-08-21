@@ -63,6 +63,10 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
+            if request.POST.get('remember_me'):
+                request.session.set_expiry(8 * 60 * 60)
+            else:
+                request.session.set_expiry(0)
             prefs, _ = UserPreferences.objects.get_or_create(user=user)
             if not prefs.fecha_sistema:
                 prefs.fecha_sistema = timezone.localdate()
@@ -71,7 +75,7 @@ def login_view(request):
             status, empresa = resolve_post_login(request, user)
             if status == "ONE" and empresa:
                 set_empresa_activa_en_sesion(request, empresa)
-                return redirect('biblioteca:listar_propiedades')
+                return redirect('dashboard:dashboard_general')
             if status == "MANY":
                 return redirect('access_control:seleccionar_empresa')
 

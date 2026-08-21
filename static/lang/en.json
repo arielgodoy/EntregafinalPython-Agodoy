@@ -719,6 +719,8 @@
 "activation.page.title": "Activate account",
 "activation.header.title": "Activate account",
 "activation.header.subtitle": "Create your password to continue.",
+"activation.fields.name.label": "Name",
+"activation.fields.username.label": "Username",
 "activation.fields.password1.label": "New password",
 "activation.fields.password2.label": "Confirm password",
 "activation.submit": "Activate account",

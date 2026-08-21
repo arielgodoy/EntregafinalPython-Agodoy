@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.utils.html import escape
 
 from access_control.models import Vista, Permiso
 from acounts.services.config import get_effective_company_config
@@ -103,13 +104,28 @@ def invite_user_flow(email, first_name, last_name, empresas, tipo_usuario, usuar
 
     activation_link = f"{public_base_url.rstrip('/')}/auth/activate/{token_plain}/"
     subject = 'Activación de cuenta'
+    display_name = user.get_full_name().strip() or user.username
     body_text = (
-        'Has sido invitado a la plataforma.\n\n'
-        f'Activa tu cuenta aquí: {activation_link}\n'
+        f'Hola {display_name}:\n\n'
+        'Se ha creado una cuenta para que puedas acceder a nuestra plataforma.\n\n'
+        f'Tu nombre de usuario es: {user.username}\n\n'
+        'Para completar la activación debes crear tu contraseña utilizando el siguiente enlace:\n'
+        f'Activar cuenta: {activation_link}\n\n'
+        'Una vez activada la cuenta podrás ingresar utilizando tu nombre de usuario y la contraseña que definas.\n\n'
+        'Si no esperabas esta invitación, puedes ignorar este mensaje.\n'
     )
+    html_display_name = escape(display_name)
+    html_username = escape(user.username)
+    html_activation_link = escape(activation_link)
     body_html = (
-        '<p>Has sido invitado a la plataforma.</p>'
-        f'<p><a href="{activation_link}">Activar cuenta</a></p>'
+        f'<p>Hola {html_display_name}:</p>'
+        '<p>Se ha creado una cuenta para que puedas acceder a nuestra plataforma.</p>'
+        '<p><strong>Tu nombre de usuario es:</strong><br>'
+        f'<span>{html_username}</span></p>'
+        '<p>Para completar la activación debes crear tu contraseña utilizando el siguiente enlace.</p>'
+        f'<p><a href="{html_activation_link}">Activar cuenta</a></p>'
+        '<p>Una vez activada la cuenta podrás ingresar utilizando tu nombre de usuario y la contraseña que definas.</p>'
+        '<p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>'
     )
 
     try:

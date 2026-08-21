@@ -52,4 +52,4 @@ def activate_account(request, token):
     else:
         form = ActivationPasswordForm()
 
-    return render(request, 'acounts/activation_form.html', {'form': form})
+    return render(request, 'acounts/activation_form.html', {'form': form, 'user': user})

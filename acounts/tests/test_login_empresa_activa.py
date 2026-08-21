@@ -34,7 +34,7 @@ class LoginEmpresaActivaTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("biblioteca:listar_propiedades"))
+        self.assertEqual(response.url, reverse("dashboard:dashboard_general"))
 
         session = self.client.session
         self.assertEqual(session.get("empresa_id"), empresa.id)
