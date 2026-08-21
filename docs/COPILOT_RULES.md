@@ -132,12 +132,12 @@ EXCEPCIÓN CONTROLADA (solo hotfix crítico):
 
 ## 9) Checklist antes de entregar cambios
 
-FORMATO DE RESPUESTA OBLIGATORIO:
+FORMATO DE RESPUESTA:
 
-- TODA respuesta DEBE ser EXACTAMENTE 1 bloque de código (```text``` / ```python``` / ```js``` según corresponda).
-- PROHIBIDO escribir cualquier explicación fuera del bloque.
-- Dentro del bloque se incluyen: instrucciones + snippets + checklist (todo junto).
-- Si se requiere texto plano, usar ```text``` igualmente para mantener "copiar con 1 click".
+- Responder de forma clara y concisa en texto normal.
+- Usar bloques de código solo cuando correspondan a código, comandos, prompts, JSON, SQL, configuraciones o contenido que realmente se beneficie de formato monoespaciado.
+- No exigir que toda respuesta sea un bloque de código.
+- No prohibir bloques de código cuando sean útiles.
 
 Comandos oficiales (local):
 - scripts\run_local.ps1

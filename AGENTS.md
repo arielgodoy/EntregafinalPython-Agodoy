@@ -306,11 +306,12 @@ AI RESPONSE FORMAT RULE
 
 When responding with instructions for implementation:
 
-Agents must respond in plain text only.
+Agents should respond clearly and concisely in normal text.
 
-No markdown.
-No code blocks.
-No emojis.
+Use fenced code blocks only when the content is code, commands, prompts, JSON, SQL, configuration, or other content that benefits from monospaced formatting.
+
+Do not require that every response be a code block.
+Do not prohibit code blocks when they are useful.
 
 Instructions must be structured clearly so they can be copied in a single action.
 
