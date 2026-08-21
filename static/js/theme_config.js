@@ -42,6 +42,16 @@
     // ✅ 1. Aplicar configuración desde localStorage antes del render CSS
     const appliedPrefs = {};
     layoutOptions.forEach(attr => {
+        if (attr === "data-preloader") {
+            const serverValue = serverPrefs[attr] || "disable";
+            htmlTag.setAttribute(attr, serverValue);
+            // Compatibilidad con app.js legacy; el servidor sigue siendo la fuente de verdad.
+            sessionStorage.setItem(attr, serverValue);
+            localStorage.removeItem(attr);
+            appliedPrefs[attr] = serverValue;
+            return;
+        }
+
         const savedValue = localStorage.getItem(attr) || sessionStorage.getItem(attr);
         if (savedValue) {
             htmlTag.setAttribute(attr, savedValue);
