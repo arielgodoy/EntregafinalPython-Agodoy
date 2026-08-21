@@ -332,11 +332,7 @@ def guardar_preferencias(request):
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "JSON inválido"}, status=400)
 
-    empresa_id = request.session.get("empresa_id")
-    if not empresa_id:
-        return JsonResponse({"success": False, "error": "Empresa no seleccionada"}, status=400)
-
-    prefs, _ = ThemePreferences.objects.get_or_create(user=request.user, empresa_id=empresa_id)
+    prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
 
     field_map = {
         "data-layout": "data_layout",

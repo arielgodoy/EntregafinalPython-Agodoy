@@ -39,38 +39,40 @@
         "data-preloader": "disable"
     };
 
-    // ✅ 1. Aplicar configuración desde localStorage antes del render CSS
+    // Aplicar siempre el valor del servidor; el almacenamiento web solo es un espejo legacy.
     const appliedPrefs = {};
     layoutOptions.forEach(attr => {
-        if (attr === "data-preloader") {
-            const serverValue = serverPrefs[attr] || "disable";
-            htmlTag.setAttribute(attr, serverValue);
-            // Compatibilidad con app.js legacy; el servidor sigue siendo la fuente de verdad.
-            sessionStorage.setItem(attr, serverValue);
-            localStorage.removeItem(attr);
-            appliedPrefs[attr] = serverValue;
-            return;
-        }
-
-        const savedValue = localStorage.getItem(attr) || sessionStorage.getItem(attr);
-        if (savedValue) {
-            htmlTag.setAttribute(attr, savedValue);
-            sessionStorage.setItem(attr, savedValue);
-            appliedPrefs[attr] = savedValue;
-            return;
-        }
-
-        const serverValue = serverPrefs[attr];
-        if (serverValue) {
-            htmlTag.setAttribute(attr, serverValue);
-            localStorage.setItem(attr, serverValue);
-            sessionStorage.setItem(attr, serverValue);
-            appliedPrefs[attr] = serverValue;
-        }
+        const serverValue = serverPrefs[attr] || defaultLayout[attr];
+        htmlTag.setAttribute(attr, serverValue);
+        localStorage.removeItem(attr);
+        sessionStorage.setItem(attr, serverValue);
+        appliedPrefs[attr] = serverValue;
     });
-    console.log("✅ Preferencias cargadas desde localStorage:", appliedPrefs);
+    console.log("Preferencias cargadas desde el servidor:", appliedPrefs);
 
-    // ✅ 2. Observar cambios y guardar en localStorage
+    const savePreferences = () => {
+        if (!savePrefsUrl) return Promise.resolve();
+
+        const payload = {};
+        layoutOptions.forEach(attr => {
+            const value = htmlTag.getAttribute(attr);
+            if (value) {
+                payload[attr] = value;
+            }
+        });
+
+        return fetch(savePrefsUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify(payload)
+        }).catch(() => {
+            console.warn("No se pudieron guardar las preferencias en el servidor.");
+        });
+    };
+
     let saveTimer = null;
     const queueSave = () => {
         if (!savePrefsUrl) return;
@@ -79,26 +81,7 @@
             clearTimeout(saveTimer);
         }
 
-        saveTimer = setTimeout(() => {
-            const payload = {};
-            layoutOptions.forEach(attr => {
-                const value = htmlTag.getAttribute(attr);
-                if (value) {
-                    payload[attr] = value;
-                }
-            });
-
-            fetch(savePrefsUrl, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie("csrftoken")
-                },
-                body: JSON.stringify(payload)
-            }).catch(() => {
-                console.warn("⚠️ No se pudo guardar preferencias en el servidor.");
-            });
-        }, 300);
+        saveTimer = setTimeout(savePreferences, 300);
     };
 
     const observer = new MutationObserver(mutations => {
@@ -107,13 +90,12 @@
             const attr = mutation.attributeName;
             const value = htmlTag.getAttribute(attr);
             if (layoutOptions.includes(attr) && value) {
-                localStorage.setItem(attr, value);
                 sessionStorage.setItem(attr, value);
                 storedPrefs[attr] = value;
             }
         });
         if (Object.keys(storedPrefs).length > 0) {
-            console.log("💾 Preferencias guardadas en localStorage:", storedPrefs);
+            console.log("Preferencias actualizadas:", storedPrefs);
             queueSave();
         }
     });
@@ -142,9 +124,7 @@
                 const currentTheme = htmlTag.getAttribute("data-bs-theme") || "light";
                 const newTheme = currentTheme === "light" ? "dark" : "light";
                 htmlTag.setAttribute("data-bs-theme", newTheme);
-                localStorage.setItem("data-bs-theme", newTheme);
                 sessionStorage.setItem("data-bs-theme", newTheme);
-                console.log(`🌗 Tema cambiado manualmente: ${newTheme} y guardado en localStorage`);
 
                 if (icon) {
                     icon.classList.remove("bx-moon", "bx-sun");
@@ -159,16 +139,21 @@
             resetBtn.addEventListener("click", function () {
                 layoutOptions.forEach(attr => {
                     localStorage.removeItem(attr);
+                    sessionStorage.removeItem(attr);
                     if (defaultLayout[attr]) {
                         htmlTag.setAttribute(attr, defaultLayout[attr]);
                     } else {
                         htmlTag.removeAttribute(attr);
                     }
                 });
-                console.log("🔁 Layout reseteado a valores por defecto. Recargando en 150ms...");
-                setTimeout(() => {
-                    window.location.reload();
-                }, 150);
+                if (saveTimer) {
+                    clearTimeout(saveTimer);
+                }
+                savePreferences().finally(() => {
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 150);
+                });
             });
         }
     });

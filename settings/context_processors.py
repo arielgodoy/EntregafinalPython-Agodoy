@@ -1,4 +1,19 @@
-from .models import UserPreferences, ThemePreferences
+from .models import UserPreferences
+
+
+THEME_PREFERENCE_DEFAULTS = {
+    "data-layout": "vertical",
+    "data-bs-theme": "light",
+    "data-sidebar-visibility": "show",
+    "data-layout-width": "fluid",
+    "data-layout-position": "fixed",
+    "data-topbar": "light",
+    "data-sidebar-size": "lg",
+    "data-layout-style": "default",
+    "data-sidebar": "dark",
+    "data-sidebar-image": "none",
+    "data-preloader": "disable",
+}
 
 
 def system_date_context(request):
@@ -18,46 +33,26 @@ def user_preferences_to_localstorage(request):
     if not request.user.is_authenticated:
         return {}
 
-    empresa_id = request.session.get("empresa_id")
-    if not empresa_id:
-        return {}
+    visual_fields = {
+        "data-layout": "data_layout",
+        "data-bs-theme": "data_bs_theme",
+        "data-sidebar-visibility": "data_sidebar_visibility",
+        "data-layout-width": "data_layout_width",
+        "data-layout-position": "data_layout_position",
+        "data-topbar": "data_topbar",
+        "data-sidebar-size": "data_sidebar_size",
+        "data-layout-style": "data_layout_style",
+        "data-sidebar": "data_sidebar",
+        "data-sidebar-image": "data_sidebar_image",
+        "data-preloader": "data_preloader",
+    }
+    values = UserPreferences.objects.filter(user=request.user).values(
+        *visual_fields.values()
+    ).first() or {}
 
-    try:
-        prefs = ThemePreferences.objects.get(user=request.user, empresa_id=empresa_id)
-
-        return {
-            "theme_preferences": {
-                "data-layout": prefs.data_layout,
-                "data-bs-theme": prefs.data_bs_theme,
-                "data-sidebar-visibility": prefs.data_sidebar_visibility,
-                "data-layout-width": prefs.data_layout_width,
-                "data-layout-position": prefs.data_layout_position,
-                "data-topbar": prefs.data_topbar,
-                "data-sidebar-size": prefs.data_sidebar_size,
-                "data-layout-style": prefs.data_layout_style,
-                "data-sidebar": prefs.data_sidebar,
-                "data-sidebar-image": prefs.data_sidebar_image,
-                "data-preloader": prefs.data_preloader,
-            }
+    return {
+        "theme_preferences": {
+            key: values.get(field) or THEME_PREFERENCE_DEFAULTS[key]
+            for key, field in visual_fields.items()
         }
-
-    except ThemePreferences.DoesNotExist:
-        try:
-            prefs = UserPreferences.objects.get(user=request.user)
-            return {
-                "theme_preferences": {
-                    "data-layout": prefs.data_layout,
-                    "data-bs-theme": prefs.data_bs_theme,
-                    "data-sidebar-visibility": prefs.data_sidebar_visibility,
-                    "data-layout-width": prefs.data_layout_width,
-                    "data-layout-position": prefs.data_layout_position,
-                    "data-topbar": prefs.data_topbar,
-                    "data-sidebar-size": prefs.data_sidebar_size,
-                    "data-layout-style": prefs.data_layout_style,
-                    "data-sidebar": prefs.data_sidebar,
-                    "data-sidebar-image": prefs.data_sidebar_image,
-                    "data-preloader": prefs.data_preloader,
-                }
-            }
-        except UserPreferences.DoesNotExist:
-            return {}
+    }
