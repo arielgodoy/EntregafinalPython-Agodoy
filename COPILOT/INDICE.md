@@ -31,3 +31,9 @@ Incluye reportes, comparativas, diagnósticos, implementaciones, soluciones, ver
 - No cargar toda la carpeta `COPILOT/` ni toda la carpeta historica por defecto.
 
 Para patrones generales de implementacion, revisar primero las reglas globales y la documentacion operativa vigente.
+
+### Theme / Frontend
+
+- `COPILOT/THEME_PREFERENCES.md`
+  - Arquitectura vigente de preferencias visuales por usuario.
+  - Cargar para tareas relacionadas con theme, customizer, dark/light, sidebar, layout, preloader o persistencia visual.
