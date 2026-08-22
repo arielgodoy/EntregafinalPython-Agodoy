@@ -1,5 +1,8 @@
+import uuid
+
 from django.db import models, transaction
 from django.contrib.auth.models import User
+from django.utils import timezone
 from access_control.models import Empresa
 
 def upload_to_certificado(instance, filename):
@@ -117,6 +120,62 @@ class TareaRPETC(models.Model):
         return f'{self.nombre_tarea or self.tipo_consulta} - {self.id_tarea}'
 
 
+class LecturaAutomaticaConfig(models.Model):
+    INTERVALO_CHOICES = (
+        (15, '15 minutos'),
+        (30, '30 minutos'),
+        (60, '1 hora'),
+    )
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    habilitado = models.BooleanField(default=False)
+    intervalo_minutos = models.PositiveSmallIntegerField(choices=INTERVALO_CHOICES, default=60)
+    ultima_ejecucion = models.DateTimeField(null=True, blank=True)
+    proxima_ejecucion = models.DateTimeField(null=True, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    modificado = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return 'Configuración de lectura automática de cesiones'
+
+
+class LecturaAutomaticaEjecucion(models.Model):
+    TIPO_EJECUCION_CHOICES = (
+        ('MANUAL', 'Manual'),
+        ('AUTOMATICA', 'Automática'),
+    )
+    ESTADO_CHOICES = (
+        ('PENDIENTE', 'Pendiente'),
+        ('EN_PROCESO', 'En proceso'),
+        ('ACTUALIZADO', 'Actualizado'),
+        ('ERROR', 'Error'),
+    )
+
+    lote_id = models.UUIDField(default=uuid.uuid4, db_index=True)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='lecturas_automaticas')
+    tipo_ejecucion = models.CharField(max_length=12, choices=TIPO_EJECUCION_CHOICES)
+    fecha_desde = models.DateField()
+    fecha_hasta = models.DateField()
+    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='PENDIENTE', db_index=True)
+    progreso = models.PositiveSmallIntegerField(default=0)
+    total_documentos = models.PositiveIntegerField(null=True, blank=True)
+    documentos_procesados = models.PositiveIntegerField(default=0)
+    fecha_inicio = models.DateTimeField(null=True, blank=True)
+    fecha_termino = models.DateTimeField(null=True, blank=True)
+    ultima_actualizacion = models.DateTimeField(auto_now=True)
+    mensaje_error = models.TextField(null=True, blank=True)
+    tarea_rpetc = models.ForeignKey(TareaRPETC, null=True, blank=True, on_delete=models.SET_NULL, related_name='lecturas_automaticas')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['lote_id', 'estado'], name='lectura_auto_lote_estado_idx'),
+            models.Index(fields=['empresa', 'estado'], name='lectura_auto_emp_estado_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.empresa.codigo} - {self.estado}'
+
+
 class CesionRPETC(models.Model):
     id_cesion = models.CharField(max_length=64, db_index=True)
     estado_cesion = models.CharField(max_length=80, db_index=True)
@@ -158,6 +217,61 @@ class CesionRPETC(models.Model):
 
     def __str__(self):
         return f'{self.id_cesion} - {self.tipo_doc}/{self.folio_doc}'
+
+
+class EstadoContableCesion(models.Model):
+    ESTADO_CONTABILIZACION_CHOICES = (
+        ('CONTABILIZADA', 'Contabilizada'),
+        ('NO_CONTABILIZADA', 'No contabilizada'),
+        ('REVISAR', 'Revisar'),
+        ('NO_DISPONIBLE', 'No disponible'),
+    )
+    ESTADO_PAGO_CHOICES = (
+        ('PAGADA', 'Pagada'),
+        ('NO_PAGADA', 'No pagada'),
+        ('REVISAR', 'Revisar'),
+        ('NO_DISPONIBLE', 'No disponible'),
+    )
+    ESTADO_PAGO_RESUMEN_CHOICES = (
+        ('PENDIENTE', 'Pendiente'),
+        ('PAGADA_FACTORING', 'Pagada a factoring'),
+        ('PAGADA_PROVEEDOR', 'Pagada a proveedor'),
+        ('PAGADA_AMBOS', 'Pagada a factoring y proveedor'),
+        ('REVISAR', 'Revisar'),
+        ('NO_DISPONIBLE', 'No disponible'),
+    )
+    ESTADO_VERIFICACION_CHOICES = (
+        ('OK', 'Correcta'),
+        ('ERROR', 'Error'),
+    )
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='estados_contables_cesiones')
+    cesion = models.ForeignKey(CesionRPETC, on_delete=models.PROTECT, related_name='estados_contables')
+    estado_contabilizacion = models.CharField(max_length=20, choices=ESTADO_CONTABILIZACION_CHOICES)
+    estado_factoring = models.CharField(max_length=20, choices=ESTADO_PAGO_CHOICES)
+    estado_proveedor = models.CharField(max_length=20, choices=ESTADO_PAGO_CHOICES)
+    estado_pago_resumen = models.CharField(max_length=20, choices=ESTADO_PAGO_RESUMEN_CHOICES)
+    fecha_pago_factoring = models.DateTimeField(null=True, blank=True)
+    monto_pago_factoring = models.DecimalField(max_digits=20, decimal_places=0, null=True, blank=True)
+    fecha_pago_proveedor = models.DateTimeField(null=True, blank=True)
+    monto_pago_proveedor = models.DecimalField(max_digits=20, decimal_places=0, null=True, blank=True)
+    fecha_verificacion = models.DateTimeField(default=timezone.now)
+    estado_verificacion = models.CharField(max_length=5, choices=ESTADO_VERIFICACION_CHOICES, default='OK')
+    mensaje_error = models.CharField(max_length=500, null=True, blank=True)
+    creado = models.DateTimeField(auto_now_add=True)
+    modificado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'cesion'], name='rpetc_estado_empresa_cesion_unico'),
+        ]
+        indexes = [
+            models.Index(fields=['empresa', 'estado_pago_resumen'], name='rpetc_estado_emp_pago_idx'),
+            models.Index(fields=['empresa', 'fecha_verificacion'], name='rpetc_estado_emp_verif_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.empresa.codigo} - cesión {self.cesion_id} - {self.estado_pago_resumen}'
 
 
 class TareaCesionRPETC(models.Model):

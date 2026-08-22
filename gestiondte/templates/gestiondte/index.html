@@ -1,28 +1,33 @@
 {% extends 'partials/base.html' %}
 {% load static %}
 
-{% block title %}Gestión DTE{% endblock title %}
+{% block title %}Dashboard DTE-SII-RPETC{% endblock title %}
+
+{% block extra_css %}
+<style>
+    .dte-dashboard-chart { min-height: 330px; }
+    .dte-dashboard-loading { display: none; }
+    .dte-dashboard-loading.is-loading { display: inline-block; }
+</style>
+{% endblock extra_css %}
 
 {% block content %}
-    <div class="main-content">
-        <div class="page-content">
-            <div class="container-fluid">
-                {% block pagetitle %}
-                    {% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Gestión DTE" title_key="menu.gestion_dte" pagetitle_key="menu.gestion_dte" %}
-                {% endblock pagetitle %}
-
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-body">
-                                <p data-key="gestion_dte.welcome">Bienvenido al módulo de Gestión de Documentos Tributarios Electrónicos (DTE).</p>
-                                <a href="{% url 'gestion_dte:cesiones' %}" class="btn btn-primary" data-key="gestion_dte.go_cesiones">Ir a Control de Cesiones</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
+    <div class="main-content"><div class="page-content"><div class="container-fluid" id="dte-dashboard" data-endpoint="{% url 'gestion_dte:dashboard_resumen' %}">
+        {% block pagetitle %}{% include "partials/page-title.html" with pagetitle="Dashboard DTE-SII-RPETC" title="Dashboard DTE-SII-RPETC" %}{% endblock pagetitle %}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div><h5 class="mb-1">Dashboard DTE-SII-RPETC</h5><p class="text-muted mb-0">Empresa: {{ empresa_activa.codigo|default:'-' }} - {{ empresa_activa.descripcion|default:'-' }}</p></div>
+            <div class="d-flex align-items-center gap-2"><label class="visually-hidden" for="dte-dashboard-periodo">Período</label><select id="dte-dashboard-periodo" class="form-select"><option value="hoy">Hoy</option><option value="semana">Semana</option><option value="mes" selected>Mes</option><option value="anio">Año</option></select><span class="spinner-border spinner-border-sm text-primary dte-dashboard-loading" role="status" aria-label="Cargando"></span></div>
         </div>
-    </div>
+        <div class="row g-3 mb-3">
+            {% for kpi in dashboard_kpis %}<div class="col-xxl-2 col-md-4 col-6"><div class="card h-100"><div class="card-body"><div class="d-flex justify-content-between"><div><p class="text-muted mb-1">{{ kpi.label }}</p><h4 class="mb-0" data-kpi="{{ kpi.key }}">0</h4></div><div class="avatar-sm"><span class="avatar-title bg-{{ kpi.color }}-subtle text-{{ kpi.color }} rounded fs-4"><i class="{{ kpi.icon }}"></i></span></div></div></div></div></div>{% endfor %}
+        </div>
+        <div class="row g-3">
+            <div class="col-xl-6"><div class="card"><div class="card-header"><h5 class="card-title mb-0">Evolución de cesiones</h5></div><div class="card-body"><div id="dte-chart-evolucion" class="dte-dashboard-chart" data-colors='["--vz-primary"]'></div></div></div></div>
+            <div class="col-xl-6"><div class="card"><div class="card-header"><h5 class="card-title mb-0">Cesiones por estado RPETC</h5></div><div class="card-body"><div id="dte-chart-estados" class="dte-dashboard-chart" data-colors='["--vz-primary", "--vz-success", "--vz-warning", "--vz-danger", "--vz-info"]'></div></div></div></div>
+            <div class="col-xl-7"><div class="card"><div class="card-header"><h5 class="card-title mb-0">Cantidad y monto de cesiones</h5></div><div class="card-body"><div id="dte-chart-actividad" class="dte-dashboard-chart" data-colors='["--vz-primary", "--vz-success"]'></div></div></div></div>
+            <div class="col-xl-5"><div class="card"><div class="card-header"><h5 class="card-title mb-0">Principales cesionarios</h5></div><div class="card-body"><div id="dte-chart-cesionarios" class="dte-dashboard-chart" data-colors='["--vz-info"]'></div></div></div></div>
+        </div>
+    </div></div></div>
 {% endblock content %}
+
+{% block extra_js %}<script src="{% static 'libs/echarts/echarts.min.js' %}"></script><script src="{% static 'js/pages/gestiondte-dashboard.init.js' %}"></script>{% endblock extra_js %}

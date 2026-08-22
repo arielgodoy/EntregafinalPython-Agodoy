@@ -1,0 +1,136 @@
+{% extends 'partials/base.html' %}
+{% load static %}
+
+{% block title %}Lectura automática de Cesiones{% endblock title %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      {% block pagetitle %}{% include "partials/page-title.html" with pagetitle="Gestión DTE" title="Lectura automática de Cesiones" title_key="menu.gestion_dte.lectura_automatica" pagetitle_key="menu.gestion_dte" %}{% endblock pagetitle %}
+
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+      {% endfor %}
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h5 class="card-title" data-key="gestion_dte.lectura_automatica.config.title">Configuración de lectura</h5>
+          <form method="post" action="{% url 'gestion_dte:ejecutar_lectura_automatica_cesiones' %}" id="lectura-automatica-form" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-3">
+              <label class="form-label" for="lectura-fecha-desde" data-key="gestion_dte.lectura_automatica.from">Fecha desde</label>
+              <input class="form-control" id="lectura-fecha-desde" name="fecha_desde" type="date" value="{{ fecha_desde|date:'Y-m-d' }}" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="lectura-fecha-hasta" data-key="gestion_dte.lectura_automatica.to">Fecha hasta</label>
+              <input class="form-control" id="lectura-fecha-hasta" name="fecha_hasta" type="date" value="{{ fecha_hasta|date:'Y-m-d' }}" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="lectura-intervalo" data-key="gestion_dte.lectura_automatica.interval">Ejecutar cada</label>
+              <select class="form-select" id="lectura-intervalo" name="intervalo_minutos">
+                {% for value, label in config.INTERVALO_CHOICES %}
+                  <option value="{{ value }}"{% if config.intervalo_minutos == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" id="lectura-habilitada" name="habilitado" type="checkbox"{% if config.habilitado %} checked{% endif %}>
+                <label class="form-check-label" for="lectura-habilitada" data-key="gestion_dte.lectura_automatica.enabled">Lectura automática activa</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <button class="btn btn-outline-primary" name="action" value="save" type="submit" data-key="gestion_dte.lectura_automatica.save">Guardar configuración</button>
+              <button class="btn btn-primary" name="action" value="run" type="submit" data-key="gestion_dte.lectura_automatica.run_now">Ejecutar ahora</button>
+              <span class="text-muted small ms-2" data-key="gestion_dte.lectura_automatica.schedule_help">La ejecución recurrente requiere un scheduler externo que invoque el comando del servidor.</span>
+            </div>
+          </form>
+          <div class="small text-muted mt-3">
+            <span data-key="gestion_dte.lectura_automatica.next_run">Próxima ejecución</span>:
+            <span>{{ config.proxima_ejecucion|date:'d-m-Y H:i:s'|default:'-' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title" data-key="gestion_dte.lectura_automatica.companies.title">Empresas con certificado vigente</h5>
+          <div class="table-responsive">
+            <table class="table table-striped align-middle" id="lectura-automatica-table">
+              <thead><tr>
+                <th data-key="gestion_dte.lectura_automatica.company">Empresa</th>
+                <th data-key="gestion_dte.lectura_automatica.certificate">Certificado</th>
+                <th data-key="gestion_dte.lectura_automatica.status">Estado</th>
+                <th data-key="gestion_dte.lectura_automatica.progress">Progreso</th>
+                <th data-key="gestion_dte.lectura_automatica.updated">Última actualización</th>
+              </tr></thead>
+              <tbody id="lectura-automatica-body">
+                {% for row in empresas_lectura %}
+                  {% with ejecucion=row.ejecucion %}
+                  <tr data-empresa="{{ row.empresa.codigo }}">
+                    <td>{{ row.empresa.codigo }} - {{ row.empresa.descripcion }}</td>
+                    <td data-key="gestion_dte.lectura_automatica.valid">{{ row.certificado.estado_vigencia }}</td>
+                    <td class="lectura-estado">{% if ejecucion %}{{ ejecucion.get_estado_display }}{% else %}<span data-key="gestion_dte.lectura_automatica.pending">Pendiente</span>{% endif %}</td>
+                    <td><div class="progress" role="progressbar" aria-label="Progreso"><div class="progress-bar{% if ejecucion.estado == 'EN_PROCESO' %} progress-bar-striped progress-bar-animated{% endif %}" style="width: {{ ejecucion.progreso|default:0 }}%">{{ ejecucion.progreso|default:0 }}%</div></div></td>
+                    <td class="lectura-actualizacion">{% if ejecucion %}Actualizado a las {{ ejecucion.ultima_actualizacion|date:'d-m-Y H:i:s' }}{% else %}<span data-key="gestion_dte.lectura_automatica.never">Sin actualización</span>{% endif %}</td>
+                  </tr>
+                  {% endwith %}
+                {% empty %}
+                  <tr><td colspan="5" data-key="gestion_dte.lectura_automatica.no_companies">No hay empresas con certificado vigente.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('lectura-automatica-form');
+  const from = document.getElementById('lectura-fecha-desde');
+  const to = document.getElementById('lectura-fecha-hasta');
+  const endpoint = '{% url "gestion_dte:estado_lectura_automatica_cesiones" %}';
+  const body = document.getElementById('lectura-automatica-body');
+
+  if (form) {
+    form.addEventListener('submit', function (event) {
+      const start = new Date(from.value + 'T00:00:00');
+      const end = new Date(to.value + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end || end > today || ((end - start) / 86400000) + 1 > 30) {
+        event.preventDefault();
+        alert('El rango debe ser válido, no futuro y de máximo 30 días.');
+      }
+    });
+  }
+
+  function refresh() {
+    if (!body) return;
+    fetch(endpoint, {headers: {Accept: 'application/json'}, credentials: 'same-origin'})
+      .then(function (response) { return response.json(); })
+      .then(function (payload) {
+        (payload.data || []).forEach(function (item) {
+          const row = body.querySelector('[data-empresa="' + item.empresa_codigo + '"]');
+          if (!row) return;
+          row.querySelector('.lectura-estado').textContent = item.estado;
+          const bar = row.querySelector('.progress-bar');
+          const progress = Number(item.progreso || 0);
+          bar.style.width = progress + '%';
+          bar.textContent = progress + '%';
+          bar.classList.toggle('progress-bar-striped', item.estado === 'EN_PROCESO');
+          bar.classList.toggle('progress-bar-animated', item.estado === 'EN_PROCESO');
+          row.querySelector('.lectura-actualizacion').textContent = item.ultima_actualizacion ? 'Actualizado a las ' + new Date(item.ultima_actualizacion).toLocaleString('es-CL') : 'Sin actualización';
+        });
+      })
+      .catch(function () {});
+  }
+
+  window.setInterval(refresh, 7000);
+}());
+</script>
+{% endblock content %}

@@ -1,15 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Avg, Count, Max, Sum
 from django.contrib.auth.decorators import login_required
-from datetime import date
+from django.contrib import messages
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 from django.utils import timezone
 from django.db.models import Q
+from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from access_control.decorators import verificar_permiso
 
-from .models import CertificadoSII, TareaRPETC, TareaCesionRPETC, CesionRPETC
+from .models import (
+    CertificadoSII,
+    TareaRPETC,
+    TareaCesionRPETC,
+    CesionRPETC,
+    LecturaAutomaticaConfig,
+    LecturaAutomaticaEjecucion,
+)
 from access_control.models import Empresa
 from access_control.models import Permiso, Vista
 from .forms import CertificadoUploadForm
@@ -244,6 +253,98 @@ def cesiones(request):
     return render(request, 'gestiondte/cesiones.html', context)
 
 
+def _lectura_automatica_filas():
+    from .services.lectura_automatica import empresas_elegibles
+
+    elegibles = empresas_elegibles()
+    codigos = [empresa.codigo for empresa, _certificado in elegibles]
+    ejecuciones = LecturaAutomaticaEjecucion.objects.filter(
+        empresa__codigo__in=codigos,
+    ).select_related('empresa').order_by('empresa__codigo', '-ultima_actualizacion')
+    latest = {}
+    for ejecucion in ejecuciones:
+        latest.setdefault(ejecucion.empresa.codigo, ejecucion)
+    return [
+        {
+            'empresa': empresa,
+            'certificado': certificado,
+            'ejecucion': latest.get(empresa.codigo),
+        }
+        for empresa, certificado in elegibles
+    ]
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+def lectura_automatica_cesiones(request):
+    from .services.lectura_automatica import rango_automatico
+
+    config, _ = LecturaAutomaticaConfig.objects.get_or_create(pk=1)
+    fecha_desde, fecha_hasta = rango_automatico()
+    return render(request, 'gestiondte/lectura_automatica_cesiones.html', {
+        'config': config,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+        'empresas_lectura': _lectura_automatica_filas(),
+    })
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "modificar")
+def ejecutar_lectura_automatica_cesiones(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido.'}, status=405)
+    from .services.lectura_automatica import (
+        LecturaAutomaticaError,
+        ejecutar_lote,
+    )
+
+    try:
+        intervalo = int(request.POST.get('intervalo_minutos', 60))
+        if intervalo not in {15, 30, 60}:
+            raise LecturaAutomaticaError('Intervalo inválido.')
+        config, _ = LecturaAutomaticaConfig.objects.get_or_create(pk=1)
+        config.habilitado = request.POST.get('habilitado') == 'on'
+        config.intervalo_minutos = intervalo
+        config.proxima_ejecucion = (
+            timezone.now() + timedelta(minutes=intervalo)
+            if config.habilitado else None
+        )
+        config.save(update_fields=['habilitado', 'intervalo_minutos', 'proxima_ejecucion', 'modificado'])
+        if request.POST.get('action') == 'save':
+            messages.success(request, 'Configuración guardada.')
+            return redirect('gestion_dte:lectura_automatica_cesiones')
+        fecha_desde = date.fromisoformat(request.POST.get('fecha_desde', ''))
+        fecha_hasta = date.fromisoformat(request.POST.get('fecha_hasta', ''))
+        resultado = ejecutar_lote(fecha_desde, fecha_hasta, tipo_ejecucion='MANUAL')
+        if resultado['bloqueado']:
+            messages.warning(request, 'Ya existe una lectura de cesiones en proceso.')
+        else:
+            messages.success(request, 'Lectura de cesiones ejecutada.')
+    except (ValueError, LecturaAutomaticaError) as exc:
+        messages.error(request, str(exc))
+    return redirect('gestion_dte:lectura_automatica_cesiones')
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+def estado_lectura_automatica_cesiones(request):
+    rows = _lectura_automatica_filas()
+    return JsonResponse({
+        'data': [
+            {
+                'empresa_codigo': row['empresa'].codigo,
+                'empresa_nombre': row['empresa'].descripcion,
+                'certificado': row['certificado'].estado_vigencia,
+                'estado': row['ejecucion'].estado if row['ejecucion'] else 'PENDIENTE',
+                'progreso': row['ejecucion'].progreso if row['ejecucion'] else 0,
+                'ultima_actualizacion': row['ejecucion'].ultima_actualizacion.isoformat() if row['ejecucion'] else None,
+            }
+            for row in rows
+        ],
+    })
+
+
 @login_required
 @verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
 def cesiones_data(request):
@@ -393,11 +494,9 @@ def sincronizar_cesiones_rpetc(request):
     from .services.rpetc import (
         RPETCAuthenticationError, RPETCError, RPETCRateLimitError,
         RPETCTaskFailedError, RPETCTaskTimeoutError, RPETCUnauthorizedError,
-        RPETCClient,
     )
-    from .services.rpetc_importer import importar_resultado_rpetc
     from .services.rpetc_importer import RPETCImportError
-    from .services.rpetc_parser import parsear_txt_rpetc
+    from .services.lectura_automatica import LecturaAutomaticaError, sincronizar_empresa_rpetc
 
     empresa_id = request.session.get('empresa_id')
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
@@ -436,52 +535,26 @@ def sincronizar_cesiones_rpetc(request):
         context['sync_error'] = 'Ya existe una sincronización en progreso para ese período.'
         return render(request, 'gestiondte/cesiones.html', context)
 
-    maestro = get_maestroempresa_by_codigo(empresa_activa.codigo)
-    from .services.rpetc_importer import normalizar_rut
-    rut_empresa, dv_empresa = normalizar_rut((maestro or {}).get('rut'))
     certificado = CertificadoSII.objects.filter(
         empresa_codigo=empresa_activa.codigo, activo=True,
     ).first()
-    if not maestro or not rut_empresa or not dv_empresa:
-        context['sync_error'] = 'No fue posible resolver el RUT de la empresa activa.'
-        return render(request, 'gestiondte/cesiones.html', context)
     if not certificado:
         context['sync_error'] = 'No existe un certificado SII activo para la empresa activa.'
         return render(request, 'gestiondte/cesiones.html', context)
 
     try:
-        resultado = RPETCClient(certificado).obtener_cesiones_deudor(
-            rut_deudor=rut_empresa,
-            dv_deudor=dv_empresa,
-            desde=fecha_desde.strftime('%d%m%Y'),
-            hasta=fecha_hasta.strftime('%d%m%Y'),
-            formato='TXT',
+        maestro = get_maestroempresa_by_codigo(empresa_activa.codigo)
+        sincronizado = sincronizar_empresa_rpetc(
+            empresa_activa,
+            fecha_desde,
+            fecha_hasta,
+            certificado=certificado,
+            maestro=maestro,
             intervalo=3,
             max_intentos=20,
         )
-        estado = resultado['estado_final']
-        if estado.get('estado') != 'TERMINADO' or estado.get('codigoError') not in (0, '0', None):
-            raise RPETCTaskFailedError(
-                estado.get('descripcionError') or 'La tarea SII no terminó correctamente.',
-                task_state=estado,
-            )
-        parseado = parsear_txt_rpetc(resultado['resultado']['bytes'])
-        if (
-            parseado['consulta'].get('TIPO_CONSULTA') != 'DEUDOR'
-            or not parseado.get('columnas')
-            or 'ID_CESION' not in parseado['columnas']
-        ):
-            raise RPETCError('El resultado RPETC no contiene una consulta DEUDOR válida.')
-        stats = importar_resultado_rpetc(
-            empresa_activa,
-            resultado['tarea_inicial'],
-            estado,
-            parseado,
-            'DEUDOR',
-            fecha_desde,
-            fecha_hasta,
-            'TXT',
-        )
+        resultado = sincronizado['resultado']
+        stats = sincronizado['stats']
         context['sync_result'] = {
             **{key: value for key, value in stats.items() if key != 'tarea'},
             'id_tarea': resultado['tarea_inicial'].get('idTarea'),
@@ -489,6 +562,8 @@ def sincronizar_cesiones_rpetc(request):
             'fecha': timezone.localtime(),
         }
         context.update(_cesiones_rpetc_context(empresa_activa))
+    except LecturaAutomaticaError as exc:
+        context['sync_error'] = str(exc)
     except RPETCImportError:
         context['sync_error'] = 'Los datos recibidos del SII no pudieron guardarse.'
     except RPETCError as exc:
@@ -515,9 +590,112 @@ def verificar_cesion(request):
     return render(request, 'gestiondte/verificar.html')
 
 
+def _dashboard_periodo(periodo):
+    hoy = timezone.localdate()
+    ahora = timezone.now()
+    if periodo == 'hoy':
+        inicio = hoy
+    elif periodo == 'semana':
+        inicio = hoy - timedelta(days=hoy.weekday())
+    elif periodo == 'mes':
+        inicio = hoy.replace(day=1)
+    elif periodo == 'anio':
+        inicio = hoy.replace(month=1, day=1)
+    else:
+        raise ValueError('Período inválido.')
+    inicio_local = timezone.make_aware(datetime.combine(inicio, time.min))
+    return inicio_local, ahora
+
+
+def _dashboard_resumen(empresa_activa, periodo):
+    inicio, ahora = _dashboard_periodo(periodo)
+    cesiones = CesionRPETC.objects.filter(
+        tareas__tarea__empresa=empresa_activa,
+        fecha_cesion__gte=inicio,
+        fecha_cesion__lte=ahora,
+    ).distinct()
+    aggregate = cesiones.aggregate(
+        total_cesiones=Count('pk'),
+        monto_total=Sum('monto_cesion'),
+        cedentes=Count('cedente_rut', distinct=True),
+        cesionarios=Count('cesionario_rut', distinct=True),
+        monto_promedio=Avg('monto_cesion'),
+        ultima_cesion=Max('fecha_cesion'),
+    )
+    if periodo == 'hoy':
+        trunc = TruncHour('fecha_cesion', tzinfo=timezone.get_current_timezone())
+        formato = '%H:00'
+    elif periodo == 'anio':
+        trunc = TruncMonth('fecha_cesion', tzinfo=timezone.get_current_timezone())
+        formato = '%Y-%m'
+    else:
+        trunc = TruncDay('fecha_cesion', tzinfo=timezone.get_current_timezone())
+        formato = '%d-%m'
+
+    evolucion = list(cesiones.annotate(periodo=trunc).values('periodo').annotate(
+        cantidad=Count('pk'), monto=Sum('monto_cesion'),
+    ).order_by('periodo'))
+    evolucion = [
+        {
+            'periodo': item['periodo'].strftime(formato),
+            'cantidad': item['cantidad'],
+            'monto': item['monto'] or 0,
+        }
+        for item in evolucion if item['periodo']
+    ]
+    estados = list(cesiones.values('estado_cesion').annotate(
+        cantidad=Count('pk'), monto=Sum('monto_cesion'),
+    ).order_by('-cantidad', 'estado_cesion'))
+    top_cesionarios = list(cesiones.values(
+        'cesionario_rut', 'cesionario_dv', 'cesionario_razon_social',
+    ).annotate(monto=Sum('monto_cesion'), cantidad=Count('pk')).order_by('-monto')[:10])
+    return {
+        'periodo': periodo,
+        'kpis': {
+            'total_cesiones': aggregate['total_cesiones'] or 0,
+            'monto_total': aggregate['monto_total'] or 0,
+            'cedentes': aggregate['cedentes'] or 0,
+            'cesionarios': aggregate['cesionarios'] or 0,
+            'monto_promedio': aggregate['monto_promedio'] or 0,
+            'ultima_cesion': aggregate['ultima_cesion'].isoformat() if aggregate['ultima_cesion'] else None,
+        },
+        'evolucion': evolucion,
+        'estados_rpetc': estados,
+        'actividad': evolucion,
+        'cesionarios_top': top_cesionarios,
+    }
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
 def index(request):
-    """Página principal de Gestión DTE."""
-    return render(request, 'gestiondte/index.html')
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    return render(request, 'gestiondte/index.html', {
+        'empresa_activa': empresa_activa,
+        'periodo_dashboard': 'mes',
+        'dashboard_kpis': [
+            {'key': 'total_cesiones', 'label': 'Total cesiones', 'color': 'primary', 'icon': 'ri-file-text-line'},
+            {'key': 'monto_total', 'label': 'Monto total cedido', 'color': 'success', 'icon': 'ri-money-dollar-circle-line'},
+            {'key': 'cedentes', 'label': 'Cedentes distintos', 'color': 'info', 'icon': 'ri-user-3-line'},
+            {'key': 'cesionarios', 'label': 'Cesionarios distintos', 'color': 'warning', 'icon': 'ri-group-line'},
+            {'key': 'monto_promedio', 'label': 'Monto promedio', 'color': 'danger', 'icon': 'ri-bar-chart-line'},
+            {'key': 'ultima_cesion', 'label': 'Última cesión', 'color': 'secondary', 'icon': 'ri-time-line'},
+        ],
+    })
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+def dashboard_resumen(request):
+    periodo = request.GET.get('periodo', 'mes').strip().lower()
+    if periodo not in {'hoy', 'semana', 'mes', 'anio'}:
+        return JsonResponse({'error': 'Período inválido.'}, status=400)
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa:
+        return JsonResponse({'error': 'No hay empresa activa.'}, status=302)
+    return JsonResponse(_dashboard_resumen(empresa_activa, periodo))
 
 
 @login_required
