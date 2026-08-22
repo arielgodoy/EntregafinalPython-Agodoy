@@ -707,7 +707,7 @@
 "menu.library.list_documents": "Listado General de Documentos",
 "menu.library.manage_dte": "Gestión DTE",
 "menu.gestion_dte": "Gestión DTE",
-"menu.gestion_dte.index": "Panel Gestión DTE",
+"menu.gestion_dte.index": "Dashboard DTE-SII-RPETC",
 "gestion_dte.kpi.revisados": "Documentos revisados",
 "gestion_dte.kpi.cedidos": "Documentos cedidos",
 "gestion_dte.kpi.no_cedidos": "Documentos sin cesión",
