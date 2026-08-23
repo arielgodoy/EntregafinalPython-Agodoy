@@ -29,11 +29,8 @@ class AvatarForm(ModelForm):
      imagen= forms.ImageField(required=False)
      class Meta:
         model = Avatar
-        fields = ['imagen', 'profesion', 'dni', 'first_name', 'last_name', 'email']
+        fields = ['imagen', 'profesion', 'dni']
         labels = {                        
-                        'first_name':'Nombre',
-                        'last_name': 'Apellido ',
-                        'email': 'Correo electronico',
                         'profesion': 'Profesión Usuario',
                         'dni': 'RUT/DNI'
                 }
