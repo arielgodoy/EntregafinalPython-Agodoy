@@ -203,7 +203,6 @@ except ImportError:
     INSTALLED_APPS = [app for app in INSTALLED_APPS if app != 'channels']
 
 MIGRATION_MODULES = {
-    'access_control': None,
     'acounts': None,
     'api': None,
     'biblioteca': None,

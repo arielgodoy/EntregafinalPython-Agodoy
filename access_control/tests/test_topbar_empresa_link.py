@@ -23,9 +23,8 @@ class TopbarEmpresaLinkTests(TestCase):
             codigo="01",
             descripcion="Empresa de prueba",
         )
-        # Crear permiso para la vista raíz (biblioteca listar propiedades)
-        # Coincidir con el nombre usado por la view: 'Biblioteca - Listar Propiedades'
-        self.vista = Vista.objects.get_or_create(nombre="Biblioteca - Listar Propiedades")[0]
+        # Crear permiso para la vista de Control de Cesiones usada por los tests de navegación.
+        self.vista = Vista.objects.get_or_create(nombre="Gestión DTE - Control de Cesiones")[0]
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
