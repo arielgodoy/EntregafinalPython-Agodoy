@@ -78,6 +78,7 @@
       <div class="modal-content">
         <form method="POST" action="{% url 'access_control:seleccionar_empresa' %}">
           {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path|default:'' }}">
           <div class="modal-header">
             <h5 class="modal-title" id="cambiarEmpresaLabel" data-key="modal.select_company">Seleccionar Empresa</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

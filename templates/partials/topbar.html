@@ -219,6 +219,32 @@
                         </div>
                         {% if messages %}
                         {% for message in messages %}
+                        {% if 'empresa-switch-toast' in message.tags %}
+                        <div class="position-fixed top-0 end-0 p-3" style="z-index: 11">
+                            <div class="toast align-items-right text-white bg-success border-0 empresa-switch-toast" role="alert"
+                                aria-live="assertive" aria-atomic="true" data-bs-autohide="true" data-bs-delay="5000">
+                                <div class="d-flex">
+                                    <div class="toast-body">
+                                        {{message}}
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+                                        aria-label="Close"></button>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function () {
+                                var toastEl = document.querySelector('.empresa-switch-toast');
+                                if (toastEl) {
+                                    var toast = new bootstrap.Toast(toastEl, {
+                                        autohide: true,
+                                        delay: 5000
+                                    });
+                                    toast.show();
+                                }
+                            });
+                        </script>
+                        {% else %}
                         <input type="hidden" id="login-msg" value="{{message}}">
     
                         <button type="button" class="btn btn-primary" id="liveToastBtn" hidden></button>
@@ -234,6 +260,7 @@
                                 </div>
                             </div>
                         </div>
+                        {% endif %}
     
                         {% endfor %}
                         {% endif %}

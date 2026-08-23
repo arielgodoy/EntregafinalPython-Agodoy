@@ -3,6 +3,8 @@ from django.urls import reverse
 from django.http import JsonResponse
 from django.utils.translation import gettext as _
 
+from access_control.services.empresa_activa import remember_last_valid_view
+
 
 class EmpresaActivaMiddleware:
     def __init__(self, get_response):
@@ -21,7 +23,13 @@ class EmpresaActivaMiddleware:
                 if is_ajax:
                     return JsonResponse({'detail': _('Empresa activa requerida')}, status=401)
                 return redirect(self._get_selector_url())
-        return self.get_response(request)
+
+        response = self.get_response(request)
+
+        if request.method == "GET" and getattr(request.user, "is_authenticated", False):
+            remember_last_valid_view(request)
+
+        return response
 
     def _get_selector_url(self):
         try:

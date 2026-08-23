@@ -2,6 +2,7 @@
 Tests para verificar que el link de cambio de empresa en topbar funciona correctamente.
 """
 from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
 from django.test import TestCase
 from django.urls import reverse
 
@@ -126,3 +127,82 @@ class TopbarEmpresaLinkTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # Verificar que la sesión se actualizó
         self.assertEqual(self.client.session.get("empresa_id"), empresa2.id)
+
+    def test_middleware_recuerda_ultima_vista_con_querystring(self):
+        """Debe guardar la última URL funcional válida con query string en sesión."""
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session.save()
+
+        url = reverse("gestion_dte:cesiones") + "?mes=8&anio=2026"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session.get("ultima_vista_url"), url)
+
+    def test_post_seleccionar_empresa_redirige_a_ultima_vista_guardada(self):
+        """Cuando existe una última vista funcional, el cambio de empresa debe volver a ella."""
+        self.client.force_login(self.user)
+
+        empresa2 = Empresa.objects.create(
+            codigo="02",
+            descripcion="Segunda empresa",
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=empresa2,
+            vista=self.vista,
+            ingresar=True,
+        )
+
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session["ultima_vista_url"] = reverse("gestion_dte:cesiones") + "?mes=8&anio=2026"
+        session.save()
+
+        response = self.client.post(
+            reverse("access_control:seleccionar_empresa"),
+            {"empresa_id": empresa2.id},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("gestion_dte:cesiones") + "?mes=8&anio=2026",
+        )
+
+    def test_post_seleccionar_empresa_crea_mensaje_success(self):
+        """Un cambio de empresa exitoso debe dejar un message de tipo success."""
+        self.client.force_login(self.user)
+
+        empresa2 = Empresa.objects.create(
+            codigo="02",
+            descripcion="Segunda empresa",
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=empresa2,
+            vista=self.vista,
+            ingresar=True,
+        )
+
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session.save()
+
+        response = self.client.post(
+            reverse("access_control:seleccionar_empresa"),
+            {"empresa_id": empresa2.id, "next": reverse("gestion_dte:cesiones") + "?mes=8&anio=2026"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any(
+            m.message == "Cambio de empresa exitoso"
+            and m.level == 25
+            and "empresa-switch-toast" in m.tags
+            for m in messages
+        ))

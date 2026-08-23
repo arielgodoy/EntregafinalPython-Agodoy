@@ -73,6 +73,7 @@ def login_view(request):
                 prefs.save(update_fields=["fecha_sistema"])
             request.session["fecha_sistema"] = prefs.fecha_sistema.isoformat()
             status, empresa = resolve_post_login(request, user)
+            request.session.pop('ultima_vista_url', None)
             if status == "ONE" and empresa:
                 set_empresa_activa_en_sesion(request, empresa)
                 return redirect('dashboard:dashboard_general')
@@ -102,6 +103,7 @@ def login_view(request):
 
 def logout_view(request):
     # Vista para realizar el logout (opcional)
+    request.session.pop('ultima_vista_url', None)
     logout(request)
     return redirect('login')
 

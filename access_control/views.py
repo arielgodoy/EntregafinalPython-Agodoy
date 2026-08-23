@@ -1,5 +1,5 @@
 from django.views.generic.edit import UpdateView,DeleteView,CreateView
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.contrib.auth.models import User
 from django.contrib.auth.models import User as Usuario
 from django.contrib.auth.decorators import login_required
@@ -52,7 +52,7 @@ from access_control.services.access_requests import (
     record_access_request_email_audit,
 )
 from notificaciones.models import Notification
-from access_control.services.empresa_activa import set_empresa_activa_en_sesion
+from access_control.services.empresa_activa import get_safe_redirect_target, set_empresa_activa_en_sesion
 logger = logging.getLogger(__name__)
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
@@ -1372,11 +1372,16 @@ def seleccionar_empresa(request):
         empresa_id = request.POST.get("empresa_id")
         empresa = Empresa.objects.get(pk=empresa_id)
         set_empresa_activa_en_sesion(request, empresa)
-        return redirect("dashboard:dashboard_general")
+        messages.success(request, "Cambio de empresa exitoso", extra_tags="empresa-switch-toast")
+        target = get_safe_redirect_target(
+            request,
+            fallback_url=reverse("dashboard:dashboard_general"),
+            candidate_urls=[request.POST.get("next"), request.session.get("ultima_vista_url")],
+        )
+        return redirect(target)
 
     permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
     empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
 
-    print(empresas)  # Para depuración
     return render(request, "access_control/seleccionar_empresa.html", {"empresas": empresas})
 
