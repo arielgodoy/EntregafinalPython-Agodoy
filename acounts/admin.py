@@ -2,9 +2,9 @@ from django.contrib import admin
 from django.utils import timezone
 from .models import Avatar, EmailAccount, SystemConfig, CompanyConfig, UserEmailToken
 
-# Register your models here.
-
-admin.site.register(Avatar)
+@admin.register(Avatar)
+class AvatarAdmin(admin.ModelAdmin):
+	fields = ('user', 'imagen', 'profesion', 'dni')
 
 
 class UserEmailTokenExpiredFilter(admin.SimpleListFilter):

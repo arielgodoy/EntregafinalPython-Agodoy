@@ -1,6 +1,7 @@
 import base64
 
 from django.contrib.auth.models import User
+from django.contrib.admin.sites import site
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -83,6 +84,7 @@ class PerfilIdentidadTests(TestCase):
         self.assertEqual(self.avatar.dni, "12.345.678-5")
 
     def test_profile_updates_avatar_image(self):
+        previous_image_name = self.avatar.imagen.name
         image = SimpleUploadedFile(
             "avatar.png",
             base64.b64decode(
@@ -95,7 +97,7 @@ class PerfilIdentidadTests(TestCase):
 
         self.assertRedirects(response, reverse("editar_perfil"), fetch_redirect_response=False)
         self.avatar.refresh_from_db()
-        self.assertTrue(self.avatar.imagen.name.endswith("avatar.png"))
+        self.assertNotEqual(self.avatar.imagen.name, previous_image_name)
 
     def test_profile_does_not_change_username(self):
         self._post_profile(username="otro-usuario")
@@ -113,3 +115,20 @@ class PerfilIdentidadTests(TestCase):
         self.assertIn('value="Nombre original"', content)
         self.assertIn('value="Apellido original"', content)
         self.assertIn('value="original@example.com"', content)
+
+    def test_avatar_upload_template_reads_identity_from_user(self):
+        response = self.client.get(reverse("subeavatar"))
+
+        self.assertContains(response, "Nombre original")
+        self.assertContains(response, "Apellido original")
+        self.assertContains(response, "original@example.com")
+        self.assertNotContains(response, "Avatar original")
+        self.assertNotContains(response, "avatar@example.com")
+
+    def test_avatar_admin_exposes_only_non_identity_fields(self):
+        avatar_admin = site._registry[Avatar]
+
+        self.assertEqual(
+            tuple(avatar_admin.fields),
+            ("user", "imagen", "profesion", "dni"),
+        )
