@@ -7,6 +7,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login, logout
 from django.utils import timezone
 from settings.models import UserPreferences
+from access_control.models import Permiso
 from access_control.services.empresa_activa import (
     get_user_initial_view_url,
     resolve_post_login,
@@ -14,6 +15,52 @@ from access_control.services.empresa_activa import (
 )
 from access_control.decorators import verificar_permiso
 import time
+
+
+def _usuario_tiene_permiso(user, empresa_id, vista_nombre, permiso_requerido):
+    if not empresa_id:
+        return False
+    return Permiso.objects.filter(
+        usuario=user,
+        empresa_id=empresa_id,
+        vista__nombre=vista_nombre,
+    ).filter(**{permiso_requerido: True}).exists()
+
+
+@verificar_permiso("Accounts - Cambiar Password", "modificar")
+def _procesar_cambio_password_en_perfil(request, user, avatar):
+    """Procesa el cambio de contraseña dentro de la pestaña del perfil."""
+    password_form = PasswordChangeForm(request.user, request.POST)
+    user_form = CustomUserForm(instance=user)
+    avatar_form = AvatarForm(instance=avatar)
+    can_change_password = _usuario_tiene_permiso(
+        request.user,
+        request.session.get('empresa_id'),
+        'Accounts - Cambiar Password',
+        'modificar',
+    )
+
+    for field in user_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+    for field in avatar_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+    for field in password_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+
+    if password_form.is_valid():
+        updated_user = password_form.save()
+        update_session_auth_hash(request, updated_user)
+        messages.success(request, 'Tu contraseña ha sido cambiada con éxito.')
+        return redirect(f"{request.path}?tab=password")
+
+    messages.error(request, 'Por favor corrige los errores abajo.')
+    return render(request, 'editar_perfil.html', {
+        'user_form': user_form,
+        'avatar_form': avatar_form,
+        'password_form': password_form,
+        'active_tab': 'password',
+        'can_change_password': can_change_password,
+    })
 from acounts.forms import CustomUserForm
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth import update_session_auth_hash
@@ -37,25 +84,57 @@ def crear_usuario_admin(request):
 @login_required
 @verificar_permiso("Accounts - Editar Perfil", "modificar")
 def editar_perfil(request):
-    """Editar perfil de usuario y avatar."""
+    """Editar perfil de usuario, avatar y cambio de contraseña dentro de la misma pantalla."""
     user = request.user
-    # Asegurarnos de tener un objeto Avatar relacionado para evitar RelatedObjectDoesNotExist
     avatar, _ = Avatar.objects.get_or_create(user=user)
+    active_tab = request.GET.get('tab', 'personal')
+    can_change_password = _usuario_tiene_permiso(
+        user,
+        request.session.get('empresa_id'),
+        'Accounts - Cambiar Password',
+        'modificar',
+    )
+
     if request.method == 'POST':
+        form_action = request.POST.get('form_action', 'profile')
+        user_form = CustomUserForm(instance=user)
+        avatar_form = AvatarForm(instance=avatar)
+        password_form = PasswordChangeForm(request.user)
+
+        if form_action == 'password':
+            return _procesar_cambio_password_en_perfil(request, user, avatar)
+
+        active_tab = 'personal'
         user_form = CustomUserForm(request.POST, instance=user)
         avatar_form = AvatarForm(request.POST, request.FILES, instance=avatar)
+        for field in user_form.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        for field in avatar_form.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
         if user_form.is_valid() and avatar_form.is_valid():
             user_form.save()
             avatar_form.save()
-            messages.success(request, "Perfil actualizado correctamente.")
+            messages.success(request, 'Perfil actualizado correctamente.')
             return redirect('editar_perfil')
+        messages.error(request, 'Revisa los datos ingresados.')
     else:
         user_form = CustomUserForm(instance=user)
         avatar_form = AvatarForm(instance=avatar)
-    
+        password_form = PasswordChangeForm(request.user)
+
+    for field in user_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+    for field in avatar_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+    for field in password_form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+
     return render(request, 'editar_perfil.html', {
         'user_form': user_form,
-        'avatar_form': avatar_form
+        'avatar_form': avatar_form,
+        'password_form': password_form,
+        'active_tab': active_tab,
+        'can_change_password': can_change_password,
     })
 
 
@@ -151,11 +230,15 @@ def cambiar_password(request):
         form = PasswordChangeForm(request.user, request.POST)
         if form.is_valid():
             user = form.save()
-            update_session_auth_hash(request, user)  # 🔐 Esta línea es clave
+            update_session_auth_hash(request, user)
             messages.success(request, 'Tu contraseña ha sido cambiada con éxito.')
             return redirect('editar_perfil')
         else:
             messages.error(request, 'Por favor corrige los errores abajo.')
     else:
         form = PasswordChangeForm(request.user)
+
+    for field in form.fields.values():
+        field.widget.attrs.update({'class': 'form-control'})
+
     return render(request, 'cambiar_password.html', {'form': form})

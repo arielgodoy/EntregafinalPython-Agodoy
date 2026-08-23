@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+{% load static %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -10,66 +11,189 @@ Editar Perfil
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Editar Perfil" pagetitle="Cuenta de Usuario" %}
+{% include "partials/page-title.html" with title="Editar Perfil" pagetitle="Cuenta de Usuario" title_key="account.profile.title" pagetitle_key="account.profile.pagetitle" %}
 {% endblock pagetitle %}
 
 {% block content %}
 <div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="card shadow-lg p-4 mb-5 rounded bg-mode">
-                <h2 class="text-center mb-4">Editar Perfil</h2>
-                <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
-                    {% csrf_token %}
-                    <div class="table-responsive">
-                        <table class="table align-middle table-striped w-75 mx-auto">
-                            <tbody>
-                                <tr>
-                                    <td class="text-end align-middle">Nombre de Usuario:</td>
-                                    <td>{{ user_form.username }}</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end align-middle">Nombre:</td>
-                                    <td>{{ user_form.first_name }}</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end align-middle">Apellido:</td>
-                                    <td>{{ user_form.last_name }}</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end align-middle">Correo Electrónico:</td>
-                                    <td>{{ user_form.email }}</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end align-middle">Profesión:</td>
-                                    <td>{{ avatar_form.profesion }}</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end align-middle">RUT/DNI:</td>
-                                    <td>{{ avatar_form.dni }}</td>
-                                </tr>
-                                <tr>
-    <td class="text-end align-middle">Avatar actual:</td>
-    <td>
-        {% if request.user.avatar.imagen %}
-            <img src="{{ request.user.avatar.imagen.url }}" alt="Avatar" class="rounded-circle" style="max-height: 80px; max-width: 80px; object-fit: cover; margin-bottom: 10px;">
-        {% else %}
-            <span class="text-muted">No hay avatar cargado.</span>
-        {% endif %}
-        <br>
-        {{ avatar_form.imagen }}
-    </td>
-</tr>
+            <div class="position-relative mx-n4 mt-n4">
+                <div class="profile-wid-bg profile-setting-img">
+                    <img src="{% static 'images/profile-bg.jpg' %}" class="profile-wid-img" alt="" aria-hidden="true">
+                </div>
+            </div>
 
-                                <tr>
-                                    <td colspan="2" class="text-center">
-                                        <button type="submit" class="btn btn-success w-50">Guardar Cambios</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+            <div class="row">
+                <div class="col-xxl-3">
+                    <div class="card mt-n5">
+                        <div class="card-body p-4">
+                            <div class="text-center">
+                                <div class="profile-user position-relative d-inline-block mx-auto mb-4">
+                                    {% if request.user.avatar.imagen %}
+                                    <img src="{{ request.user.avatar.imagen.url }}"
+                                        class="rounded-circle avatar-xl img-thumbnail user-profile-image"
+                                        alt="Avatar de {{ request.user.username }}">
+                                    {% else %}
+                                    <div class="rounded-circle avatar-xl img-thumbnail avatar-title bg-body text-body user-profile-image"
+                                        role="img" aria-label="Avatar de {{ request.user.username }}">
+                                        <i class="ri-user-line fs-1" aria-hidden="true"></i>
+                                    </div>
+                                    {% endif %}
+                                    <label for="id_imagen" class="profile-photo-edit avatar-xs" title="Cambiar avatar">
+                                        <span class="avatar-title rounded-circle bg-light text-body">
+                                            <i class="ri-camera-fill" aria-hidden="true"></i>
+                                        </span>
+                                    </label>
+                                </div>
+                                <h5 class="fs-16 mb-1">{{ request.user.get_full_name|default:request.user.username }}</h5>
+                                <p class="text-muted mb-1">{{ request.user.avatar.profesion|default:"Sin profesión registrada" }}</p>
+                                <p class="text-muted mb-0">@{{ request.user.username }}</p>
+                            </div>
+                        </div>
                     </div>
-                </form>
+                </div>
+
+                <div class="col-xxl-9">
+                    <div class="card mt-xxl-n5">
+                        <div class="card-header">
+                            <ul class="nav nav-tabs-custom rounded card-header-tabs border-bottom-0" role="tablist">
+                                <li class="nav-item">
+                                    <a class="nav-link {% if active_tab == 'personal' %}active{% endif %}" data-bs-toggle="tab" href="#personalDetails" role="tab"
+                                        data-key="account.profile.personal_details">
+                                        <i class="ri-user-line align-bottom me-1" aria-hidden="true"></i>
+                                        Datos personales
+                                    </a>
+                                </li>
+                                {% if can_change_password %}
+                                <li class="nav-item">
+                                    <a class="nav-link {% if active_tab == 'password' %}active{% endif %}" data-bs-toggle="tab" href="#passwordChange" role="tab"
+                                        data-key="account.profile.change_password">
+                                        <i class="ri-lock-password-line align-bottom me-1" aria-hidden="true"></i>
+                                        Cambiar contraseña
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+
+                        <div class="card-body p-4">
+                            <div class="tab-content">
+                                <div class="tab-pane fade {% if active_tab == 'personal' %}show active{% endif %}" id="personalDetails" role="tabpanel">
+                                    <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                        {% csrf_token %}
+                                        <input type="hidden" name="form_action" value="profile">
+                                        <div class="row">
+                                            <div class="col-lg-12">
+                                                <div class="mb-3">
+                                                    <label for="{{ user_form.username.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.username">Nombre de usuario</label>
+                                                    {{ user_form.username }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ user_form.first_name.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.first_name">Nombre</label>
+                                                    {{ user_form.first_name }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ user_form.last_name.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.last_name">Apellido</label>
+                                                    {{ user_form.last_name }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ user_form.email.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.email">Correo electrónico</label>
+                                                    {{ user_form.email }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ avatar_form.profesion.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.profession">Profesión</label>
+                                                    {{ avatar_form.profesion }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ avatar_form.dni.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.document">RUT/DNI</label>
+                                                    {{ avatar_form.dni }}
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-6">
+                                                <div class="mb-3">
+                                                    <label for="{{ avatar_form.imagen.id_for_label }}" class="form-label"
+                                                        data-key="account.profile.avatar">Avatar</label>
+                                                    {{ avatar_form.imagen }}
+                                                </div>
+                                            </div>
+                                            {% if user_form.errors or avatar_form.errors %}
+                                            <div class="col-lg-12">
+                                                <div class="alert alert-danger" role="alert" data-key="account.profile.validation_error">
+                                                    Revisa los datos ingresados.
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                            <div class="col-lg-12">
+                                                <div class="hstack gap-2 justify-content-end">
+                                                    <button type="submit" class="btn btn-primary" data-key="account.profile.save">
+                                                        <i class="ri-save-3-line align-bottom me-1" aria-hidden="true"></i>
+                                                        Guardar cambios
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                {% if can_change_password %}
+                                <div class="tab-pane fade {% if active_tab == 'password' %}show active{% endif %}" id="passwordChange" role="tabpanel">
+                                    <form method="post" class="needs-validation" novalidate>
+                                        {% csrf_token %}
+                                        <input type="hidden" name="form_action" value="password">
+                                        <div class="row justify-content-center">
+                                            <div class="col-lg-8">
+                                                {% if password_form.non_field_errors %}
+                                                <div class="alert alert-danger" role="alert">
+                                                    {{ password_form.non_field_errors }}
+                                                </div>
+                                                {% endif %}
+
+                                                {% for field in password_form %}
+                                                <div class="mb-3">
+                                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                                    {{ field }}
+                                                    {% if field.errors %}
+                                                    <div class="invalid-feedback d-block">
+                                                        {% for error in field.errors %}
+                                                            {{ error }}
+                                                        {% endfor %}
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                                {% endfor %}
+
+                                                <div class="hstack gap-2 justify-content-end mt-4">
+                                                    <button type="submit" class="btn btn-primary" data-key="account.profile.change_password_button">
+                                                        <i class="ri-lock-password-line align-bottom me-1" aria-hidden="true"></i>
+                                                        Cambiar contraseña
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
