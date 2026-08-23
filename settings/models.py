@@ -4,6 +4,13 @@ from access_control.models import Empresa
 
 class UserPreferences(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    vista_inicial = models.ForeignKey(
+        "access_control.Vista",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="usuarios_vista_inicial",
+    )
 
     # 🖥️ Opciones para layout según layout.js
     LAYOUT_CHOICES = [

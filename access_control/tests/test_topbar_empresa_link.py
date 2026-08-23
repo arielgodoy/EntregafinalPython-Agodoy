@@ -127,6 +127,34 @@ class TopbarEmpresaLinkTests(TestCase):
         # Verificar que la sesión se actualizó
         self.assertEqual(self.client.session.get("empresa_id"), empresa2.id)
 
+    def test_post_seleccionar_empresa_no_autorizada_no_cambia_sesion_ni_notifica(self):
+        """Una empresa fuera de los permisos del usuario debe ser rechazada."""
+        self.client.force_login(self.user)
+        empresa_no_autorizada = Empresa.objects.create(
+            codigo="02",
+            descripcion="Empresa no autorizada",
+        )
+
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session["empresa_codigo"] = self.empresa.codigo
+        session["empresa_nombre"] = str(self.empresa)
+        session.save()
+
+        response = self.client.post(
+            reverse("access_control:seleccionar_empresa"),
+            {"empresa_id": empresa_no_autorizada.id},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.session.get("empresa_id"), self.empresa.id)
+        self.assertEqual(self.client.session.get("empresa_codigo"), self.empresa.codigo)
+        self.assertEqual(self.client.session.get("empresa_nombre"), str(self.empresa))
+        self.assertFalse(any(
+            message.message == "Cambio de empresa exitoso"
+            for message in get_messages(response.wsgi_request)
+        ))
+
     def test_middleware_recuerda_ultima_vista_con_querystring(self):
         """Debe guardar la última URL funcional válida con query string en sesión."""
         self.client.force_login(self.user)

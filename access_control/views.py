@@ -52,7 +52,14 @@ from access_control.services.access_requests import (
     record_access_request_email_audit,
 )
 from notificaciones.models import Notification
-from access_control.services.empresa_activa import get_safe_redirect_target, set_empresa_activa_en_sesion
+from access_control.services.empresa_activa import (
+    get_navigable_vistas,
+    get_navigable_vistas_by_user_ids,
+    get_safe_redirect_target,
+    get_user_navigable_vistas,
+    get_user_initial_view_url,
+    set_empresa_activa_en_sesion,
+)
 logger = logging.getLogger(__name__)
 #Decorador generar para verificar permispo por mixim
 class VerificarPermisoMixin:
@@ -779,7 +786,19 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        from settings.models import UserPreferences
+
+        preferences = UserPreferences.objects.filter(
+            user_id__in=[usuario.id for usuario in context['usuarios']]
+        ).select_related('vista_inicial')
+        preferences_by_user = {preference.user_id: preference for preference in preferences}
+        vistas_iniciales_por_usuario = get_navigable_vistas_by_user_ids(
+            usuario.id for usuario in context['usuarios']
+        )
         for usuario in context['usuarios']:
+            preference = preferences_by_user.get(usuario.id)
+            usuario.vista_inicial_id = preference.vista_inicial_id if preference else None
+            usuario.vistas_iniciales = vistas_iniciales_por_usuario.get(usuario.id, [])
             has_pending_invitation = bool(getattr(usuario, 'pending_activation_tokens', []))
             if usuario.is_active and usuario.has_usable_password():
                 usuario.estado_key = 'users.status.active'
@@ -796,9 +815,29 @@ class UsuariosListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
         return context
 
     def render_to_response(self, context, **response_kwargs):
-        # Imprime el contexto para verificar los datos
-        print(context['usuarios'])
         return super().render_to_response(context, **response_kwargs)
+
+
+@login_required
+@verificar_permiso("Control de Acceso - Maestro Usuarios", "modificar")
+@require_POST
+def actualizar_vista_inicial(request):
+    from settings.models import UserPreferences
+
+    usuario = get_object_or_404(User, pk=request.POST.get('user_id'))
+    vista_id = request.POST.get('vista_id')
+    vista = None
+    if vista_id:
+        vista = get_object_or_404(Vista, pk=vista_id)
+        if vista not in get_user_navigable_vistas(usuario):
+            messages.error(request, "La vista inicial seleccionada no es válida.")
+            return redirect('access_control:usuarios_lista')
+
+    preferences, _ = UserPreferences.objects.get_or_create(user=usuario)
+    preferences.vista_inicial = vista
+    preferences.save(update_fields=['vista_inicial'])
+    messages.success(request, "Vista inicial actualizada correctamente")
+    return redirect('access_control:usuarios_lista')
 
 
 class InvitacionesListView(VerificarPermisoSafeMixin, LoginRequiredMixin, ListView):
@@ -1370,15 +1409,28 @@ class UsuarioEliminarView(VerificarPermisoMixin,LoginRequiredMixin, DeleteView):
 def seleccionar_empresa(request):
     if request.method == "POST":
         empresa_id = request.POST.get("empresa_id")
-        empresa = Empresa.objects.get(pk=empresa_id)
+        empresa = Empresa.objects.filter(
+            pk=empresa_id,
+            id__in=Permiso.objects.filter(
+                usuario=request.user,
+            ).values("empresa_id"),
+        ).first()
+        if not empresa:
+            contexto = build_access_request_context(
+                request,
+                "Seleccionar Empresa",
+                "No tienes acceso a la empresa seleccionada.",
+            )
+            return render(request, "access_control/403_forbidden.html", contexto, status=403)
+
         set_empresa_activa_en_sesion(request, empresa)
         messages.success(request, "Cambio de empresa exitoso", extra_tags="empresa-switch-toast")
-        target = get_safe_redirect_target(
+        navigation_target = get_safe_redirect_target(
             request,
-            fallback_url=reverse("dashboard:dashboard_general"),
+            fallback_url="",
             candidate_urls=[request.POST.get("next"), request.session.get("ultima_vista_url")],
         )
-        return redirect(target)
+        return redirect(navigation_target or get_user_initial_view_url(request.user))
 
     permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
     empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))

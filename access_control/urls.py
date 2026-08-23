@@ -9,7 +9,7 @@ from .views import EmpresaListaView,EmpresaCrearView,EmpresaEditarView,EmpresaEl
 from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEliminarView
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
 from .views import InvitacionesListView, InvitacionEliminarView
-from .views import toggle_permiso,PermisosFiltradosView, CopyPermisosView, seleccionar_empresa
+from .views import toggle_permiso,PermisosFiltradosView, CopyPermisosView, seleccionar_empresa, actualizar_vista_inicial
 from .views import SolicitarAccesoView
 
 
@@ -42,6 +42,7 @@ urlpatterns = [
 
 
     path('usuarios/', UsuariosListaView.as_view(), name='usuarios_lista'),
+    path('usuarios/vista-inicial/', actualizar_vista_inicial, name='actualizar_vista_inicial'),
     path('usuarios/crear/', UsuarioCrearView.as_view(), name='usuario_crear'),
     path('usuarios/invitar/', UsuarioInvitarView.as_view(), name='usuario_invitar'),
     path('usuarios/por-empresas/', UsuariosPorEmpresasJsonView.as_view(), name='usuarios_por_empresas_json'),

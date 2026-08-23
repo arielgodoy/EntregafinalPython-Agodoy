@@ -35,6 +35,7 @@ Lista de Usuarios
                                     <th data-key="name">Nombre</th>
                                     <th data-key="email">Email</th>
                                     <th data-key="users.status.column">Estado</th>
+                                    <th data-key="users.initial_view.column">Vista inicial</th>
                                     <th data-key="actions">Acciones</th>
                                 </tr>
                             </thead>
@@ -44,6 +45,19 @@ Lista de Usuarios
                                     <td>{{ usuario.username }}</td>
                                     <td>{{ usuario.email }}</td>
                                     <td><span class="badge bg-{{ usuario.estado_badge }}" data-key="{{ usuario.estado_key }}">{{ usuario.estado_label }}</span></td>
+                                    <td>
+                                        <form method="post" action="{% url 'access_control:actualizar_vista_inicial' %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="user_id" value="{{ usuario.id }}">
+                                            <select name="vista_id" class="form-select form-select-sm" onchange="this.form.submit()"
+                                                aria-label="Vista inicial de {{ usuario.username }}">
+                                                <option value="" data-key="users.initial_view.dashboard">Dashboard General</option>
+                                                {% for vista in usuario.vistas_iniciales %}
+                                                <option value="{{ vista.id }}" data-key="users.initial_view.option" {% if usuario.vista_inicial_id == vista.id %}selected{% endif %}>{{ vista.nombre }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                    </td>
                                     <td>
                                         <a href="{% url 'access_control:usuario_editar' usuario.id %}" class="btn btn-primary btn-sm">
                                             <i class="bi bi-pencil"></i> <span data-key="edit">Editar</span>

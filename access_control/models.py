@@ -27,6 +27,7 @@ class Empresa(models.Model):
 class Vista(models.Model):
     nombre = models.CharField(max_length=255)
     descripcion = models.TextField(blank=True, null=True)
+    route_name = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.nombre

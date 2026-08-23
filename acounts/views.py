@@ -7,7 +7,11 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login, logout
 from django.utils import timezone
 from settings.models import UserPreferences
-from access_control.services.empresa_activa import resolve_post_login, set_empresa_activa_en_sesion
+from access_control.services.empresa_activa import (
+    get_user_initial_view_url,
+    resolve_post_login,
+    set_empresa_activa_en_sesion,
+)
 from access_control.decorators import verificar_permiso
 import time
 from acounts.forms import CustomUserForm
@@ -76,7 +80,7 @@ def login_view(request):
             request.session.pop('ultima_vista_url', None)
             if status == "ONE" and empresa:
                 set_empresa_activa_en_sesion(request, empresa)
-                return redirect('dashboard:dashboard_general')
+                return redirect(get_user_initial_view_url(user))
             if status == "MANY":
                 return redirect('access_control:seleccionar_empresa')
 
