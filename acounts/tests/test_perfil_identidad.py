@@ -1,7 +1,6 @@
 import base64
 
 from django.contrib.auth.models import User
-from django.contrib.admin.sites import site
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -28,10 +27,6 @@ class PerfilIdentidadTests(TestCase):
             modificar=True,
         )
         self.avatar = Avatar.objects.get(user=self.user)
-        self.avatar.first_name = "Avatar original"
-        self.avatar.last_name = "Avatar original"
-        self.avatar.email = "avatar@example.com"
-        self.avatar.save()
         self.client.force_login(self.user)
         session = self.client.session
         session["empresa_id"] = self.empresa.id
@@ -68,13 +63,13 @@ class PerfilIdentidadTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "nuevo@example.com")
 
-    def test_profile_does_not_write_duplicate_avatar_identity_fields(self):
-        self._post_profile()
+    def test_avatar_has_no_duplicate_identity_fields(self):
+        avatar_fields = {field.name for field in Avatar._meta.get_fields()}
 
-        self.avatar.refresh_from_db()
-        self.assertEqual(self.avatar.first_name, "Avatar original")
-        self.assertEqual(self.avatar.last_name, "Avatar original")
-        self.assertEqual(self.avatar.email, "avatar@example.com")
+        self.assertNotIn("username", avatar_fields)
+        self.assertNotIn("first_name", avatar_fields)
+        self.assertNotIn("last_name", avatar_fields)
+        self.assertNotIn("email", avatar_fields)
 
     def test_profile_keeps_avatar_complementary_fields(self):
         self._post_profile()
@@ -122,13 +117,3 @@ class PerfilIdentidadTests(TestCase):
         self.assertContains(response, "Nombre original")
         self.assertContains(response, "Apellido original")
         self.assertContains(response, "original@example.com")
-        self.assertNotContains(response, "Avatar original")
-        self.assertNotContains(response, "avatar@example.com")
-
-    def test_avatar_admin_exposes_only_non_identity_fields(self):
-        avatar_admin = site._registry[Avatar]
-
-        self.assertEqual(
-            tuple(avatar_admin.fields),
-            ("user", "imagen", "profesion", "dni"),
-        )

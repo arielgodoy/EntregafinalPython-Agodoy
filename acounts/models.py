@@ -21,10 +21,6 @@ from access_control.models import Empresa
 class Avatar(models.Model):
     user = models.OneToOneField(User,on_delete=models.CASCADE,null=True)
     imagen = models.ImageField(default='avatares/default.jpg',upload_to='avatares',null = True, blank=True)    
-    username = models.CharField(max_length=100,default='')
-    first_name = models.CharField(max_length=100,default='')
-    last_name = models.CharField(max_length=100,default='')
-    email = models.EmailField(max_length=100,default='')
     profesion = models.CharField(max_length=100,default='')
     dni = models.CharField(max_length=20,default='')   
     def __str__(self):
