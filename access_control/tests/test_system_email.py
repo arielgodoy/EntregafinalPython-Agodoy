@@ -16,14 +16,14 @@ class SystemEmailTests(TestCase):
         session = self.client.session
         session['empresa_id'] = self.empresa.id
         session.save()
-        self.vista = Vista.objects.create(nombre='system_config')
+        self.vista = Vista.objects.create(nombre='Settings - Configuración del Sistema')
 
     def _set_permiso(self, crear=False, modificar=False):
         return Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista,
-            ingresar=False,
+            ingresar=True,
             crear=crear,
             modificar=modificar,
             eliminar=False,

@@ -13,6 +13,7 @@ from gestiondte.models import (
     TareaCesionRPETC,
     TareaRPETC,
 )
+from auditoria.models import AuditoriaGestionDTEEvent
 
 
 class SincronizarRPETCViewTest(TestCase):
@@ -103,6 +104,11 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(call.kwargs['formato'], 'TXT')
         importer.assert_called_once()
         self.assertContains(response, 'Sincronización completada')
+        event = AuditoriaGestionDTEEvent.objects.get(action='UPDATE')
+        self.assertEqual(event.empresa_id, self.empresa.id)
+        self.assertEqual(event.vista_nombre, 'Gestión DTE - Control de Cesiones')
+        self.assertEqual(event.meta['procesados'], 1)
+        self.assertEqual(event.meta['actualizados'], 0)
 
     @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
     @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')

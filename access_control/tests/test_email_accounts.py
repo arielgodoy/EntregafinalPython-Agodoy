@@ -23,7 +23,7 @@ class EmailAccountViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_list_ok_with_permiso_ingresar(self):
-        vista = Vista.objects.create(nombre='email_accounts')
+        vista = Vista.objects.create(nombre='Settings - Emails Acounts')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

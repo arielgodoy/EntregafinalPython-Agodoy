@@ -1,30 +1,19 @@
 from urllib.parse import urlsplit
 
-from django.urls import NoReverseMatch, resolve, reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from access_control.models import Empresa, Permiso, Vista
+from common.navigation import (
+    EXCLUDED_NAVIGATION_PATHS,
+    is_excluded_navigation_path,
+    is_navigable_request,
+    is_valid_internal_path,
+)
 
 LAST_VIEW_SESSION_KEY = "ultima_vista_url"
 
-EXCLUDED_LAST_VIEW_PATHS = (
-    "/acounts/login/",
-    "/acounts/logout/",
-    "/access-control/seleccionar_empresa/",
-    "/auth/activate/",
-    "/admin/",
-    "/static/",
-    "/media/",
-    "/api/",
-    "/notificaciones/forzar/",
-    "/notificaciones/alerta-personalizada/",
-    "/settings/fecha-sistema/",
-    "/search/menu/",
-    "/favicon.ico",
-    "/403/",
-    "/404/",
-    "/500/",
-)
+EXCLUDED_LAST_VIEW_PATHS = EXCLUDED_NAVIGATION_PATHS
 
 
 def set_empresa_activa_en_sesion(request, empresa):
@@ -153,57 +142,12 @@ def _is_navigable_vista(vista):
         return False
 
 
-def is_valid_internal_path(path):
-    try:
-        resolve(path)
-        return True
-    except Exception:
-        return False
-
-
 def is_excluded_last_view_path(path):
-    normalized = (path or "/").strip()
-    if not normalized.startswith("/"):
-        return True
-    for excluded in EXCLUDED_LAST_VIEW_PATHS:
-        if normalized == excluded or normalized.startswith(excluded):
-            return True
-    return False
+    return is_excluded_navigation_path(path)
 
 
 def should_record_last_view(request):
-    if request.method != "GET":
-        return False
-    if not getattr(request.user, "is_authenticated", False):
-        return False
-
-    if request.headers.get("x-requested-with") == "XMLHttpRequest":
-        return False
-    if request.headers.get("HX-Request") == "true":
-        return False
-    if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest":
-        return False
-    if request.META.get("HTTP_HX_REQUEST") == "true":
-        return False
-
-    is_ajax_callable = getattr(request, "is_ajax", None)
-    if callable(is_ajax_callable) and is_ajax_callable():
-        return False
-
-    accept_header = request.headers.get("accept", "")
-    if "application/json" in accept_header.lower():
-        return False
-
-    path = request.path or ""
-    if not path.startswith("/"):
-        return False
-    if path.startswith("/api/"):
-        return False
-    if is_excluded_last_view_path(path):
-        return False
-    if not is_valid_internal_path(path):
-        return False
-    return True
+    return is_navigable_request(request)
 
 
 def remember_last_valid_view(request):

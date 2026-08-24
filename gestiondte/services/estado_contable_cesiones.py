@@ -139,7 +139,12 @@ def _persistir(empresa, cesiones: list[Any], values_by_pk: dict[Any, dict[str, A
         if snapshot is None:
             nuevos.append(EstadoContableCesion(empresa=empresa, **values))
         else:
+            fields_to_update = fields
+            if values.get('estado_verificacion') == 'ERROR':
+                fields_to_update = ['fecha_verificacion', 'estado_verificacion', 'mensaje_error', 'modificado']
             for field, value in values.items():
+                if field not in fields_to_update:
+                    continue
                 if field != 'cesion':
                     setattr(snapshot, field, value)
             actualizados.append(snapshot)

@@ -12,7 +12,7 @@ class TestVerificarPermisoMixinHTML(TestCase):
         self.factory = RequestFactory()
         self.user = User.objects.create_user(username='testuser', password='testpass123')
         self.empresa = Empresa.objects.create(codigo='TEST', descripcion='Empresa Test')
-        self.vista = Vista.objects.create(nombre='Maestro Usuarios', descripcion='Usuarios')
+        self.vista = Vista.objects.create(nombre='Control de Acceso - Maestro Usuarios', descripcion='Usuarios')
         
     def test_sin_permiso_retorna_403_html(self):
         """Cuando falta permiso en request HTML, debe retornar 403 con template custom"""
@@ -103,7 +103,7 @@ class TestVerificarPermisoMixinConPermiso(TestCase):
         self.factory = RequestFactory()
         self.user = User.objects.create_user(username='authorized', password='testpass123')
         self.empresa = Empresa.objects.create(codigo='AUTH', descripcion='Autorizado')
-        self.vista = Vista.objects.create(nombre='Maestro Usuarios', descripcion='Usuarios')
+        self.vista = Vista.objects.create(nombre='Control de Acceso - Maestro Usuarios', descripcion='Usuarios')
         
     def test_con_permiso_funciona_normal(self):
         """Cuando tiene permiso, la vista debe ejecutar normalmente sin 403"""

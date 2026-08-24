@@ -127,15 +127,6 @@ class UpdateAuditTests(TestCase):
         # Datos originales
         original_descripcion = self.propiedad.descripcion
         
-        # Crear request GET para capturar before
-        request_get = self._create_request_with_session('GET', f'/biblioteca/propiedad/{self.propiedad.pk}/modificar/')
-        view = ModificarPropiedadView()
-        view.request = request_get
-        view.kwargs = {'pk': self.propiedad.pk}
-        
-        # Simular GET para capturar before
-        view.dispatch(request_get, pk=self.propiedad.pk)
-        
         # Datos modificados
         new_data = {
             'rol': self.propiedad.rol,
@@ -146,13 +137,12 @@ class UpdateAuditTests(TestCase):
             'propietario': self.propietario.pk
         }
         
-        # Crear request POST
+        # Ejecutar el flujo productivo de actualización
         request_post = self._create_request_with_session('POST', f'/biblioteca/propiedad/{self.propiedad.pk}/modificar/', data=new_data)
         view_post = ModificarPropiedadView()
         view_post.request = request_post
         view_post.kwargs = {'pk': self.propiedad.pk}
         view_post.object = self.propiedad
-        view_post._audit_before = view._audit_before  # Transferir snapshot del GET
         
         # Crear form y validar
         form = PropiedadForm(new_data, instance=self.propiedad)
@@ -192,13 +182,6 @@ class UpdateAuditTests(TestCase):
         # Datos originales
         original_nombre = self.propietario.nombre
         
-        # Crear request GET para capturar before
-        request_get = self._create_request_with_session('GET', f'/biblioteca/propietario/{self.propietario.pk}/modificar/')
-        view = ModificarPropietarioView()
-        view.request = request_get
-        view.kwargs = {'pk': self.propietario.pk}
-        view.dispatch(request_get, pk=self.propietario.pk)
-        
         # Datos modificados
         new_data = {
             'nombre': 'Propietario Modificado',
@@ -207,13 +190,12 @@ class UpdateAuditTests(TestCase):
             'rol': self.propietario.rol
         }
         
-        # Crear request POST
+        # Ejecutar el flujo productivo de actualización
         request_post = self._create_request_with_session('POST', f'/biblioteca/propietario/{self.propietario.pk}/modificar/', data=new_data)
         view_post = ModificarPropietarioView()
         view_post.request = request_post
         view_post.kwargs = {'pk': self.propietario.pk}
         view_post.object = self.propietario
-        view_post._audit_before = view._audit_before
         
         # Crear form y validar
         form = PropietarioForm(new_data, instance=self.propietario)

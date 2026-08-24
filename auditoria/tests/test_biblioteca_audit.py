@@ -181,32 +181,15 @@ class BibliotecaAuditTests(TestCase):
     
     def test_delete_documento_logs_event(self):
         """Test: eliminación de documento registra evento DELETE."""
-        
         from biblioteca.views import EliminarDocumentoView
-        from django.http import HttpResponseRedirect
-        
-        # Crear request con POST (DeleteView requiere POST para confirmar)
+
+        doc_id = self.documento.id
         request = self._create_request_with_session(
             method='POST',
-            path=f'/biblioteca/documento/{self.documento.id}/eliminar/'
+            path=f'/biblioteca/documentos/{doc_id}/eliminar/'
         )
-        
-        # Crear instancia de la vista
-        view = EliminarDocumentoView()
-        view.request = request
-        view.object = self.documento
-        
-        # Obtener ID antes de simular delete
-        doc_id = self.documento.id
-        
-        # Simular respuesta exitosa (redirect 302)
-        response = HttpResponseRedirect('/success/')
-        
-        # Validar que debería auditar (POST + redirect)
-        self.assertTrue(view._should_audit(request, response))
-        
-        # Ejecutar auditoría manualmente (en el flujo real lo hace dispatch)
-        view._audit_dispatch(request, response)
+
+        response = EliminarDocumentoView.as_view()(request, pk=doc_id)
         
         # Verificar evento creado
         eventos = AuditoriaBibliotecaEvent.objects.filter(
@@ -220,4 +203,5 @@ class BibliotecaAuditTests(TestCase):
         self.assertEqual(evento.empresa_id, self.empresa.id)
         self.assertEqual(evento.object_type, 'Documento')
         self.assertEqual(evento.object_id, str(doc_id))
-        self.assertTrue(request._audit_logged)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Documento.objects.filter(pk=doc_id).exists())

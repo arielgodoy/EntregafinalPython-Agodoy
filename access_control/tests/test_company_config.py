@@ -16,7 +16,7 @@ class CompanyConfigViewTests(TestCase):
         session.save()
 
     def test_denied_without_permission(self):
-        vista = Vista.objects.create(nombre='company_config')
+        vista = Vista.objects.create(nombre='Settings - Configuracion de Empresa')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
@@ -32,7 +32,7 @@ class CompanyConfigViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_list_ok_with_permission(self):
-        vista = Vista.objects.create(nombre='company_config')
+        vista = Vista.objects.create(nombre='Settings - Configuracion de Empresa')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
@@ -49,7 +49,7 @@ class CompanyConfigViewTests(TestCase):
         self.assertContains(response, 'Company Settings')
 
     def test_get_or_create_company_config(self):
-        vista = Vista.objects.create(nombre='company_config')
+        vista = Vista.objects.create(nombre='Settings - Configuracion de Empresa')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

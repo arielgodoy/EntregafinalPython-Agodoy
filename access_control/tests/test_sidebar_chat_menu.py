@@ -9,7 +9,7 @@ class SidebarChatMenuTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="tester", password="pass")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
-        self.vista_dashboard = Vista.objects.create(nombre="Control Operacional Dashboard")
+        self.vista_dashboard = Vista.objects.create(nombre="Control Operacional - Dashboard")
         self.vista_chat = Vista.objects.create(nombre="chat.inbox")
 
     def _login_with_empresa(self):
@@ -51,10 +51,10 @@ class SidebarChatMenuTests(TestCase):
         self.assertContains(response, 'data-key="menu.chat"')
         self.assertContains(response, reverse("chat_inbox"))
 
-    def test_sidebar_oculta_chat_sin_permiso(self):
+    def test_sidebar_muestra_chat_sin_permiso(self):
         self._login_with_empresa()
         self._grant_dashboard_permiso()
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'data-key="menu.chat"')
+        self.assertContains(response, f'href="{reverse("chat_inbox")}"')

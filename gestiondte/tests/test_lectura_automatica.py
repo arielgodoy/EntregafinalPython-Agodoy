@@ -4,7 +4,10 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.exceptions import ValidationError
+from django.contrib.auth.models import User
 from django.test import TestCase, SimpleTestCase
+from django.test import Client
+from django.urls import reverse
 from django.utils import timezone
 
 from access_control.models import Empresa
@@ -20,6 +23,73 @@ from gestiondte.services.lectura_automatica import (
     rango_automatico,
     validar_rango_lectura,
 )
+from auditoria.models import AuditoriaGestionDTEEvent, UserPresence
+from access_control.models import Permiso, Vista
+
+
+class LecturaAutomaticaAuditViewTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='lectura-auditor', password='pass')
+        self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa')
+        vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Lectura Automática de Cesiones')
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=vista, modificar=True, ingresar=True)
+        self.assertTrue(Permiso.objects.filter(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista__nombre='Gestión DTE - Lectura Automática de Cesiones',
+            modificar=True,
+        ).exists())
+        self.client = Client()
+        self.client.force_login(self.user)
+        session = self.client.session
+        session['empresa_id'] = self.empresa.id
+        session.save()
+        self.assertEqual(self.client.session.get('empresa_id'), self.empresa.id)
+
+    @patch('gestiondte.services.lectura_automatica.ejecutar_lote')
+    def test_save_registra_update_sin_alterar_presence(self, ejecutar_lote_mock):
+        presence = UserPresence.objects.create(
+            user=self.user,
+            empresa_id=self.empresa.id,
+            app_label='gestiondte',
+            vista_nombre='Cesiones',
+            path='/gestiondte/lectura-automatica-cesiones/',
+        )
+
+        response = self.client.post(
+            reverse('gestion_dte:ejecutar_lectura_automatica_cesiones'),
+            {'action': 'save', 'intervalo_minutos': '30', 'habilitado': 'on'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ejecutar_lote_mock.called)
+        event = AuditoriaGestionDTEEvent.objects.get(action='UPDATE')
+        self.assertEqual(event.object_type, 'configuracion_lectura_cesiones')
+        self.assertEqual(event.after['intervalo_minutos'], 30)
+        self.assertEqual(UserPresence.objects.get(pk=presence.pk).path, presence.path)
+
+    @patch('gestiondte.services.lectura_automatica.ejecutar_lote')
+    def test_execution_registra_execute(self, ejecutar_lote_mock):
+        ejecutar_lote_mock.return_value = {
+            'bloqueado': False,
+            'ejecuciones': [],
+            'lote_id': 'lote-test',
+        }
+
+        response = self.client.post(
+            reverse('gestion_dte:ejecutar_lectura_automatica_cesiones'),
+            {
+                'intervalo_minutos': '60',
+                'habilitado': '',
+                'fecha_desde': '2026-08-01',
+                'fecha_hasta': '2026-08-20',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = AuditoriaGestionDTEEvent.objects.get(action='EXECUTE')
+        self.assertEqual(event.object_type, 'lectura_cesiones')
+        self.assertEqual(event.meta['empresas_procesadas'], 0)
 
 
 class RangoLecturaAutomaticaTest(SimpleTestCase):

@@ -18,7 +18,7 @@ Cubre los 7 casos originales + 8 de request/response + 3 de aio con cero inicial
 15. secrets no aparecen en resultado
 """
 from unittest.mock import MagicMock, patch
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from gestiondte.services.sii_auth import SiiAuthError, probar_autenticacion_sii
@@ -89,6 +89,7 @@ class TestSiiAuthPreconditions(TestCase):
         self.assertIn("certificado no contiene", str(ctx.exception).lower())
 
 
+@override_settings(SII_RPETC_BASIC_AUTH="TEST_ONLY_NOT_A_REAL_CREDENTIAL")
 class TestSiiAuthFlujoExito(TestCase):
     """Casos 1–5: flujos de respuesta del SII."""
 
@@ -217,6 +218,7 @@ class TestSiiAuthFlujoExito(TestCase):
             self.assertFalse(result.get("success") and not result.get("token_obtenido"))
 
 
+@override_settings(SII_RPETC_BASIC_AUTH="TEST_ONLY_NOT_A_REAL_CREDENTIAL")
 class TestSiiAuthRequestFormat(TestCase):
     """Tests 8-15: formato del request y manejo seguro de respuestas."""
 
@@ -245,6 +247,18 @@ class TestSiiAuthRequestFormat(TestCase):
         x509.public_bytes.return_value = b"\x30\x82"
         mock_load.return_value = (MagicMock(), x509, [])
         return c
+
+    @override_settings(SII_RPETC_BASIC_AUTH="")
+    @patch("gestiondte.services.sii_auth.load_key_and_certificates")
+    @patch("os.path.exists", return_value=True)
+    @patch("builtins.open", _OPEN_MOCK)
+    def test_sin_basic_auth_configurado_lanza_error(self, mock_exists, mock_load):
+        with patch("gestiondte.services.sii_auth._build_jwt", return_value="h.p.s"), \
+                patch("gestiondte.utils.maestro.get_maestroempresa_by_codigo", return_value=_MAESTRO_OK):
+            cert = self._setup(mock_load)
+            with self.assertRaises(SiiAuthError) as ctx:
+                probar_autenticacion_sii(cert)
+        self.assertIn("sii_rpetc_basic_auth", str(ctx.exception).lower())
 
     @patch("gestiondte.services.sii_auth.requests.post")
     @patch("gestiondte.services.sii_auth._build_jwt", return_value="h.p.s")

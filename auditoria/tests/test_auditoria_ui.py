@@ -15,10 +15,9 @@ class AuditoriaUITest(TestCase):
         self.empresa2 = Empresa.objects.create(codigo='02', descripcion='Empresa 2')
         # Usuario y permisos
         self.user = User.objects.create_user(username='tester', password='secret')
-        vista_listar, _ = Vista.objects.get_or_create(nombre='Auditoría - Listar')
-        vista_detalle, _ = Vista.objects.get_or_create(nombre='Auditoría - Detalle')
+        vista_biblioteca, _ = Vista.objects.get_or_create(nombre='Auditoría - Biblioteca')
         # Permiso para empresa1
-        Permiso.objects.create(usuario=self.user, empresa=self.empresa1, vista=vista_listar, ingresar=True)
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa1, vista=vista_biblioteca, ingresar=True)
         # Eventos: uno para empresa1, otro para empresa2
         self.event1 = AuditoriaBibliotecaEvent.objects.create(
             user=self.user, empresa_id=self.empresa1.id, action='VIEW', object_type='Documento', object_id='1', path='/doc/1', vista_nombre='VistaX'
@@ -74,3 +73,33 @@ class AuditoriaUITest(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertIn(self.event1.vista_nombre, resp.content.decode('utf-8'))
+
+    def test_biblioteca_audit_uses_all_authorized_companies(self):
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa2,
+            vista=Vista.objects.get(nombre='Auditoría - Biblioteca'),
+            ingresar=True,
+        )
+        self.client.login(username='tester', password='secret')
+        session = self.client.session
+        session['empresa_id'] = self.empresa1.id
+        session.save()
+
+        response = self.client.get(reverse('auditoria:auditoria_biblioteca_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({event.pk for event in response.context['eventos']}, {self.event1.pk, self.event2.pk})
+
+    def test_biblioteca_unauthorized_company_filter_returns_404(self):
+        self.client.login(username='tester', password='secret')
+        session = self.client.session
+        session['empresa_id'] = self.empresa1.id
+        session.save()
+
+        response = self.client.get(
+            reverse('auditoria:auditoria_biblioteca_list'),
+            {'empresa': self.empresa2.id},
+        )
+
+        self.assertEqual(response.status_code, 404)

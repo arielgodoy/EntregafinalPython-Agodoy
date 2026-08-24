@@ -304,6 +304,11 @@ def ejecutar_lectura_automatica_cesiones(request):
         if intervalo not in {15, 30, 60}:
             raise LecturaAutomaticaError('Intervalo inválido.')
         config, _ = LecturaAutomaticaConfig.objects.get_or_create(pk=1)
+        before_config = {
+            'habilitado': config.habilitado,
+            'intervalo_minutos': config.intervalo_minutos,
+            'proxima_ejecucion': config.proxima_ejecucion.isoformat() if config.proxima_ejecucion else None,
+        }
         config.habilitado = request.POST.get('habilitado') == 'on'
         config.intervalo_minutos = intervalo
         config.proxima_ejecucion = (
@@ -312,6 +317,24 @@ def ejecutar_lectura_automatica_cesiones(request):
         )
         config.save(update_fields=['habilitado', 'intervalo_minutos', 'proxima_ejecucion', 'modificado'])
         if request.POST.get('action') == 'save':
+            after_config = {
+                'habilitado': config.habilitado,
+                'intervalo_minutos': config.intervalo_minutos,
+                'proxima_ejecucion': config.proxima_ejecucion.isoformat() if config.proxima_ejecucion else None,
+            }
+            if before_config != after_config:
+                audit_log(
+                    request=request,
+                    action='UPDATE',
+                    app_label='gestiondte',
+                    object_type='configuracion_lectura_cesiones',
+                    object_id=config.pk,
+                    vista_nombre='Gestión DTE - Lectura Automática de Cesiones',
+                    message_key='gestiondte.cesiones.configuracion_actualizada',
+                    before=before_config,
+                    after=after_config,
+                    status_code=302,
+                )
             messages.success(request, 'Configuración guardada.')
             return redirect('gestion_dte:lectura_automatica_cesiones')
         fecha_desde = date.fromisoformat(request.POST.get('fecha_desde', ''))
@@ -320,6 +343,22 @@ def ejecutar_lectura_automatica_cesiones(request):
         if resultado['bloqueado']:
             messages.warning(request, 'Ya existe una lectura de cesiones en proceso.')
         else:
+            ejecuciones = resultado.get('ejecuciones', [])
+            audit_log(
+                request=request,
+                action='EXECUTE',
+                app_label='gestiondte',
+                object_type='lectura_cesiones',
+                vista_nombre='Gestión DTE - Lectura Automática de Cesiones',
+                message_key='gestiondte.cesiones.lectura_ejecutada',
+                status_code=302,
+                meta={
+                    'fecha_desde': fecha_desde.isoformat(),
+                    'fecha_hasta': fecha_hasta.isoformat(),
+                    'empresas_procesadas': len(ejecuciones),
+                    'errores': sum(1 for ejecucion in ejecuciones if ejecucion.estado == 'ERROR'),
+                },
+            )
             messages.success(request, 'Lectura de cesiones ejecutada.')
     except (ValueError, LecturaAutomaticaError) as exc:
         messages.error(request, str(exc))
@@ -561,6 +600,21 @@ def sincronizar_cesiones_rpetc(request):
             'periodo': f'{fecha_desde:%d/%m/%Y} - {fecha_hasta:%d/%m/%Y}',
             'fecha': timezone.localtime(),
         }
+        audit_log(
+            request=request,
+            action='UPDATE',
+            app_label='gestiondte',
+            vista_nombre='Gestión DTE - Control de Cesiones',
+            message_key='gestiondte.cesiones.sincronizadas',
+            status_code=200,
+            meta={
+                'empresa_codigo': empresa_activa.codigo,
+                'fecha_desde': fecha_desde.isoformat(),
+                'fecha_hasta': fecha_hasta.isoformat(),
+                'procesados': stats.get('registros_recibidos', 0),
+                'actualizados': stats.get('cesiones_actualizadas', 0),
+            },
+        )
         context.update(_cesiones_rpetc_context(empresa_activa))
     except LecturaAutomaticaError as exc:
         context['sync_error'] = str(exc)
@@ -639,7 +693,7 @@ def _dashboard_resumen(empresa_activa, periodo):
         {
             'periodo': item['periodo'].strftime(formato),
             'cantidad': item['cantidad'],
-            'monto': item['monto'] or 0,
+            'monto': int(item['monto'] or 0),
         }
         for item in evolucion if item['periodo']
     ]
@@ -653,10 +707,10 @@ def _dashboard_resumen(empresa_activa, periodo):
         'periodo': periodo,
         'kpis': {
             'total_cesiones': aggregate['total_cesiones'] or 0,
-            'monto_total': aggregate['monto_total'] or 0,
+            'monto_total': int(aggregate['monto_total'] or 0),
             'cedentes': aggregate['cedentes'] or 0,
             'cesionarios': aggregate['cesionarios'] or 0,
-            'monto_promedio': aggregate['monto_promedio'] or 0,
+            'monto_promedio': int(aggregate['monto_promedio'] or 0),
             'ultima_cesion': aggregate['ultima_cesion'].isoformat() if aggregate['ultima_cesion'] else None,
         },
         'evolucion': evolucion,
@@ -743,11 +797,32 @@ def certificados_eliminar(request, pk):
     if not empresa_activa or certificado.empresa_codigo != empresa_activa.codigo:
         return JsonResponse({'success': False, 'error': 'El certificado no pertenece a la empresa activa.'}, status=403)
     archivo = certificado.archivo
+    before = {
+        'empresa_codigo': certificado.empresa_codigo,
+        'titular': certificado.titular,
+        'emisor_certificado': certificado.emisor_certificado,
+        'numero_serie': certificado.numero_serie,
+        'activo': certificado.activo,
+    }
     try:
         with transaction.atomic():
             certificado.delete()
         if archivo and archivo.name:
             archivo.delete(save=False)
+        certificado.pk = pk
+        audit_log(
+            request=request,
+            action='DELETE',
+            app_label='gestiondte',
+            obj=certificado,
+            object_type='certificado_sii',
+            object_id=pk,
+            vista_nombre='Gestión DTE - Certificados PFX-DTE',
+            message_key='gestiondte.certificado.eliminado',
+            before=before,
+            status_code=200,
+            meta={'empresa_codigo': before['empresa_codigo'], 'activo': before['activo']},
+        )
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'success': True, 'message': 'gestion_dte.certificados.delete.success'})
         return redirect('gestion_dte:certificados')
@@ -819,11 +894,22 @@ def certificados_cargar(request, codigoempresa=None):
                     instance.valido_hasta = valido_hasta
                     # finally save (this saves file to storage)
                     instance.save()
-                    if audit_log:
-                        try:
-                            audit_log(request, 'CREATE_CERTIFICADO', instance)
-                        except Exception:
-                            pass
+                    audit_log(
+                        request=request,
+                        action='CREATE',
+                        app_label='gestiondte',
+                        obj=instance,
+                        object_type='certificado_sii',
+                        vista_nombre='Gestión DTE - Certificados PFX-DTE',
+                        message_key='gestiondte.certificado.creado',
+                        status_code=302,
+                        meta={
+                            'empresa_codigo': instance.empresa_codigo,
+                            'titular': instance.titular,
+                            'activo': instance.activo,
+                            'formato': (uploaded.name.rsplit('.', 1)[-1].lower() if uploaded and '.' in uploaded.name else None),
+                        },
+                    )
                     return redirect('gestion_dte:certificados')
             except ImportError:
                 form.add_error(None, 'Biblioteca cryptography no disponible en el entorno')
@@ -854,14 +940,23 @@ def certificados_detail(request, codigoempresa):
 @verificar_permiso("Gestión DTE - Certificados PFX-DTE", "modificar")
 def certificados_toggle_active(request, pk):
     cert = get_object_or_404(CertificadoSII, pk=pk)
+    before_active = cert.activo
     cert.activo = not cert.activo
     cert.updated_by = request.user
     cert.save()
-    if audit_log:
-        try:
-            audit_log(request, 'TOGGLE_CERTIFICADO_ACTIVO', cert)
-        except Exception:
-            pass
+    audit_log(
+        request=request,
+        action='UPDATE',
+        app_label='gestiondte',
+        obj=cert,
+        object_type='certificado_sii',
+        vista_nombre='Gestión DTE - Certificados PFX-DTE',
+        message_key='gestiondte.certificado.activado' if cert.activo else 'gestiondte.certificado.desactivado',
+        before={'activo': before_active},
+        after={'activo': cert.activo},
+        status_code=302,
+        meta={'empresa_codigo': cert.empresa_codigo},
+    )
     return redirect('gestion_dte:certificados')
 
 
@@ -876,6 +971,7 @@ def certificados_probar_conexion(request, pk):
     cert = get_object_or_404(CertificadoSII, pk=pk)
     empresa = get_maestroempresa_by_codigo(cert.empresa_codigo)
 
+    request._audit_logged = True
     resultado = {
         'cert': cert,
         'empresa': empresa,
@@ -897,18 +993,30 @@ def certificados_probar_conexion(request, pk):
             'token_expira': res.get('token_expira'),
             'rut_envio_sii': res.get('rut_envio_sii'),
         })
-        if audit_log:
-            try:
-                audit_log(request, 'PROBAR_CONEXION_SII_OK', cert)
-            except Exception:
-                pass
+        audit_log(
+            request=request,
+            action='EXECUTE',
+            app_label='gestiondte',
+            obj=cert,
+            object_type='certificado_sii',
+            vista_nombre='Gestión DTE - Certificados PFX-DTE',
+            message_key='gestiondte.certificado.probar_conexion',
+            status_code=200,
+            meta={'operation': 'test_sii_connection', 'result': 'success', 'empresa': cert.empresa_codigo},
+        )
     except SiiAuthError as e:
         resultado['error'] = str(e)
         resultado['http_status'] = e.http_status
-        if audit_log:
-            try:
-                audit_log(request, 'PROBAR_CONEXION_SII_FAIL', cert)
-            except Exception:
-                pass
+        audit_log(
+            request=request,
+            action='EXECUTE',
+            app_label='gestiondte',
+            obj=cert,
+            object_type='certificado_sii',
+            vista_nombre='Gestión DTE - Certificados PFX-DTE',
+            message_key='gestiondte.certificado.probar_conexion',
+            status_code=200,
+            meta={'operation': 'test_sii_connection', 'result': 'failure', 'empresa': cert.empresa_codigo},
+        )
 
     return render(request, 'gestiondte/certificados_probar.html', resultado)

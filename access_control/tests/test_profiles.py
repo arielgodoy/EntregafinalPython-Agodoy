@@ -81,11 +81,11 @@ class PerfilInvitacionFormTests(TestCase):
         session.save()
 
         Vista.objects.create(nombre='auth_invite')
-        Vista.objects.create(nombre='Maestro Usuarios')
+        Vista.objects.create(nombre='Control de Acceso - Invitar Usuario')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
-            vista=Vista.objects.get(nombre='auth_invite'),
+            vista=Vista.objects.get(nombre='Control de Acceso - Invitar Usuario'),
             ingresar=True,
             crear=True,
             modificar=False,

@@ -11,7 +11,7 @@ class UsuarioDeleteTests(TestCase):
         self.admin = User.objects.create_user(username="admin", password="pass", is_staff=True)
         self.target = User.objects.create_user(username="target", password="pass")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
-        self.vista = Vista.objects.create(nombre="Maestro Usuarios")
+        self.vista = Vista.objects.create(nombre="Control de Acceso - Maestro Usuarios")
         self.perfil = PerfilAcceso.objects.create(nombre="BASICO", is_active=True)
 
         Permiso.objects.create(

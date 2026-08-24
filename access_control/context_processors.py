@@ -1,5 +1,5 @@
 # access_control/context_processors.py
-from access_control.models import Empresa, Permiso
+from access_control.models import Empresa, Permiso, Vista
 from access_control.services.access_requests import is_user_mail_enabled
 
 
@@ -31,3 +31,23 @@ def empresas_disponibles(request):
         empresas = Empresa.objects.filter(id__in=permisos.values('empresa'))
         return {'empresas': empresas}
     return {}
+
+
+def auditoria_disponible(request):
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {"puede_auditar_biblioteca": False, "puede_auditar_gestiondte": False}
+
+    nombres = {
+        "puede_auditar_biblioteca": "Auditoría - Biblioteca",
+        "puede_auditar_gestiondte": "Auditoría - Gestión DTE",
+    }
+    vistas = {
+        vista.nombre: vista.id
+        for vista in Vista.objects.filter(nombre__in=nombres.values())
+    }
+    permisos = set(Permiso.objects.filter(
+        usuario=request.user,
+        vista_id__in=vistas.values(),
+        ingresar=True,
+    ).values_list("vista__nombre", flat=True))
+    return {key: nombre in permisos for key, nombre in nombres.items()}

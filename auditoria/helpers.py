@@ -1,6 +1,9 @@
 
 import time
+import logging
 from .services import AuditoriaService
+
+logger = logging.getLogger(__name__)
 
 
 def audit_log(
@@ -8,6 +11,8 @@ def audit_log(
     action,
     app_label,
     obj=None,
+    object_type=None,
+    object_id=None,
     vista_nombre=None,
     message_key=None,
     meta=None,
@@ -36,10 +41,9 @@ def audit_log(
     request._audit_logged = True
     
     # Extraer información del objeto si existe
-    object_type = None
-    object_id = None
-    if obj:
+    if obj and object_type is None:
         object_type = obj.__class__.__name__
+    if obj and object_id is None:
         object_id = str(obj.pk)
     
     # Extraer empresa_id de la sesión
@@ -81,7 +85,12 @@ def audit_log(
     event_data['duration_ms'] = duration_ms
     
     # Registrar evento
-    AuditoriaService.log_event(app_label=app_label, **event_data)
+    try:
+        event = AuditoriaService.log_event(app_label=app_label, **event_data)
+        if event is not None and action == 'VIEW':
+            AuditoriaService.update_user_presence(request, app_label, vista_nombre)
+    except Exception:
+        logger.exception("Falló el registro de auditoría desde audit_log app=%s", app_label)
 
 
 def _get_client_ip(request):

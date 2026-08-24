@@ -1,0 +1,50 @@
+{% extends "partials/base.html" %}
+
+{% block title %}{{ audit_title }}{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title=audit_title pagetitle="Auditoría" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card shadow-sm bg-mode">
+                <div class="card-body">
+                    <h1 class="h4 mb-4" data-key="audit_latest_views">{{ audit_title }}</h1>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th data-key="table_date">Fecha</th>
+                                    <th data-key="table_company">Empresa</th>
+                                    <th data-key="table_view">Vista</th>
+                                    <th data-key="table_path">Path</th>
+                                    <th data-key="table_status">Status</th>
+                                    <th data-key="table_duration">Duración (ms)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for evento in eventos %}
+                                <tr>
+                                    <td>{{ evento.created_at }}</td>
+                                    <td>{{ evento.empresa_id }}</td>
+                                    <td>{{ evento.vista_nombre }}</td>
+                                    <td>{{ evento.path }}</td>
+                                    <td>{{ evento.status_code }}</td>
+                                    <td>{{ evento.duration_ms }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="6" class="text-center" data-key="no_results">Sin resultados</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <a href="{% url back_url_name %}" class="btn btn-secondary" data-key="volver_listado">Volver al listado</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

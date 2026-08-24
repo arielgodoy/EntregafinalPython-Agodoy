@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from gestiondte.models import CertificadoSII
+from auditoria.models import AuditoriaGestionDTEEvent
 
 
 class CertificadoEliminarViewTest(TestCase):
@@ -38,6 +39,13 @@ class CertificadoEliminarViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['success'])
         self.assertFalse(CertificadoSII.objects.filter(pk=self.certificado.pk).exists())
+        evento = AuditoriaGestionDTEEvent.objects.get(action='DELETE')
+        self.assertEqual(evento.object_type, 'certificado_sii')
+        self.assertEqual(evento.object_id, str(self.certificado.pk))
+        self.assertEqual(evento.empresa_id, self.empresa.id)
+        self.assertEqual(evento.meta['empresa_codigo'], '09')
+        self.assertNotIn('password', str(evento.meta).lower())
+        self.assertNotIn('test.pfx', str(evento.before))
 
     def test_get_no_elimina_y_rechaza_metodo(self):
         response = self.client.get(

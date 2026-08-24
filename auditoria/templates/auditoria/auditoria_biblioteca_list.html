@@ -7,11 +7,11 @@
 {% endblock extra_css %}
 
 {% block title %}
-Auditoría Biblioteca
+{{ audit_title }}
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Auditoría Biblioteca" pagetitle="Auditoría" %}
+{% include "partials/page-title.html" with title=audit_title pagetitle="Auditoría" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -25,8 +25,52 @@ Auditoría Biblioteca
 
 ```
             <h1 class="mb-4 text-center" data-key="auditoria_biblioteca">
-                Auditoría Biblioteca
+                {{ audit_title }}
             </h1>
+
+            <section class="card shadow-sm bg-mode mb-4" aria-labelledby="audit-presence-title">
+                <div class="card-header">
+                    <h2 id="audit-presence-title" class="h5 mb-0" data-key="audit_last_activity">Última actividad</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th data-key="table_user">Usuario</th>
+                                <th data-key="table_company">Empresa</th>
+                                <th data-key="table_view">Última vista</th>
+                                <th data-key="table_path">Path</th>
+                                <th data-key="table_date">Última actividad</th>
+                                <th data-key="table_status">Estado</th>
+                                <th data-key="table_detail">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for presence in presencias %}
+                            <tr>
+                                <td>{{ presence.user }}</td>
+                                <td>
+                                    {% for empresa in empresas_autorizadas %}
+                                        {% if empresa.id == presence.empresa_id %}
+                                            {{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>{{ presence.vista_nombre }}</td>
+                                <td>{{ presence.path }}</td>
+                                <td>{{ presence.last_seen }}</td>
+                                <td>{{ presence.activity_status }}</td>
+                                <td>
+                                    <a href="{% url audit_latest_views_url_name presence.user_id %}" class="btn btn-sm btn-primary" data-key="audit_latest_views">Ver últimas vistas</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" class="text-center" data-key="no_activity">Sin actividad registrada</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
             {% if not empresa_selected %}
             <div class="alert alert-info" data-key="no_company_selected">
@@ -95,6 +139,17 @@ Auditoría Biblioteca
                     </div>
 
                     <div class="col-md-2">
+                        <select name="empresa" class="form-select">
+                            <option value="" data-key="filter_company">Todas las empresas autorizadas</option>
+                            {% for empresa in empresas_autorizadas %}
+                            <option value="{{ empresa.id }}" {% if request.GET.empresa == empresa.id|stringformat:'s' %}selected{% endif %}>
+                                {{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
                         <input type="date" name="date_from" class="form-control"
                                value="{{ request.GET.date_from }}"
                                data-key="filter_date_from">
@@ -126,6 +181,7 @@ Auditoría Biblioteca
                         <tr>
                             <th data-key="table_date">Fecha</th>
                             <th data-key="table_user">Usuario</th>
+                            <th data-key="table_company">Empresa</th>
                             <th data-key="table_action">Acción</th>
                             <th data-key="table_view">Vista</th>
                             <th data-key="table_type">Tipo</th>
@@ -142,6 +198,13 @@ Auditoría Biblioteca
                         <tr>
                             <td>{{ evento.created_at }}</td>
                             <td>{{ evento.user }}</td>
+                            <td>
+                                {% for empresa in empresas_autorizadas %}
+                                    {% if empresa.id == evento.empresa_id %}
+                                        {{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
                             <td>{{ evento.action }}</td>
                             <td>{{ evento.vista_nombre }}</td>
                             <td>{{ evento.object_type }}</td>
@@ -150,7 +213,7 @@ Auditoría Biblioteca
                             <td>{{ evento.status_code }}</td>
                             <td>{{ evento.duration_ms }}</td>
                             <td>
-                                <a href="{% url 'auditoria:auditoria_biblioteca_detail' evento.pk %}"
+                                <a href="{% url audit_detail_url_name evento.pk %}"
                                    class="btn btn-sm btn-primary"
                                    data-key="btn_view">
                                     Ver
@@ -160,6 +223,7 @@ Auditoría Biblioteca
                         {% empty %}
                         <tr>
                             <td class="text-center" data-key="no_results">Sin resultados</td>
+                            <td></td>
                             <td></td>
                             <td></td>
                             <td></td>

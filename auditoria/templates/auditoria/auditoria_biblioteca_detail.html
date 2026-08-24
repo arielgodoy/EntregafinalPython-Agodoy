@@ -1,11 +1,11 @@
 {% extends "partials/base.html" %}
 
 {% block title %}
-Detalle Auditoría
+{{ audit_title }}
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Detalle Auditoría" pagetitle="Auditoría" %}
+{% include "partials/page-title.html" with title=audit_title pagetitle="Auditoría" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -20,7 +20,7 @@ Detalle Auditoría
           <div class="card shadow-sm bg-mode">
             <div class="card-body">
 
-              <h1 class="mb-4 text-center" data-key="detalle_auditoria">Detalle Auditoría</h1>
+              <h1 class="mb-4 text-center" data-key="detalle_auditoria">{{ audit_title }}</h1>
 
               <div class="table-responsive">
                 <table class="table table-bordered table-striped align-middle">
@@ -96,7 +96,7 @@ Detalle Auditoría
               </div>
 
               <div class="text-end mt-4">
-                <a href="{% url 'auditoria:auditoria_biblioteca_list' %}" class="btn btn-secondary" data-key="volver_listado">
+                <a href="{% url audit_list_url_name %}" class="btn btn-secondary" data-key="volver_listado">
                   Volver al listado
                 </a>
               </div>

@@ -24,6 +24,7 @@ if load_dotenv is not None:
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+AUDIT_ARCHIVE_ROOT = Path(os.getenv('AUDIT_ARCHIVE_ROOT', str(Path.home() / '.audit_archive')))
 
 
 def _env_bool(name, default=False, environ=None):
@@ -152,6 +153,7 @@ TEMPLATES = [
                 #global_conext para mostra nombre de la empresa activa
                 'access_control.context_processors.global_context',
                 'access_control.context_processors.empresas_disponibles',
+                'access_control.context_processors.auditoria_disponible',
                 'settings.context_processors.user_preferences_to_localstorage',
                 'settings.context_processors.system_date_context',
                 'chat.context_processors.chat_unread_count',
