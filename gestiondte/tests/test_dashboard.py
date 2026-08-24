@@ -16,7 +16,7 @@ class DashboardDteTest(TestCase):
         self.user = User.objects.create_user(username='dashboard-user', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa activa')
         self.otra_empresa = Empresa.objects.create(codigo='10', descripcion='Otra empresa')
-        vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Control de Cesiones')
+        vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Dashboard DTE-SII-RPETC')
         Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=vista, ingresar=True)
         self.client = Client()
         self.client.login(username='dashboard-user', password='pass')

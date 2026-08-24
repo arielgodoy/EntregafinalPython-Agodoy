@@ -275,7 +275,7 @@ def _lectura_automatica_filas():
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+@verificar_permiso("Gestión DTE - Lectura Automática de Cesiones", "ingresar")
 def lectura_automatica_cesiones(request):
     from .services.lectura_automatica import rango_automatico
 
@@ -290,7 +290,7 @@ def lectura_automatica_cesiones(request):
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Control de Cesiones", "modificar")
+@verificar_permiso("Gestión DTE - Lectura Automática de Cesiones", "modificar")
 def ejecutar_lectura_automatica_cesiones(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido.'}, status=405)
@@ -327,7 +327,7 @@ def ejecutar_lectura_automatica_cesiones(request):
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+@verificar_permiso("Gestión DTE - Lectura Automática de Cesiones", "ingresar")
 def estado_lectura_automatica_cesiones(request):
     rows = _lectura_automatica_filas()
     return JsonResponse({
@@ -584,7 +584,7 @@ def sincronizar_cesiones_rpetc(request):
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Verificar Cesión", "ingresar")
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
 def verificar_cesion(request):
     """Vista para consulta individual de cesión (placeholder)."""
     return render(request, 'gestiondte/verificar.html')
@@ -667,7 +667,7 @@ def _dashboard_resumen(empresa_activa, periodo):
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+@verificar_permiso("Gestión DTE - Dashboard DTE-SII-RPETC", "ingresar")
 def index(request):
     empresa_id = request.session.get('empresa_id')
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
@@ -686,7 +686,7 @@ def index(request):
 
 
 @login_required
-@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+@verificar_permiso("Gestión DTE - Dashboard DTE-SII-RPETC", "ingresar")
 def dashboard_resumen(request):
     periodo = request.GET.get('periodo', 'mes').strip().lower()
     if periodo not in {'hoy', 'semana', 'mes', 'anio'}:

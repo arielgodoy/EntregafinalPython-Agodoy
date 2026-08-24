@@ -10,7 +10,7 @@ class CertificadoEliminarViewTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='cert-delete', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa test')
-        self.vista = Vista.objects.create(nombre='Gestión DTE - Certificados PFX-DTE')
+        self.vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Certificados PFX-DTE')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
