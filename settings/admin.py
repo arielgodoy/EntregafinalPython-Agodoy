@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserPreferences, ThemePreferences
+from .models import SettingsMySQLConnection, ThemePreferences, UserPreferences
 
 @admin.register(UserPreferences)
 class UserPreferencesAdmin(admin.ModelAdmin):
@@ -21,9 +21,9 @@ class UserPreferencesAdmin(admin.ModelAdmin):
             'fields': (
                 'email_enabled',
                 'email_protocol', 'email_host', 'email_port', 'email_encryption',
-                'email_username', 'email_password',
+                'email_username',
                 'smtp_host', 'smtp_port', 'smtp_encryption',
-                'smtp_username', 'smtp_password',
+                'smtp_username',
             )
         }),
         ('🔔 Notificaciones', {
@@ -49,3 +49,21 @@ class ThemePreferencesAdmin(admin.ModelAdmin):
             )
         }),
     )
+
+
+@admin.register(SettingsMySQLConnection)
+class SettingsMySQLConnectionAdmin(admin.ModelAdmin):
+    list_display = ('empresa', 'nombre_logico', 'engine', 'host', 'port', 'user', 'db_name', 'is_active')
+    list_filter = ('engine', 'is_active', 'empresa')
+    search_fields = ('empresa__codigo', 'empresa__descripcion', 'nombre_logico', 'engine', 'host', 'user', 'db_name')
+    exclude = ('password',)
+    readonly_fields = tuple(field.name for field in SettingsMySQLConnection._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
