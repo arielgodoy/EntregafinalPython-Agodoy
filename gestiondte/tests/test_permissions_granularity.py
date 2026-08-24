@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.empresa_activa import get_user_navigable_vistas
+from gestiondte.models import CertificadoSII
 
 
 class DtePermissionGranularityTests(TestCase):
@@ -134,6 +135,23 @@ class DtePermissionGranularityTests(TestCase):
         self.assertEqual(self.client.get(reverse("gestion_dte:cesiones")).status_code, 200)
         self.assertEqual(self.client.get(reverse("gestion_dte:lectura_automatica_cesiones")).status_code, 200)
         self.assertEqual(self.client.get(reverse("gestion_dte:certificados")).status_code, 403)
+
+    def test_certificados_preserves_global_company_selector_with_certificate_metadata(self):
+        empresa_b = Empresa.objects.create(codigo="02", descripcion="Empresa 02")
+        vista = self.create_view("Gestión DTE - Certificados PFX-DTE")
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=vista, ingresar=True)
+        Permiso.objects.create(usuario=self.user, empresa=empresa_b, vista=vista, ingresar=False)
+        CertificadoSII.objects.create(empresa_codigo=self.empresa.codigo, archivo="certificado.pfx")
+
+        response = self.client.get(reverse("gestion_dte:certificados"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        selector_start = content.index('<select class="form-control" id="empresa_id"')
+        selector_end = content.index("</select>", selector_start)
+        selector = content[selector_start:selector_end]
+        self.assertIn(f'value="{self.empresa.id}">{self.empresa.codigo} - {self.empresa.descripcion}', selector)
+        self.assertIn(f'value="{empresa_b.id}">{empresa_b.codigo} - {empresa_b.descripcion}', selector)
 
     def test_migration_copies_all_flags_without_changing_original(self):
         control = self.create_view("Gestión DTE - Control de Cesiones")

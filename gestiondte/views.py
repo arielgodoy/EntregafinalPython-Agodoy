@@ -708,7 +708,7 @@ def certificados_list(request):
     ) if active_empresa else CertificadoSII.objects.none()
     # gather empresa info for codes present
     codigos = set(cert.empresa_codigo for cert in certificados)
-    empresas = {c: get_maestroempresa_by_codigo(c) for c in codigos}
+    empresas_certificados = {c: get_maestroempresa_by_codigo(c) for c in codigos}
     # compute can_create for UI: if user has crear on active empresa OR on any empresa
     can_create_context = False
     can_delete_context = False
@@ -724,7 +724,7 @@ def certificados_list(request):
 
     return render(request, 'gestiondte/certificados.html', {
         'certificados': certificados,
-        'empresas': empresas,
+        'empresas_certificados': empresas_certificados,
         'can_create_context': can_create_context,
         'can_delete_context': can_delete_context,
         'active_empresa_codigo': active_empresa.codigo if active_empresa else '',
