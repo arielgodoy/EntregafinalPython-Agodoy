@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -81,7 +81,8 @@ class DashboardDteTest(TestCase):
         response = self.client.get(reverse('gestion_dte:dashboard_resumen'), {'periodo': 'invalido'})
         self.assertEqual(response.status_code, 400)
 
-    def test_aggregations_and_activity_use_fecha_cesion(self):
+    @patch('django.utils.timezone.now', return_value=datetime(2026, 8, 24, 12, tzinfo=dt_timezone.utc))
+    def test_aggregations_and_activity_use_fecha_cesion(self, now_mock):
         now = timezone.now()
         self.crear_cesion(fecha=now - timedelta(hours=1), folio='1', cedente='11111111', cesionario='22222222', monto='100')
         self.crear_cesion(fecha=now - timedelta(hours=2), folio='2', cedente='33333333', cesionario='44444444', monto='300', estado='Cesion Vigente')

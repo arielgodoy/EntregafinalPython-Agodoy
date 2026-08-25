@@ -1,10 +1,12 @@
 from django.contrib.auth.models import User
+import json
+
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
-from gestiondte.models import CertificadoSII
 from auditoria.models import AuditoriaGestionDTEEvent
+from gestiondte.models import CertificadoSII
 
 
 class CertificadoEliminarViewTest(TestCase):
@@ -39,13 +41,22 @@ class CertificadoEliminarViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['success'])
         self.assertFalse(CertificadoSII.objects.filter(pk=self.certificado.pk).exists())
-        evento = AuditoriaGestionDTEEvent.objects.get(action='DELETE')
+
+        eventos_delete = AuditoriaGestionDTEEvent.objects.filter(action='DELETE')
+        self.assertEqual(eventos_delete.count(), 1)
+        evento = eventos_delete.get()
         self.assertEqual(evento.object_type, 'certificado_sii')
         self.assertEqual(evento.object_id, str(self.certificado.pk))
         self.assertEqual(evento.empresa_id, self.empresa.id)
+        self.assertEqual(evento.before['empresa_codigo'], '09')
         self.assertEqual(evento.meta['empresa_codigo'], '09')
-        self.assertNotIn('password', str(evento.meta).lower())
-        self.assertNotIn('test.pfx', str(evento.before))
+        self.assertEqual(evento.meta['empresa_id'], self.empresa.id)
+        serialized_audit = json.dumps(
+            {'meta': evento.meta, 'before': evento.before, 'after': evento.after},
+            sort_keys=True,
+        ).lower()
+        for sensitive_term in ('test.pfx', 'password', 'private key', 'private_key', 'token', 'secret'):
+            self.assertNotIn(sensitive_term, serialized_audit)
 
     def test_get_no_elimina_y_rechaza_metodo(self):
         response = self.client.get(
