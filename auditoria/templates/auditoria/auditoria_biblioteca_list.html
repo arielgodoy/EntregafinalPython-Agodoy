@@ -221,30 +221,31 @@
                         <tr>
                             <td>{{ evento.created_at }}</td>
                             <td>{{ evento.user }}</td>
-                            {% if audit_app_label == "gestiondte" %}<td>
+                            <td>
                                 {% for empresa in empresas_autorizadas %}
                                     {% if empresa.id == evento.empresa_id %}
                                         {{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}
                                     {% endif %}
                                 {% endfor %}
-                            </td>{% endif %}
+                            </td>
                             <td>{{ evento.action }}</td>
-                            <td>
+                            {% if audit_app_label == "gestiondte" %}<td>
                                 {% if evento.source == "historical" %}
                                     <span class="badge bg-secondary">Histórico</span>
-                                    <div class="small text-muted">{{ evento.batch_id }}</div>
                                 {% else %}
                                     <span class="badge bg-success">Actual</span>
                                 {% endif %}
-                            </td>
-                            <td>{{ evento.vista_nombre }}</td>
-                            <td>{{ evento.object_type }}</td>
-                            <td>{{ evento.object_id }}</td>
-                            <td>{{ evento.path }}</td>
-                            <td>{{ evento.status_code }}</td>
-                            <td>{{ evento.duration_ms }}</td>
+                            </td>{% endif %}
+                            <td>{{ evento.vista_nombre|default:"—" }}</td>
+                            <td>{{ evento.object_type|default:"—" }}</td>
+                            <td>{{ evento.object_id|default:"—" }}</td>
+                            <td>{{ evento.path|default:"—" }}</td>
+                            <td>{{ evento.status_code|default:"—" }}</td>
+                            <td>{{ evento.duration_ms|default:"—" }}</td>
                             <td>
-                                <a href="{% if evento.source == "historical" %}{% url 'auditoria:auditoria_gestiondte_historical_detail' evento.pk %}{% else %}{% url audit_detail_url_name evento.pk %}{% endif %}"
+                                          <a href="{% if evento.source == "historical" %}{% url 'auditoria:auditoria_gestiondte_historical_detail' evento.pk %}{% else %}{% url audit_detail_url_name evento.pk %}{% endif %}"
+                                              data-detail-url="{% if evento.source == "historical" %}{% url 'auditoria:auditoria_gestiondte_historical_detail' evento.pk %}{% else %}{% url audit_detail_url_name evento.pk %}{% endif %}"
+                                              data-audit-detail-trigger
                                    class="btn btn-sm btn-primary"
                                    data-key="btn_view">
                                     Ver
@@ -301,6 +302,23 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="auditEventDetailModal" tabindex="-1" aria-labelledby="auditEventDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="auditEventDetailModalLabel">Detalle de auditoría</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" data-audit-detail-body>
+                <p class="text-muted">Seleccione un evento para ver su detalle.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 ```
 
 </div>
@@ -328,6 +346,29 @@ document.addEventListener('DOMContentLoaded', function () {
     } else {
         console.warn('DataTables no está cargado.');
     }
+
+    var detailModal = document.getElementById('auditEventDetailModal');
+    var detailBody = detailModal && detailModal.querySelector('[data-audit-detail-body]');
+    if (!detailModal || !detailBody || !window.bootstrap) return;
+    var modal = window.bootstrap.Modal.getOrCreateInstance(detailModal);
+    document.addEventListener('click', function (event) {
+        var trigger = event.target.closest('[data-audit-detail-trigger]');
+        if (!trigger) return;
+        event.preventDefault();
+        detailBody.innerHTML = '<p class="text-muted">Cargando detalle...</p>';
+        modal.show();
+        var url = new URL(trigger.dataset.detailUrl, window.location.origin);
+        url.searchParams.set('partial', '1');
+        fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) {
+                if (!response.ok) throw new Error('detail-load-failed');
+                return response.text();
+            })
+            .then(function (html) { detailBody.innerHTML = html; })
+            .catch(function () {
+                detailBody.innerHTML = '<div class="alert alert-danger" role="alert">No fue posible cargar el detalle del evento.</div>';
+            });
+    });
 });
 </script>
 

@@ -254,7 +254,8 @@ class GestionDTEAuditUITests(TestCase):
                 {event.pk for event in historical_response.context['eventos']},
                 {self.event1.pk, old_event.pk},
             )
-            self.assertContains(historical_response, batch.batch_id)
+            self.assertContains(historical_response, 'Histórico')
+            self.assertNotContains(historical_response, batch.batch_id)
 
             active_response = self.client.get(
                 reverse('auditoria:auditoria_gestiondte_list'), {'source': 'active'},
@@ -291,7 +292,10 @@ class GestionDTEAuditUITests(TestCase):
                 reverse('auditoria:auditoria_gestiondte_historical_detail', args=[event.id]),
             )
             self.assertEqual(detail.status_code, 200)
-            self.assertContains(detail, 'Histórico (historical-detail)')
+            self.assertContains(detail, 'Origen</th><td>Histórico')
+            self.assertContains(detail, 'Batch histórico</th><td>historical-detail')
+            self.assertContains(detail, '—')
+            self.assertNotContains(detail, '>None<')
 
     def test_historical_query_ignores_unauthorized_company_and_preserves_file(self):
         with TemporaryDirectory() as archive_root, override_settings(AUDIT_ARCHIVE_ROOT=archive_root):
@@ -387,3 +391,48 @@ class GestionDTEAuditUITests(TestCase):
             )
             self.assertEqual(response.status_code, 200)
             self.assertEqual([item.pk for item in response.context['eventos']], [event.id])
+
+    def test_detail_modal_urls_and_partial_details_preserve_full_page_fallback(self):
+        self.client.force_login(self.user)
+        self._activate(self.empresa1)
+        active_response = self.client.get(reverse('auditoria:auditoria_gestiondte_list'))
+        self.assertContains(active_response, 'data-audit-detail-trigger')
+        self.assertContains(active_response, f'data-detail-url="/auditoria/gestiondte/{self.event1.id}/"')
+        active_partial = self.client.get(
+            reverse('auditoria:auditoria_gestiondte_detail', args=[self.event1.id]),
+            {'partial': '1'},
+        )
+        self.assertEqual(active_partial.status_code, 200)
+        self.assertContains(active_partial, 'Origen</th><td>Actual')
+        self.assertNotContains(active_partial, '<html')
+
+        with TemporaryDirectory() as archive_root, override_settings(AUDIT_ARCHIVE_ROOT=archive_root):
+            Permiso.objects.filter(
+                usuario=self.user, empresa=self.empresa1, vista=self.gestion_vista,
+            ).update(autorizar=True)
+            historical = AuditoriaGestionDTEEvent.objects.create(
+                user=self.user, empresa_id=self.empresa1.id, action='VIEW',
+                path='/historical/modal/', vista_nombre=self.gestion_vista.nombre,
+            )
+            batch = AuditArchiveService.run_batch(
+                'gestiondte', timezone.now() + timedelta(days=1),
+                max_source_id=historical.id, requested_company_ids=[self.empresa1.id],
+                batch_id='modal-history', user=self.user,
+                vista_nombre=self.gestion_vista.nombre,
+            )
+            listing = self.client.get(
+                reverse('auditoria:auditoria_gestiondte_list'), {'source': 'historical'},
+            )
+            self.assertContains(listing, f'data-detail-url="/auditoria/gestiondte/historico/{historical.id}/"')
+            historical_partial = self.client.get(
+                reverse('auditoria:auditoria_gestiondte_historical_detail', args=[historical.id]),
+                {'partial': '1'},
+            )
+            self.assertEqual(historical_partial.status_code, 200)
+            self.assertContains(historical_partial, 'Origen</th><td>Histórico')
+            self.assertContains(historical_partial, f'Batch histórico</th><td>{batch.batch_id}')
+            self.assertNotContains(historical_partial, '<html')
+            full_page = self.client.get(
+                reverse('auditoria:auditoria_gestiondte_historical_detail', args=[historical.id]),
+            )
+            self.assertContains(full_page, '<html')

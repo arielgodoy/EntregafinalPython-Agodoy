@@ -210,6 +210,11 @@ class AuditoriaBibliotecaDetailView(AuditoriaPermissionMixin, DetailView):
     audit_list_url_name = "auditoria:auditoria_biblioteca_list"
     audit_app_label = "biblioteca"
 
+    def get_template_names(self):
+        if self.request.GET.get('partial') == '1':
+            return ['auditoria/partials/audit_event_detail.html']
+        return [self.template_name]
+
     @method_decorator(login_required)
     def dispatch(self, request, *args, **kwargs):
         logger.info("AUDIT_EXEC_START path=%s user=%s empresa_id=%s",
