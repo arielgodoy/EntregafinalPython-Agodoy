@@ -79,7 +79,7 @@ class SidebarChatMenuTests(TestCase):
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Auditoría Biblioteca")
-        self.assertNotContains(response, "Auditoría Gestión DTE")
+        self.assertContains(response, "Auditoría Gestión DTE")
 
     def test_sidebar_auditoria_muestra_dte_con_permiso(self):
         self._login_with_empresa()
@@ -99,7 +99,7 @@ class SidebarChatMenuTests(TestCase):
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Auditoría Gestión DTE")
-        self.assertNotContains(response, "Auditoría Biblioteca")
+        self.assertContains(response, "Auditoría Biblioteca")
 
     def test_sidebar_auditoria_muestra_ambos_permisos(self):
         self._login_with_empresa()
@@ -127,7 +127,7 @@ class SidebarChatMenuTests(TestCase):
         self.assertContains(response, "Auditoría Biblioteca")
         self.assertContains(response, "Auditoría Gestión DTE")
 
-    def test_sidebar_auditoria_oculta_sin_permisos(self):
+    def test_sidebar_auditoria_visible_sin_permisos(self):
         self._login_with_empresa()
         Permiso.objects.create(
             usuario=self.user,
@@ -138,8 +138,59 @@ class SidebarChatMenuTests(TestCase):
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Auditoría Biblioteca")
-        self.assertNotContains(response, "Auditoría Gestión DTE")
+        self.assertContains(response, "Auditoría Biblioteca")
+        self.assertContains(response, "Auditoría Gestión DTE")
+        self.assertEqual(
+            Permiso.objects.filter(
+                usuario=self.user,
+                vista__nombre__in=("Auditoría - Biblioteca", "Auditoría - Gestión DTE"),
+            ).count(),
+            0,
+        )
+
+    def test_sidebar_auditoria_sin_permiso_conduce_a_403(self):
+        self._login_with_empresa()
+        self._grant_dashboard_permiso()
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertContains(response, reverse("auditoria:auditoria_biblioteca_list"))
+        self.assertContains(response, reverse("auditoria:auditoria_gestiondte_list"))
+        self.assertEqual(
+            self.client.get(reverse("auditoria:auditoria_biblioteca_list")).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse("auditoria:auditoria_gestiondte_list")).status_code,
+            403,
+        )
+
+    def test_sidebar_auditoria_con_permiso_conduce_a_200(self):
+        self._login_with_empresa()
+        self._grant_dashboard_permiso()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_biblioteca,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_gestiondte,
+            ingresar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertContains(response, "Auditoría Biblioteca")
+        self.assertContains(response, "Auditoría Gestión DTE")
+        self.assertEqual(
+            self.client.get(reverse("auditoria:auditoria_biblioteca_list")).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(reverse("auditoria:auditoria_gestiondte_list")).status_code,
+            200,
+        )
 
     def test_sidebar_auditoria_no_requiere_superuser(self):
         self._login_with_empresa()

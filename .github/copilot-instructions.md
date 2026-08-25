@@ -14,3 +14,5 @@
 - Treat `static/js/app.js` as immutable template/vendor code: do not modify, patch, reformat, minify, or use it for new functionality.
 - If a solution appears to require changing `static/js/app.js`, stop and propose an external alternative before editing.
 - Consult specialized documentation in `COPILOT/` only when the task requires it; do not read the entire directory by default.
+
+- Toda vista destinada a usuarios normales debe ser visible en el menú aunque el usuario no tenga `Permiso.ingresar`. La autorización ocurre al acceder; sin permiso, el backend debe responder 403 para que el usuario conozca la vista y pueda solicitar acceso. Las vistas exclusivamente administrativas o técnicas pueden mantener visibilidad restringida por rol.

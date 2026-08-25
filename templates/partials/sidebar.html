@@ -222,19 +222,18 @@
                         </ul>
                     </div>
                 </li>
-                {% if puede_auditar_biblioteca or puede_auditar_gestiondte %}
                 <li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarAuditoria" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarAuditoria">
                         <i class="ri-search-eye-line"></i> <span data-key="menu.audit">Auditoría</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarAuditoria">
                         <ul class="nav nav-sm flex-column">
-                            {% if puede_auditar_biblioteca %}<li class="nav-item">
+                            <li class="nav-item">
                                 <a href="{% url 'auditoria:auditoria_biblioteca_list' %}" class="nav-link" data-key="menu.audit.library">Auditoría Biblioteca</a>
-                            </li>{% endif %}
-                            {% if puede_auditar_gestiondte %}<li class="nav-item">
+                            </li>
+                            <li class="nav-item">
                                 <a href="{% url 'auditoria:auditoria_gestiondte_list' %}" class="nav-link" data-key="menu.audit.gestion_dte">Auditoría Gestión DTE</a>
-                            </li>{% endif %}
+                            </li>
                         </ul>
                     </div>
                 </li>
@@ -301,8 +300,6 @@
                         </ul>
                     </div>
                 </li>
-                {% endif %}
-
             </ul>
         </div>
         <!-- Sidebar -->

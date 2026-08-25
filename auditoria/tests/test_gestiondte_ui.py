@@ -69,7 +69,7 @@ class GestionDTEAuditUITests(TestCase):
         self.assertContains(response, '01 - Empresa 1')
         self.assertContains(response, '03 - Empresa 3')
         self.assertContains(response, '/auditoria/gestiondte/')
-        self.assertNotContains(response, '/auditoria/biblioteca/')
+        self.assertContains(response, '/auditoria/biblioteca/')
 
     def test_unauthorized_company_filter_returns_404(self):
         self.client.force_login(self.user)
@@ -105,7 +105,7 @@ class GestionDTEAuditUITests(TestCase):
         self.assertEqual(gestion_response.status_code, 200)
         self.assertEqual(biblioteca_response.status_code, 403)
         self.assertContains(gestion_response, '/auditoria/gestiondte/')
-        self.assertNotContains(gestion_response, '/auditoria/biblioteca/')
+        self.assertContains(gestion_response, '/auditoria/biblioteca/')
 
     def test_gestiondte_without_permission_is_forbidden(self):
         user = User.objects.create_user(username='without-gestion-audit', password='secret')
