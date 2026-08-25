@@ -78,6 +78,8 @@ class AuditArchiveUITests(TestCase):
     def test_archive_ui_shows_only_authorized_companies(self):
         response = self.client.get(reverse('auditoria:auditoria_biblioteca_archive'))
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Limpieza real aún no habilitada')
+        self.assertContains(response, 'Limpieza disponible después de validar el dry-run.')
         self.assertContains(response, 'id="archive-company-%s"' % self.empresa_a.id)
         self.assertContains(response, 'id="archive-company-%s"' % self.empresa_b.id)
         self.assertNotContains(response, 'id="archive-company-%s"' % self.empresa_c.id)
