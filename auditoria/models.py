@@ -113,9 +113,14 @@ class UserPresence(models.Model):
 class AuditArchiveBatch(models.Model):
     """Estado de archivado seguro de eventos de auditoría sin borrar el origen."""
     STATUS_CHOICES = [
-        ('pending', 'Pendiente'),
-        ('completed', 'Completado'),
-        ('failed', 'Fallido'),
+        ('PENDING', 'Pendiente'),
+        ('COPYING', 'Copiando'),
+        ('VALIDATING', 'Validando'),
+        ('COMPLETED', 'Completado'),
+        ('FAILED', 'Fallido'),
+        ('PURGING', 'Limpiando origen'),
+        ('PURGED', 'Origen limpiado'),
+        ('PURGE_FAILED', 'Limpieza fallida'),
     ]
 
     batch_id = models.CharField(max_length=255, db_index=True, unique=True)
@@ -124,13 +129,31 @@ class AuditArchiveBatch(models.Model):
     source_min_id = models.BigIntegerField(null=True, blank=True)
     source_max_id = models.BigIntegerField(null=True, blank=True)
     company_ids = models.JSONField(default=list, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    source_count = models.PositiveIntegerField(default=0)
+    first_source_id = models.BigIntegerField(null=True, blank=True)
+    last_source_id = models.BigIntegerField(null=True, blank=True)
+    first_event_at = models.DateTimeField(null=True, blank=True)
+    last_event_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
     archive_path = models.CharField(max_length=500, blank=True, default='')
     archive_count = models.PositiveIntegerField(default=0)
+    checksum_algorithm = models.CharField(max_length=32, default='SHA-256')
     source_checksum = models.CharField(max_length=128, blank=True, default='')
     archive_checksum = models.CharField(max_length=128, blank=True, default='')
+    validated_at = models.DateTimeField(null=True, blank=True)
     manifest = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True, default='')
+    purge_started_at = models.DateTimeField(null=True, blank=True)
+    purged_at = models.DateTimeField(null=True, blank=True)
+    purged_count = models.PositiveIntegerField(default=0)
+    purge_error_message = models.TextField(blank=True, default='')
+    purged_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='audit_archive_purges',
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
@@ -138,8 +161,38 @@ class AuditArchiveBatch(models.Model):
         db_table = 'auditoria_archive_batch'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['app_label', 'cutoff_datetime', 'source_max_id']),
+            models.Index(
+                fields=['app_label', 'cutoff_datetime', 'source_max_id'],
+                name='auditoria_archive_batch_idx',
+            ),
         ]
 
     def __str__(self):
         return f"{self.batch_id} ({self.app_label})"
+
+
+class AuditArchivePurgeChunk(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendiente'),
+        ('DELETING', 'Eliminando'),
+        ('COMPLETED', 'Completado'),
+        ('FAILED', 'Fallido'),
+    ]
+
+    batch = models.ForeignKey(AuditArchiveBatch, on_delete=models.CASCADE, related_name='purge_chunks')
+    sequence = models.PositiveIntegerField()
+    expected_count = models.PositiveIntegerField()
+    deleted_count = models.PositiveIntegerField(default=0)
+    source_ids_checksum = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='PENDING')
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default='')
+    first_source_id = models.BigIntegerField(null=True, blank=True)
+    last_source_id = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['batch', 'sequence'], name='audit_purge_batch_sequence_unique'),
+        ]
+        ordering = ['batch_id', 'sequence']

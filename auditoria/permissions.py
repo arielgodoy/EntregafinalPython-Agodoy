@@ -27,3 +27,7 @@ def get_auditable_company_ids(user, vista_nombre, permiso="ingresar"):
 def get_auditable_companies(user, vista_nombre, permiso="ingresar"):
     company_ids = get_auditable_company_ids(user, vista_nombre, permiso)
     return Empresa.objects.filter(id__in=company_ids).order_by("codigo", "id")
+
+
+def get_archivable_company_ids(user, vista_nombre):
+    return get_auditable_company_ids(user, vista_nombre, permiso="autorizar")

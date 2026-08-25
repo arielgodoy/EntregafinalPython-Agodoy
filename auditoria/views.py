@@ -1,11 +1,12 @@
 from django.views import View
 from django.views.generic import ListView, DetailView
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from access_control.views import VerificarPermisoMixin
 from auditoria.models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence
-from auditoria.permissions import get_auditable_company_ids, get_auditable_companies
+from auditoria.permissions import get_archivable_company_ids, get_auditable_company_ids, get_auditable_companies
 from auditoria.services import AuditoriaService
 from django.shortcuts import get_object_or_404, render
 from django.db.models import Q
@@ -15,6 +16,9 @@ from datetime import datetime, time, timedelta
 import logging
 logger = logging.getLogger(__name__)
 from access_control.models import Vista, Permiso
+from auditoria.archive_service import AuditArchiveService
+from auditoria.models import AuditArchiveBatch
+from auditoria.purge_service import AuditArchivePurgeService
 
 
 class AuditoriaPermissionMixin:
@@ -182,6 +186,15 @@ class AuditoriaBibliotecaListView(AuditoriaPermissionMixin, ListView):
         context["audit_title"] = self.audit_title
         context["audit_list_url_name"] = self.audit_list_url_name
         context["audit_detail_url_name"] = self.audit_detail_url_name
+        context["archive_url_name"] = (
+            "auditoria:auditoria_biblioteca_archive"
+            if self.audit_app_label == "biblioteca"
+            else "auditoria:auditoria_gestiondte_archive"
+        )
+        context["archivable_company_ids"] = get_archivable_company_ids(
+            self.request.user,
+            self.vista_nombre,
+        )
         return context
 
 class AuditoriaBibliotecaDetailView(AuditoriaPermissionMixin, DetailView):
@@ -296,3 +309,146 @@ class AuditoriaGestionDTELatestViewsView(AuditoriaBibliotecaLatestViewsView):
     vista_nombre = "Auditoría - Gestión DTE"
     model = AuditoriaGestionDTEEvent
     audit_app_label = "gestiondte"
+
+
+class AuditoriaArchiveView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    app_label = None
+    vista_nombre = None
+    audit_title = None
+    archive_template = 'auditoria/auditoria_archive.html'
+
+    def _authorized_company_ids(self, request):
+        return get_archivable_company_ids(request.user, self.vista_nombre)
+
+    def _visible_batches(self, request, company_ids):
+        batches = AuditArchiveBatch.objects.filter(app_label=self.app_label).order_by('-created_at')
+        visible = []
+        for batch in batches:
+            if not set(batch.company_ids or []).issubset(company_ids):
+                continue
+            batch.archive_error_display = {
+                'FAILED': 'El snapshot no pudo completarse.',
+                'PURGE_FAILED': 'La limpieza quedó incompleta y requiere revisión.',
+            }.get(batch.status, '')
+            visible.append(batch)
+        return visible
+
+    def _parse_cutoff(self, value):
+        try:
+            cutoff = datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            raise ValueError('La fecha de corte no es válida.') from None
+        if timezone.is_naive(cutoff):
+            cutoff = timezone.make_aware(cutoff)
+        return cutoff
+
+    def _context(self, request, company_ids, **extra):
+        context = {
+            'archive_title': self.audit_title,
+            'archive_app_label': self.app_label,
+            'archive_batches': self._visible_batches(request, company_ids),
+            'archivable_companies': get_auditable_companies(
+                request.user,
+                self.vista_nombre,
+                'autorizar',
+            ),
+            'archive_error': None,
+            'archive_success': None,
+            'snapshot_preview': None,
+            'purge_preview': None,
+            'dry_run_result': None,
+        }
+        context.update(extra)
+        return context
+
+    def _batch_for_action(self, request, company_ids):
+        batch_id = (request.POST.get('batch_id') or '').strip()
+        batch = get_object_or_404(AuditArchiveBatch, batch_id=batch_id, app_label=self.app_label)
+        if not set(batch.company_ids or []).issubset(company_ids):
+            raise PermissionError('No tienes autorización para todas las empresas del batch.')
+        return batch
+
+    def get(self, request, *args, **kwargs):
+        company_ids = self._authorized_company_ids(request)
+        if not company_ids:
+            return VerificarPermisoMixin.handle_no_permission(
+                self, request, f"No tienes permiso para 'autorizar' en {self.vista_nombre}.",
+            )
+        return render(request, self.archive_template, self._context(request, company_ids))
+
+    def post(self, request, *args, **kwargs):
+        company_ids = self._authorized_company_ids(request)
+        if not company_ids:
+            return VerificarPermisoMixin.handle_no_permission(
+                self, request, f"No tienes permiso para 'autorizar' en {self.vista_nombre}.",
+            )
+        context = self._context(request, company_ids)
+        action = request.POST.get('action')
+        try:
+            if action in {'preview_snapshot', 'create_snapshot'}:
+                requested_ids = [int(value) for value in request.POST.getlist('company_ids')]
+                if not requested_ids or not set(requested_ids).issubset(company_ids):
+                    raise PermissionError('Las empresas seleccionadas no están autorizadas.')
+                cutoff = self._parse_cutoff(request.POST.get('cutoff_datetime'))
+                preview = AuditArchiveService.preview_snapshot(
+                    self.app_label, cutoff, requested_ids, request.user, self.vista_nombre,
+                )
+                if action == 'preview_snapshot':
+                    context['snapshot_preview'] = preview
+                elif not preview['source_count']:
+                    context['archive_error'] = 'No hay eventos elegibles para crear el snapshot.'
+                else:
+                    batch = AuditArchiveService.run_batch(
+                        self.app_label,
+                        cutoff,
+                        max_source_id=preview['max_source_id'],
+                        requested_company_ids=requested_ids,
+                        user=request.user,
+                        vista_nombre=self.vista_nombre,
+                    )
+                    from auditoria.helpers import audit_log
+
+                    audit_log(
+                        request,
+                        'EXECUTE',
+                        self.app_label,
+                        object_type='audit_archive_batch',
+                        object_id=batch.batch_id,
+                        vista_nombre=self.vista_nombre,
+                        message_key='auditoria.snapshot.creado',
+                        meta={
+                            'batch_id': batch.batch_id,
+                            'source_count': batch.source_count,
+                            'company_ids': batch.company_ids,
+                            'cutoff': batch.cutoff_datetime.isoformat(),
+                        },
+                    )
+                    context['archive_success'] = f'Snapshot creado y validado: {batch.batch_id}'
+            elif action in {'preview_purge', 'dry_run'}:
+                batch = self._batch_for_action(request, company_ids)
+                if action == 'preview_purge':
+                    context['purge_preview'] = AuditArchivePurgeService.preview(batch.batch_id, request.user)
+                else:
+                    context['dry_run_result'] = AuditArchivePurgeService.purge(
+                        batch.batch_id, request.user, dry_run=True,
+                    )
+        except PermissionError as exc:
+            context['archive_error'] = str(exc)
+            return render(request, self.archive_template, context, status=403)
+        except ValueError as exc:
+            context['archive_error'] = 'No fue posible completar la operación de archivado.'
+        except Exception:
+            context['archive_error'] = 'No fue posible validar la operación de archivado.'
+        return render(request, self.archive_template, context)
+
+
+class AuditoriaBibliotecaArchiveView(AuditoriaArchiveView):
+    app_label = 'biblioteca'
+    vista_nombre = 'Auditoría - Biblioteca'
+    audit_title = 'Auditoría Biblioteca - Archivado'
+
+
+class AuditoriaGestionDTEArchiveView(AuditoriaArchiveView):
+    app_label = 'gestiondte'
+    vista_nombre = 'Auditoría - Gestión DTE'
+    audit_title = 'Auditoría Gestión DTE - Archivado'

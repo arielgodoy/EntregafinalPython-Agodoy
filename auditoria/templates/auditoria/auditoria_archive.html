@@ -1,0 +1,106 @@
+{% extends "partials/base.html" %}
+
+{% block title %}{{ archive_title }}{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title=archive_title pagetitle="Auditoría" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h1 class="h4 mb-0" data-key="auditoria.archive.heading">Archivado</h1>
+        <span class="badge bg-warning-subtle text-warning" data-key="auditoria.archive.no_purge">Limpieza real aún no habilitada</span>
+      </div>
+
+      {% if archive_error %}
+      <div class="alert alert-danger" role="alert" data-key="auditoria.archive.error">{{ archive_error }}</div>
+      {% endif %}
+      {% if archive_success %}
+      <div class="alert alert-success" role="status" data-key="auditoria.archive.success">{{ archive_success }}</div>
+      {% endif %}
+
+      <section class="card shadow-sm bg-mode mb-4">
+        <div class="card-header"><h2 class="h5 mb-0" data-key="auditoria.archive.snapshot.create">Crear snapshot</h2></div>
+        <div class="card-body">
+          <form method="post" class="row g-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="preview_snapshot">
+            <div class="col-12 col-lg-6">
+              <label class="form-label" data-key="auditoria.archive.companies">Empresas</label>
+              {% for empresa in archivable_companies %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="company_ids" value="{{ empresa.id }}" id="archive-company-{{ empresa.id }}">
+                <label class="form-check-label" for="archive-company-{{ empresa.id }}">{{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}</label>
+              </div>
+              {% empty %}
+              <p class="text-muted" data-key="auditoria.archive.no_companies">No hay empresas autorizadas.</p>
+              {% endfor %}
+            </div>
+            <div class="col-12 col-lg-6">
+              <label class="form-label" for="archive-cutoff" data-key="auditoria.archive.cutoff">Archivar eventos anteriores a</label>
+              <input class="form-control" type="datetime-local" name="cutoff_datetime" id="archive-cutoff" required>
+            </div>
+            <div class="col-12">
+              <button class="btn btn-outline-primary" type="submit" data-key="auditoria.archive.preview">Vista previa</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {% if snapshot_preview %}
+      <section class="card shadow-sm bg-mode mb-4">
+        <div class="card-header"><h2 class="h5 mb-0" data-key="auditoria.archive.snapshot.preview">Vista previa del snapshot</h2></div>
+        <div class="card-body">
+          <dl class="row mb-3">
+            <dt class="col-sm-4" data-key="auditoria.archive.app">Aplicación</dt><dd class="col-sm-8">{{ snapshot_preview.app_label }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.companies">Empresas</dt><dd class="col-sm-8">{{ snapshot_preview.company_ids|join:", " }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.cutoff">Fecha de corte</dt><dd class="col-sm-8">{{ snapshot_preview.cutoff_datetime }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.count">Eventos</dt><dd class="col-sm-8">{{ snapshot_preview.source_count }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.first">Primer evento</dt><dd class="col-sm-8">{{ snapshot_preview.first_event_at }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.last">Último evento</dt><dd class="col-sm-8">{{ snapshot_preview.last_event_at }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.first_id">Primer ID</dt><dd class="col-sm-8">{{ snapshot_preview.first_source_id|default:"-" }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.last_id">Último ID</dt><dd class="col-sm-8">{{ snapshot_preview.last_source_id|default:"-" }}</dd>
+          </dl>
+          {% if snapshot_preview.source_count %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_snapshot">
+            <input type="hidden" name="cutoff_datetime" value="{{ snapshot_preview.cutoff_datetime|date:"Y-m-d\\TH:i" }}">
+            {% for company_id in snapshot_preview.company_ids %}<input type="hidden" name="company_ids" value="{{ company_id }}">{% endfor %}
+            <button class="btn btn-primary" type="submit" data-key="auditoria.archive.snapshot.create_confirm">Crear snapshot histórico</button>
+          </form>
+          {% else %}
+          <p class="text-muted mb-0" data-key="auditoria.archive.empty">No hay eventos elegibles. La creación está deshabilitada.</p>
+          {% endif %}
+        </div>
+      </section>
+      {% endif %}
+
+      <section class="card shadow-sm bg-mode">
+        <div class="card-header"><h2 class="h5 mb-0" data-key="auditoria.archive.batches">Snapshots existentes</h2></div>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead><tr>
+              <th data-key="auditoria.archive.batch">ID</th><th data-key="auditoria.archive.created">Creado</th><th data-key="auditoria.archive.companies">Empresas</th><th data-key="auditoria.archive.cutoff">Corte</th><th data-key="auditoria.archive.events">Eventos</th><th data-key="auditoria.archive.snapshot_status">Estado snapshot</th><th data-key="auditoria.archive.checksum">Checksum</th><th data-key="auditoria.archive.purge_status">Estado purge</th><th data-key="auditoria.archive.actions">Acciones</th>
+            </tr></thead>
+            <tbody>
+            {% for batch in archive_batches %}
+            <tr>
+              <td>{{ batch.batch_id }}</td><td>{{ batch.created_at }}</td><td>{{ batch.company_ids|join:", " }}</td><td>{{ batch.cutoff_datetime }}</td><td>{{ batch.archive_count }}</td><td>{{ batch.get_status_display }}{% if batch.status == "FAILED" or batch.status == "PURGE_FAILED" %}<div class="small text-danger">{{ batch.archive_error_display }}</div>{% endif %}</td><td>{% if batch.source_checksum == batch.archive_checksum %}<span data-key="auditoria.archive.valid">Válido</span>{% else %}<span data-key="auditoria.archive.invalid">Inválido</span>{% endif %}</td><td>{% if batch.status == "PURGED" %}<span data-key="auditoria.archive.purged">Origen limpiado</span><div class="small">{{ batch.purged_count }} / {{ batch.source_count }}</div>{% elif batch.status == "PURGING" or batch.status == "PURGE_FAILED" %}<span data-key="auditoria.archive.purge_progress">Progreso</span><div class="small">{{ batch.purged_count }} / {{ batch.source_count }}</div>{% else %}<span data-key="auditoria.archive.not_purged">No limpiado</span>{% endif %}</td>
+              <td>{% if batch.status == "COMPLETED" %}<form method="post" class="d-inline"><input type="hidden" name="batch_id" value="{{ batch.batch_id }}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="action" value="preview_purge" type="submit" data-key="auditoria.archive.purge.preview">Vista previa de limpieza</button> <button class="btn btn-sm btn-outline-warning" name="action" value="dry_run" type="submit" data-key="auditoria.archive.purge.dry_run">Validar limpieza</button></form>{% elif batch.status == "PURGED" %}<span data-key="auditoria.archive.purge.disabled">No disponible</span>{% else %}<span data-key="auditoria.archive.purge.unavailable">Requiere snapshot validado</span>{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="9" class="text-center" data-key="auditoria.archive.no_batches">No hay snapshots.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% if purge_preview %}<div class="alert alert-info mt-3" data-key="auditoria.archive.purge.preview.result">Eventos archivados: {{ purge_preview.source_count }}. Aún presentes: {{ purge_preview.remaining_in_source }}. Checksum histórico válido.</div>{% endif %}
+      {% if dry_run_result %}<div class="alert alert-success mt-3" data-key="auditoria.archive.purge.dry_run.result">Listo para limpiar. No se eliminó ningún evento.</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock content %}

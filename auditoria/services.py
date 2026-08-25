@@ -16,7 +16,7 @@ from access_control.models import Vista
 logger = logging.getLogger(__name__)
 
 
-class AuditArchiveService:
+class _LegacyAuditArchiveService:
     """Copia segura de auditoría a SQLite histórico sin borrar el origen."""
 
     @staticmethod
@@ -372,3 +372,6 @@ class AuditoriaService:
                 continue
 
         return snapshot
+
+
+from .archive_service import AuditArchiveService

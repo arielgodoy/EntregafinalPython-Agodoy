@@ -6,6 +6,8 @@ from auditoria.views import (
     AuditoriaGestionDTEDetailView,
     AuditoriaBibliotecaLatestViewsView,
     AuditoriaGestionDTELatestViewsView,
+    AuditoriaBibliotecaArchiveView,
+    AuditoriaGestionDTEArchiveView,
 )
 
 app_name = "auditoria"
@@ -17,4 +19,6 @@ urlpatterns = [
     path("gestiondte/", AuditoriaGestionDTEListView.as_view(), name="auditoria_gestiondte_list"),
     path("gestiondte/<int:pk>/", AuditoriaGestionDTEDetailView.as_view(), name="auditoria_gestiondte_detail"),
     path("gestiondte/usuario/<int:user_id>/vistas/", AuditoriaGestionDTELatestViewsView.as_view(), name="auditoria_gestiondte_latest_views"),
+    path("biblioteca/archivo/", AuditoriaBibliotecaArchiveView.as_view(), name="auditoria_biblioteca_archive"),
+    path("gestiondte/archivo/", AuditoriaGestionDTEArchiveView.as_view(), name="auditoria_gestiondte_archive"),
 ]

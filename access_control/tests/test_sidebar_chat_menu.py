@@ -11,6 +11,8 @@ class SidebarChatMenuTests(TestCase):
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
         self.vista_dashboard = Vista.objects.create(nombre="Control Operacional - Dashboard")
         self.vista_chat = Vista.objects.create(nombre="chat.inbox")
+        self.vista_auditoria_biblioteca = Vista.objects.create(nombre="Auditoría - Biblioteca")
+        self.vista_auditoria_gestiondte = Vista.objects.create(nombre="Auditoría - Gestión DTE")
 
     def _login_with_empresa(self):
         self.client.force_login(self.user)
@@ -58,3 +60,105 @@ class SidebarChatMenuTests(TestCase):
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'href="{reverse("chat_inbox")}"')
+
+    def test_sidebar_auditoria_muestra_biblioteca_con_permiso(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_biblioteca,
+            ingresar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Auditoría Biblioteca")
+        self.assertNotContains(response, "Auditoría Gestión DTE")
+
+    def test_sidebar_auditoria_muestra_dte_con_permiso(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_gestiondte,
+            ingresar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Auditoría Gestión DTE")
+        self.assertNotContains(response, "Auditoría Biblioteca")
+
+    def test_sidebar_auditoria_muestra_ambos_permisos(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_biblioteca,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_gestiondte,
+            ingresar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Auditoría Biblioteca")
+        self.assertContains(response, "Auditoría Gestión DTE")
+
+    def test_sidebar_auditoria_oculta_sin_permisos(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Auditoría Biblioteca")
+        self.assertNotContains(response, "Auditoría Gestión DTE")
+
+    def test_sidebar_auditoria_no_requiere_superuser(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_auditoria_biblioteca,
+            ingresar=True,
+        )
+
+        self.user.is_superuser = False
+        self.user.save(update_fields=['is_superuser'])
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Auditoría Biblioteca")
