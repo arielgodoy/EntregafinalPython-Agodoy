@@ -90,7 +90,7 @@
             {% for batch in archive_batches %}
             <tr>
               <td>{{ batch.batch_id }}</td><td>{{ batch.created_at }}</td><td>{{ batch.company_ids|join:", " }}</td><td>{{ batch.cutoff_datetime }}</td><td>{{ batch.archive_count }}</td><td>{{ batch.get_status_display }}{% if batch.status == "FAILED" or batch.status == "PURGE_FAILED" %}<div class="small text-danger">{{ batch.archive_error_display }}</div>{% endif %}</td><td>{% if batch.source_checksum == batch.archive_checksum %}<span data-key="auditoria.archive.valid">Válido</span>{% else %}<span data-key="auditoria.archive.invalid">Inválido</span>{% endif %}</td><td>{% if batch.status == "PURGED" %}<span data-key="auditoria.archive.purged">Origen limpiado</span><div class="small">{{ batch.purged_count }} / {{ batch.source_count }}</div>{% elif batch.status == "PURGING" or batch.status == "PURGE_FAILED" %}<span data-key="auditoria.archive.purge_progress">Progreso</span><div class="small">{{ batch.purged_count }} / {{ batch.source_count }}</div>{% else %}<span data-key="auditoria.archive.not_purged">No limpiado</span>{% endif %}</td>
-              <td>{% if batch.status == "COMPLETED" %}<form method="post" class="d-inline"><input type="hidden" name="batch_id" value="{{ batch.batch_id }}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="action" value="preview_purge" type="submit" data-key="auditoria.archive.purge.preview">Vista previa de limpieza</button> <button class="btn btn-sm btn-outline-warning" name="action" value="dry_run" type="submit" data-key="auditoria.archive.purge.dry_run">Validar limpieza</button></form>{% elif batch.status == "PURGED" %}<span data-key="auditoria.archive.purge.disabled">No disponible</span>{% else %}<span data-key="auditoria.archive.purge.unavailable">Requiere snapshot validado</span>{% endif %}</td>
+              <td>{% if batch.status == "COMPLETED" %}<form method="post" class="d-inline"><input type="hidden" name="batch_id" value="{{ batch.batch_id }}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" name="action" value="preview_purge" type="submit" data-key="auditoria.archive.purge.preview">Vista previa de limpieza</button> <button class="btn btn-sm btn-outline-warning" name="action" value="dry_run" type="submit" data-key="auditoria.archive.purge.dry_run">Validar limpieza</button></form>{% elif batch.status == "PURGED" %}<span data-key="auditoria.archive.purge.disabled">No disponible</span>{% elif batch.status == "PURGE_FAILED" %}<span data-key="auditoria.archive.purge.review_required">Limpieza incompleta. Requiere revisión antes de reintentar.</span>{% else %}<span data-key="auditoria.archive.purge.unavailable">Requiere snapshot validado</span>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="9" class="text-center" data-key="auditoria.archive.no_batches">No hay snapshots.</td></tr>{% endfor %}
             </tbody>
@@ -98,9 +98,61 @@
         </div>
       </section>
 
-      {% if purge_preview %}<div class="alert alert-info mt-3" data-key="auditoria.archive.purge.preview.result">Eventos archivados: {{ purge_preview.source_count }}. Aún presentes: {{ purge_preview.remaining_in_source }}. Checksum histórico válido.</div>{% endif %}
+      {% if purge_preview %}
+      <section class="card shadow-sm bg-mode mt-3" aria-labelledby="purge-preview-heading">
+        <div class="card-header"><h2 class="h5 mb-0" id="purge-preview-heading" data-key="auditoria.archive.purge.preview.heading">Vista previa de limpieza</h2></div>
+        <div class="card-body">
+          <div class="alert alert-info" data-key="auditoria.archive.purge.preview.result">Eventos archivados: {{ purge_preview.source_count }}. Aún presentes: {{ purge_preview.remaining_in_source }}. Checksum histórico válido.</div>
+          <dl class="row mb-3">
+            <dt class="col-sm-4" data-key="auditoria.archive.app">Aplicación</dt><dd class="col-sm-8">{{ purge_preview.app_label }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.companies">Empresas</dt><dd class="col-sm-8">{{ purge_preview.company_ids|join:", " }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.batch">Batch ID</dt><dd class="col-sm-8">{{ purge_preview.batch_id }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.events">Cantidad archivada</dt><dd class="col-sm-8">{{ purge_preview.source_count }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.purge.remaining">Cantidad todavía presente en origen</dt><dd class="col-sm-8">{{ purge_preview.remaining_in_source }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.preview.cutoff">Fecha de corte</dt><dd class="col-sm-8">{{ purge_preview.cutoff_datetime }}</dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.purge.checksum">Estado checksum</dt><dd class="col-sm-8"><span data-key="auditoria.archive.valid">Válido</span></dd>
+            <dt class="col-sm-4" data-key="auditoria.archive.purge.to_delete">Cantidad que será eliminada</dt><dd class="col-sm-8">{{ purge_preview.remaining_in_source }}</dd>
+          </dl>
+          <p class="alert alert-warning mb-3" data-key="auditoria.archive.purge.warning">Los eventos serán eliminados de la base activa. La copia histórica permanecerá intacta. Esta operación no ejecuta VACUUM.</p>
+          {% if purge_ready %}
+          <form method="post" data-purge-confirmation>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="purge">
+            <input type="hidden" name="batch_id" value="{{ purge_preview.batch_id }}">
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="confirm_purge" value="on" id="confirm-purge">
+              <label class="form-check-label" for="confirm-purge" data-key="auditoria.archive.purge.confirm">Confirmo que revisé el preview y deseo eliminar estos eventos de la base activa.</label>
+            </div>
+            <button class="btn btn-warning" type="submit" disabled data-purge-submit data-key="auditoria.archive.purge.execute">Ejecutar limpieza</button>
+          </form>
+          {% else %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="dry_run">
+            <input type="hidden" name="batch_id" value="{{ purge_preview.batch_id }}">
+            <button class="btn btn-outline-warning" type="submit" data-key="auditoria.archive.purge.validate_again">Validar limpieza</button>
+          </form>
+          {% endif %}
+        </div>
+      </section>
+      {% endif %}
       {% if dry_run_result %}<div class="alert alert-success mt-3" data-key="auditoria.archive.purge.dry_run.result">Listo para limpiar. No se eliminó ningún evento.</div>{% endif %}
     </div>
   </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+{% if purge_ready %}
+<script>
+  document.querySelectorAll('[data-purge-confirmation]').forEach(function (form) {
+    var checkbox = form.querySelector('[name="confirm_purge"]');
+    var submit = form.querySelector('[data-purge-submit]');
+    checkbox.addEventListener('change', function () {
+      submit.disabled = !checkbox.checked;
+    });
+  });
+</script>
+{% endif %}
+{% endblock extra_js %}

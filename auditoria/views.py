@@ -3,12 +3,13 @@ from django.views.generic import ListView, DetailView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.http import Http404, JsonResponse
 from access_control.views import VerificarPermisoMixin
 from auditoria.models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence
 from auditoria.permissions import get_archivable_company_ids, get_auditable_company_ids, get_auditable_companies
 from auditoria.services import AuditoriaService
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -357,6 +358,7 @@ class AuditoriaArchiveView(VerificarPermisoMixin, LoginRequiredMixin, View):
             'snapshot_preview': None,
             'purge_preview': None,
             'dry_run_result': None,
+            'purge_ready': False,
         }
         context.update(extra)
         return context
@@ -366,6 +368,10 @@ class AuditoriaArchiveView(VerificarPermisoMixin, LoginRequiredMixin, View):
         batch = get_object_or_404(AuditArchiveBatch, batch_id=batch_id, app_label=self.app_label)
         if not set(batch.company_ids or []).issubset(company_ids):
             raise PermissionError('No tienes autorización para todas las empresas del batch.')
+        if batch.status == 'PURGED':
+            raise ValueError('El batch ya fue purgado.')
+        if batch.status != 'COMPLETED':
+            raise ValueError('El batch no está disponible para ejecutar limpieza.')
         return batch
 
     def get(self, request, *args, **kwargs):
@@ -432,13 +438,57 @@ class AuditoriaArchiveView(VerificarPermisoMixin, LoginRequiredMixin, View):
                     context['dry_run_result'] = AuditArchivePurgeService.purge(
                         batch.batch_id, request.user, dry_run=True,
                     )
+                    context['purge_preview'] = AuditArchivePurgeService.preview(batch.batch_id, request.user)
+                    context['purge_ready'] = True
+            elif action == 'purge':
+                batch = self._batch_for_action(request, company_ids)
+                if request.POST.get('confirm_purge') != 'on':
+                    raise ValueError('Debes confirmar la eliminación de eventos de la base activa.')
+                AuditArchivePurgeService.purge(
+                    batch.batch_id, request.user, dry_run=True,
+                )
+                purged_batch = AuditArchivePurgeService.purge(
+                    batch.batch_id, request.user, dry_run=False,
+                )
+                from auditoria.helpers import audit_log
+
+                audit_log(
+                    request,
+                    'EXECUTE',
+                    self.app_label,
+                    object_type='audit_archive_purge',
+                    object_id=purged_batch.batch_id,
+                    vista_nombre=self.vista_nombre,
+                    message_key='auditoria.snapshot.purgado',
+                    meta={
+                        'batch_id': purged_batch.batch_id,
+                        'purged_count': purged_batch.purged_count,
+                        'company_ids': list(purged_batch.company_ids or []),
+                    },
+                )
+                messages.success(
+                    request,
+                    f'Limpieza completada correctamente. Se eliminaron {purged_batch.purged_count} eventos de la base activa.',
+                )
+                return redirect(request.path)
         except PermissionError as exc:
             context['archive_error'] = str(exc)
             return render(request, self.archive_template, context, status=403)
         except ValueError as exc:
-            context['archive_error'] = 'No fue posible completar la operación de archivado.'
+            if action == 'purge' and str(exc) in {
+                'Debes confirmar la eliminación de eventos de la base activa.',
+                'El batch ya fue purgado.',
+            }:
+                context['archive_error'] = str(exc)
+            elif action == 'purge':
+                context['archive_error'] = 'No fue posible completar la limpieza. El batch quedó marcado para revisión.'
+            else:
+                context['archive_error'] = 'No fue posible completar la operación de archivado.'
         except Exception:
-            context['archive_error'] = 'No fue posible validar la operación de archivado.'
+            if action == 'purge':
+                context['archive_error'] = 'No fue posible completar la limpieza. El batch quedó marcado para revisión.'
+            else:
+                context['archive_error'] = 'No fue posible validar la operación de archivado.'
         return render(request, self.archive_template, context)
 
 
