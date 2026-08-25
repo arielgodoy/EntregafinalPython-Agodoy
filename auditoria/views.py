@@ -20,6 +20,7 @@ from access_control.models import Vista, Permiso
 from auditoria.archive_service import AuditArchiveService
 from auditoria.models import AuditArchiveBatch
 from auditoria.purge_service import AuditArchivePurgeService
+from auditoria.historical_query_service import HistoricalAuditQueryService
 
 
 class AuditoriaPermissionMixin:
@@ -185,6 +186,7 @@ class AuditoriaBibliotecaListView(AuditoriaPermissionMixin, ListView):
         ).order_by("-last_seen")
         context["audit_latest_views_url_name"] = self.audit_latest_views_url_name
         context["audit_title"] = self.audit_title
+        context["audit_app_label"] = self.audit_app_label
         context["audit_list_url_name"] = self.audit_list_url_name
         context["audit_detail_url_name"] = self.audit_detail_url_name
         context["archive_url_name"] = (
@@ -273,6 +275,37 @@ class AuditoriaGestionDTEListView(AuditoriaBibliotecaListView):
     audit_app_label = "gestiondte"
     audit_latest_views_url_name = "auditoria:auditoria_gestiondte_latest_views"
 
+    def get_queryset(self):
+        active_events = list(super().get_queryset())
+        for event in active_events:
+            event.source = 'active'
+            event.batch_id = ''
+
+        source_filter = self.request.GET.get('source', 'all')
+        if source_filter not in {'all', 'active', 'historical'}:
+            source_filter = 'all'
+        if source_filter == 'active':
+            return active_events
+
+        filters = {
+            key: self.request.GET.get(key, '')
+            for key in ('user', 'action', 'object_type', 'object_id', 'vista_nombre', 'path', 'date_from', 'date_to')
+        }
+        historical_events = HistoricalAuditQueryService.query(
+            'gestiondte', self.auditable_company_ids, filters,
+        )
+        if source_filter == 'historical':
+            return historical_events
+
+        active_ids = {event.pk for event in active_events}
+        combined = active_events + [event for event in historical_events if event.source_event_id not in active_ids]
+        return sorted(combined, key=lambda event: (event.created_at, event.pk), reverse=True)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['source_filter'] = self.request.GET.get('source', 'all')
+        return context
+
 
 class AuditoriaGestionDTEDetailView(AuditoriaBibliotecaDetailView):
     model = AuditoriaGestionDTEEvent
@@ -280,6 +313,16 @@ class AuditoriaGestionDTEDetailView(AuditoriaBibliotecaDetailView):
     audit_title = "Auditoría Gestión DTE"
     audit_list_url_name = "auditoria:auditoria_gestiondte_list"
     audit_app_label = "gestiondte"
+
+
+class AuditoriaGestionDTEHistoricalDetailView(AuditoriaGestionDTEDetailView):
+    def get_object(self, queryset=None):
+        event = HistoricalAuditQueryService.get_event(
+            'gestiondte', self.kwargs['pk'], self.auditable_company_ids,
+        )
+        if event is None:
+            raise Http404
+        return event
 
 
 class AuditoriaBibliotecaLatestViewsView(AuditoriaPermissionMixin, View):

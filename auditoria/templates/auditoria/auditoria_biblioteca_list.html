@@ -99,6 +99,16 @@
 
                 <div class="row g-2">
 
+                    {% if audit_app_label == "gestiondte" %}
+                    <div class="col-md-2">
+                        <select name="source" class="form-select">
+                            <option value="all" {% if source_filter == "all" %}selected{% endif %}>Todos los orígenes</option>
+                            <option value="active" {% if source_filter == "active" %}selected{% endif %}>Actual</option>
+                            <option value="historical" {% if source_filter == "historical" %}selected{% endif %}>Histórico</option>
+                        </select>
+                    </div>
+                    {% endif %}
+
                     <div class="col-md-2">
                         <input type="text" name="user" class="form-control"
                                placeholder="Usuario"
@@ -195,6 +205,7 @@
                             <th data-key="table_user">Usuario</th>
                             <th data-key="table_company">Empresa</th>
                             <th data-key="table_action">Acción</th>
+                            {% if audit_app_label == "gestiondte" %}<th data-key="table_source">Origen</th>{% endif %}
                             <th data-key="table_view">Vista</th>
                             <th data-key="table_type">Tipo</th>
                             <th data-key="table_id">ID</th>
@@ -210,14 +221,22 @@
                         <tr>
                             <td>{{ evento.created_at }}</td>
                             <td>{{ evento.user }}</td>
-                            <td>
+                            {% if audit_app_label == "gestiondte" %}<td>
                                 {% for empresa in empresas_autorizadas %}
                                     {% if empresa.id == evento.empresa_id %}
                                         {{ empresa.codigo }} - {{ empresa.descripcion|default:"Sin descripción" }}
                                     {% endif %}
                                 {% endfor %}
-                            </td>
+                            </td>{% endif %}
                             <td>{{ evento.action }}</td>
+                            <td>
+                                {% if evento.source == "historical" %}
+                                    <span class="badge bg-secondary">Histórico</span>
+                                    <div class="small text-muted">{{ evento.batch_id }}</div>
+                                {% else %}
+                                    <span class="badge bg-success">Actual</span>
+                                {% endif %}
+                            </td>
                             <td>{{ evento.vista_nombre }}</td>
                             <td>{{ evento.object_type }}</td>
                             <td>{{ evento.object_id }}</td>
@@ -225,7 +244,7 @@
                             <td>{{ evento.status_code }}</td>
                             <td>{{ evento.duration_ms }}</td>
                             <td>
-                                <a href="{% url audit_detail_url_name evento.pk %}"
+                                <a href="{% if evento.source == "historical" %}{% url 'auditoria:auditoria_gestiondte_historical_detail' evento.pk %}{% else %}{% url audit_detail_url_name evento.pk %}{% endif %}"
                                    class="btn btn-sm btn-primary"
                                    data-key="btn_view">
                                     Ver

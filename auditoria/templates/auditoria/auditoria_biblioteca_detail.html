@@ -29,6 +29,7 @@
                     <tr><th data-key="field_user">Usuario</th><td>{{ evento.user }}</td></tr>
                     <tr><th data-key="field_company">Empresa</th><td>{{ evento.empresa_id }}</td></tr>
                     <tr><th data-key="field_action">Acción</th><td>{{ evento.action }}</td></tr>
+                    <tr><th data-key="field_source">Origen</th><td>{% if evento.source == "historical" %}Histórico ({{ evento.batch_id }}){% else %}Actual{% endif %}</td></tr>
                     <tr><th data-key="field_view">Vista</th><td>{{ evento.vista_nombre }}</td></tr>
                     <tr><th data-key="field_method">Método</th><td>{{ evento.method }}</td></tr>
                     <tr><th data-key="field_path">Path</th><td>{{ evento.path }}</td></tr>
