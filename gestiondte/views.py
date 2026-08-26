@@ -176,13 +176,45 @@ def _rpetc_filtered_queryset(empresa_activa, filtros):
     return base
 
 
+def _rpetc_pagos_pendientes_ids(estados_por_pk, *, sin_pago_factoring=False, sin_pago_proveedor=False):
+    """Return the ids that match the validated operational filters."""
+    if not (sin_pago_factoring or sin_pago_proveedor):
+        return set(estados_por_pk)
+
+    pending_ids = set()
+    for pk, state in (estados_por_pk or {}).items():
+        state = state or {}
+        factoring = state.get('pagada_factoring') or {}
+        proveedor = state.get('pagada_proveedor') or {}
+        factoring_estado = factoring.get('estado')
+        proveedor_estado = proveedor.get('estado')
+
+        factor_pending = factoring_estado in {'NO_PAGADA', 'REVISAR'} if factoring_estado else False
+        proveedor_pending = proveedor_estado in {'NO_PAGADA', 'REVISAR'} if proveedor_estado else False
+
+        if sin_pago_factoring and sin_pago_proveedor:
+            if factor_pending and proveedor_pending:
+                pending_ids.add(pk)
+        elif sin_pago_factoring:
+            if factor_pending:
+                pending_ids.add(pk)
+        elif sin_pago_proveedor:
+            if proveedor_pending:
+                pending_ids.add(pk)
+
+    return pending_ids
+
+
 def _rpetc_request_filters(request):
     today = timezone.localdate()
     filters = {
         key: request.GET.get(key, '').strip()
         for key in ('rut_proveedor', 'tipo_doc', 'folio', 'estado', 'fecha_desde', 'fecha_hasta')
     }
-    filters = {key: value for key, value in filters.items() if value}
+    for key in ('sin_pago_factoring', 'sin_pago_proveedor'):
+        value = request.GET.get(key, '')
+        filters[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
+    filters = {key: value for key, value in filters.items() if value not in ('', False, None)}
     filters.setdefault('fecha_desde', today.replace(day=1).isoformat())
     filters.setdefault('fecha_hasta', today.isoformat())
     for key in ('fecha_desde', 'fecha_hasta'):
@@ -228,7 +260,10 @@ def cesiones(request):
         key: request.GET.get(key, '').strip()
         for key in ('rut_proveedor', 'tipo_doc', 'folio', 'estado', 'fecha_desde', 'fecha_hasta')
     }
-    filtros = {key: value for key, value in filtros.items() if value}
+    for key in ('sin_pago_factoring', 'sin_pago_proveedor'):
+        value = request.GET.get(key, '')
+        filtros[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
+    filtros = {key: value for key, value in filtros.items() if value not in ('', False, None)}
     today = timezone.localdate()
     filtros.setdefault('fecha_desde', today.replace(day=1))
     filtros.setdefault('fecha_hasta', today)
@@ -395,6 +430,34 @@ def cesiones_data(request):
             | Q(cedente_rut__icontains=search)
             | Q(cesionario_rut__icontains=search)
         )
+    sin_pago_factoring = bool(filters.get('sin_pago_factoring'))
+    sin_pago_proveedor = bool(filters.get('sin_pago_proveedor'))
+    if sin_pago_factoring or sin_pago_proveedor:
+        candidate_ids = list(filtered.values_list('pk', flat=True))
+        states_by_pk = {}
+        for start in range(0, len(candidate_ids), 250):
+            chunk_ids = candidate_ids[start:start + 250]
+            cesiones_chunk = list(CesionRPETC.objects.filter(pk__in=chunk_ids).order_by('pk'))
+            if not cesiones_chunk:
+                continue
+            try:
+                from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
+                states_by_pk.update(obtener_estados_contables_cesiones(empresa_activa.codigo, cesiones_chunk))
+            except Exception:
+                states_by_pk.update({
+                    cesion.pk: {
+                        'contabilizacion': {'estado': 'NO_DISPONIBLE'},
+                        'pagada_factoring': {'estado': 'NO_DISPONIBLE'},
+                        'pagada_proveedor': {'estado': 'NO_DISPONIBLE'},
+                    }
+                    for cesion in cesiones_chunk
+                })
+        pending_ids = _rpetc_pagos_pendientes_ids(
+            states_by_pk,
+            sin_pago_factoring=sin_pago_factoring,
+            sin_pago_proveedor=sin_pago_proveedor,
+        )
+        filtered = filtered.filter(pk__in=sorted(pending_ids))
     total = base.values('pk').count()
     filtered_total = filtered.values('pk').count()
     filtered_ids = filtered.values('pk')

@@ -11,6 +11,7 @@ from gestiondte.services.rpetc_contabilidad import (
     normalizar_rut_legacy,
     obtener_estados_contables_cesiones,
 )
+from gestiondte.views import _rpetc_pagos_pendientes_ids
 
 
 class LegacyCursor:
@@ -65,6 +66,29 @@ class FakeCesion:
 
 
 class RPETCLegacyServiceTest(SimpleTestCase):
+    def test_rpetc_pagos_pendientes_usa_interseccion_y_no_or(self):
+        states = {
+            1: {'pagada_factoring': {'estado': 'NO_PAGADA'}, 'pagada_proveedor': {'estado': 'PAGADA_PROVEEDOR'}},
+            2: {'pagada_factoring': {'estado': 'REVISAR'}, 'pagada_proveedor': {'estado': 'NO_PAGADA'}},
+            3: {'pagada_factoring': {'estado': 'PAGADA_FACTORING'}, 'pagada_proveedor': {'estado': 'NO_PAGADA'}},
+            4: {'pagada_factoring': {'estado': 'NO_PAGADA'}, 'pagada_proveedor': {'estado': 'NO_PAGADA'}},
+            5: {'pagada_factoring': {'estado': 'NO_DISPONIBLE'}, 'pagada_proveedor': {'estado': 'NO_PAGADA'}},
+        }
+        self.assertEqual(_rpetc_pagos_pendientes_ids(states, sin_pago_factoring=True, sin_pago_proveedor=False), {1, 2, 4})
+        self.assertEqual(_rpetc_pagos_pendientes_ids(states, sin_pago_factoring=False, sin_pago_proveedor=True), {2, 3, 4, 5})
+        self.assertEqual(_rpetc_pagos_pendientes_ids(states, sin_pago_factoring=True, sin_pago_proveedor=True), {2, 4})
+
+    def test_proveedor_usa_monto_total_y_no_monto_cesion(self):
+        cesion = FakeCesion()
+        cesion.monto_total = Decimal("1764799")
+        cesion.monto_cesion = Decimal("999000")
+        rows = [("0763761428", "FC", "0000002587", 1764799.0, "D", None, None, None, "CANCELA DOCUMENTO", "u", None, None, "DB", "23100026")]
+        with patch("gestiondte.services.rpetc_contabilidad._config_legacy") as config, patch("gestiondte.services.rpetc_contabilidad.pymysql.connect") as connect:
+            connect.return_value = FakeConnection(rows)
+            config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+            result = obtener_estados_contables_cesiones("09", [cesion])
+        self.assertEqual(result[1]["pagada_proveedor"]["estado"], "PAGADA_PROVEEDOR")
+
     def test_normaliza_rut_y_folio(self):
         self.assertEqual(normalizar_rut_legacy("76.376.142", "8"), "0763761428")
         self.assertEqual(normalizar_rut_legacy("07762388", "k"), "007762388K")

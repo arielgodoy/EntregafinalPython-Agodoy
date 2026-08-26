@@ -264,7 +264,10 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
         ):
             keys_for_role = key_by_cesion[cesion.pk][role]
             if keys_for_role:
-                expected = cesion.monto_total if role == "contabilizacion" else cesion.monto_cesion
+                if role in {"contabilizacion", "pagada_proveedor"}:
+                    expected = cesion.monto_total
+                else:
+                    expected = cesion.monto_cesion
                 movements = [
                     movement
                     for candidate_key in keys_for_role
