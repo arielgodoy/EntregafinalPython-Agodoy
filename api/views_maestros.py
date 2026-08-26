@@ -10,6 +10,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from access_control.decorators import verificar_permiso
+from access_control.models import Empresa
+from api.decorators import require_api_authentication, require_api_empresa, require_api_permission
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +366,7 @@ def _ensure_django_alias_configured_from_cfg(cfg) -> bool:
     return True
 
 
-def _resolve_db_for_request(request):
+def resolve_db_for_empresa(empresa):
     """Resuelve el modo de conexión para el request.
 
     Retorna:
@@ -378,14 +380,7 @@ def _resolve_db_for_request(request):
     if not hasattr(connections, "databases"):
         return ("django", None)
 
-    empresa_id = None
-    try:
-        if hasattr(request, "session"):
-            empresa_id = request.session.get("empresa_id")
-    except Exception:
-        empresa_id = None
-
-    if not empresa_id:
+    if empresa is None:
         # Sin empresa activa: si el alias ya existe, usarlo; si no, fallar.
         try:
             _ = connections[DB_ALIAS]
@@ -393,7 +388,7 @@ def _resolve_db_for_request(request):
         except Exception:
             return None
 
-    cfg = _get_active_mysql_connection_cfg_for_empresa(empresa_id)
+    cfg = _get_active_mysql_connection_cfg_for_empresa(empresa.id)
 
     if not cfg:
         try:
@@ -413,6 +408,19 @@ def _resolve_db_for_request(request):
         return None
 
     return ("django", cfg)
+
+
+def _resolve_db_for_request(request):
+    """Compatibilidad para endpoints que todavía resuelven empresa desde sesión."""
+
+    empresa = None
+    try:
+        empresa_id = request.session.get("empresa_id")
+        if empresa_id:
+            empresa = Empresa.objects.filter(pk=empresa_id).first()
+    except Exception:
+        empresa = None
+    return resolve_db_for_empresa(empresa)
 
 
 @contextmanager
@@ -1034,9 +1042,8 @@ def _tipos_documentos_delete(request, tipos):
         return JsonResponse({"detail": "No se pudo eliminar tipo de documento."}, status=500)
 
 
-@verificar_permiso(VISTA_NOMBRE_LOCALES, "ingresar")
 def _locales_list(request):
-    resolved = _resolve_db_for_request(request)
+    resolved = resolve_db_for_empresa(request.api_empresa)
     if not resolved:
         return _db_alias_not_configured_response()
 
@@ -1063,6 +1070,18 @@ def _locales_list(request):
     except Exception as e:
         logger.error("maestros_locales_list error (%s)", type(e).__name__)
         return JsonResponse({"detail": "Error interno."}, status=500)
+
+
+@require_api_authentication
+@require_api_empresa
+@require_api_permission(VISTA_NOMBRE_LOCALES, "ingresar")
+def _locales_list_api(request):
+    return _locales_list(request)
+
+
+@login_required
+def _locales_create_authenticated(request):
+    return _locales_create(request)
 
 
 @verificar_permiso(VISTA_NOMBRE_LOCALES, "ingresar")
@@ -1561,13 +1580,12 @@ def maestros_tipos_documentos_detail(request, tipos):
     return _tipos_documentos_delete(request, tipos)
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def maestros_locales_list(request):
     if request.method == "GET":
-        return _locales_list(request)
+        return _locales_list_api(request)
 
-    return _locales_create(request)
+    return _locales_create_authenticated(request)
 
 
 @login_required

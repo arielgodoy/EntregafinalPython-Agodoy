@@ -3,6 +3,7 @@ from rest_framework import routers
 from api.views import PropietarioViewSet, TrabajadoresViewSet, invite_user, employees_active, api_home
 from . import views_maestros
 from . import views_movimientos
+from .auth_views import whoami
 
 router = routers.DefaultRouter()
 
@@ -13,6 +14,7 @@ router.register(r'trabajadores', TrabajadoresViewSet, basename='trabajadores')
 urlpatterns = [
 
     path('ui/', api_home, name='api_home'),
+    path('auth/whoami/', whoami, name='api_auth_whoami'),
 
     path(
         "maestros/rubros/",

@@ -5,6 +5,8 @@ VISTAS = [
     {"nombre": "Settings - Configuracion de Empresa", "descripcion": "Configuración por empresa (UI)"},
     {"nombre": "Settings - Emails Acounts", "descripcion": "Cuentas de correo del sistema"},
     {"nombre": "Settings - Configuración del Sistema", "descripcion": "Configuración global del sistema"},
+    {"nombre": "API - Acceso", "descripcion": "Acceso a la API protegido por ICMEAS"},
+    {"nombre": "API - Maestros Locales", "descripcion": "Acceso API al maestro de locales"},
 ]
 
 

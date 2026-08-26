@@ -1,5 +1,6 @@
 
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Contratopublicidad(models.Model):
@@ -49,4 +50,29 @@ class LmovimientosDetalle19(models.Model):
         managed = False
         db_table = 'l_movimientos_detalle_19'
         unique_together = (('tipo', 'numero', 'linea', 'rut', 'fecha', 'codigo', 'bodega'),)
+
+
+class ApiToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=150)
+    prefix = models.CharField(max_length=32, unique=True)
+    token_hash = models.CharField(max_length=64, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_api_tokens",
+    )
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+
+        return self.expires_at is not None and self.expires_at <= timezone.now()
 

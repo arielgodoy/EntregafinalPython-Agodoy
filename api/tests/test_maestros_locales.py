@@ -6,6 +6,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
+from api.services.api_tokens import create_api_token
 
 
 class _DummyCursor:
@@ -58,6 +59,7 @@ class MaestrosLocalesApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="u", password="p")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 1")
+        self.vista_locales = Vista.objects.create(nombre="API - Maestros Locales")
 
         self.client = Client()
         self.client.force_login(self.user)
@@ -68,13 +70,10 @@ class MaestrosLocalesApiTests(TestCase):
         session.save()
 
     def _grant_all_perms(self):
-        from api.views_maestros import VISTA_NOMBRE_LOCALES
-
-        vista = Vista.objects.create(nombre=VISTA_NOMBRE_LOCALES)
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
-            vista=vista,
+            vista=self.vista_locales,
             ingresar=True,
             crear=True,
             modificar=True,
@@ -82,6 +81,19 @@ class MaestrosLocalesApiTests(TestCase):
             autorizar=False,
             supervisor=False,
         )
+
+    def _grant_ingresar(self, user, empresa, *, supervisor=False, ingresar=True):
+        return Permiso.objects.create(
+            usuario=user,
+            empresa=empresa,
+            vista=self.vista_locales,
+            ingresar=ingresar,
+            supervisor=supervisor,
+        )
+
+    def _create_bearer_token(self):
+        _, token_value = create_api_token(user=self.user, name="Locales test")
+        return token_value
 
     def test_get_list_returns_rows_and_colacion_numeric(self):
         self._grant_all_perms()
@@ -149,6 +161,158 @@ class MaestrosLocalesApiTests(TestCase):
         self.assertIs(isinstance(payload[0]["colacion"], bool), False)
 
         self.assertEqual(cursor.executed[0][0], SQL_MAESTROS_LOCALES_LIST)
+
+    def test_bearer_allowed_uses_validated_empresa_and_preserves_json(self):
+        token_value = self._create_bearer_token()
+        self._grant_ingresar(self.user, self.empresa)
+        cursor = _DummyCursor(
+            description=[("codigo",), ("nombrelocal",)],
+            rows=[("01", "Local 1")],
+        )
+        dummy_connections = _DummyConnections(_DummyConnection(cursor))
+
+        with patch("api.views_maestros.connections", dummy_connections), patch(
+            "api.views_maestros.resolve_db_for_empresa",
+            return_value=("django", None),
+        ) as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=01&rubro=02",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+                HTTP_ACCEPT="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{"codigo": "01", "nombrelocal": "Local 1"}])
+        self.assertEqual(resolve_db.call_args.args[0], self.empresa)
+
+    def test_bearer_without_permission_does_not_open_connection(self):
+        token_value = self._create_bearer_token()
+
+        with patch("api.views_maestros.resolve_db_for_empresa") as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=01",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+
+        self.assertEqual(response.status_code, 403)
+        resolve_db.assert_not_called()
+
+    def test_bearer_other_empresa_permission_does_not_open_connection(self):
+        token_value = self._create_bearer_token()
+        self._grant_ingresar(self.user, self.empresa)
+        other_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa 2")
+
+        with patch("api.views_maestros.resolve_db_for_empresa") as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=02",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+
+        self.assertEqual(response.status_code, 403)
+        resolve_db.assert_not_called()
+
+    def test_bearer_missing_empresa_does_not_open_connection(self):
+        token_value = self._create_bearer_token()
+
+        with patch("api.views_maestros.resolve_db_for_empresa") as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list"),
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        resolve_db.assert_not_called()
+
+    def test_bearer_unknown_empresa_does_not_open_connection(self):
+        token_value = self._create_bearer_token()
+
+        with patch("api.views_maestros.resolve_db_for_empresa") as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=99",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+
+        self.assertEqual(response.status_code, 404)
+        resolve_db.assert_not_called()
+
+    def test_bearer_invalid_does_not_open_connection(self):
+        with patch("api.views_maestros.resolve_db_for_empresa") as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=01",
+                HTTP_AUTHORIZATION="Bearer invalid-token",
+            )
+
+        self.assertEqual(response.status_code, 401)
+        resolve_db.assert_not_called()
+
+    def test_session_explicit_empresa_uses_selected_empresa_without_changing_session(self):
+        other_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa 2")
+        self._grant_ingresar(self.user, other_empresa)
+        original_empresa_id = self.client.session["empresa_id"]
+        tokenless_connection_result = ("django", None)
+        dummy_connections = _DummyConnections(_DummyConnection(_DummyCursor()))
+
+        with patch("api.views_maestros.connections", dummy_connections), patch(
+            "api.views_maestros.resolve_db_for_empresa",
+            return_value=tokenless_connection_result,
+        ) as resolve_db:
+            response = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=02",
+                HTTP_ACCEPT="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(resolve_db.call_args.args[0], other_empresa)
+        self.assertEqual(self.client.session["empresa_id"], original_empresa_id)
+
+    def test_same_bearer_uses_two_authorized_companies(self):
+        token_value = self._create_bearer_token()
+        other_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa 2")
+        self._grant_ingresar(self.user, self.empresa)
+        self._grant_ingresar(self.user, other_empresa)
+        dummy_connections = _DummyConnections(_DummyConnection(_DummyCursor()))
+
+        with patch("api.views_maestros.connections", dummy_connections), patch(
+            "api.views_maestros.resolve_db_for_empresa",
+            return_value=("django", None),
+        ) as resolve_db:
+            first = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=01",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+            second = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=02",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(resolve_db.call_args_list[0].args[0], self.empresa)
+        self.assertEqual(resolve_db.call_args_list[1].args[0], other_empresa)
+
+    def test_ingresar_false_and_supervisor_preserve_icmeas_semantics(self):
+        token_value = self._create_bearer_token()
+        self._grant_ingresar(self.user, self.empresa, ingresar=False)
+        denied = self.client.get(
+            reverse("api_maestros_locales_list") + "?empresa=01",
+            HTTP_AUTHORIZATION=f"Bearer {token_value}",
+        )
+        self.assertEqual(denied.status_code, 403)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_locales,
+        )
+        permiso.supervisor = True
+        permiso.save(update_fields=["supervisor"])
+        dummy_connections = _DummyConnections(_DummyConnection(_DummyCursor()))
+        with patch("api.views_maestros.connections", dummy_connections):
+            allowed = self.client.get(
+                reverse("api_maestros_locales_list") + "?empresa=01",
+                HTTP_AUTHORIZATION=f"Bearer {token_value}",
+            )
+        self.assertEqual(allowed.status_code, 200)
 
     def test_get_detail_missing_returns_404(self):
         self._grant_all_perms()
