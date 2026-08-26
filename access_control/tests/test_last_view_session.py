@@ -125,6 +125,31 @@ class LastViewSessionTests(SimpleTestCase):
         self.assertTrue(should_record_last_view(request))
         self.assertEqual(request.get_full_path(), "/gestiondte/cesiones/?mes=8&anio=2026")
 
+    def test_topbar_fetch_does_not_replace_existing_last_view(self):
+        request = self._make_request(
+            path="/notificaciones/topbar/",
+            query_string="?type=ALL&page=1&page_size=10",
+            accept="text/html",
+        )
+        request.session[LAST_VIEW_SESSION_KEY] = "/gestiondte/cesiones/?mes=8&anio=2026"
+        self.assertFalse(should_record_last_view(request))
+        self.assertEqual(request.session[LAST_VIEW_SESSION_KEY], "/gestiondte/cesiones/?mes=8&anio=2026")
+
+    def test_topbar_fetch_does_not_create_last_view_when_empty(self):
+        request = self._make_request(
+            path="/notificaciones/topbar/",
+            query_string="?type=ALL&page=1&page_size=10",
+            accept="text/html",
+        )
+        self.assertFalse(should_record_last_view(request))
+        self.assertNotIn(LAST_VIEW_SESSION_KEY, request.session)
+
+    def test_stale_topbar_session_value_is_ignored_for_redirect(self):
+        request = self._make_request(path="/access-control/seleccionar_empresa/")
+        request.session[LAST_VIEW_SESSION_KEY] = "/notificaciones/topbar/?type=ALL&page=1&page_size=10"
+        target = get_safe_redirect_target(request, fallback_url="/", candidate_urls=[])
+        self.assertEqual(target, "/")
+
     def test_permission_denied_is_not_dashboard_fallback(self):
         request = self._make_request(path="/access-control/seleccionar_empresa/")
         target = get_safe_redirect_target(

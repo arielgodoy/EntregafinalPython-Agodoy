@@ -10,6 +10,7 @@ EXCLUDED_NAVIGATION_PATHS = (
     "/static/",
     "/media/",
     "/api/",
+    "/notificaciones/topbar/",
     "/notificaciones/forzar/",
     "/notificaciones/alerta-personalizada/",
     "/settings/fecha-sistema/",
@@ -21,9 +22,33 @@ EXCLUDED_NAVIGATION_PATHS = (
 )
 
 
+def is_technical_navigation_path(path):
+    normalized = (path or "/").strip()
+    if not normalized.startswith("/"):
+        return False
+
+    try:
+        match = resolve(normalized)
+    except Exception:
+        return False
+
+    namespace = (match.namespace or "").strip().lower()
+    url_name = (match.url_name or "").strip().lower()
+    if namespace == "notificaciones" and url_name in {"topbar", "mark_read", "mark_all_read"}:
+        return True
+
+    view_name = (match.view_name or "").strip()
+    if view_name.startswith("api."):
+        return True
+
+    return False
+
+
 def is_excluded_navigation_path(path):
     normalized = (path or "/").strip()
     if not normalized.startswith("/"):
+        return True
+    if is_technical_navigation_path(normalized):
         return True
     return any(
         normalized == excluded or normalized.startswith(excluded)
