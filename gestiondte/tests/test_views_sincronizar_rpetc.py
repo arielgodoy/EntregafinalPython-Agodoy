@@ -62,7 +62,7 @@ class SincronizarRPETCViewTest(TestCase):
 
     def test_control_cesiones_usa_inicio_del_ano_actual_en_contexto_y_ajax(self):
         for today in (date(2027, 3, 15), date(2028, 1, 2)):
-            with self.subTest(today=today), patch('gestiondte.views.timezone.localdate', return_value=today):
+            with self.subTest(today=today), patch('gestiondte.views._fecha_sistema_request', return_value=today):
                 response = self.client.get(reverse('gestion_dte:cesiones'))
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context['filtros']['fecha_desde'], date(today.year, 1, 1))
@@ -72,6 +72,29 @@ class SincronizarRPETCViewTest(TestCase):
                 self.assertEqual(filters['fecha_hasta'], today)
                 self.assertContains(response, f'value="{today.year}-01-01"')
                 self.assertContains(response, f'value="{today.isoformat()}"')
+
+    def test_control_cesiones_defaults_usan_fecha_sistema_y_no_fecha_real(self):
+        for system_date in (date(2025, 12, 31), date(2025, 8, 15), date(2027, 1, 2)):
+            with self.subTest(system_date=system_date), patch(
+                'gestiondte.views._fecha_sistema_request', return_value=system_date,
+            ), patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 27)):
+                response = self.client.get(reverse('gestion_dte:cesiones'))
+                request = response.wsgi_request
+                filters = _rpetc_request_filters(request)
+                self.assertEqual(filters['fecha_desde'], date(system_date.year, 1, 1))
+                self.assertEqual(filters['fecha_hasta'], system_date)
+                self.assertEqual(response.context['filtros']['fecha_desde'], date(system_date.year, 1, 1))
+                self.assertEqual(response.context['filtros']['fecha_hasta'], system_date)
+                self.assertContains(response, f'value="{system_date.year}-01-01"')
+                self.assertContains(response, f'value="{system_date.isoformat()}"')
+
+    def test_control_cesiones_defaults_conservan_fechas_explicitas(self):
+        with patch('gestiondte.views._fecha_sistema_request', return_value=date(2025, 12, 31)):
+            response = self.client.get(reverse('gestion_dte:cesiones'), {
+                'fecha_desde': '2025-03-01', 'fecha_hasta': '2025-03-31',
+            })
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2025, 3, 1))
+        self.assertEqual(response.context['filtros']['fecha_hasta'], date(2025, 3, 31))
 
     def test_control_cesiones_limpiar_conserva_defaults_anuales_y_pagos(self):
         today = date(2026, 8, 27)
@@ -236,8 +259,8 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['cesiones_por_fecha']), [])
 
-    @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
-    def test_sin_get_aplica_default_anual_al_queryset(self, localdate):
+    @patch('gestiondte.views._fecha_sistema_request', return_value=date(2026, 8, 20))
+    def test_sin_get_aplica_default_anual_al_queryset(self, fecha_sistema):
         tarea = TareaRPETC.objects.create(
             empresa=self.empresa, id_tarea='task-defaults', tipo_consulta='DEUDOR',
             rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 8, 1),
@@ -260,7 +283,6 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(response.context['filtros']['fecha_hasta'], date(2026, 8, 20))
         self.assertEqual(response.context['total_cesiones_rpetc'], 1)
         self.assertEqual(response.context['cesiones_detalle'], [])
-        localdate.assert_called_once_with()
 
     @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
     def test_get_explicito_conserva_fechas(self, localdate):

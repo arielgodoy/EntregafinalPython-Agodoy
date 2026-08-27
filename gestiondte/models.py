@@ -219,6 +219,48 @@ class CesionRPETC(models.Model):
         return f'{self.id_cesion} - {self.tipo_doc}/{self.folio_doc}'
 
 
+class RevisionCesionRPETC(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='revisiones_cesiones_rpetc')
+    cesion = models.ForeignKey(CesionRPETC, on_delete=models.CASCADE, related_name='revisiones')
+    glosa = models.TextField(max_length=2000)
+    creado_por = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='revisiones_cesiones_creadas')
+    creado_en = models.DateTimeField(auto_now_add=True)
+    modificado_por = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='revisiones_cesiones_modificadas')
+    modificado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'cesion'], name='revision_cesion_empresa_unica'),
+        ]
+        indexes = [
+            models.Index(fields=['empresa', 'cesion'], name='revision_cesion_emp_idx'),
+        ]
+
+
+class RevisionCesionComentario(models.Model):
+    revision = models.ForeignKey(
+        RevisionCesionRPETC,
+        on_delete=models.CASCADE,
+        related_name='comentarios',
+    )
+    comentario = models.TextField(max_length=2000)
+    creado_por = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='comentarios_revision_cesiones_creados',
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    modificado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['creado_en', 'pk']
+
+    def __str__(self):
+        return f'Revisión {self.revision_id} - comentario {self.pk}'
+
+
 class EstadoContableCesion(models.Model):
     ESTADO_CONTABILIZACION_CHOICES = (
         ('CONTABILIZADA', 'Contabilizada'),
