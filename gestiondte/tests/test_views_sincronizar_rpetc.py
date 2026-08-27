@@ -15,6 +15,7 @@ from gestiondte.models import (
 )
 from auditoria.models import AuditoriaGestionDTEEvent
 from gestiondte.views import _rpetc_request_filters
+from settings.models import UserPreferences
 
 
 class SincronizarRPETCViewTest(TestCase):
@@ -35,6 +36,10 @@ class SincronizarRPETCViewTest(TestCase):
         session = self.client.session
         session['empresa_id'] = self.empresa.id
         session.save()
+        UserPreferences.objects.update_or_create(
+            user=self.user,
+            defaults={'fecha_sistema': date(2026, 8, 27)},
+        )
         CertificadoSII.objects.create(
             empresa_codigo='09', archivo='certificado.pfx', activo=True,
         )
@@ -100,6 +105,42 @@ class SincronizarRPETCViewTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'rango solicitado')
+
+    @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
+    @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')
+    @patch('gestiondte.services.rpetc.RPETCClient')
+    @patch('gestiondte.views.get_maestroempresa_by_codigo')
+    def test_mes_ignora_ano_manipulado_y_usa_fecha_sistema(self, maestro, client_class, parser, importer):
+        maestro.return_value = {'rut': '77575300-5', 'nombre': 'Empresa activa'}
+        client_class.return_value.obtener_cesiones_deudor.return_value = {
+            'tarea_inicial': self.initial,
+            'estado_final': self.final,
+            'resultado': {'bytes': b'contenido'},
+        }
+        parser.return_value = self.parsed
+        importer.return_value = {'registros_recibidos': 0, 'cesiones_creadas': 0, 'cesiones_actualizadas': 0}
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'mes': '3', 'anio': '2030', 'fecha_desde': '2030-03-01', 'fecha_hasta': '2030-03-31',
+        })
+        self.assertEqual(response.status_code, 200)
+        call = client_class.return_value.obtener_cesiones_deudor.call_args
+        self.assertEqual(call.kwargs['desde'], '01032026')
+        self.assertEqual(call.kwargs['hasta'], '31032026')
+
+    @patch('gestiondte.services.rpetc.RPETCClient')
+    def test_mes_posterior_a_fecha_sistema_no_procesa(self, client_class):
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'mes': '9', 'fecha_desde': '2026-09-01', 'fecha_hasta': '2026-09-30',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'mes posterior a la fecha de sistema')
+        client_class.assert_not_called()
+
+    def test_botones_mensuales_usan_fecha_sistema_y_bloquean_futuros(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, 'data-month="3" data-desde="2026-03-01" data-hasta="2026-03-31"')
+        self.assertContains(response, 'data-month="8" data-desde="2026-08-01" data-hasta="2026-08-27"')
+        self.assertContains(response, 'data-month="9" data-desde="" data-hasta="" disabled')
 
     @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
     @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')

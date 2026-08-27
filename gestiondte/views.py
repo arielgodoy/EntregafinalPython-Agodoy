@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from access_control.decorators import verificar_permiso
+from settings.context_processors import system_date_context
 
 from .models import (
     CertificadoSII,
@@ -38,6 +39,14 @@ def _normalizar_rut_filtro(value):
         rut, dv = raw.rsplit('-', 1)
         return rut or None, dv.upper() or None
     return raw, None
+
+
+def _fecha_sistema_request(request):
+    value = system_date_context(request).get('fecha_sistema')
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
 
 
 def _cesiones_rpetc_context(empresa_activa, fecha_seleccionada=None, filtros=None, include_detail=True):
@@ -255,6 +264,10 @@ def cesiones(request):
         'sync_result': None,
         'sync_error': None,
     }
+    from .services.lectura_automatica import periodos_mensuales_rpetc
+    fecha_sistema = _fecha_sistema_request(request)
+    context['fecha_sistema_rpetc'] = fecha_sistema
+    context['periodos_mensuales_rpetc'] = periodos_mensuales_rpetc(fecha_sistema) if fecha_sistema else []
     selected = request.GET.get('fecha_cesion')
     filtros = {
         key: request.GET.get(key, '').strip()
@@ -588,12 +601,19 @@ def sincronizar_cesiones_rpetc(request):
         RPETCTaskFailedError, RPETCTaskTimeoutError, RPETCUnauthorizedError,
     )
     from .services.rpetc_importer import RPETCImportError
-    from .services.lectura_automatica import LecturaAutomaticaError, sincronizar_empresa_rpetc
+    from .services.lectura_automatica import (
+        LecturaAutomaticaError,
+        periodos_mensuales_rpetc,
+        rango_mensual_rpetc,
+        sincronizar_empresa_rpetc,
+    )
 
     empresa_id = request.session.get('empresa_id')
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa:
         return redirect('access_control:seleccionar_empresa')
+
+    fecha_sistema = _fecha_sistema_request(request)
 
     form = SincronizarCesionesRPETCForm(request.POST or None)
     context = {
@@ -609,13 +629,31 @@ def sincronizar_cesiones_rpetc(request):
         'sync_form': form,
         'sync_result': None,
         'sync_error': None,
+        'fecha_sistema_rpetc': fecha_sistema,
+        'periodos_mensuales_rpetc': periodos_mensuales_rpetc(fecha_sistema) if fecha_sistema else [],
     }
     context.update(_cesiones_rpetc_context(empresa_activa))
     if request.method != 'POST' or not form.is_valid():
         return render(request, 'gestiondte/cesiones.html', context)
 
-    fecha_desde = form.cleaned_data['fecha_desde']
-    fecha_hasta = form.cleaned_data['fecha_hasta']
+    mes = request.POST.get('mes', '').strip()
+    if mes:
+        try:
+            if not fecha_sistema:
+                raise LecturaAutomaticaError('No existe una fecha de sistema configurada.')
+            fecha_desde, fecha_hasta = rango_mensual_rpetc(fecha_sistema, int(mes))
+        except (LecturaAutomaticaError, TypeError, ValueError) as exc:
+            context['sync_error'] = str(exc)
+            return render(request, 'gestiondte/cesiones.html', context)
+    else:
+        fecha_desde = form.cleaned_data['fecha_desde']
+        fecha_hasta = form.cleaned_data['fecha_hasta']
+        if not fecha_sistema or fecha_desde.year != fecha_sistema.year or fecha_hasta.year != fecha_sistema.year:
+            context['sync_error'] = 'El período debe pertenecer al año de la fecha de sistema.'
+            return render(request, 'gestiondte/cesiones.html', context)
+        if fecha_hasta > fecha_sistema:
+            context['sync_error'] = 'La fecha hasta no puede superar la fecha de sistema.'
+            return render(request, 'gestiondte/cesiones.html', context)
     en_progreso = TareaRPETC.objects.filter(
         empresa=empresa_activa,
         tipo_consulta='DEUDOR',
