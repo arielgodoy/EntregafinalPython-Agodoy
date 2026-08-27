@@ -222,6 +222,9 @@ def _classify(
     result["monto_coincide"] = expected is not None and legacy_amount == expected
     if result["monto_coincide"]:
         result["estado"] = "CONTABILIZADA" if found_state == "H" else paid_state
+    elif found_state == "D" and paid_state:
+        result["estado"] = f"{paid_state}_DIFERENCIA"
+        result["diferencia_monto"] = legacy_amount - expected if expected is not None else None
     else:
         result["estado"] = "REVISAR"
     return result

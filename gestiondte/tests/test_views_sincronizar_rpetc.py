@@ -401,11 +401,32 @@ class SincronizarRPETCViewTest(TestCase):
         response = self.client.get(reverse('gestion_dte:cesiones'), {'tipo_doc': '34'})
         self.assertContains(response, 'href="/gestiondte/cesiones/"')
 
+    def test_filtros_control_cesiones_recargan_automaticamente_y_folio_tiene_debounce(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, "serverSide:true")
+        self.assertContains(response, "processing:true")
+        self.assertContains(response, "table.ajax.reload(null, true)")
+        self.assertContains(response, "select, #cesiones-filtros-form input[type=\"date\"], #cesiones-filtros-form input[type=\"checkbox\"]")
+        self.assertContains(response, "input[name=\"folio\"]")
+        self.assertContains(response, "on('input'")
+        self.assertContains(response, "clearTimeout(folioTimer)")
+        self.assertContains(response, "setTimeout(function(){ table.ajax.reload(null, true); }, 400)")
+        self.assertContains(response, "e.preventDefault();table.ajax.reload(null, true);")
+
     def test_filtro_sin_resultados_muestra_mensaje(self):
         self._crear_cesiones_para_filtros()
         response = self.client.get(reverse('gestion_dte:cesiones'), {'folio': 'inexistente'})
         self.assertEqual(response.context['total_cesiones_rpetc'], 0)
         self.assertContains(response, 'id="cesionesRpetcTable"')
+
+    def test_ui_pago_con_diferencia_muestra_si_rojo_y_montos(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, "PAGADA_PROVEEDOR_DIFERENCIA:'Sí con diferencia'")
+        self.assertContains(response, "difference||duplicate?'btn-danger'")
+        self.assertContains(response, 'Monto esperado: ')
+        self.assertContains(response, "$(document).on('click','.btn-detalle-contable'")
+        self.assertContains(response, 'modal.show();box.textContent=\'Cargando...\';')
+        self.assertContains(response, 'd.pagos_resumen||{}')
 
     @patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones')
     def test_detalle_visible_consulta_contabilidad_en_un_batch(self, accounting):
@@ -445,10 +466,19 @@ class SincronizarRPETCViewTest(TestCase):
         detail.return_value = {
             'contabilizacion': {'movimientos': [{'rutctacte': '0763761428', 'monto': Decimal('100')}]},
             'pago': {'movimientos': []},
+            'pagada_proveedor': {
+                'estado': 'PAGADA_PROVEEDOR_DIFERENCIA',
+                'monto_rpetc': Decimal('3122579'),
+                'monto_legacy': Decimal('3123479'),
+                'diferencia_monto': Decimal('900'),
+                'movimientos': [{'rutctacte': '0763761428', 'monto': Decimal('3123479')}],
+            },
         }
         response = self.client.get(reverse('gestion_dte:detalle_contable_cesion', args=[cesion.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['factura']['folio'], '2587')
+        self.assertEqual(response.json()['pagos_resumen']['pagada_proveedor']['estado'], 'PAGADA_PROVEEDOR_DIFERENCIA')
+        self.assertEqual(response.json()['pagos_resumen']['pagada_proveedor']['diferencia_monto'], '900')
         self.assertNotIn('schema', response.json())
         detail.assert_called_once_with('09', cesion)
 

@@ -16,7 +16,10 @@ from .rpetc_contabilidad import obtener_estados_contables_cesiones
 
 
 ESTADOS_CONTABILIZACION = {'CONTABILIZADA', 'NO_CONTABILIZADA', 'REVISAR', 'NO_DISPONIBLE'}
-ESTADOS_PAGO = {'PAGADA', 'NO_PAGADA', 'REVISAR', 'NO_DISPONIBLE'}
+ESTADOS_PAGO = {
+    'PAGADA', 'PAGADA_FACTORING_DIFERENCIA', 'PAGADA_PROVEEDOR_DIFERENCIA',
+    'NO_PAGADA', 'REVISAR', 'NO_DISPONIBLE',
+}
 
 
 def determinar_estado_pago_resumen(estado_factoring: str, estado_proveedor: str) -> str:
@@ -60,7 +63,10 @@ def _fecha_movimiento(value: Any) -> datetime | None:
 def _pago_inequivoco(bloque: dict[str, Any]) -> tuple[datetime | None, Decimal | None]:
     """Solo extrae fecha y monto cuando el servicio legacy devuelve un movimiento."""
     movimientos = bloque.get('movimientos') or []
-    if bloque.get('estado') not in {'PAGADA_FACTORING', 'PAGADA_PROVEEDOR', 'PAGADA'} or len(movimientos) != 1:
+    if bloque.get('estado') not in {
+        'PAGADA_FACTORING', 'PAGADA_FACTORING_DIFERENCIA',
+        'PAGADA_PROVEEDOR', 'PAGADA_PROVEEDOR_DIFERENCIA', 'PAGADA',
+    } or len(movimientos) != 1:
         return None, None
     movimiento = movimientos[0]
     try:

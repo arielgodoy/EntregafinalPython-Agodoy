@@ -572,6 +572,14 @@ def detalle_contable_cesion(request, pk):
     return JsonResponse({
         'success': True,
         'factura': {'tipo': cesion.tipo_doc, 'folio': cesion.folio_doc},
+        'pagos_resumen': {
+            role: {
+                key: serializar(detalle.get(role, {}).get(key))
+                for key in ('estado', 'monto_rpetc', 'monto_legacy', 'diferencia_monto')
+                if key in detalle.get(role, {})
+            }
+            for role in ('pagada_factoring', 'pagada_proveedor')
+        },
         'contabilizacion': [
             {key: serializar(value) for key, value in movimiento.items()}
             for movimiento in detalle['contabilizacion'].get('movimientos', [])
