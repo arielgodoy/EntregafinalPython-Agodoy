@@ -425,7 +425,12 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertContains(response, "difference||duplicate?'btn-danger'")
         self.assertContains(response, 'Monto esperado: ')
         self.assertContains(response, "$(document).on('click','.btn-detalle-contable'")
+        self.assertContains(response, "b.data('cesion-id')")
+        self.assertContains(response, "b.attr('data-cesion-id')")
+        self.assertContains(response, "b.attr('data-section')")
         self.assertContains(response, 'modal.show();box.textContent=\'Cargando...\';')
+        self.assertContains(response, "if(!r.ok)throw new Error('Detalle contable HTTP '+r.status)")
+        self.assertContains(response, "console.error('No fue posible consultar el detalle contable.'")
         self.assertContains(response, 'd.pagos_resumen||{}')
 
     @patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones')
