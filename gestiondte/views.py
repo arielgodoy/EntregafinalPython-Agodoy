@@ -215,7 +215,7 @@ def _rpetc_request_filters(request):
         value = request.GET.get(key, '')
         filters[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
     filters = {key: value for key, value in filters.items() if value not in ('', False, None)}
-    filters.setdefault('fecha_desde', today.replace(day=1).isoformat())
+    filters.setdefault('fecha_desde', date(today.year, 1, 1).isoformat())
     filters.setdefault('fecha_hasta', today.isoformat())
     for key in ('fecha_desde', 'fecha_hasta'):
         try:
@@ -265,7 +265,7 @@ def cesiones(request):
         filtros[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
     filtros = {key: value for key, value in filtros.items() if value not in ('', False, None)}
     today = timezone.localdate()
-    filtros.setdefault('fecha_desde', today.replace(day=1))
+    filtros.setdefault('fecha_desde', date(today.year, 1, 1))
     filtros.setdefault('fecha_hasta', today)
     filtros_error = None
     for field in ('fecha_desde', 'fecha_hasta'):

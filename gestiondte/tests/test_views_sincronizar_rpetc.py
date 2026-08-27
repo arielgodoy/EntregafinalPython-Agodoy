@@ -14,6 +14,7 @@ from gestiondte.models import (
     TareaRPETC,
 )
 from auditoria.models import AuditoriaGestionDTEEvent
+from gestiondte.views import _rpetc_request_filters
 
 
 class SincronizarRPETCViewTest(TestCase):
@@ -53,6 +54,31 @@ class SincronizarRPETCViewTest(TestCase):
             'registros': [{'ID_CESION': '100'}],
             'cantidad_registros': 1,
         }
+
+    def test_control_cesiones_usa_inicio_del_ano_actual_en_contexto_y_ajax(self):
+        for today in (date(2027, 3, 15), date(2028, 1, 2)):
+            with self.subTest(today=today), patch('gestiondte.views.timezone.localdate', return_value=today):
+                response = self.client.get(reverse('gestion_dte:cesiones'))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['filtros']['fecha_desde'], date(today.year, 1, 1))
+                self.assertEqual(response.context['filtros']['fecha_hasta'], today)
+                filters = _rpetc_request_filters(response.wsgi_request)
+                self.assertEqual(filters['fecha_desde'], date(today.year, 1, 1))
+                self.assertEqual(filters['fecha_hasta'], today)
+                self.assertContains(response, f'value="{today.year}-01-01"')
+                self.assertContains(response, f'value="{today.isoformat()}"')
+
+    def test_control_cesiones_limpiar_conserva_defaults_anuales_y_pagos(self):
+        today = date(2026, 8, 27)
+        with patch('gestiondte.views.timezone.localdate', return_value=today):
+            response = self.client.get(reverse('gestion_dte:cesiones'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="sin_pago_factoring"')
+        self.assertContains(response, 'id="sin_pago_proveedor"')
+        self.assertContains(response, 'href="/gestiondte/cesiones/"')
+        self.assertContains(response, 'value="2026-01-01"')
+        self.assertContains(response, 'value="2026-08-27"')
 
     def test_sin_permiso_modificar_recibe_403(self):
         Permiso.objects.update(modificar=False)
@@ -170,7 +196,7 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(list(response.context['cesiones_por_fecha']), [])
 
     @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
-    def test_sin_get_aplica_default_mes_actual_al_queryset(self, localdate):
+    def test_sin_get_aplica_default_anual_al_queryset(self, localdate):
         tarea = TareaRPETC.objects.create(
             empresa=self.empresa, id_tarea='task-defaults', tipo_consulta='DEUDOR',
             rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 8, 1),
@@ -184,12 +210,12 @@ class SincronizarRPETCViewTest(TestCase):
         fuera = CesionRPETC.objects.create(
             id_cesion='default-out', estado_cesion='Vigente', cedente_rut='22222222', cedente_dv='2',
             cedente_razon_social='Proveedor B', deudor_rut='1', deudor_dv='9', tipo_doc='33', folio_doc='2',
-            fecha_cesion=datetime(2026, 7, 31, tzinfo=timezone.utc), monto_cesion=Decimal('200'),
+            fecha_cesion=datetime(2025, 12, 31, tzinfo=timezone.utc), monto_cesion=Decimal('200'),
         )
         for cesion in (dentro, fuera):
             TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
         response = self.client.get(reverse('gestion_dte:cesiones'))
-        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 8, 1))
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 1, 1))
         self.assertEqual(response.context['filtros']['fecha_hasta'], date(2026, 8, 20))
         self.assertEqual(response.context['total_cesiones_rpetc'], 1)
         self.assertEqual(response.context['cesiones_detalle'], [])
