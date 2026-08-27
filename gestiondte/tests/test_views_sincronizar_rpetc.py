@@ -427,6 +427,8 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertContains(response, "$(document).on('click','.btn-detalle-contable'")
         self.assertContains(response, "b.data('cesion-id')")
         self.assertContains(response, "b.attr('data-cesion-id')")
+        self.assertContains(response, "row=$('#cesionesRpetcTable').DataTable().row(b.closest('tr')).data()||{}")
+        self.assertContains(response, "row.id||row.pk")
         self.assertContains(response, "b.attr('data-section')")
         self.assertContains(response, 'modal.show();box.textContent=\'Cargando...\';')
         self.assertContains(response, "if(!r.ok)throw new Error('Detalle contable HTTP '+r.status)")
