@@ -222,6 +222,9 @@ def _classify(
     result["monto_coincide"] = expected is not None and legacy_amount == expected
     if result["monto_coincide"]:
         result["estado"] = "CONTABILIZADA" if found_state == "H" else paid_state
+    elif found_state == "D" and paid_state:
+        result["estado"] = f"{paid_state}_DIFERENCIA"
+        result["diferencia_monto"] = legacy_amount - expected if expected is not None else None
     else:
         result["estado"] = "REVISAR"
     return result
@@ -264,7 +267,10 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
         ):
             keys_for_role = key_by_cesion[cesion.pk][role]
             if keys_for_role:
-                expected = cesion.monto_total if role == "contabilizacion" else cesion.monto_cesion
+                if role in {"contabilizacion", "pagada_proveedor"}:
+                    expected = cesion.monto_total
+                else:
+                    expected = cesion.monto_cesion
                 movements = [
                     movement
                     for candidate_key in keys_for_role

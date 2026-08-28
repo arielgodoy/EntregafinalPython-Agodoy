@@ -20,6 +20,8 @@ from gestiondte.services.lectura_automatica import (
     LecturaAutomaticaError,
     empresas_elegibles,
     ejecutar_lote,
+    periodos_mensuales_rpetc,
+    rango_mensual_rpetc,
     rango_automatico,
     validar_rango_lectura,
 )
@@ -93,6 +95,21 @@ class LecturaAutomaticaAuditViewTest(TestCase):
 
 
 class RangoLecturaAutomaticaTest(SimpleTestCase):
+    def test_rango_mensual_usa_fecha_sistema_y_resuelve_mes_completo(self):
+        self.assertEqual(rango_mensual_rpetc(date(2025, 12, 31), 3), (date(2025, 3, 1), date(2025, 3, 31)))
+        self.assertEqual(rango_mensual_rpetc(date(2026, 8, 15), 3), (date(2026, 3, 1), date(2026, 3, 31)))
+        self.assertEqual(rango_mensual_rpetc(date(2026, 8, 15), 8), (date(2026, 8, 1), date(2026, 8, 15)))
+        self.assertEqual(rango_mensual_rpetc(date(2024, 12, 31), 2), (date(2024, 2, 1), date(2024, 2, 29)))
+
+    def test_rango_mensual_rechaza_mes_futuro(self):
+        with self.assertRaises(LecturaAutomaticaError):
+            rango_mensual_rpetc(date(2026, 8, 15), 9)
+
+    def test_periodos_mensuales_marca_futuros_deshabilitados(self):
+        periodos = periodos_mensuales_rpetc(date(2026, 8, 15))
+        self.assertEqual([periodo['mes'] for periodo in periodos if periodo['habilitado']], list(range(1, 9)))
+        self.assertEqual([periodo['mes'] for periodo in periodos if not periodo['habilitado']], list(range(9, 13)))
+
     def test_rechaza_rango_mayor_a_30_dias(self):
         with self.assertRaises(LecturaAutomaticaError):
             validar_rango_lectura(date(2026, 8, 1), date(2026, 8, 31), date(2026, 8, 31))

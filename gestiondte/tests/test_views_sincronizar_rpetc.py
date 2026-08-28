@@ -14,6 +14,8 @@ from gestiondte.models import (
     TareaRPETC,
 )
 from auditoria.models import AuditoriaGestionDTEEvent
+from gestiondte.views import _rpetc_request_filters
+from settings.models import UserPreferences
 
 
 class SincronizarRPETCViewTest(TestCase):
@@ -34,6 +36,10 @@ class SincronizarRPETCViewTest(TestCase):
         session = self.client.session
         session['empresa_id'] = self.empresa.id
         session.save()
+        UserPreferences.objects.update_or_create(
+            user=self.user,
+            defaults={'fecha_sistema': date(2026, 8, 27)},
+        )
         CertificadoSII.objects.create(
             empresa_codigo='09', archivo='certificado.pfx', activo=True,
         )
@@ -53,6 +59,54 @@ class SincronizarRPETCViewTest(TestCase):
             'registros': [{'ID_CESION': '100'}],
             'cantidad_registros': 1,
         }
+
+    def test_control_cesiones_usa_inicio_del_ano_actual_en_contexto_y_ajax(self):
+        for today in (date(2027, 3, 15), date(2028, 1, 2)):
+            with self.subTest(today=today), patch('gestiondte.views._fecha_sistema_request', return_value=today):
+                response = self.client.get(reverse('gestion_dte:cesiones'))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['filtros']['fecha_desde'], date(today.year, 1, 1))
+                self.assertEqual(response.context['filtros']['fecha_hasta'], today)
+                filters = _rpetc_request_filters(response.wsgi_request)
+                self.assertEqual(filters['fecha_desde'], date(today.year, 1, 1))
+                self.assertEqual(filters['fecha_hasta'], today)
+                self.assertContains(response, f'value="{today.year}-01-01"')
+                self.assertContains(response, f'value="{today.isoformat()}"')
+
+    def test_control_cesiones_defaults_usan_fecha_sistema_y_no_fecha_real(self):
+        for system_date in (date(2025, 12, 31), date(2025, 8, 15), date(2027, 1, 2)):
+            with self.subTest(system_date=system_date), patch(
+                'gestiondte.views._fecha_sistema_request', return_value=system_date,
+            ), patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 27)):
+                response = self.client.get(reverse('gestion_dte:cesiones'))
+                request = response.wsgi_request
+                filters = _rpetc_request_filters(request)
+                self.assertEqual(filters['fecha_desde'], date(system_date.year, 1, 1))
+                self.assertEqual(filters['fecha_hasta'], system_date)
+                self.assertEqual(response.context['filtros']['fecha_desde'], date(system_date.year, 1, 1))
+                self.assertEqual(response.context['filtros']['fecha_hasta'], system_date)
+                self.assertContains(response, f'value="{system_date.year}-01-01"')
+                self.assertContains(response, f'value="{system_date.isoformat()}"')
+
+    def test_control_cesiones_defaults_conservan_fechas_explicitas(self):
+        with patch('gestiondte.views._fecha_sistema_request', return_value=date(2025, 12, 31)):
+            response = self.client.get(reverse('gestion_dte:cesiones'), {
+                'fecha_desde': '2025-03-01', 'fecha_hasta': '2025-03-31',
+            })
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2025, 3, 1))
+        self.assertEqual(response.context['filtros']['fecha_hasta'], date(2025, 3, 31))
+
+    def test_control_cesiones_limpiar_conserva_defaults_anuales_y_pagos(self):
+        today = date(2026, 8, 27)
+        with patch('gestiondte.views.timezone.localdate', return_value=today):
+            response = self.client.get(reverse('gestion_dte:cesiones'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="sin_pago_factoring"')
+        self.assertContains(response, 'id="sin_pago_proveedor"')
+        self.assertContains(response, 'href="/gestiondte/cesiones/"')
+        self.assertContains(response, 'value="2026-01-01"')
+        self.assertContains(response, 'value="2026-08-27"')
 
     def test_sin_permiso_modificar_recibe_403(self):
         Permiso.objects.update(modificar=False)
@@ -74,6 +128,42 @@ class SincronizarRPETCViewTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'rango solicitado')
+
+    @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
+    @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')
+    @patch('gestiondte.services.rpetc.RPETCClient')
+    @patch('gestiondte.views.get_maestroempresa_by_codigo')
+    def test_mes_ignora_ano_manipulado_y_usa_fecha_sistema(self, maestro, client_class, parser, importer):
+        maestro.return_value = {'rut': '77575300-5', 'nombre': 'Empresa activa'}
+        client_class.return_value.obtener_cesiones_deudor.return_value = {
+            'tarea_inicial': self.initial,
+            'estado_final': self.final,
+            'resultado': {'bytes': b'contenido'},
+        }
+        parser.return_value = self.parsed
+        importer.return_value = {'registros_recibidos': 0, 'cesiones_creadas': 0, 'cesiones_actualizadas': 0}
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'mes': '3', 'anio': '2030', 'fecha_desde': '2030-03-01', 'fecha_hasta': '2030-03-31',
+        })
+        self.assertEqual(response.status_code, 200)
+        call = client_class.return_value.obtener_cesiones_deudor.call_args
+        self.assertEqual(call.kwargs['desde'], '01032026')
+        self.assertEqual(call.kwargs['hasta'], '31032026')
+
+    @patch('gestiondte.services.rpetc.RPETCClient')
+    def test_mes_posterior_a_fecha_sistema_no_procesa(self, client_class):
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'mes': '9', 'fecha_desde': '2026-09-01', 'fecha_hasta': '2026-09-30',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'mes posterior a la fecha de sistema')
+        client_class.assert_not_called()
+
+    def test_botones_mensuales_usan_fecha_sistema_y_bloquean_futuros(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, 'data-month="3" data-desde="2026-03-01" data-hasta="2026-03-31"')
+        self.assertContains(response, 'data-month="8" data-desde="2026-08-01" data-hasta="2026-08-27"')
+        self.assertContains(response, 'data-month="9" data-desde="" data-hasta="" disabled')
 
     @patch('gestiondte.services.rpetc_importer.importar_resultado_rpetc')
     @patch('gestiondte.services.rpetc_parser.parsear_txt_rpetc')
@@ -169,8 +259,8 @@ class SincronizarRPETCViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['cesiones_por_fecha']), [])
 
-    @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
-    def test_sin_get_aplica_default_mes_actual_al_queryset(self, localdate):
+    @patch('gestiondte.views._fecha_sistema_request', return_value=date(2026, 8, 20))
+    def test_sin_get_aplica_default_anual_al_queryset(self, fecha_sistema):
         tarea = TareaRPETC.objects.create(
             empresa=self.empresa, id_tarea='task-defaults', tipo_consulta='DEUDOR',
             rut_consultado='1', dv_consultado='9', fecha_desde=date(2026, 8, 1),
@@ -184,16 +274,15 @@ class SincronizarRPETCViewTest(TestCase):
         fuera = CesionRPETC.objects.create(
             id_cesion='default-out', estado_cesion='Vigente', cedente_rut='22222222', cedente_dv='2',
             cedente_razon_social='Proveedor B', deudor_rut='1', deudor_dv='9', tipo_doc='33', folio_doc='2',
-            fecha_cesion=datetime(2026, 7, 31, tzinfo=timezone.utc), monto_cesion=Decimal('200'),
+            fecha_cesion=datetime(2025, 12, 31, tzinfo=timezone.utc), monto_cesion=Decimal('200'),
         )
         for cesion in (dentro, fuera):
             TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
         response = self.client.get(reverse('gestion_dte:cesiones'))
-        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 8, 1))
+        self.assertEqual(response.context['filtros']['fecha_desde'], date(2026, 1, 1))
         self.assertEqual(response.context['filtros']['fecha_hasta'], date(2026, 8, 20))
         self.assertEqual(response.context['total_cesiones_rpetc'], 1)
         self.assertEqual(response.context['cesiones_detalle'], [])
-        localdate.assert_called_once_with()
 
     @patch('gestiondte.views.timezone.localdate', return_value=date(2026, 8, 20))
     def test_get_explicito_conserva_fechas(self, localdate):
@@ -334,11 +423,39 @@ class SincronizarRPETCViewTest(TestCase):
         response = self.client.get(reverse('gestion_dte:cesiones'), {'tipo_doc': '34'})
         self.assertContains(response, 'href="/gestiondte/cesiones/"')
 
+    def test_filtros_control_cesiones_recargan_automaticamente_y_folio_tiene_debounce(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, "serverSide:true")
+        self.assertContains(response, "processing:true")
+        self.assertContains(response, "table.ajax.reload(null, true)")
+        self.assertContains(response, "select, #cesiones-filtros-form input[type=\"date\"], #cesiones-filtros-form input[type=\"checkbox\"]")
+        self.assertContains(response, "input[name=\"folio\"]")
+        self.assertContains(response, "on('input'")
+        self.assertContains(response, "clearTimeout(folioTimer)")
+        self.assertContains(response, "setTimeout(function(){ table.ajax.reload(null, true); }, 400)")
+        self.assertContains(response, "e.preventDefault();table.ajax.reload(null, true);")
+
     def test_filtro_sin_resultados_muestra_mensaje(self):
         self._crear_cesiones_para_filtros()
         response = self.client.get(reverse('gestion_dte:cesiones'), {'folio': 'inexistente'})
         self.assertEqual(response.context['total_cesiones_rpetc'], 0)
         self.assertContains(response, 'id="cesionesRpetcTable"')
+
+    def test_ui_pago_con_diferencia_muestra_si_rojo_y_montos(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, "PAGADA_PROVEEDOR_DIFERENCIA:'Sí con diferencia'")
+        self.assertContains(response, "difference||duplicate?'btn-danger'")
+        self.assertContains(response, 'Monto esperado: ')
+        self.assertContains(response, "$(document).on('click','.btn-detalle-contable'")
+        self.assertContains(response, "b.data('cesion-id')")
+        self.assertContains(response, "b.attr('data-cesion-id')")
+        self.assertContains(response, "row=$('#cesionesRpetcTable').DataTable().row(b.closest('tr')).data()||{}")
+        self.assertContains(response, "row.id||row.pk")
+        self.assertContains(response, "b.attr('data-section')")
+        self.assertContains(response, 'modal.show();box.textContent=\'Cargando...\';')
+        self.assertContains(response, "if(!r.ok)throw new Error('Detalle contable HTTP '+r.status)")
+        self.assertContains(response, "console.error('No fue posible consultar el detalle contable.'")
+        self.assertContains(response, 'd.pagos_resumen||{}')
 
     @patch('gestiondte.services.rpetc_contabilidad.obtener_estados_contables_cesiones')
     def test_detalle_visible_consulta_contabilidad_en_un_batch(self, accounting):
@@ -378,10 +495,19 @@ class SincronizarRPETCViewTest(TestCase):
         detail.return_value = {
             'contabilizacion': {'movimientos': [{'rutctacte': '0763761428', 'monto': Decimal('100')}]},
             'pago': {'movimientos': []},
+            'pagada_proveedor': {
+                'estado': 'PAGADA_PROVEEDOR_DIFERENCIA',
+                'monto_rpetc': Decimal('3122579'),
+                'monto_legacy': Decimal('3123479'),
+                'diferencia_monto': Decimal('900'),
+                'movimientos': [{'rutctacte': '0763761428', 'monto': Decimal('3123479')}],
+            },
         }
         response = self.client.get(reverse('gestion_dte:detalle_contable_cesion', args=[cesion.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['factura']['folio'], '2587')
+        self.assertEqual(response.json()['pagos_resumen']['pagada_proveedor']['estado'], 'PAGADA_PROVEEDOR_DIFERENCIA')
+        self.assertEqual(response.json()['pagos_resumen']['pagada_proveedor']['diferencia_monto'], '900')
         self.assertNotIn('schema', response.json())
         detail.assert_called_once_with('09', cesion)
 

@@ -1,21 +1,28 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
+from io import BytesIO
 from django.db import transaction
-from django.db.models import Avg, Count, Max, Sum
+from django.db.models import Avg, Count, Exists, Max, OuterRef, Sum
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 from django.db.models import Q
 from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from access_control.decorators import verificar_permiso
+from settings.context_processors import system_date_context
 
 from .models import (
     CertificadoSII,
     TareaRPETC,
     TareaCesionRPETC,
     CesionRPETC,
+    RevisionCesionRPETC,
+    RevisionCesionComentario,
     LecturaAutomaticaConfig,
     LecturaAutomaticaEjecucion,
 )
@@ -38,6 +45,14 @@ def _normalizar_rut_filtro(value):
         rut, dv = raw.rsplit('-', 1)
         return rut or None, dv.upper() or None
     return raw, None
+
+
+def _fecha_sistema_request(request):
+    value = system_date_context(request).get('fecha_sistema')
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
 
 
 def _cesiones_rpetc_context(empresa_activa, fecha_seleccionada=None, filtros=None, include_detail=True):
@@ -150,7 +165,6 @@ def _cesiones_rpetc_context(empresa_activa, fecha_seleccionada=None, filtros=Non
 
 
 def _rpetc_filtered_queryset(empresa_activa, filtros):
-    """Return the distinct CesionRPETC queryset for server-side requests."""
     base = CesionRPETC.objects.filter(
         tareas__tarea__empresa=empresa_activa,
     ).distinct()
@@ -176,22 +190,83 @@ def _rpetc_filtered_queryset(empresa_activa, filtros):
     return base
 
 
+def _rpetc_annotated_queryset(empresa_activa, filtros):
+    return _rpetc_filtered_queryset(empresa_activa, filtros).annotate(
+        revision_registrada=Exists(RevisionCesionComentario.objects.filter(
+            revision__empresa=empresa_activa, revision__cesion=OuterRef('pk'),
+        )),
+    )
+
+
+def _rpetc_apply_payment_filters(filtered, empresa_activa, filtros):
+    if not (filtros.get('sin_pago_factoring') or filtros.get('sin_pago_proveedor')):
+        return filtered
+    candidate_ids = list(filtered.values_list('pk', flat=True))
+    states_by_pk = {}
+    for start in range(0, len(candidate_ids), 250):
+        chunk = list(CesionRPETC.objects.filter(pk__in=candidate_ids[start:start + 250]).order_by('pk'))
+        if not chunk:
+            continue
+        from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
+        states_by_pk.update(obtener_estados_contables_cesiones(empresa_activa.codigo, chunk))
+    pending_ids = _rpetc_pagos_pendientes_ids(
+        states_by_pk,
+        sin_pago_factoring=bool(filtros.get('sin_pago_factoring')),
+        sin_pago_proveedor=bool(filtros.get('sin_pago_proveedor')),
+    )
+    return filtered.filter(pk__in=sorted(pending_ids))
+
+
+def _rpetc_pagos_pendientes_ids(estados_por_pk, *, sin_pago_factoring=False, sin_pago_proveedor=False):
+    """Return the ids that match the validated operational filters."""
+    if not (sin_pago_factoring or sin_pago_proveedor):
+        return set(estados_por_pk)
+
+    pending_ids = set()
+    for pk, state in (estados_por_pk or {}).items():
+        state = state or {}
+        factoring = state.get('pagada_factoring') or {}
+        proveedor = state.get('pagada_proveedor') or {}
+        factoring_estado = factoring.get('estado')
+        proveedor_estado = proveedor.get('estado')
+
+        factor_pending = factoring_estado in {'NO_PAGADA', 'REVISAR'} if factoring_estado else False
+        proveedor_pending = proveedor_estado in {'NO_PAGADA', 'REVISAR'} if proveedor_estado else False
+
+        if sin_pago_factoring and sin_pago_proveedor:
+            if factor_pending and proveedor_pending:
+                pending_ids.add(pk)
+        elif sin_pago_factoring:
+            if factor_pending:
+                pending_ids.add(pk)
+        elif sin_pago_proveedor:
+            if proveedor_pending:
+                pending_ids.add(pk)
+
+    return pending_ids
+
+
 def _rpetc_request_filters(request):
-    today = timezone.localdate()
+    today = _fecha_sistema_request(request)
     filters = {
         key: request.GET.get(key, '').strip()
         for key in ('rut_proveedor', 'tipo_doc', 'folio', 'estado', 'fecha_desde', 'fecha_hasta')
     }
-    filters = {key: value for key, value in filters.items() if value}
-    filters.setdefault('fecha_desde', today.replace(day=1).isoformat())
-    filters.setdefault('fecha_hasta', today.isoformat())
+    for key in ('sin_pago_factoring', 'sin_pago_proveedor', 'sin_revisar'):
+        value = request.GET.get(key, '')
+        filters[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
+    filters = {key: value for key, value in filters.items() if value not in ('', False, None)}
+    if today:
+        filters.setdefault('fecha_desde', date(today.year, 1, 1).isoformat())
+        filters.setdefault('fecha_hasta', today.isoformat())
     for key in ('fecha_desde', 'fecha_hasta'):
+        if key not in filters:
+            continue
         try:
             filters[key] = date.fromisoformat(filters[key])
         except ValueError:
             filters.pop(key, None)
     return filters
-
 
 @login_required
 @verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
@@ -223,16 +298,26 @@ def cesiones(request):
         'sync_result': None,
         'sync_error': None,
     }
+    from .services.lectura_automatica import periodos_mensuales_rpetc
+    fecha_sistema = _fecha_sistema_request(request)
+    context['fecha_sistema_rpetc'] = fecha_sistema
+    context['periodos_mensuales_rpetc'] = periodos_mensuales_rpetc(fecha_sistema) if fecha_sistema else []
     selected = request.GET.get('fecha_cesion')
     filtros = {
         key: request.GET.get(key, '').strip()
         for key in ('rut_proveedor', 'tipo_doc', 'folio', 'estado', 'fecha_desde', 'fecha_hasta')
     }
-    filtros = {key: value for key, value in filtros.items() if value}
-    today = timezone.localdate()
-    filtros.setdefault('fecha_desde', today.replace(day=1))
-    filtros.setdefault('fecha_hasta', today)
+    for key in ('sin_pago_factoring', 'sin_pago_proveedor', 'sin_revisar'):
+        value = request.GET.get(key, '')
+        filtros[key] = str(value).strip().lower() in {'1', 'true', 'on', 'yes'}
+    filtros = {key: value for key, value in filtros.items() if value not in ('', False, None)}
+    today = _fecha_sistema_request(request)
     filtros_error = None
+    if today:
+        filtros.setdefault('fecha_desde', date(today.year, 1, 1))
+        filtros.setdefault('fecha_hasta', today)
+    else:
+        filtros_error = 'No existe una fecha de sistema configurada.'
     for field in ('fecha_desde', 'fecha_hasta'):
         if field in filtros and isinstance(filtros[field], str):
             try:
@@ -385,7 +470,7 @@ def cesiones_data(request):
 
     filters = _rpetc_request_filters(request)
     base = CesionRPETC.objects.filter(tareas__tarea__empresa=empresa_activa).distinct()
-    filtered = _rpetc_filtered_queryset(empresa_activa, filters)
+    filtered = _rpetc_annotated_queryset(empresa_activa, filters)
     search = request.GET.get('search[value]', '').strip()
     if search:
         filtered = filtered.filter(
@@ -395,6 +480,10 @@ def cesiones_data(request):
             | Q(cedente_rut__icontains=search)
             | Q(cesionario_rut__icontains=search)
         )
+    sin_revisar = bool(filters.get('sin_revisar'))
+    if sin_revisar:
+        filtered = filtered.filter(revision_registrada=False)
+    filtered = _rpetc_apply_payment_filters(filtered, empresa_activa, filters)
     total = base.values('pk').count()
     filtered_total = filtered.values('pk').count()
     filtered_ids = filtered.values('pk')
@@ -452,6 +541,7 @@ def cesiones_data(request):
             'cesionario_rut': rut_display(cesion.cesionario_rut, cesion.cesionario_dv),
             'monto_cesion': str(cesion.monto_cesion or 0),
             'estado_cesion': cesion.estado_cesion,
+            'revision': {'revisado': bool(getattr(cesion, 'revision_registrada', False))},
             'contabilizacion': {key: value for key, value in state.get('contabilizacion', {}).items() if key != 'movimientos'},
             'pagada_factoring': {key: value for key, value in state.get('pagada_factoring', state.get('pago', {})).items() if key != 'movimientos'},
             'pagada_proveedor': {key: value for key, value in state.get('pagada_proveedor', {}).items() if key != 'movimientos'},
@@ -468,6 +558,109 @@ def cesiones_data(request):
         'summary': {'cantidad': filtered_total, 'monto_total': str(amount_total)},
         'data': [row_data(cesion) for cesion in page],
     })
+
+
+def _excel_text(value):
+    value = '' if value is None else str(value)
+    return "'" + value if value[:1] in {'=', '+', '-', '@'} else value
+
+
+def _excel_estado(value, payment=False):
+    estados = {
+        'CONTABILIZADA': 'Sí',
+        'PAGADA': 'Sí',
+        'PAGADA_FACTORING': 'Sí',
+        'PAGADA_PROVEEDOR': 'Sí',
+        'PAGADA_FACTORING_DIFERENCIA': 'Sí con diferencia',
+        'PAGADA_PROVEEDOR_DIFERENCIA': 'Sí con diferencia',
+        'NO_CONTABILIZADA': 'No',
+        'NO_PAGADA': 'No',
+        'REVISAR': 'Revisar',
+        'TIPO_NO_SOPORTADO': 'No soportado',
+        'NO_DISPONIBLE': 'No disponible',
+    }
+    return estados.get(value or '', value or '-')
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+def exportar_cesiones_excel(request):
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+
+    filters = _rpetc_request_filters(request)
+    filtered = _rpetc_annotated_queryset(empresa_activa, filters)
+    search = request.GET.get('search[value]', '').strip()
+    if search:
+        filtered = filtered.filter(
+            Q(folio_doc__icontains=search)
+            | Q(cedente_razon_social__icontains=search)
+            | Q(cesionario_razon_social__icontains=search)
+            | Q(cedente_rut__icontains=search)
+            | Q(cesionario_rut__icontains=search)
+        )
+    if filters.get('sin_revisar'):
+        filtered = filtered.filter(revision_registrada=False)
+    filtered = _rpetc_apply_payment_filters(filtered, empresa_activa, filters)
+    cesiones = list(filtered.order_by('-fecha_cesion', 'pk'))
+
+    states = {}
+    from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
+    for start in range(0, len(cesiones), 250):
+        chunk = cesiones[start:start + 250]
+        states.update(obtener_estados_contables_cesiones(empresa_activa.codigo, chunk))
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = 'Control de Cesiones'
+    headers = [
+        'Fecha cesión', 'Proveedor', 'RUT proveedor', 'Tipo documento', 'Folio',
+        'Monto documento', 'Monto cesión', 'Cesionario', 'RUT cesionario',
+        'Contabilizada', 'Pagada a factoring', 'Pagada a proveedor', 'Revisado',
+    ]
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for cesion in cesiones:
+        state = states.get(cesion.pk, {})
+        fecha = cesion.fecha_cesion
+        if fecha and timezone.is_aware(fecha):
+            fecha = timezone.localtime(fecha).replace(tzinfo=None)
+        sheet.append([
+            fecha,
+            _excel_text(cesion.cedente_razon_social),
+            _excel_text(f'{cesion.cedente_rut}-{cesion.cedente_dv}' if cesion.cedente_rut and cesion.cedente_dv else cesion.cedente_rut),
+            _excel_text(cesion.tipo_doc),
+            _excel_text(cesion.folio_doc),
+            cesion.monto_total,
+            cesion.monto_cesion,
+            _excel_text(cesion.cesionario_razon_social),
+            _excel_text(f'{cesion.cesionario_rut}-{cesion.cesionario_dv}' if cesion.cesionario_rut and cesion.cesionario_dv else cesion.cesionario_rut),
+            _excel_estado((state.get('contabilizacion') or {}).get('estado')),
+            _excel_estado((state.get('pagada_factoring') or {}).get('estado'), payment=True),
+            _excel_estado((state.get('pagada_proveedor') or {}).get('estado'), payment=True),
+            'Sí' if getattr(cesion, 'revision_registrada', False) else 'No',
+        ])
+    sheet.freeze_panes = 'A2'
+    sheet.auto_filter.ref = sheet.dimensions
+    for index, header in enumerate(headers, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = min(max(len(header) + 2, 14), 28)
+    for row in sheet.iter_rows(min_row=2, min_col=1, max_col=7):
+        if row[0].value:
+            row[0].number_format = 'DD-MM-YYYY HH:MM'
+        for cell in row[5:7]:
+            cell.number_format = '#,##0'
+
+    output = BytesIO()
+    workbook.save(output)
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="control_cesiones_{empresa_activa.codigo}_{timezone.localdate().isoformat()}.xlsx"'
+    return response
 
 
 @login_required
@@ -496,6 +689,14 @@ def detalle_contable_cesion(request, pk):
     return JsonResponse({
         'success': True,
         'factura': {'tipo': cesion.tipo_doc, 'folio': cesion.folio_doc},
+        'pagos_resumen': {
+            role: {
+                key: serializar(detalle.get(role, {}).get(key))
+                for key in ('estado', 'monto_rpetc', 'monto_legacy', 'diferencia_monto')
+                if key in detalle.get(role, {})
+            }
+            for role in ('pagada_factoring', 'pagada_proveedor')
+        },
         'contabilizacion': [
             {key: serializar(value) for key, value in movimiento.items()}
             for movimiento in detalle['contabilizacion'].get('movimientos', [])
@@ -515,6 +716,231 @@ def detalle_contable_cesion(request, pk):
     })
 
 
+def _revision_empresa(request):
+    empresa_id = request.session.get('empresa_id')
+    return Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+
+
+def _revision_cesion(request, pk, empresa):
+    return get_object_or_404(CesionRPETC.objects.filter(
+        tareas__tarea__empresa=empresa,
+    ).distinct(), pk=pk)
+
+
+def _revision_permisos(request, empresa):
+    vista = Vista.objects.filter(nombre='Gestión DTE - Control de Cesiones').first()
+    permiso = Permiso.objects.filter(usuario=request.user, empresa=empresa, vista=vista).first() if vista else None
+    return {
+        'crear': bool(permiso and (permiso.crear or permiso.supervisor)),
+        'modificar': bool(permiso and (permiso.modificar or permiso.supervisor)),
+        'eliminar': bool(permiso and (permiso.eliminar or permiso.supervisor)),
+    }
+
+
+def _revision_json(revision, permisos):
+    usuario_id = permisos.get('_usuario_id')
+    public_permisos = {key: permisos[key] for key in ('crear', 'modificar', 'eliminar')}
+    if not revision:
+        return {'revisado': False, 'comentarios': [], 'puede_agregar': public_permisos['crear'], 'permisos': public_permisos}
+    comentarios = []
+    for comentario in revision.comentarios.all():
+        es_autor = comentario.creado_por_id == usuario_id
+        comentarios.append({
+            'id': comentario.pk,
+            'glosa': comentario.comentario,
+            'autor': comentario.creado_por.username if comentario.creado_por else None,
+            'creado_en': comentario.creado_en.isoformat(),
+            'modificado_en': comentario.modificado_en.isoformat(),
+            'puede_editar': es_autor and public_permisos['modificar'],
+            'puede_eliminar': es_autor and public_permisos['eliminar'],
+        })
+    return {
+        'revisado': bool(comentarios),
+        'comentarios': comentarios,
+        'revision': {
+            'glosa': comentarios[0]['glosa'] if comentarios else revision.glosa,
+            'creado_por': comentarios[0]['autor'] if comentarios else None,
+            'creado_en': comentarios[0]['creado_en'] if comentarios else revision.creado_en.isoformat(),
+        },
+        'puede_agregar': public_permisos['crear'],
+        'permisos': public_permisos,
+    }
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "ingresar")
+def revision_cesion(request, pk):
+    empresa = _revision_empresa(request)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    cesion = _revision_cesion(request, pk, empresa)
+    revision = RevisionCesionRPETC.objects.filter(empresa=empresa, cesion=cesion).prefetch_related(
+        'comentarios__creado_por',
+    ).first()
+    permisos = _revision_permisos(request, empresa)
+    permisos['_usuario_id'] = request.user.pk
+    return JsonResponse(_revision_json(revision, permisos))
+
+
+def _validar_comentario_revision(request):
+    comentario = (request.POST.get('comentario') or '').strip()
+    if not comentario:
+        raise ValueError('El comentario es obligatorio.')
+    if len(comentario) > 2000:
+        raise ValueError('El comentario no puede superar 2000 caracteres.')
+    return comentario
+
+
+def _revision_con_permisos(request, pk):
+    empresa = _revision_empresa(request)
+    if not empresa:
+        return None, None, None
+    cesion = _revision_cesion(request, pk, empresa)
+    revision = RevisionCesionRPETC.objects.filter(empresa=empresa, cesion=cesion).first()
+    permisos = _revision_permisos(request, empresa)
+    permisos['_usuario_id'] = request.user.pk
+    return empresa, cesion, (revision, permisos)
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "crear")
+def crear_comentario_revision(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa, cesion, datos = _revision_con_permisos(request, pk)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    try:
+        comentario = _validar_comentario_revision(request)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    revision, _ = RevisionCesionRPETC.objects.get_or_create(
+        empresa=empresa,
+        cesion=cesion,
+        defaults={'glosa': comentario, 'creado_por': request.user},
+    )
+    RevisionCesionComentario.objects.create(
+        revision=revision,
+        comentario=comentario,
+        creado_por=request.user,
+    )
+    return JsonResponse(_revision_json(revision, datos[1]), status=201)
+
+
+def _comentario_autorizado(request, pk, comentario_pk):
+    empresa, cesion, datos = _revision_con_permisos(request, pk)
+    if not empresa:
+        return None, None, None, None
+    revision, permisos = datos
+    comentario = get_object_or_404(
+        RevisionCesionComentario,
+        pk=comentario_pk,
+        revision__empresa=empresa,
+        revision__cesion=cesion,
+    )
+    return empresa, revision, comentario, permisos
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "modificar")
+def editar_comentario_revision(request, pk, comentario_pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa, revision, comentario_obj, permisos = _comentario_autorizado(request, pk, comentario_pk)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    if comentario_obj.creado_por_id != request.user.pk:
+        return JsonResponse({'error': 'Solo el autor puede editar este comentario.'}, status=403)
+    try:
+        comentario_obj.comentario = _validar_comentario_revision(request)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    comentario_obj.save(update_fields=['comentario', 'modificado_en'])
+    return JsonResponse(_revision_json(revision, permisos))
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "eliminar")
+def eliminar_comentario_revision(request, pk, comentario_pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa, revision, comentario_obj, permisos = _comentario_autorizado(request, pk, comentario_pk)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    if comentario_obj.creado_por_id != request.user.pk:
+        return JsonResponse({'error': 'Solo el autor puede eliminar este comentario.'}, status=403)
+    comentario_obj.delete()
+    if not revision.comentarios.exists():
+        revision.delete()
+        return JsonResponse({'revisado': False, 'comentarios': [], 'puede_agregar': permisos['crear'], 'permisos': {key: permisos[key] for key in ('crear', 'modificar', 'eliminar')}})
+    return JsonResponse(_revision_json(revision, permisos))
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "crear")
+def crear_revision_cesion(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa = _revision_empresa(request)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    cesion = _revision_cesion(request, pk, empresa)
+    glosa = (request.POST.get('glosa') or '').strip()
+    if not glosa:
+        return JsonResponse({'error': 'La glosa es obligatoria.'}, status=400)
+    if len(glosa) > 2000:
+        return JsonResponse({'error': 'La glosa no puede superar 2000 caracteres.'}, status=400)
+    revision, creada = RevisionCesionRPETC.objects.get_or_create(
+        empresa=empresa,
+        cesion=cesion,
+        defaults={'glosa': glosa, 'creado_por': request.user},
+    )
+    if creada:
+        RevisionCesionComentario.objects.create(
+            revision=revision,
+            comentario=glosa,
+            creado_por=request.user,
+        )
+    if not creada:
+        return JsonResponse({'error': 'La cesión ya tiene una revisión registrada.'}, status=409)
+    return JsonResponse(_revision_json(revision, _revision_permisos(request, empresa)), status=201)
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "modificar")
+def editar_revision_cesion(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa = _revision_empresa(request)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    cesion = _revision_cesion(request, pk, empresa)
+    revision = get_object_or_404(RevisionCesionRPETC, empresa=empresa, cesion=cesion)
+    glosa = (request.POST.get('glosa') or '').strip()
+    if not glosa:
+        return JsonResponse({'error': 'La glosa es obligatoria.'}, status=400)
+    if len(glosa) > 2000:
+        return JsonResponse({'error': 'La glosa no puede superar 2000 caracteres.'}, status=400)
+    revision.glosa = glosa
+    revision.modificado_por = request.user
+    revision.save(update_fields=['glosa', 'modificado_por', 'modificado_en'])
+    return JsonResponse(_revision_json(revision, _revision_permisos(request, empresa)))
+
+
+@login_required
+@verificar_permiso("Gestión DTE - Control de Cesiones", "eliminar")
+def eliminar_revision_cesion(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido.'}, status=405)
+    empresa = _revision_empresa(request)
+    if not empresa:
+        return JsonResponse({'error': 'Empresa activa requerida.'}, status=403)
+    cesion = _revision_cesion(request, pk, empresa)
+    revision = get_object_or_404(RevisionCesionRPETC, empresa=empresa, cesion=cesion)
+    revision.delete()
+    return JsonResponse({'revisado': False, 'revision': None, 'permisos': _revision_permisos(request, empresa)})
+
+
 @login_required
 @verificar_permiso("Gestión DTE - Control de Cesiones", "modificar")
 def sincronizar_cesiones_rpetc(request):
@@ -525,12 +951,19 @@ def sincronizar_cesiones_rpetc(request):
         RPETCTaskFailedError, RPETCTaskTimeoutError, RPETCUnauthorizedError,
     )
     from .services.rpetc_importer import RPETCImportError
-    from .services.lectura_automatica import LecturaAutomaticaError, sincronizar_empresa_rpetc
+    from .services.lectura_automatica import (
+        LecturaAutomaticaError,
+        periodos_mensuales_rpetc,
+        rango_mensual_rpetc,
+        sincronizar_empresa_rpetc,
+    )
 
     empresa_id = request.session.get('empresa_id')
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa:
         return redirect('access_control:seleccionar_empresa')
+
+    fecha_sistema = _fecha_sistema_request(request)
 
     form = SincronizarCesionesRPETCForm(request.POST or None)
     context = {
@@ -546,13 +979,31 @@ def sincronizar_cesiones_rpetc(request):
         'sync_form': form,
         'sync_result': None,
         'sync_error': None,
+        'fecha_sistema_rpetc': fecha_sistema,
+        'periodos_mensuales_rpetc': periodos_mensuales_rpetc(fecha_sistema) if fecha_sistema else [],
     }
     context.update(_cesiones_rpetc_context(empresa_activa))
     if request.method != 'POST' or not form.is_valid():
         return render(request, 'gestiondte/cesiones.html', context)
 
-    fecha_desde = form.cleaned_data['fecha_desde']
-    fecha_hasta = form.cleaned_data['fecha_hasta']
+    mes = request.POST.get('mes', '').strip()
+    if mes:
+        try:
+            if not fecha_sistema:
+                raise LecturaAutomaticaError('No existe una fecha de sistema configurada.')
+            fecha_desde, fecha_hasta = rango_mensual_rpetc(fecha_sistema, int(mes))
+        except (LecturaAutomaticaError, TypeError, ValueError) as exc:
+            context['sync_error'] = str(exc)
+            return render(request, 'gestiondte/cesiones.html', context)
+    else:
+        fecha_desde = form.cleaned_data['fecha_desde']
+        fecha_hasta = form.cleaned_data['fecha_hasta']
+        if not fecha_sistema or fecha_desde.year != fecha_sistema.year or fecha_hasta.year != fecha_sistema.year:
+            context['sync_error'] = 'El período debe pertenecer al año de la fecha de sistema.'
+            return render(request, 'gestiondte/cesiones.html', context)
+        if fecha_hasta > fecha_sistema:
+            context['sync_error'] = 'La fecha hasta no puede superar la fecha de sistema.'
+            return render(request, 'gestiondte/cesiones.html', context)
     en_progreso = TareaRPETC.objects.filter(
         empresa=empresa_activa,
         tipo_consulta='DEUDOR',

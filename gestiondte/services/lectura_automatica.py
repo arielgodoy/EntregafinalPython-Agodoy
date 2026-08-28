@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import calendar
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -22,6 +23,41 @@ logger = logging.getLogger(__name__)
 
 class LecturaAutomaticaError(RuntimeError):
     """Error seguro de precondiciones de una lectura RPETC."""
+
+
+MESES_RPETC = (
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+)
+
+
+def rango_mensual_rpetc(fecha_sistema: date, mes: int) -> tuple[date, date]:
+    if mes < 1 or mes > 12:
+        raise LecturaAutomaticaError("El mes RPETC no es válido.")
+    if mes > fecha_sistema.month:
+        raise LecturaAutomaticaError("No se puede sincronizar un mes posterior a la fecha de sistema.")
+    desde = date(fecha_sistema.year, mes, 1)
+    hasta = date(fecha_sistema.year, mes, calendar.monthrange(fecha_sistema.year, mes)[1])
+    if mes == fecha_sistema.month:
+        hasta = fecha_sistema
+    return desde, hasta
+
+
+def periodos_mensuales_rpetc(fecha_sistema: date) -> list[dict[str, Any]]:
+    periodos = []
+    for mes, nombre in enumerate(MESES_RPETC, start=1):
+        if mes <= fecha_sistema.month:
+            desde, hasta = rango_mensual_rpetc(fecha_sistema, mes)
+        else:
+            desde = hasta = None
+        periodos.append({
+            'mes': mes,
+            'nombre': nombre,
+            'fecha_desde': desde,
+            'fecha_hasta': hasta,
+            'habilitado': mes <= fecha_sistema.month,
+        })
+    return periodos
 
 
 def validar_rango_lectura(fecha_desde: date, fecha_hasta: date, hoy: date | None = None) -> None:
