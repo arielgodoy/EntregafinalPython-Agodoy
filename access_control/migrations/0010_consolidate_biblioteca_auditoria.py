@@ -18,15 +18,16 @@ PERMISSION_FLAGS = (
 
 
 def forwards(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
     Permiso = apps.get_model("access_control", "Permiso")
 
-    target, _created = Vista.objects.get_or_create(nombre=TARGET_NAME)
-    source_vistas = Vista.objects.filter(nombre__in=SOURCE_NAMES)
+    target, _created = Vista.objects.using(db_alias).get_or_create(nombre=TARGET_NAME)
+    source_vistas = Vista.objects.using(db_alias).filter(nombre__in=SOURCE_NAMES)
 
     for source in source_vistas:
-        for source_permission in Permiso.objects.filter(vista=source):
-            target_permission, _created = Permiso.objects.get_or_create(
+        for source_permission in Permiso.objects.using(db_alias).filter(vista=source):
+            target_permission, _created = Permiso.objects.using(db_alias).get_or_create(
                 usuario_id=source_permission.usuario_id,
                 empresa_id=source_permission.empresa_id,
                 vista=target,
@@ -43,7 +44,7 @@ def forwards(apps, schema_editor):
             if changed:
                 for flag in changed:
                     setattr(target_permission, flag, updates[flag])
-                target_permission.save(update_fields=changed)
+                target_permission.save(using=db_alias, update_fields=changed)
 
 
 class Migration(migrations.Migration):

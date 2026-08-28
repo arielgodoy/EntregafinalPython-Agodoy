@@ -19,22 +19,23 @@ PERMISSION_FLAGS = (
 
 
 def forwards(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
     Permiso = apps.get_model("access_control", "Permiso")
 
     vistas = {}
     for nombre, route_name in VIEWS.items():
-        vista, _created = Vista.objects.get_or_create(nombre=nombre)
+        vista, _created = Vista.objects.using(db_alias).get_or_create(nombre=nombre)
         if vista.route_name != route_name:
             vista.route_name = route_name
-            vista.save(update_fields=["route_name"])
+            vista.save(using=db_alias, update_fields=["route_name"])
         vistas[nombre] = vista
 
     control_vista = vistas[CONTROL_NAME]
-    for permiso in Permiso.objects.filter(vista=control_vista):
+    for permiso in Permiso.objects.using(db_alias).filter(vista=control_vista):
         flags = {flag: getattr(permiso, flag) for flag in PERMISSION_FLAGS}
         for vista in (vistas[DASHBOARD_NAME], vistas[LECTURA_NAME]):
-            Permiso.objects.get_or_create(
+            Permiso.objects.using(db_alias).get_or_create(
                 usuario_id=permiso.usuario_id,
                 empresa_id=permiso.empresa_id,
                 vista=vista,

@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -46,6 +45,13 @@ class EmailAccount(models.Model):
 
 class SystemConfig(models.Model):
     is_active = models.BooleanField(default=False)
+    active_slot = models.CharField(
+        max_length=32,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+    )
     public_base_url = models.URLField()
     default_from_email = models.EmailField()
     default_from_name = models.CharField(max_length=150)
@@ -77,14 +83,30 @@ class SystemConfig(models.Model):
     max_failed_logins = models.PositiveIntegerField(default=5)
     lock_minutes = models.PositiveIntegerField(default=15)
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['is_active'],
-                condition=Q(is_active=True),
-                name='unique_active_system_config'
-            )
-        ]
+    def save(self, *args, **kwargs):
+        from django.db import IntegrityError, transaction
+
+        self.active_slot = 'SYSTEM_CONFIG_ACTIVE' if self.is_active else None
+        using = kwargs.get('using') or self._state.db or 'default'
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            kwargs['update_fields'] = set(update_fields) | {'active_slot', 'is_active'}
+
+        for attempt in range(2):
+            try:
+                with transaction.atomic(using=using):
+                    if self.is_active:
+                        # QuerySet.update() bypasses save(), so update both fields here.
+                        type(self).objects.using(using).exclude(pk=self.pk).update(
+                            is_active=False,
+                            active_slot=None,
+                        )
+                    if self.active_slot not in (None, 'SYSTEM_CONFIG_ACTIVE'):
+                        self.active_slot = None
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                if attempt == 1:
+                    raise
 
     def __str__(self):
         return f"SystemConfig ({'active' if self.is_active else 'inactive'})"

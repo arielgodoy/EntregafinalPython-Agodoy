@@ -23,15 +23,17 @@ ROUTES = {
 
 
 def populate_routes(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
     for nombre, route_name in ROUTES.items():
-        Vista.objects.filter(nombre=nombre).update(route_name=route_name)
+        Vista.objects.using(db_alias).filter(nombre=nombre).update(route_name=route_name)
 
 
 def clear_routes(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
     for nombre, route_name in ROUTES.items():
-        Vista.objects.filter(
+        Vista.objects.using(db_alias).filter(
             nombre=nombre,
             route_name=route_name,
         ).update(route_name=None)

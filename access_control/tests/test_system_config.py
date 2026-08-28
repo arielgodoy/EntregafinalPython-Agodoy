@@ -19,6 +19,69 @@ class SystemConfigFormTests(TestCase):
         self.assertIn('public_base_url', form.errors)
 
 
+class SystemConfigModelTests(TestCase):
+    databases = {'default', 'system_test'}
+
+    def _config(self, is_active=False):
+        return SystemConfig.objects.create(
+            is_active=is_active,
+            public_base_url='https://example.test',
+            default_from_email='system@example.test',
+            default_from_name='System',
+        )
+
+    def test_multiple_inactive_configs_are_allowed(self):
+        self._config()
+        self._config()
+
+        self.assertEqual(SystemConfig.objects.filter(is_active=False).count(), 2)
+
+    def test_saving_active_config_deactivates_previous_config(self):
+        previous = self._config(is_active=True)
+        current = self._config(is_active=True)
+
+        previous.refresh_from_db()
+        self.assertFalse(previous.is_active)
+        self.assertIsNone(previous.active_slot)
+        self.assertTrue(current.is_active)
+        self.assertEqual(current.active_slot, 'SYSTEM_CONFIG_ACTIVE')
+        self.assertEqual(SystemConfig.objects.filter(is_active=True).count(), 1)
+
+    def test_active_slot_replaces_conditional_constraint(self):
+        self.assertEqual(SystemConfig._meta.constraints, [])
+        self.assertTrue(SystemConfig._meta.get_field('active_slot').unique)
+
+    def test_update_fields_keeps_active_slot_consistent(self):
+        config = self._config()
+
+        config.is_active = True
+        config.save(update_fields=['is_active'])
+        config.refresh_from_db()
+        self.assertTrue(config.is_active)
+        self.assertEqual(config.active_slot, 'SYSTEM_CONFIG_ACTIVE')
+
+        config.is_active = False
+        config.save(update_fields=['is_active'])
+        config.refresh_from_db()
+        self.assertFalse(config.is_active)
+        self.assertIsNone(config.active_slot)
+
+    def test_save_uses_loaded_database_when_using_is_omitted(self):
+        config = SystemConfig.objects.using('system_test').create(
+            is_active=False,
+            public_base_url='https://example.test',
+            default_from_email='system@example.test',
+            default_from_name='System',
+        )
+        config.is_active = True
+        config.save()
+        config.refresh_from_db()
+
+        self.assertTrue(config.is_active)
+        self.assertEqual(config.active_slot, 'SYSTEM_CONFIG_ACTIVE')
+        self.assertFalse(SystemConfig.objects.filter(pk=config.pk).exists())
+
+
 class SystemConfigViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='tester', password='testpass')

@@ -191,6 +191,11 @@ DATABASES['default'] = {
     'ENGINE': 'django.db.backends.sqlite3',
     'NAME': ':memory:',
 }
+DATABASES['system_test'] = {
+    'ENGINE': 'django.db.backends.sqlite3',
+    'NAME': ':memory:',
+}
+SYSTEM_DATABASE_ALIASES = {'default', 'system_test'}
 
 try:
     import PIL  # noqa: F401

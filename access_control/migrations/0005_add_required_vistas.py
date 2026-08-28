@@ -8,6 +8,7 @@ def create_vistas(apps, schema_editor):
     if any('test' in str(arg) for arg in sys.argv):
         return
 
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model('access_control', 'Vista')
     nombres = [
         'Maestro Usuarios',
@@ -24,10 +25,11 @@ def create_vistas(apps, schema_editor):
         'chat.delete',
     ]
     for nombre in nombres:
-        Vista.objects.get_or_create(nombre=nombre)
+        Vista.objects.using(db_alias).get_or_create(nombre=nombre)
 
 
 def remove_vistas(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model('access_control', 'Vista')
     nombres = [
         'Maestro Usuarios',
@@ -43,7 +45,7 @@ def remove_vistas(apps, schema_editor):
         'chat.send_message',
         'chat.delete',
     ]
-    Vista.objects.filter(nombre__in=nombres).delete()
+    Vista.objects.using(db_alias).filter(nombre__in=nombres).delete()
 
 
 class Migration(migrations.Migration):

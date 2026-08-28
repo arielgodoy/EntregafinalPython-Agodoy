@@ -6,15 +6,17 @@ GESTION_CESIONES_ROUTE = "gestion_dte:cesiones"
 
 
 def populate_routes(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
-    Vista.objects.filter(nombre=GESTION_CESIONES_NAME).update(
+    Vista.objects.using(db_alias).filter(nombre=GESTION_CESIONES_NAME).update(
         route_name=GESTION_CESIONES_ROUTE,
     )
 
 
 def clear_routes(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Vista = apps.get_model("access_control", "Vista")
-    Vista.objects.filter(
+    Vista.objects.using(db_alias).filter(
         nombre=GESTION_CESIONES_NAME,
         route_name=GESTION_CESIONES_ROUTE,
     ).update(route_name=None)

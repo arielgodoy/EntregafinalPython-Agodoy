@@ -7,10 +7,11 @@ from django.utils import timezone
 
 
 def copiar_glosas_a_comentarios(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     revision_model = apps.get_model('gestiondte', 'RevisionCesionRPETC')
     comentario_model = apps.get_model('gestiondte', 'RevisionCesionComentario')
     comentarios = []
-    for revision in revision_model.objects.exclude(glosa='').iterator():
+    for revision in revision_model.objects.using(db_alias).exclude(glosa='').iterator():
         comentarios.append(comentario_model(
             revision_id=revision.pk,
             comentario=revision.glosa,
@@ -18,12 +19,13 @@ def copiar_glosas_a_comentarios(apps, schema_editor):
             creado_en=revision.creado_en,
             modificado_en=revision.modificado_en or timezone.now(),
         ))
-    comentario_model.objects.bulk_create(comentarios)
+    comentario_model.objects.using(db_alias).bulk_create(comentarios)
 
 
 def revertir_comentarios_migrados(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     comentario_model = apps.get_model('gestiondte', 'RevisionCesionComentario')
-    comentario_model.objects.all().delete()
+    comentario_model.objects.using(db_alias).all().delete()
 
 
 class Migration(migrations.Migration):

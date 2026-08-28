@@ -8,12 +8,13 @@ IDENTITY_FIELDS = ("first_name", "last_name", "email")
 
 
 def merge_missing_identity(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Avatar = apps.get_model("acounts", "Avatar")
     User = apps.get_model("auth", "User")
     copied = {field: 0 for field in IDENTITY_FIELDS}
     conflicts = {field: 0 for field in IDENTITY_FIELDS}
 
-    for avatar in Avatar.objects.select_related("user").all():
+    for avatar in Avatar.objects.using(db_alias).select_related("user").all():
         user = avatar.user
         if user is None:
             continue
@@ -30,7 +31,7 @@ def merge_missing_identity(apps, schema_editor):
                 conflicts[field] += 1
 
         if fields_to_update:
-            user.save(update_fields=fields_to_update)
+            user.save(using=db_alias, update_fields=fields_to_update)
 
     logger.warning(
         "Avatar identity consolidation: copied_missing=%s conflicts=%s",
