@@ -38,6 +38,7 @@ urlpatterns = [
     path('evaluaciones/', include('evaluaciones.urls')),
     path('notificaciones/', include('notificaciones.urls', namespace='notificaciones')),
     path('auditoria/', include('auditoria.urls', namespace='auditoria')),
+    path('database-manager/', include('database_manager.urls', namespace='database_manager')),
 
 ]
 

@@ -1,0 +1,39 @@
+{% extends 'partials/base.html' %}
+
+{% block title %}Gestión de Bases del Sistema{% endblock title %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% include "partials/page-title.html" with pagetitle="Gestión de Bases del Sistema" title="Panel" pagetitle_key="database_manager.title" title_key="database_manager.dashboard.title" %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title" data-key="database_manager.dashboard.heading">Gestión de Bases del Sistema</h5>
+                            <p class="card-text" data-key="database_manager.dashboard.description">Panel de diagnóstico y comparación de bases configuradas.</p>
+                            <a class="btn btn-primary" href="{% url 'database_manager:compare' %}" data-key="database_manager.dashboard.compare">Comparar bases</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                {% for database in database_aliases %}
+                <div class="col-md-6 col-xl-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">{{ database.alias }}</h6>
+                            <p class="mb-1"><span data-key="database_manager.database.vendor">Motor</span>: {{ database.vendor }}</p>
+                            <p class="mb-0"><span data-key="database_manager.database.classification">Clasificación</span>: {{ database.classification }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-12"><p data-key="database_manager.database.none">No hay bases SYSTEM configuradas.</p></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
