@@ -1129,5 +1129,16 @@
 "database_manager.compare.managed_false": "Tablas externas / managed=False",
 "database_manager.compare.managed_false_error": "Se detectaron tablas externas inesperadas en el destino.",
 "database_manager.compare.managed_false_none": "No se detectaron tablas externas inesperadas en el destino.",
-"database_manager.compare.technical_details": "Detalles t\u00e9cnicos: PK m\u00e1ximas"
+"database_manager.compare.technical_details": "Detalles t\u00e9cnicos: PK m\u00e1ximas",
+"database_manager.preflight.title": "Preflight",
+"database_manager.preflight.heading": "Validaci\u00f3n previa a migraci\u00f3n",
+"database_manager.preflight.description": "Diagn\u00f3stico de solo lectura antes de preparar una futura migraci\u00f3n.",
+"database_manager.preflight.submit": "Ejecutar preflight",
+"database_manager.preflight.status": "Estado general",
+"database_manager.preflight.summary": "Resumen",
+"database_manager.preflight.checks": "Checks",
+"database_manager.preflight.next_step": "Preparar plan de migraci\u00f3n",
+"database_manager.dashboard.preflight_card": "Preflight",
+"database_manager.dashboard.preflight_card_description": "Valida compatibilidad y riesgos antes de planificar una futura migraci\u00f3n.",
+"database_manager.dashboard.open_preflight": "Abrir preflight"
 }

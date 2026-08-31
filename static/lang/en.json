@@ -1167,5 +1167,16 @@
 "database_manager.compare.managed_false": "External tables / managed=False",
 "database_manager.compare.managed_false_error": "Unexpected external tables were detected in the target.",
 "database_manager.compare.managed_false_none": "No unexpected external tables were detected in the target.",
-"database_manager.compare.technical_details": "Technical details: maximum PK values"
+"database_manager.compare.technical_details": "Technical details: maximum PK values",
+"database_manager.preflight.title": "Preflight",
+"database_manager.preflight.heading": "Preflight validation before migration",
+"database_manager.preflight.description": "Read-only diagnostics before preparing a future migration.",
+"database_manager.preflight.submit": "Run preflight",
+"database_manager.preflight.status": "Overall status",
+"database_manager.preflight.summary": "Summary",
+"database_manager.preflight.checks": "Checks",
+"database_manager.preflight.next_step": "Prepare migration plan",
+"database_manager.dashboard.preflight_card": "Preflight",
+"database_manager.dashboard.preflight_card_description": "Validate compatibility and risks before planning a future migration.",
+"database_manager.dashboard.open_preflight": "Open preflight"
 }
