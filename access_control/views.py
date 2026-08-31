@@ -300,13 +300,13 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
                         'supervisor': permiso.supervisor,
                     }
                 )
-            return JsonResponse({"success": True})
+            return JsonResponse({"success": True, "message": "Permisos copiados correctamente."})
         except Usuario.DoesNotExist:
-            return JsonResponse({"success": False, "error": _("Usuario no encontrado.")})
+            return JsonResponse({"success": False, "error": _("Usuario no encontrado.")}, status=404)
         except Empresa.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Empresa no encontrada."})
+            return JsonResponse({"success": False, "error": "Empresa no encontrada."}, status=404)
         except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 class VistaListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
     model = Vista

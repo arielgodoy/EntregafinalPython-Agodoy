@@ -134,6 +134,7 @@ Gestión de Permisos Filtrados
                     <div class="form-group mb-3">
                         <label for="destinoUsuario" class="form-label" data-key="label_target_user">Usuario Destino</label>
                         <select id="destinoUsuario" class="form-select">
+                            <option value="">Seleccionar usuario</option>
                             {% for option in form.usuario.field.queryset %}
                             <option value="{{ option.id }}">{{ option }}</option>
                             {% endfor %}
@@ -148,6 +149,8 @@ Gestión de Permisos Filtrados
                         </select>
                     </div>
                 </form>
+                <div id="copy-permissions-success" class="alert alert-success d-none mb-0" role="status">Permisos copiados correctamente.</div>
+                <div id="copy-permissions-error" class="alert alert-danger d-none mb-0" role="alert"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="btn_cancel">Cancelar</button>
@@ -404,7 +407,6 @@ Gestión de Permisos Filtrados
                         position: "right",
                         backgroundColor: "#28a745",
                     }).showToast();
-                    location.reload();
                 } else {
                     Toastify({
                         text: t('permission_update_error') + ': ' + data.error,
@@ -556,6 +558,82 @@ Gestión de Permisos Filtrados
         });
     });
 })();
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var copyButton = document.getElementById('copyPermissionsButton');
+    var origenUsuario = document.getElementById('origenUsuario');
+    var origenEmpresa = document.getElementById('origenEmpresa');
+    var destinoUsuario = document.getElementById('destinoUsuario');
+    var destinoEmpresa = document.getElementById('destinoEmpresa');
+    var successMessage = document.getElementById('copy-permissions-success');
+    var errorMessage = document.getElementById('copy-permissions-error');
+
+    if (!copyButton || !origenUsuario || !origenEmpresa || !destinoUsuario || !destinoEmpresa) {
+        return;
+    }
+
+    function showCopyError(message) {
+        successMessage.classList.add('d-none');
+        errorMessage.textContent = message;
+        errorMessage.classList.remove('d-none');
+    }
+
+    copyButton.addEventListener('click', function (event) {
+        event.stopImmediatePropagation();
+        successMessage.classList.add('d-none');
+        errorMessage.classList.add('d-none');
+
+        if (!destinoUsuario.value) {
+            showCopyError('Selecciona un usuario destino.');
+            destinoUsuario.focus();
+            return;
+        }
+
+        copyButton.disabled = true;
+        fetch("{% url 'access_control:copy_permissions' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Accept': 'application/json'
+            },
+            body: new URLSearchParams({
+                origen_usuario: origenUsuario.value,
+                origen_empresa: origenEmpresa.value,
+                destino_usuario: destinoUsuario.value,
+                destino_empresa: destinoEmpresa.value
+            })
+        })
+        .then(function (response) {
+            return response.json().catch(function () {
+                return {};
+            }).then(function (data) {
+                if (!response.ok) {
+                    throw new Error(data.error || 'No fue posible copiar los permisos.');
+                }
+                return data;
+            });
+        })
+        .then(function (data) {
+            if (!data.success) {
+                showCopyError(data.error || 'No fue posible copiar los permisos.');
+                return;
+            }
+
+            errorMessage.classList.add('d-none');
+            successMessage.textContent = data.message || 'Permisos copiados correctamente.';
+            successMessage.classList.remove('d-none');
+        })
+        .catch(function (error) {
+            showCopyError(error.message || 'No fue posible copiar los permisos.');
+        })
+        .finally(function () {
+            copyButton.disabled = false;
+        });
+    }, true);
+});
 </script>
 
 {% endblock extra_js %}

@@ -21,9 +21,11 @@
 
   function hideMessages() {
     var invalid = document.getElementById("system-date-error-invalid");
+    var forbidden = document.getElementById("system-date-error-forbidden");
     var server = document.getElementById("system-date-error-server");
     var success = document.getElementById("system-date-success");
     if (invalid) invalid.classList.add("d-none");
+    if (forbidden) forbidden.classList.add("d-none");
     if (server) server.classList.add("d-none");
     if (success) success.classList.add("d-none");
   }
@@ -66,16 +68,29 @@
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           "X-CSRFToken": csrftoken,
+          "Accept": "application/json",
         },
         body: body.toString(),
       })
         .then(function (response) {
+          if (response.status === 403) {
+            return response.json().catch(function () {
+              return null;
+            }).then(function () {
+              var forbidden = document.getElementById("system-date-error-forbidden");
+              if (forbidden) forbidden.classList.remove("d-none");
+              return null;
+            });
+          }
           if (!response.ok) {
             throw new Error("request failed");
           }
           return response.json();
         })
         .then(function (data) {
+          if (data === null) {
+            return;
+          }
           if (data && data.ok) {
             var success = document.getElementById("system-date-success");
             if (success) success.classList.remove("d-none");

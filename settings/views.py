@@ -252,7 +252,7 @@ class RecibirCorreoPruebaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 class SetFechaSistemaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Configurar fecha del sistema."""
     vista_nombre = "Settings - Establecer Fecha Sistema"
-    permiso_requerido = "ingresar"
+    permiso_requerido = "modificar"
 
     def dispatch(self, request, *args, **kwargs):
         empresa_response = _require_empresa_activa_for_view(request, self.vista_nombre)
