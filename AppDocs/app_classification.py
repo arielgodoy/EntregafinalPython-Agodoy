@@ -45,3 +45,13 @@ APPLICATION_APPS = (
 )
 
 PROJECT_APPS = SYSTEM_APPS + APPLICATION_APPS
+
+# Temporary legacy adapter pending API/domain decoupling.
+ALLOWED_SYSTEM_TO_APPLICATION_DEPENDENCIES = {
+    ("api", "biblioteca"): "Legacy API adapter for Propietario; pending decoupling.",
+}
+
+# Known business coupling pending an event-based integration boundary.
+ALLOWED_APPLICATION_CYCLES = (
+    frozenset(("control_de_proyectos", "control_operacional")),
+)
