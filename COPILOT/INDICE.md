@@ -15,6 +15,7 @@ Consultar `COPILOT/historico/` unicamente cuando sea necesario investigar una im
 - `INDICE.md`: indice de la documentacion operativa actual.
 - `REGLAS_CODIGO_VENDOR.md`: regla vigente para archivos vendor e infraestructura.
 - `LOGIN_RECUERDAME_SESIONES.md`: comportamiento y seguridad de sesiones del login.
+- `ARQUITECTURA_APPS.md`: clasificacion tecnica de apps, proteccion de SYSTEM_APPS y deuda arquitectonica.
 
 ## HISTORICO / REFERENCIA
 
@@ -31,6 +32,11 @@ Incluye reportes, comparativas, diagnósticos, implementaciones, soluciones, ver
 - No cargar toda la carpeta `COPILOT/` ni toda la carpeta historica por defecto.
 
 Para patrones generales de implementacion, revisar primero las reglas globales y la documentacion operativa vigente.
+
+### Arquitectura
+
+- `COPILOT/ARQUITECTURA_APPS.md`
+  - Cargar para tareas que creen, modifiquen o dependan de apps Django, settings, integraciones o cambios transversales.
 
 ### Theme / Frontend
 
