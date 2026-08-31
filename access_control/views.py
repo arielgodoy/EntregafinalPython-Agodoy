@@ -266,6 +266,8 @@ def toggle_permiso_por_vista(request):
 
 
 @login_required
+@verificar_permiso("Control de Acceso - Maestro Permisos", "modificar")
+@require_POST
 def toggle_permiso(request):
     """
     Modifica un permiso granular (ingresar/crear/modificar/eliminar/autorizar/supervisor).
@@ -278,13 +280,6 @@ def toggle_permiso(request):
     - permiso_field debe estar en whitelist
     - CSRF token requerido (frontend envía X-CSRFToken)
     """
-    # Validar método HTTP
-    if request.method != "POST":
-        return JsonResponse(
-            {"success": False, "error": _("Método no permitido. Solo POST.")},
-            status=405
-        )
-    
     # Campos válidos para toggle
     VALID_FIELDS = ["ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor"]
     
@@ -312,6 +307,11 @@ def toggle_permiso(request):
     
     try:
         permiso = Permiso.objects.get(id=int(permiso_id))
+        if str(permiso.empresa_id) != str(request.session.get("empresa_id")):
+            return JsonResponse(
+                {"success": False, "error": _("No tienes permiso para modificar permisos de otra empresa.")},
+                status=403,
+            )
         setattr(permiso, permiso_field, value)
         permiso.save()
         return JsonResponse({"success": True, "new_value": value})
@@ -932,7 +932,7 @@ def actualizar_vista_inicial(request):
 class InvitacionesListView(VerificarPermisoSafeMixin, LoginRequiredMixin, ListView):
     template_name = 'access_control/invitaciones_list.html'
     context_object_name = 'invitaciones'
-    vista_nombre = 'invitaciones'
+    vista_nombre = 'Control de Acceso - Invitaciones'
     permiso_requerido = 'ingresar'
 
     def _resolve_empresa_ids(self, token):
@@ -1027,7 +1027,7 @@ class InvitacionesListView(VerificarPermisoSafeMixin, LoginRequiredMixin, ListVi
 
 
 class InvitacionEliminarView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = 'invitaciones'
+    vista_nombre = 'Control de Acceso - Invitaciones'
     permiso_requerido = 'eliminar'
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
@@ -1106,14 +1106,6 @@ class BaseUsuarioInviteView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
     success_url = reverse_lazy('access_control:usuarios_lista')
     vista_nombre = 'Control de Acceso - Invitar Usuario'    
     permiso_requerido = 'crear'
-
-    def dispatch(self, request, *args, **kwargs):
-        # Asegurar existencia de la vista base para invitaciones
-        Vista.objects.get_or_create(nombre='auth_invite', defaults={'descripcion': ''})
-        try:
-            return super().dispatch(request, *args, **kwargs)
-        except PermisoDenegadoJson as e:
-            return self.handle_no_permission(request, str(e))
 
     def handle_no_permission(self, request, mensaje="No tienes permiso para esta acción."):
         vista_nombre = getattr(self, "vista_nombre", "Desconocida")

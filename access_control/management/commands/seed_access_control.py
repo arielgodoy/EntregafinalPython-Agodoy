@@ -10,8 +10,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         vistas = [
             'Maestro Usuarios',
-            'auth_invite',
-            'invitaciones',
+            'Control de Acceso - Invitaciones',
+            'Control de Acceso - Invitar Usuario',
             'system_config',
             'company_config',
             'email_accounts',

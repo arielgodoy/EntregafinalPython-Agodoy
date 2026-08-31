@@ -18,8 +18,7 @@ def invite_user_flow(email, first_name, last_name, empresas, tipo_usuario, usuar
     if tipo_usuario == 'USUARIO' and not usuario_referencia:
         return {'ok': False, 'error': 'validation.reference_required'}
 
-    # Asegurar que existan las vistas necesarias; crearlas si faltan.
-    Vista.objects.get_or_create(nombre='auth_invite', defaults={'descripcion': ''})
+    # Asegurar que exista la vista base para permisos del usuario invitado.
     vista_base, _ = Vista.objects.get_or_create(nombre='Maestro Usuarios', defaults={'descripcion': ''})
 
     user = User.objects.filter(username=email).first()

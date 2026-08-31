@@ -16,12 +16,14 @@ def _hash_token(value):
 
 
 class InvitacionesListTests(TestCase):
+    vista_nombre = 'Control de Acceso - Invitaciones'
+
     def setUp(self):
         self.user = User.objects.create_user(username='tester', password='pass')
         self.staff = User.objects.create_user(username='staff', password='pass', is_staff=True)
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 01')
         self.empresa_sec = Empresa.objects.create(codigo='02', descripcion='Empresa 02')
-        self.vista = Vista.objects.create(nombre='invitaciones')
+        self.vista = Vista.objects.create(nombre=self.vista_nombre)
 
         Permiso.objects.create(
             usuario=self.staff,
@@ -53,6 +55,15 @@ class InvitacionesListTests(TestCase):
         session.save()
         response = self.client.get(reverse('access_control:invitaciones_lista'))
         self.assertEqual(response.status_code, 403)
+        permiso = Permiso.objects.get(usuario=self.user, empresa=self.empresa, vista=self.vista)
+        self.assertFalse(permiso.ingresar)
+        self.assertFalse(permiso.crear)
+        self.assertFalse(permiso.modificar)
+        self.assertFalse(permiso.eliminar)
+        self.assertFalse(permiso.autorizar)
+        self.assertFalse(permiso.supervisor)
+        self.assertFalse(Vista.objects.filter(nombre='invitaciones').exists())
+        self.assertFalse(Vista.objects.filter(nombre='auth_invite').exists())
 
     def test_lista_estado_tokens(self):
         self.client.force_login(self.staff)
@@ -114,7 +125,7 @@ class InvitacionesDeleteTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(username='staff', password='pass', is_staff=True)
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 01')
-        self.vista = Vista.objects.create(nombre='invitaciones')
+        self.vista = Vista.objects.create(nombre='Control de Acceso - Invitaciones')
         Permiso.objects.create(
             usuario=self.staff,
             empresa=self.empresa,

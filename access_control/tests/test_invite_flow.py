@@ -24,11 +24,6 @@ class InviteUserFlowTests(TestCase):
         session.save()
 
     def _grant_invite_perm(self, allow_create=True):
-        # Vista 'auth_invite' necesaria para dispatch check en BaseUsuarioInviteView
-        Vista.objects.get_or_create(
-            nombre='auth_invite',
-            defaults={'descripcion': ''},
-        )
         # Vista 'Maestro Usuarios' necesaria para invite_user_flow (permisos base del invitado)
         Vista.objects.get_or_create(
             nombre='Maestro Usuarios',
@@ -142,6 +137,7 @@ class InviteUserFlowTests(TestCase):
         token_obj = UserEmailToken.objects.filter(user=invited).first()
         self.assertIsNotNone(token_obj)
         self.assertIsNone(token_obj.used_at)
+        self.assertFalse(Vista.objects.filter(nombre='auth_invite').exists())
 
         self.assertEqual(len(mail.outbox), 1)
         token_match = re.search(r'/auth/activate/([^/]+)/', mail.outbox[0].body)

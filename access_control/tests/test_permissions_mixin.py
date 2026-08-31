@@ -51,6 +51,22 @@ class TestVerificarPermisoMixinHTML(TestCase):
         )
         self.assertTrue(tiene_error_403, "Debe renderizar contenido del template 403_forbidden.html")
 
+    def test_missing_permission_is_created_empty_then_returns_403(self):
+        request = self.factory.get('/access-control/usuarios/')
+        request.user = self.user
+        request.session = {'empresa_id': self.empresa.id, 'empresa_nombre': f'{self.empresa.codigo} - {self.empresa.descripcion}'}
+
+        response = UsuariosListaView.as_view()(request)
+
+        self.assertEqual(response.status_code, 403)
+        permiso = Permiso.objects.get(usuario=self.user, empresa=self.empresa, vista=self.vista)
+        self.assertFalse(permiso.ingresar)
+        self.assertFalse(permiso.crear)
+        self.assertFalse(permiso.modificar)
+        self.assertFalse(permiso.eliminar)
+        self.assertFalse(permiso.autorizar)
+        self.assertFalse(permiso.supervisor)
+
 
 class TestVerificarPermisoMixinAJAX(TestCase):
     """Tests para VerificarPermisoMixin con requests AJAX"""

@@ -20,8 +20,9 @@ from biblioteca.models import Propietario
 from .serializers import PropietarioSerializer
 from django.conf import settings
 from common.utils import crear_conexion,sql_sistema
-from access_control.models import Empresa, Permiso, Vista
+from access_control.models import Empresa
 from access_control.decorators import verificar_permiso
+from access_control.services.permissions import user_has_permission_for_empresa
 from access_control.services.invite import invite_user_flow
 from .services.buk_api import BukAPIError
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 API_HOME_VISTA_NOMBRE = "APIs - Inicio"
+INVITAR_USUARIO_VISTA_NOMBRE = "Control de Acceso - Invitar Usuario"
 
 
 # class TrabajadoresViewSet(ReadOnlyModelViewSet):
@@ -183,15 +185,12 @@ def invite_user(request):
             status=404,
         )
 
-    vista_auth = Vista.objects.filter(nombre='auth_invite').first()
-    if not vista_auth:
-        return JsonResponse(
-            {'detail': 'NO ENCONTRADO: Vista base requerida auth_invite no está configurada. Debe definirse por seed.'},
-            status=400,
-        )
-
-    permiso = Permiso.objects.filter(usuario=request.user, empresa=empresa, vista=vista_auth).first()
-    if not permiso or not permiso.crear:
+    if not user_has_permission_for_empresa(
+        user=request.user,
+        empresa=empresa,
+        vista_nombre=INVITAR_USUARIO_VISTA_NOMBRE,
+        accion="crear",
+    ):
         return JsonResponse({'detail': 'No tienes permiso para esta acción.'}, status=403)
 
     try:
