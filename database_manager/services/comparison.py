@@ -67,6 +67,20 @@ def _unmanaged_tables():
     }
 
 
+def _connection_configuration_errors(alias: str) -> list[str]:
+    connection = connections[alias]
+    if connection.vendor != 'mysql':
+        return []
+
+    required_settings = ('NAME', 'HOST', 'USER', 'PASSWORD', 'PORT')
+    return [
+        f'{alias}: database {setting.lower()} is not configured'
+        for setting in required_settings
+        if not isinstance(connection.settings_dict.get(setting), str)
+        or not connection.settings_dict[setting].strip()
+    ]
+
+
 def _read_snapshot(alias: str, managed_models: list[type[models.Model]]) -> DatabaseSnapshot:
     connection = connections[alias]
     table_names = frozenset(connection.introspection.table_names())
@@ -120,6 +134,13 @@ def compare_databases(source_alias: str, target_alias: str) -> DatabaseCompariso
         result.blocking_errors.append('source alias has UNKNOWN classification')
     if target_classification is not DatabaseClassification.SYSTEM:
         result.blocking_errors.append('target alias is not classified as SYSTEM')
+    if result.blocking_errors:
+        return result
+
+    result.source_vendor = connections[source_alias].vendor
+    result.target_vendor = connections[target_alias].vendor
+    result.blocking_errors.extend(_connection_configuration_errors(source_alias))
+    result.blocking_errors.extend(_connection_configuration_errors(target_alias))
     if result.blocking_errors:
         return result
 

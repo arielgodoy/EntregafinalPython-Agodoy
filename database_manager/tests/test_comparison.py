@@ -102,6 +102,34 @@ class DatabaseComparisonTests(SimpleTestCase):
         self.assertEqual(result.status, 'BLOCKED')
         self.assertIn('django_migrations', result.blocking_errors[0])
 
+    def test_missing_mysql_host_returns_clear_blocking_error_with_vendors(self):
+        mysql_connection = SimpleNamespace(
+            vendor='mysql',
+            settings_dict={
+                'NAME': 'system',
+                'HOST': None,
+                'USER': 'configured-user',
+                'PASSWORD': 'configured-password',
+                'PORT': '3306',
+            },
+        )
+        sqlite_connection = SimpleNamespace(vendor='sqlite', settings_dict={})
+
+        with patch(
+            'database_manager.services.comparison.connections',
+            {'default': sqlite_connection, 'system_test': mysql_connection},
+        ), patch('database_manager.services.comparison._read_snapshot') as read_snapshot:
+            result = compare_databases('default', 'system_test')
+
+        self.assertEqual(result.status, 'BLOCKED')
+        self.assertEqual(result.source_vendor, 'sqlite')
+        self.assertEqual(result.target_vendor, 'mysql')
+        self.assertEqual(
+            result.blocking_errors,
+            ['system_test: database host is not configured'],
+        )
+        read_snapshot.assert_not_called()
+
     def test_serialized_result_contains_metadata_only(self):
         serialized = repr(self._compare().to_dict())
 
