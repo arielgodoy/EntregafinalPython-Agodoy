@@ -12,6 +12,11 @@ VISTAS = (
         'route_name': 'database_manager:compare',
         'descripcion': 'Comparación de bases del sistema.',
     },
+    {
+        'nombre': 'Gestión de Bases - Preflight',
+        'route_name': 'database_manager:preflight',
+        'descripcion': 'Validación previa de bases del sistema.',
+    },
 )
 
 

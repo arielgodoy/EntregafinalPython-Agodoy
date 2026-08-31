@@ -8,6 +8,7 @@ class DatabaseManagerSeedTests(TestCase):
     expected = {
         'Gestión de Bases - Dashboard': 'database_manager:dashboard',
         'Gestión de Bases - Comparar': 'database_manager:compare',
+        'Gestión de Bases - Preflight': 'database_manager:preflight',
     }
 
     def test_seed_creates_catalog_views_without_permissions(self):
@@ -39,5 +40,8 @@ class DatabaseManagerSeedTests(TestCase):
         )
 
         self.assertEqual(second, first)
-        self.assertEqual(Vista.objects.filter(nombre__in=self.expected).count(), 2)
+        self.assertEqual(
+            Vista.objects.filter(nombre__in=self.expected).count(),
+            len(self.expected),
+        )
         self.assertFalse(Permiso.objects.filter(vista__nombre__in=self.expected).exists())

@@ -10,15 +10,17 @@ from access_control.models import Empresa, Permiso, Vista
 class DatabaseManagerViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='db-view-user', password='test-pass')
-        empresa = Empresa.objects.create(codigo='02', descripcion='Empresa view')
+        self.empresa = Empresa.objects.create(codigo='02', descripcion='Empresa view')
         session = self.client.session
-        session['empresa_id'] = empresa.id
+        session['empresa_id'] = self.empresa.id
         session.save()
         self.client.force_login(self.user)
         self.dashboard_vista = Vista.objects.create(nombre='Gestión de Bases - Dashboard')
-        Permiso.objects.create(usuario=self.user, empresa=empresa, vista=self.dashboard_vista, ingresar=True)
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=self.dashboard_vista, ingresar=True)
         vista = Vista.objects.create(nombre='Gestión de Bases - Comparar')
-        Permiso.objects.create(usuario=self.user, empresa=empresa, vista=vista, ingresar=True)
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=vista, ingresar=True)
+        preflight_vista = Vista.objects.create(nombre='Gestión de Bases - Preflight')
+        Permiso.objects.create(usuario=self.user, empresa=self.empresa, vista=preflight_vista, ingresar=True)
 
     def comparison_result(self, **overrides):
         result = {
@@ -49,6 +51,72 @@ class DatabaseManagerViewTests(TestCase):
     def test_reverse_names_are_registered(self):
         self.assertEqual(reverse('database_manager:dashboard'), '/database-manager/')
         self.assertEqual(reverse('database_manager:compare'), '/database-manager/compare/')
+        self.assertEqual(reverse('database_manager:preflight'), '/database-manager/preflight/')
+
+    @patch('database_manager.views.run_preflight')
+    def test_preflight_renders_authorized_result(self, run_preflight):
+        run_preflight.return_value.to_dict.return_value = {
+            'source_alias': 'default',
+            'target_alias': 'system_test',
+            'status': 'WARNING',
+            'summary': {'warning_count': 1, 'blocking_count': 0},
+            'checks': [{'key': 'destination_data', 'label': 'Destination data', 'status': 'WARNING', 'message': 'Target contains data.', 'details': {}}],
+        }
+
+        response = self.client.get(
+            reverse('database_manager:preflight'),
+            {'source_alias': 'default', 'target_alias': 'system_test'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'database_manager/preflight.html')
+        self.assertContains(response, 'WARNING')
+        run_preflight.assert_called_once_with('default', 'system_test')
+
+    @patch('database_manager.views.run_preflight')
+    def test_preflight_renders_ready_and_blocked_statuses(self, run_preflight):
+        for status in ('READY', 'BLOCKED'):
+            run_preflight.return_value.to_dict.return_value = {
+                'source_alias': 'default',
+                'target_alias': 'system_test',
+                'status': status,
+                'summary': {'warning_count': 0, 'blocking_count': status == 'BLOCKED'},
+                'checks': [],
+            }
+
+            response = self.client.get(
+                reverse('database_manager:preflight'),
+                {'source_alias': 'default', 'target_alias': 'system_test'},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, status)
+
+    def test_preflight_requires_authentication_and_icmeas(self):
+        self.client.logout()
+        response = self.client.get(reverse('database_manager:preflight'))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.user)
+        session = self.client.session
+        session['empresa_id'] = self.empresa.id
+        session.save()
+        Permiso.objects.filter(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista__nombre='Gestión de Bases - Preflight',
+        ).delete()
+        response = self.client.get(reverse('database_manager:preflight'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_preflight_rejects_manipulated_aliases(self):
+        response = self.client.post(
+            reverse('database_manager:preflight'),
+            {'source_alias': 'default', 'target_alias': 'dinamica'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors)
 
     def test_dashboard_renders_authorized_system_ui(self):
         response = self.client.get(reverse('database_manager:dashboard'))

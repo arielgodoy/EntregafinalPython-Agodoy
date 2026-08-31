@@ -12,10 +12,12 @@ from common.database_classification import (
 
 from .forms import DatabaseCompareForm
 from .services.comparison import compare_databases
+from .services.preflight import run_preflight
 
 
 VISTA_DASHBOARD = 'Gestión de Bases - Dashboard'
 VISTA_COMPARE = 'Gestión de Bases - Comparar'
+VISTA_PREFLIGHT = 'Gestión de Bases - Preflight'
 
 
 def _configured_system_aliases():
@@ -115,3 +117,36 @@ class DatabaseCompareView(LoginRequiredMixin, VerificarPermisoMixin, View):
 
     def post(self, request, *args, **kwargs):
         return self._render_comparison(request, request.POST)
+
+
+class DatabasePreflightView(LoginRequiredMixin, VerificarPermisoMixin, View):
+    vista_nombre = VISTA_PREFLIGHT
+    permiso_requerido = 'ingresar'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
+        if not request.session.get('empresa_id'):
+            context = build_access_request_context(
+                request,
+                self.vista_nombre,
+                'Empresa activa requerida.',
+            )
+            return render(request, 'access_control/403_forbidden.html', context, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def _render_preflight(self, request, data):
+        form = DatabaseCompareForm(data or None)
+        result = None
+        if data and form.is_valid():
+            result = run_preflight(
+                form.cleaned_data['source_alias'],
+                form.cleaned_data['target_alias'],
+            ).to_dict()
+        return render(request, 'database_manager/preflight.html', {'form': form, 'result': result})
+
+    def get(self, request, *args, **kwargs):
+        return self._render_preflight(request, request.GET)
+
+    def post(self, request, *args, **kwargs):
+        return self._render_preflight(request, request.POST)
