@@ -11,16 +11,22 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="card-title" data-key="database_manager.compare.heading">Comparar bases SYSTEM</h5>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1" data-key="database_manager.compare.heading">Diagnóstico de bases SYSTEM</h5>
+                                    <p class="text-muted mb-0" data-key="database_manager.compare.description">Comparación de metadatos y estructura sin copiar datos.</p>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary" data-key="database_manager.compare.read_only">SOLO LECTURA</span>
+                            </div>
                             <form method="get" novalidate>
                                 <div class="row g-3">
                                     <div class="col-md-5">
                                         <label class="form-label" for="id_source_alias" data-key="database_manager.compare.source">Base de origen</label>
-                                        {{ form.source_alias }}
+                                        {{ form.source_alias.as_widget }}
                                     </div>
                                     <div class="col-md-5">
                                         <label class="form-label" for="id_target_alias" data-key="database_manager.compare.target">Base de destino</label>
-                                        {{ form.target_alias }}
+                                        {{ form.target_alias.as_widget }}
                                     </div>
                                     <div class="col-md-2 d-flex align-items-end">
                                         <button class="btn btn-primary w-100" type="submit" data-key="database_manager.compare.submit">Comparar</button>
@@ -33,24 +39,66 @@
                 </div>
             </div>
             {% if result %}
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <div class="card h-100 border-primary">
                         <div class="card-body">
-                            <h5 class="card-title" data-key="database_manager.compare.result">Resultado</h5>
-                            <dl class="row mb-0">
-                                <dt class="col-sm-3" data-key="database_manager.compare.source">Origen</dt><dd class="col-sm-9">{{ result.source_alias }} ({{ result.source_vendor }})</dd>
-                                <dt class="col-sm-3" data-key="database_manager.compare.target">Destino</dt><dd class="col-sm-9">{{ result.target_alias }} ({{ result.target_vendor }})</dd>
-                                <dt class="col-sm-3" data-key="database_manager.compare.migrations">Migraciones</dt><dd class="col-sm-9">{{ result.source_migration_count }} / {{ result.target_migration_count }}</dd>
-                                <dt class="col-sm-3" data-key="database_manager.compare.tables">Tablas faltantes</dt><dd class="col-sm-9">{{ result.missing_in_source|length }} / {{ result.missing_in_target|length }}</dd>
-                                <dt class="col-sm-3" data-key="database_manager.compare.status">Estado</dt><dd class="col-sm-9">{{ result.status }}</dd>
-                            </dl>
-                            {% if result.warnings %}<p class="mt-3 mb-0" data-key="database_manager.compare.warnings">Advertencias: {{ result.warnings|length }}</p>{% endif %}
-                            {% if result.blocking_errors %}<p class="mt-3 mb-0 text-danger" data-key="database_manager.compare.errors">Bloqueos: {{ result.blocking_errors|length }}</p>{% endif %}
+                            <p class="text-uppercase text-muted fw-medium mb-2" data-key="database_manager.compare.origin">Origen</p>
+                            <h4 class="mb-2">{{ result.source_alias }}</h4>
+                            <p class="mb-2"><span data-key="database_manager.database.vendor">Motor</span>: {{ result.source_vendor|default:"No disponible" }}</p>
+                            <span class="badge bg-primary-subtle text-primary">{{ result.source_classification }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border-success">
+                        <div class="card-body">
+                            <p class="text-uppercase text-muted fw-medium mb-2" data-key="database_manager.compare.destination">Destino</p>
+                            <h4 class="mb-2">{{ result.target_alias }}</h4>
+                            <p class="mb-2"><span data-key="database_manager.database.vendor">Motor</span>: {{ result.target_vendor|default:"No disponible" }}</p>
+                            <span class="badge bg-success-subtle text-success">{{ result.target_classification }}</span>
                         </div>
                     </div>
                 </div>
             </div>
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+                                <h5 class="card-title mb-0" data-key="database_manager.compare.result">Resultado general</h5>
+                                {% if result.status == 'COMPATIBLE' %}
+                                <span class="badge bg-success-subtle text-success fs-6"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.compatible">COMPATIBLE</span></span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger fs-6"><i class="ri-error-warning-line me-1"></i><span data-key="database_manager.compare.blocked">BLOCKED</span></span>
+                                {% endif %}
+                            </div>
+                            {% if result.status == 'COMPATIBLE' %}
+                            <div class="alert alert-success" role="status"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.compatible_description">La estructura comparada no presenta bloqueos.</span></div>
+                            {% else %}
+                            <div class="alert alert-danger" role="alert"><i class="ri-error-warning-line me-1"></i><span data-key="database_manager.compare.blocked_description">La comparación contiene bloqueos que impiden continuar.</span></div>
+                            {% endif %}
+                            <div class="row g-3">
+                                <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><p class="text-muted mb-1" data-key="database_manager.compare.migrations">Migraciones</p><h5 class="mb-1">{{ result.source_migration_count }} / {{ result.target_migration_count }}</h5><span class="text-success"><i class="ri-checkbox-circle-line me-1"></i>{% if result.migration_sets_equal %}<span data-key="database_manager.compare.equal">Iguales</span>{% else %}<span data-key="database_manager.compare.different">Diferentes</span>{% endif %}</span></div></div>
+                                <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><p class="text-muted mb-1" data-key="database_manager.compare.managed_tables">Tablas gestionadas</p><h5 class="mb-1">{{ result.source_managed_table_count }} / {{ result.target_managed_table_count }}</h5><span class="{% if result.missing_in_source or result.missing_in_target %}text-danger{% else %}text-success{% endif %}"><i class="ri-checkbox-circle-line me-1"></i>{% if result.missing_in_source or result.missing_in_target %}<span data-key="database_manager.compare.incomplete">Incompletas</span>{% else %}<span data-key="database_manager.compare.compatible_tables">Compatibles</span>{% endif %}</span></div></div>
+                                <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><p class="text-muted mb-1" data-key="database_manager.compare.count_differences">Conteos distintos</p><h5 class="mb-1">{{ result.table_count_difference_count }}</h5><span class="text-warning"><i class="ri-information-line me-1"></i><span data-key="database_manager.compare.informative">Informativo</span></span></div></div>
+                                <div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><p class="text-muted mb-1" data-key="database_manager.compare.blocking">Bloqueos</p><h5 class="mb-1">{{ result.blocking_errors|length }}</h5><span class="{% if result.blocking_errors %}text-danger{% else %}text-success{% endif %}"><i class="{% if result.blocking_errors %}ri-error-warning-line{% else %}ri-checkbox-circle-line{% endif %} me-1"></i>{% if result.blocking_errors %}<span data-key="database_manager.compare.action_required">Requiere atención</span>{% else %}<span data-key="database_manager.compare.none">Ninguno</span>{% endif %}</span></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.migration_details">Migraciones</h5>{% if result.migration_sets_equal %}<p class="text-success mb-0"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.migrations_match">Los conjuntos de migraciones son iguales.</span></p>{% else %}<div class="row"><div class="col-md-6"><p class="fw-medium" data-key="database_manager.compare.only_source">Solo en origen</p><ul class="mb-0">{% for migration in result.migrations_only_source|slice:':20' %}<li>{{ migration.0 }}.{{ migration.1 }}</li>{% empty %}<li data-key="database_manager.compare.none">Ninguno</li>{% endfor %}</ul></div><div class="col-md-6"><p class="fw-medium" data-key="database_manager.compare.only_target">Solo en destino</p><ul class="mb-0">{% for migration in result.migrations_only_target|slice:':20' %}<li>{{ migration.0 }}.{{ migration.1 }}</li>{% empty %}<li data-key="database_manager.compare.none">Ninguno</li>{% endfor %}</ul></div></div>{% endif %}</div></div></div>
+                <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.table_details">Tablas gestionadas</h5>{% if result.missing_in_source or result.missing_in_target %}<div class="row"><div class="col-md-6"><p class="fw-medium" data-key="database_manager.compare.missing_source">Faltantes en origen</p><ul>{% for table in result.missing_in_source|slice:':20' %}<li>{{ table }}</li>{% endfor %}</ul></div><div class="col-md-6"><p class="fw-medium" data-key="database_manager.compare.missing_target">Faltantes en destino</p><ul>{% for table in result.missing_in_target|slice:':20' %}<li>{{ table }}</li>{% endfor %}</ul></div></div>{% else %}<p class="text-success mb-0"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.no_missing_tables">Sin tablas faltantes.</span></p>{% endif %}</div></div></div>
+            </div>
+            {% if result.table_count_rows %}<div class="row mt-1"><div class="col-12"><div class="card"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.counts">Conteos por tabla</h5><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th data-key="database_manager.compare.table">Tabla</th><th data-key="database_manager.compare.origin">Origen</th><th data-key="database_manager.compare.destination">Destino</th><th data-key="database_manager.compare.difference">Diferencia</th><th data-key="database_manager.compare.status">Estado</th></tr></thead><tbody>{% for row in result.table_count_rows %}{% if row.difference %}<tr><td>{{ row.table }}</td><td>{{ row.source }}</td><td>{{ row.target }}</td><td>{{ row.difference }}</td><td><span class="badge bg-warning-subtle text-warning"><i class="ri-information-line me-1"></i><span data-key="database_manager.compare.different">Diferente</span></span></td></tr>{% endif %}{% endfor %}</tbody></table></div></div></div></div></div>{% endif %}
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6"><div class="card h-100"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.warnings">Advertencias</h5>{% if result.warnings %}<ul class="mb-0">{% for warning in result.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>{% else %}<p class="text-muted mb-0" data-key="database_manager.compare.no_warnings">Sin advertencias.</p>{% endif %}</div></div></div>
+                <div class="col-lg-6"><div class="card h-100 border-{% if result.blocking_errors %}danger{% else %}success{% endif %}"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.blocking_errors">Errores bloqueantes</h5>{% if result.blocking_errors %}<ul class="text-danger mb-0">{% for error in result.blocking_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% else %}<p class="text-success mb-0"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.no_blocking_errors">Sin bloqueos.</span></p>{% endif %}</div></div></div>
+            </div>
+            <div class="row mt-1"><div class="col-12"><div class="card"><div class="card-body"><h5 class="card-title" data-key="database_manager.compare.managed_false">Tablas externas / managed=False</h5>{% if result.managed_false_tables_present %}<div class="alert alert-danger mb-0" role="alert"><i class="ri-error-warning-line me-1"></i><span data-key="database_manager.compare.managed_false_error">Se detectaron tablas externas inesperadas en el destino.</span><ul class="mb-0 mt-2">{% for table in result.managed_false_tables_present %}<li>{{ table }}</li>{% endfor %}</ul></div>{% else %}<p class="text-success mb-0"><i class="ri-checkbox-circle-line me-1"></i><span data-key="database_manager.compare.managed_false_none">No se detectaron tablas externas inesperadas en el destino.</span></p>{% endif %}</div></div></div></div>
+            {% if result.pk_max_rows %}<div class="row mt-1"><div class="col-12"><div class="accordion" id="technical-details"><div class="accordion-item"><h2 class="accordion-header" id="technical-details-heading"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#technical-details-body" aria-expanded="false" aria-controls="technical-details-body" data-key="database_manager.compare.technical_details">Detalles técnicos: PK máximas</button></h2><div id="technical-details-body" class="accordion-collapse collapse" aria-labelledby="technical-details-heading" data-bs-parent="#technical-details"><div class="accordion-body"><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th data-key="database_manager.compare.table">Tabla</th><th data-key="database_manager.compare.origin">Origen</th><th data-key="database_manager.compare.destination">Destino</th></tr></thead><tbody>{% for row in result.pk_max_rows %}<tr><td>{{ row.table }}</td><td>{{ row.source|default:"-" }}</td><td>{{ row.target|default:"-" }}</td></tr>{% endfor %}</tbody></table></div></div></div></div></div></div></div>{% endif %}
             {% endif %}
         </div>
     </div>

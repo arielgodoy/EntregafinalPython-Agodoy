@@ -11,27 +11,71 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="card-title" data-key="database_manager.dashboard.heading">Gestión de Bases del Sistema</h5>
-                            <p class="card-text" data-key="database_manager.dashboard.description">Panel de diagnóstico y comparación de bases configuradas.</p>
-                            <a class="btn btn-primary" href="{% url 'database_manager:compare' %}" data-key="database_manager.dashboard.compare">Comparar bases</a>
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <h5 class="card-title mb-0" data-key="database_manager.dashboard.heading">Gestión de Bases del Sistema</h5>
+                                        <span class="badge bg-primary-subtle text-primary" data-key="database_manager.dashboard.global">GLOBAL DEL SISTEMA</span>
+                                    </div>
+                                    <p class="card-text mb-0" data-key="database_manager.dashboard.description">Diagnóstico seguro y comparación de las bases configuradas.</p>
+                                </div>
+                                <a class="btn btn-primary" href="{% url 'database_manager:compare' %}" data-key="database_manager.dashboard.compare"><i class="ri-scales-3-line me-1"></i>Comparar bases</a>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="row">
+            <div class="alert alert-info d-flex align-items-center" role="status">
+                <i class="ri-information-line me-2 fs-5"></i>
+                <span data-key="database_manager.dashboard.icmeas_context">El contexto administrativo habilita el acceso; el diagnóstico conserva alcance global del sistema.</span>
+            </div>
+            <div class="row g-3">
                 {% for database in database_aliases %}
                 <div class="col-md-6 col-xl-4">
-                    <div class="card">
+                    <div class="card h-100">
                         <div class="card-body">
-                            <h6 class="card-title">{{ database.alias }}</h6>
-                            <p class="mb-1"><span data-key="database_manager.database.vendor">Motor</span>: {{ database.vendor }}</p>
-                            <p class="mb-0"><span data-key="database_manager.database.classification">Clasificación</span>: {{ database.classification }}</p>
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h6 class="card-title mb-0">{{ database.alias }}</h6>
+                                <span class="badge bg-success-subtle text-success">{{ database.classification }}</span>
+                            </div>
+                            <p class="mb-0 text-muted"><span data-key="database_manager.database.vendor">Motor</span>: {{ database.vendor }}</p>
                         </div>
                     </div>
                 </div>
                 {% empty %}
                 <div class="col-12"><p data-key="database_manager.database.none">No hay bases SYSTEM configuradas.</p></div>
                 {% endfor %}
+            </div>
+            <div class="row g-3 mt-1">
+                <div class="col-md-6 col-xl-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="ri-scales-3-line text-primary fs-3"></i>
+                            <h6 class="mt-3" data-key="database_manager.dashboard.compare_card">Comparar bases</h6>
+                            <p class="text-muted mb-3" data-key="database_manager.dashboard.compare_card_description">Revisa migraciones, tablas gestionadas y métricas de diagnóstico.</p>
+                            <a class="btn btn-outline-primary btn-sm" href="{% url 'database_manager:compare' %}" data-key="database_manager.dashboard.open_compare">Abrir comparador</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="ri-shield-check-line text-success fs-3"></i>
+                            <h6 class="mt-3" data-key="database_manager.dashboard.status_card">Estado y compatibilidad</h6>
+                            <p class="text-muted mb-0" data-key="database_manager.dashboard.status_card_description">Los bloqueos y advertencias se presentan separados para facilitar el diagnóstico.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <i class="ri-time-line text-muted fs-3"></i>
+                            <h6 class="mt-3" data-key="database_manager.dashboard.future_card">Operaciones futuras</h6>
+                            <p class="text-muted mb-2" data-key="database_manager.dashboard.future_card_description">Preflight, planificación, ejecución, clonación y restauración.</p>
+                            <span class="badge bg-secondary-subtle text-secondary" data-key="database_manager.dashboard.coming_soon">Próximamente</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

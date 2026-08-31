@@ -30,6 +30,33 @@ def _configured_system_aliases():
     return sorted(aliases, key=lambda item: item['alias'])
 
 
+def _comparison_context(result):
+    if result is None:
+        return None
+
+    result['source_managed_table_count'] = max(
+        len(result['managed_tables_expected']) - len(result['missing_in_source']), 0
+    )
+    result['target_managed_table_count'] = max(
+        len(result['managed_tables_expected']) - len(result['missing_in_target']), 0
+    )
+    result['table_count_rows'] = sorted(
+        (
+            {'table': table, **counts}
+            for table, counts in result['table_counts'].items()
+        ),
+        key=lambda item: (item['difference'] == 0, item['table']),
+    )
+    result['table_count_difference_count'] = sum(
+        row['difference'] != 0 for row in result['table_count_rows']
+    )
+    result['pk_max_rows'] = [
+        {'table': table, **values}
+        for table, values in sorted(result['pk_max_values'].items())
+    ]
+    return result
+
+
 class DatabaseManagerDashboardView(LoginRequiredMixin, VerificarPermisoMixin, View):
     vista_nombre = VISTA_DASHBOARD
     permiso_requerido = 'ingresar'
@@ -75,10 +102,12 @@ class DatabaseCompareView(LoginRequiredMixin, VerificarPermisoMixin, View):
         result = None
         if data:
             if form.is_valid():
-                result = compare_databases(
-                    form.cleaned_data['source_alias'],
-                    form.cleaned_data['target_alias'],
-                ).to_dict()
+                result = _comparison_context(
+                    compare_databases(
+                        form.cleaned_data['source_alias'],
+                        form.cleaned_data['target_alias'],
+                    ).to_dict()
+                )
         return render(request, 'database_manager/compare.html', {'form': form, 'result': result})
 
     def get(self, request, *args, **kwargs):
