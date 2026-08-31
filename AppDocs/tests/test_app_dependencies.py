@@ -1,5 +1,3 @@
-import ast
-from dataclasses import dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -12,60 +10,7 @@ from AppDocs.app_classification import (
     PROJECT_APPS,
     SYSTEM_APPS,
 )
-
-
-@dataclass(frozen=True)
-class Dependency:
-    origin: str
-    destination: str
-    path: Path
-    line: int
-    statement: str
-
-
-def collect_python_dependencies(source, origin, path, project_apps=PROJECT_APPS):
-    dependencies = []
-    tree = ast.parse(source, filename=str(path))
-    project_app_set = set(project_apps)
-
-    for node in ast.walk(tree):
-        module_names = []
-        if isinstance(node, ast.Import):
-            module_names = [alias.name for alias in node.names]
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            module_names = [node.module]
-
-        for module_name in module_names:
-            destination = module_name.split(".", 1)[0]
-            if destination not in project_app_set or destination == origin:
-                continue
-            dependencies.append(
-                Dependency(
-                    origin=origin,
-                    destination=destination,
-                    path=path,
-                    line=node.lineno,
-                    statement=ast.get_source_segment(source, node) or module_name,
-                )
-            )
-
-    return dependencies
-
-
-def production_dependencies(project_root):
-    dependencies = []
-    for origin in PROJECT_APPS:
-        for path in (project_root / origin).rglob("*.py"):
-            relative_path = path.relative_to(project_root)
-            if (
-                "migrations" in relative_path.parts
-                or "tests" in relative_path.parts
-                or path.name.endswith("_old.py")
-            ):
-                continue
-            source = path.read_text(encoding="utf-8")
-            dependencies.extend(collect_python_dependencies(source, origin, relative_path))
-    return dependencies
+from AppDocs.architecture_dependencies import application_cycles, collect_python_dependencies, production_dependencies
 
 
 def is_forbidden_system_to_application(dependency):
@@ -75,25 +20,6 @@ def is_forbidden_system_to_application(dependency):
         and (dependency.origin, dependency.destination)
         not in ALLOWED_SYSTEM_TO_APPLICATION_DEPENDENCIES
     )
-
-
-def application_cycles(dependencies):
-    graph = {app_name: set() for app_name in APPLICATION_APPS}
-    for dependency in dependencies:
-        if dependency.origin in graph and dependency.destination in graph:
-            graph[dependency.origin].add(dependency.destination)
-
-    cycles = set()
-    for origin in graph:
-        stack = [(origin, [origin])]
-        while stack:
-            current, path = stack.pop()
-            for destination in graph[current]:
-                if destination == origin and len(path) > 1:
-                    cycles.add(frozenset(path))
-                elif destination not in path:
-                    stack.append((destination, path + [destination]))
-    return cycles
 
 
 class AppDependencyTests(SimpleTestCase):
