@@ -72,6 +72,15 @@ class PermisoFiltroForm(forms.Form):
         print("Empresa validada:", empresa)
         return empresa
 
+class PermisoPorVistaFiltroForm(forms.Form):
+    empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), required=True, label="Empresa")
+    vista = forms.ModelChoiceField(queryset=Vista.objects.order_by("nombre"), required=True, label="Vista")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["empresa"].widget.attrs["class"] = "form-select"
+        self.fields["vista"].widget.attrs["class"] = "form-select"
+
 
 
 

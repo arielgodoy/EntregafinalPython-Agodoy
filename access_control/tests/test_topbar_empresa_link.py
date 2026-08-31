@@ -73,6 +73,29 @@ class TopbarEmpresaLinkTests(TestCase):
         # Si no hay empresa, puede redirigir o mostrar selector
         self.assertIn(response.status_code, [200, 302])
 
+    def test_selector_empresas_esta_ordenado_por_codigo_y_no_agrega_sin_acceso(self):
+        empresa_09 = Empresa.objects.create(codigo="09", descripcion="Empresa 09")
+        empresa_00 = Empresa.objects.create(codigo="00", descripcion="Empresa 00")
+        empresa_24 = Empresa.objects.create(codigo="24", descripcion="Empresa 24")
+        empresa_01 = Empresa.objects.create(codigo="02", descripcion="Sin acceso")
+        for empresa in (empresa_09, empresa_00, empresa_24):
+            Permiso.objects.create(
+                usuario=self.user,
+                empresa=empresa,
+                vista=self.vista,
+                ingresar=True,
+            )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("access_control:seleccionar_empresa"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertLess(html.index("00 - Empresa 00"), html.index("01 - Empresa de prueba"))
+        self.assertLess(html.index("01 - Empresa de prueba"), html.index("09 - Empresa 09"))
+        self.assertLess(html.index("09 - Empresa 09"), html.index("24 - Empresa 24"))
+        self.assertNotIn("02 - Sin acceso", html)
+
     def test_modal_cambiar_empresa_form_action_correcta(self):
         """
         Verifica que el modal de cambiar empresa tiene el form action correcto.

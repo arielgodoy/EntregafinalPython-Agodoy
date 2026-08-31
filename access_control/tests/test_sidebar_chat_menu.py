@@ -61,6 +61,41 @@ class SidebarChatMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'href="{reverse("chat_inbox")}"')
 
+    def test_sidebar_muestra_permisos_por_vista_sin_permiso(self):
+        self._login_with_empresa()
+        self._grant_dashboard_permiso()
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("access_control:permisos_por_vista")}"',
+        )
+
+    def test_sidebar_muestra_permisos_por_vista_con_modificar(self):
+        self._login_with_empresa()
+        self._grant_dashboard_permiso()
+        vista = Vista.objects.create(nombre="Control de Acceso - Permisos por Vista")
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=vista,
+            modificar=True,
+        )
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("access_control:permisos_por_vista")}"',
+        )
+        self.assertEqual(
+            self.client.get(reverse("access_control:permisos_por_vista")).status_code,
+            200,
+        )
+
     def test_sidebar_auditoria_muestra_biblioteca_con_permiso(self):
         self._login_with_empresa()
         Permiso.objects.create(

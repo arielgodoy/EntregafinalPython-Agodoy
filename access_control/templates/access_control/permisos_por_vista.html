@@ -1,0 +1,127 @@
+{% extends "partials/base.html" %}
+{% load custom_tags %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock extra_css %}
+
+{% block title %}Gestión de Permisos por Vista{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Gestión de Permisos por Vista" pagetitle="Permisos" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <h1 class="mb-4 text-center">Gestión de Permisos por Vista</h1>
+                <form method="get" class="mb-4 p-3 rounded shadow bg-mode">
+                    <div class="form-group mb-3">
+                        <label for="id_empresa" class="form-label">Empresa</label>
+                        {{ form.empresa }}
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="id_vista" class="form-label">Vista</label>
+                        {{ form.vista }}
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3 w-100">Filtrar</button>
+                </form>
+
+                {% if permission_rows is not None %}
+                <div id="permisos-por-vista-error" class="alert alert-danger d-none" role="alert"></div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped align-middle" id="tabla-permisos-por-vista">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                {% for field in fields %}<th>{{ field|slice:":1"|upper }}</th>{% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in permission_rows %}
+                            <tr>
+                                <td>{{ row.usuario.username }}</td>
+                                {% for field in fields %}
+                                <td>
+                                    <input type="checkbox" class="permiso-por-vista-checkbox"
+                                        data-usuario-id="{{ row.usuario.id }}"
+                                        data-empresa-id="{{ form.cleaned_data.empresa.id }}"
+                                        data-vista-id="{{ form.cleaned_data.vista.id }}"
+                                        data-permiso-field="{{ field }}"
+                                        {% if row.permiso and row.permiso|getattribute:field %}checked{% endif %}>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7">No hay usuarios asociados a esta empresa.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var table = document.getElementById('tabla-permisos-por-vista');
+    var errorElement = document.getElementById('permisos-por-vista-error');
+    if (table) {
+        $(table).DataTable({ pageLength: 25, order: [[0, 'asc']] });
+    }
+
+    if (!table) {
+        return;
+    }
+
+    table.addEventListener('change', function (event) {
+        var checkbox = event.target;
+        if (!checkbox.classList.contains('permiso-por-vista-checkbox')) {
+            return;
+        }
+
+        var previousValue = !checkbox.checked;
+        checkbox.disabled = true;
+        if (errorElement) errorElement.classList.add('d-none');
+        fetch("{% url 'access_control:toggle_permiso_por_vista' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Accept': 'application/json'
+                },
+                body: new URLSearchParams({
+                    usuario_id: checkbox.dataset.usuarioId,
+                    empresa_id: checkbox.dataset.empresaId,
+                    vista_id: checkbox.dataset.vistaId,
+                    permiso_field: checkbox.dataset.permisoField,
+                    value: checkbox.checked
+                })
+        })
+        .then(function (response) {
+                return response.json().catch(function () { return {}; }).then(function (data) {
+                    if (!response.ok || !data.success) throw new Error(data.error || 'No fue posible actualizar el permiso.');
+                    return data;
+                });
+        })
+        .catch(function (error) {
+                checkbox.checked = previousValue;
+                if (errorElement) {
+                    errorElement.textContent = error.message;
+                    errorElement.classList.remove('d-none');
+                }
+        })
+        .finally(function () { checkbox.disabled = false; });
+    });
+});
+</script>
+{% endblock extra_js %}

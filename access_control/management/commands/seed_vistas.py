@@ -2,6 +2,11 @@ from django.core.management.base import BaseCommand
 
 
 VISTAS = [
+    {
+        "nombre": "Control de Acceso - Permisos por Vista",
+        "descripcion": "Gestión de permisos ICMEAS por empresa y vista",
+        "route_name": "access_control:permisos_por_vista",
+    },
     {"nombre": "Settings - Configuracion de Empresa", "descripcion": "Configuración por empresa (UI)"},
     {"nombre": "Settings - Emails Acounts", "descripcion": "Cuentas de correo del sistema"},
     {"nombre": "Settings - Configuración del Sistema", "descripcion": "Configuración global del sistema"},
@@ -19,8 +24,15 @@ class Command(BaseCommand):
         for v in VISTAS:
             obj, created = Vista.objects.get_or_create(
                 nombre=v["nombre"],
-                defaults={"descripcion": v.get("descripcion", "")},
+                defaults={
+                    "descripcion": v.get("descripcion", ""),
+                    "route_name": v.get("route_name"),
+                },
             )
+            route_name = v.get("route_name")
+            if route_name and obj.route_name != route_name:
+                obj.route_name = route_name
+                obj.save(update_fields=["route_name"])
             if created:
                 self.stdout.write(self.style.SUCCESS(f"Vista creada: {obj.nombre}"))
             else:

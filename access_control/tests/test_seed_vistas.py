@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.core.management import call_command
 from django.contrib.auth.models import User
+from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 
@@ -15,6 +16,15 @@ class SeedVistasTests(TestCase):
     def test_seed_vistas_creates_api_catalog_entries_without_permissions(self):
         call_command("seed_vistas")
 
+        self.assertEqual(Vista.objects.filter(nombre="Control de Acceso - Permisos por Vista").count(), 1)
+        self.assertEqual(
+            Vista.objects.get(nombre="Control de Acceso - Permisos por Vista").route_name,
+            "access_control:permisos_por_vista",
+        )
+        self.assertEqual(
+            reverse("access_control:permisos_por_vista"),
+            "/access-control/permisos-por-vista/",
+        )
         self.assertEqual(Vista.objects.filter(nombre="API - Acceso").count(), 1)
         self.assertEqual(Vista.objects.filter(nombre="API - Maestros Locales").count(), 1)
         self.assertEqual(
@@ -28,6 +38,7 @@ class SeedVistasTests(TestCase):
         self.assertEqual(Permiso.objects.count(), 0)
 
     def test_seed_vistas_is_idempotent_and_preserves_existing_permissions(self):
+        call_command("seed_vistas")
         call_command("seed_vistas")
         user = User.objects.create_user(username="seed-user", password="password")
         empresa = Empresa.objects.create(codigo="00", descripcion="Empresa")
@@ -46,6 +57,7 @@ class SeedVistasTests(TestCase):
 
         call_command("seed_vistas")
 
+        self.assertEqual(Vista.objects.filter(nombre="Control de Acceso - Permisos por Vista").count(), 1)
         self.assertEqual(Vista.objects.filter(nombre="API - Acceso").count(), 1)
         self.assertEqual(Vista.objects.filter(nombre="API - Maestros Locales").count(), 1)
         permiso.refresh_from_db()

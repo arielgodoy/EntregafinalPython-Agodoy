@@ -22,6 +22,7 @@ from .models import Empresa, Permiso, Vista, UsuarioPerfilEmpresa, AccessRequest
 from .forms import (
     PermisoForm,
     PermisoFiltroForm,
+    PermisoPorVistaFiltroForm,
     UsuarioInvitacionForm,
     UsuarioEditarForm,
     SystemConfigForm,
@@ -55,10 +56,16 @@ from notificaciones.models import Notification
 from access_control.services.empresa_activa import (
     get_navigable_vistas,
     get_navigable_vistas_by_user_ids,
+    get_empresas_usuario,
     get_safe_redirect_target,
     get_user_navigable_vistas,
     get_user_initial_view_url,
     set_empresa_activa_en_sesion,
+)
+from access_control.services.permissions import (
+    ICMEAS_FIELDS,
+    get_valid_users_for_empresa,
+    user_has_permission_for_empresa,
 )
 logger = logging.getLogger(__name__)
 #Decorador generar para verificar permispo por mixim
@@ -190,6 +197,73 @@ class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         return self.render_to_response(context)
 
 
+class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    template_name = "access_control/permisos_por_vista.html"
+    vista_nombre = "Control de Acceso - Permisos por Vista"
+    permiso_requerido = "modificar"
+
+    def get(self, request, *args, **kwargs):
+        form = PermisoPorVistaFiltroForm(request.GET or None)
+        context = {"form": form, "fields": ICMEAS_FIELDS, "permission_rows": None}
+        if form.is_valid():
+            empresa = form.cleaned_data["empresa"]
+            vista = form.cleaned_data["vista"]
+            permisos = {
+                permiso.usuario_id: permiso
+                for permiso in Permiso.objects.filter(empresa=empresa, vista=vista).select_related("usuario")
+            }
+            context["permission_rows"] = [
+                {"usuario": usuario, "permiso": permisos.get(usuario.id)}
+                for usuario in get_valid_users_for_empresa(empresa)
+            ]
+        return render(request, self.template_name, context)
+
+
+@login_required
+@verificar_permiso("Control de Acceso - Permisos por Vista", "modificar")
+@require_POST
+def toggle_permiso_por_vista(request):
+    usuario_id = request.POST.get("usuario_id", "").strip()
+    empresa_id = request.POST.get("empresa_id", "").strip()
+    vista_id = request.POST.get("vista_id", "").strip()
+    permiso_field = request.POST.get("permiso_field", "").strip()
+    value_str = request.POST.get("value", "").strip().lower()
+
+    if not all(value.isdigit() for value in (usuario_id, empresa_id, vista_id)):
+        return JsonResponse({"success": False, "error": "Identificadores inválidos."}, status=400)
+    if permiso_field not in ICMEAS_FIELDS:
+        return JsonResponse({"success": False, "error": "Campo ICMEAS inválido."}, status=400)
+    if value_str not in {"true", "false"}:
+        return JsonResponse({"success": False, "error": "Valor booleano inválido."}, status=400)
+
+    try:
+        empresa = Empresa.objects.get(pk=empresa_id)
+    except Empresa.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Empresa no encontrada."}, status=404)
+
+    try:
+        usuario = User.objects.get(pk=usuario_id)
+        vista = Vista.objects.get(pk=vista_id)
+    except User.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Usuario no encontrado."}, status=404)
+    except Vista.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Vista no encontrada."}, status=404)
+
+    if not get_valid_users_for_empresa(empresa).filter(pk=usuario.pk).exists():
+        return JsonResponse({"success": False, "error": "El usuario no pertenece a la empresa."}, status=400)
+
+    value = value_str == "true"
+    permiso = Permiso.objects.filter(usuario=usuario, empresa=empresa, vista=vista).first()
+    if permiso is None:
+        if value:
+            Permiso.objects.create(usuario=usuario, empresa=empresa, vista=vista, **{permiso_field: True})
+    else:
+        setattr(permiso, permiso_field, value)
+        permiso.save(update_fields=[permiso_field])
+
+    return JsonResponse({"success": True, "new_value": value})
+
+
 
 @login_required
 def toggle_permiso(request):
@@ -284,6 +358,21 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
             origen_empresa = Empresa.objects.get(id=origen_empresa_id)
             destino_usuario = Usuario.objects.get(id=destino_usuario_id)
             destino_empresa = Empresa.objects.get(id=destino_empresa_id)
+
+            empresas_autorizadas = [origen_empresa]
+            if destino_empresa != origen_empresa:
+                empresas_autorizadas.append(destino_empresa)
+            for empresa in empresas_autorizadas:
+                if not user_has_permission_for_empresa(
+                    user=request.user,
+                    empresa=empresa,
+                    vista_nombre=self.vista_nombre,
+                    accion=self.permiso_requerido,
+                ):
+                    return self.handle_no_permission(
+                        request,
+                        "No tienes permiso supervisor para operar esta empresa.",
+                    )
 
             permisos_actuales = Permiso.objects.filter(usuario=origen_usuario, empresa=origen_empresa)
             for permiso in permisos_actuales:
@@ -1432,8 +1521,7 @@ def seleccionar_empresa(request):
         )
         return redirect(navigation_target or get_user_initial_view_url(request.user))
 
-    permisos = Permiso.objects.filter(usuario=request.user).select_related("empresa")
-    empresas = Empresa.objects.filter(id__in=permisos.values("empresa"))
+    empresas = get_empresas_usuario(request.user)
 
     return render(request, "access_control/seleccionar_empresa.html", {"empresas": empresas})
 

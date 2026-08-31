@@ -23,6 +23,12 @@ class CopyPermisosViewTests(TestCase):
             supervisor=True,
         )
         Permiso.objects.create(
+            usuario=self.operator,
+            empresa=self.empresa_destino,
+            vista=self.vista_control,
+            supervisor=True,
+        )
+        Permiso.objects.create(
             usuario=self.origen_usuario,
             empresa=self.empresa_origen,
             vista=self.vista_copiada,
@@ -79,6 +85,50 @@ class CopyPermisosViewTests(TestCase):
             Permiso.objects.filter(
                 usuario=self.destino_usuario,
                 empresa=self.empresa_destino,
+                vista=self.vista_copiada,
+            ).exists()
+        )
+
+    def test_copia_hacia_empresa_sin_supervisor_es_denegada(self):
+        Permiso.objects.filter(
+            usuario=self.operator,
+            empresa=self.empresa_destino,
+            vista=self.vista_control,
+        ).update(supervisor=False)
+
+        response = self._copy()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.destino_usuario,
+                empresa=self.empresa_destino,
+                vista=self.vista_copiada,
+            ).exists()
+        )
+
+    def test_copia_desde_empresa_sin_supervisor_es_denegada(self):
+        Permiso.objects.filter(
+            usuario=self.operator,
+            empresa=self.empresa_origen,
+            vista=self.vista_control,
+        ).update(supervisor=False)
+
+        response = self._copy(
+            origen_empresa=self.empresa_destino.id,
+            destino_empresa=self.empresa_origen.id,
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_copia_en_misma_empresa_requiere_un_solo_supervisor(self):
+        response = self._copy(destino_empresa=self.empresa_origen.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            Permiso.objects.filter(
+                usuario=self.destino_usuario,
+                empresa=self.empresa_origen,
                 vista=self.vista_copiada,
             ).exists()
         )

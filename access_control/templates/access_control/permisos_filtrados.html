@@ -372,59 +372,73 @@ Gestión de Permisos Filtrados
     });
     
     function initCopyPermissionsButton() {
-        document.getElementById('copyPermissionsButton').addEventListener('click', function () {
-            const origenUsuario = document.getElementById('origenUsuario').value;
-            const origenEmpresa = document.getElementById('origenEmpresa').value;
-            const destinoUsuario = document.getElementById('destinoUsuario').value;
-            const destinoEmpresa = document.getElementById('destinoEmpresa').value;
+        var copyButton = document.getElementById('copyPermissionsButton');
+        var origenUsuario = document.getElementById('origenUsuario');
+        var origenEmpresa = document.getElementById('origenEmpresa');
+        var destinoUsuario = document.getElementById('destinoUsuario');
+        var destinoEmpresa = document.getElementById('destinoEmpresa');
+        var successMessage = document.getElementById('copy-permissions-success');
+        var errorMessage = document.getElementById('copy-permissions-error');
 
+        if (!copyButton || !origenUsuario || !origenEmpresa || !destinoUsuario || !destinoEmpresa) {
+            return;
+        }
+
+        function showCopyError(message) {
+            successMessage.classList.add('d-none');
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('d-none');
+        }
+
+        copyButton.addEventListener('click', function () {
+            successMessage.classList.add('d-none');
+            errorMessage.classList.add('d-none');
+
+            if (!destinoUsuario.value) {
+                showCopyError('Selecciona un usuario destino.');
+                return;
+            }
+
+            copyButton.disabled = true;
             fetch("{% url 'access_control:copy_permissions' %}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
-                    "X-CSRFToken": "{{ csrf_token }}"
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Accept": "application/json"
                 },
                 body: new URLSearchParams({
-                    origen_usuario: origenUsuario,
-                    origen_empresa: origenEmpresa,
-                    destino_usuario: destinoUsuario,
-                    destino_empresa: destinoEmpresa
+                    origen_usuario: origenUsuario.value,
+                    origen_empresa: origenEmpresa.value,
+                    destino_usuario: destinoUsuario.value,
+                    destino_empresa: destinoEmpresa.value
                 })
             })
-            .then(response => {
-                if (!response.ok) {
-                    // 🔴 Si el servidor no responde 200 OK, asumimos que no hay permisos
-                    throw new Error(t('supervisor_permission_required'));
-                }
-                return response.json();
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return {};
+                }).then(function (data) {
+                    if (!response.ok) {
+                        throw new Error(data.error || 'No fue posible copiar los permisos.');
+                    }
+                    return data;
+                });
             })
-            .then(data => {
-                if (data.success) {
-                    Toastify({
-                        text: t('permissions_copied_success'),
-                        duration: 3000,
-                        gravity: "top",
-                        position: "right",
-                        backgroundColor: "#28a745",
-                    }).showToast();
-                } else {
-                    Toastify({
-                        text: t('permission_update_error') + ': ' + data.error,
-                        duration: 5000,
-                        gravity: "top",
-                        position: "right",
-                        backgroundColor: "#dc3545",
-                    }).showToast();
+            .then(function (data) {
+                if (!data.success) {
+                    showCopyError(data.error || 'No fue posible copiar los permisos.');
+                    return;
                 }
+
+                errorMessage.classList.add('d-none');
+                successMessage.textContent = data.message || 'Permisos copiados correctamente.';
+                successMessage.classList.remove('d-none');
             })
-            .catch(error => {
-                Toastify({
-                    text: error.message || t('unexpected_error'),
-                    duration: 5000,
-                    gravity: "top",
-                    position: "right",
-                    backgroundColor: "#dc3545",
-                }).showToast();
+            .catch(function (error) {
+                showCopyError(error.message || 'No fue posible copiar los permisos.');
+            })
+            .finally(function () {
+                copyButton.disabled = false;
             });
         });
     }
@@ -558,82 +572,6 @@ Gestión de Permisos Filtrados
         });
     });
 })();
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var copyButton = document.getElementById('copyPermissionsButton');
-    var origenUsuario = document.getElementById('origenUsuario');
-    var origenEmpresa = document.getElementById('origenEmpresa');
-    var destinoUsuario = document.getElementById('destinoUsuario');
-    var destinoEmpresa = document.getElementById('destinoEmpresa');
-    var successMessage = document.getElementById('copy-permissions-success');
-    var errorMessage = document.getElementById('copy-permissions-error');
-
-    if (!copyButton || !origenUsuario || !origenEmpresa || !destinoUsuario || !destinoEmpresa) {
-        return;
-    }
-
-    function showCopyError(message) {
-        successMessage.classList.add('d-none');
-        errorMessage.textContent = message;
-        errorMessage.classList.remove('d-none');
-    }
-
-    copyButton.addEventListener('click', function (event) {
-        event.stopImmediatePropagation();
-        successMessage.classList.add('d-none');
-        errorMessage.classList.add('d-none');
-
-        if (!destinoUsuario.value) {
-            showCopyError('Selecciona un usuario destino.');
-            destinoUsuario.focus();
-            return;
-        }
-
-        copyButton.disabled = true;
-        fetch("{% url 'access_control:copy_permissions' %}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Accept': 'application/json'
-            },
-            body: new URLSearchParams({
-                origen_usuario: origenUsuario.value,
-                origen_empresa: origenEmpresa.value,
-                destino_usuario: destinoUsuario.value,
-                destino_empresa: destinoEmpresa.value
-            })
-        })
-        .then(function (response) {
-            return response.json().catch(function () {
-                return {};
-            }).then(function (data) {
-                if (!response.ok) {
-                    throw new Error(data.error || 'No fue posible copiar los permisos.');
-                }
-                return data;
-            });
-        })
-        .then(function (data) {
-            if (!data.success) {
-                showCopyError(data.error || 'No fue posible copiar los permisos.');
-                return;
-            }
-
-            errorMessage.classList.add('d-none');
-            successMessage.textContent = data.message || 'Permisos copiados correctamente.';
-            successMessage.classList.remove('d-none');
-        })
-        .catch(function (error) {
-            showCopyError(error.message || 'No fue posible copiar los permisos.');
-        })
-        .finally(function () {
-            copyButton.disabled = false;
-        });
-    }, true);
-});
 </script>
 
 {% endblock extra_js %}

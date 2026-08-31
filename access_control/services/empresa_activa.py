@@ -162,7 +162,7 @@ def remember_last_valid_view(request):
 
 
 def get_empresas_usuario(user):
-    return Empresa.objects.filter(permiso__usuario=user).distinct()
+    return Empresa.objects.filter(permiso__usuario=user).distinct().order_by("codigo")
 
 
 def resolve_post_login(request, user):
