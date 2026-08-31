@@ -187,13 +187,13 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
         'ATOMIC_REQUESTS': False,
     },
-    'dinamica': {
+    'DB_sistema': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'eltit_remu',
-        'USER': 'root',
-        'PASSWORD': '123',
-        'HOST': '127.0.0.1',
-        'PORT': '3306',
+        'NAME': os.getenv('DB_SYSTEM_NAME'),
+        'USER': os.getenv('DB_SYSTEM_USER'),
+        'PASSWORD': os.getenv('DB_SYSTEM_PASSWORD'),
+        'HOST': os.getenv('DB_SYSTEM_HOST'),
+        'PORT': os.getenv('DB_SYSTEM_PORT', '3306'),
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
@@ -203,6 +203,11 @@ DATABASES = {
         'AUTOCOMMIT': True,
         'ATOMIC_REQUESTS': False,  # Asegúrate de incluir esta clave
     }
+}
+
+SYSTEM_DATABASE_ALIASES = {
+    'default',
+    'DB_sistema',
 }
 
 DATABASE_ROUTERS = ['api.Router_Databases.MultiDatabaseRouter']
