@@ -151,9 +151,8 @@ def login_view(request):
             else:
                 request.session.set_expiry(0)
             prefs, _ = UserPreferences.objects.get_or_create(user=user)
-            if not prefs.fecha_sistema:
-                prefs.fecha_sistema = timezone.localdate()
-                prefs.save(update_fields=["fecha_sistema"])
+            prefs.fecha_sistema = timezone.localdate()
+            prefs.save(update_fields=["fecha_sistema"])
             request.session["fecha_sistema"] = prefs.fecha_sistema.isoformat()
             status, empresa = resolve_post_login(request, user)
             request.session.pop('ultima_vista_url', None)
