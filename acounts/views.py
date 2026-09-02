@@ -14,6 +14,10 @@ from access_control.services.empresa_activa import (
 )
 from access_control.decorators import verificar_permiso
 from acounts.services.active_session import clear_active_session, register_active_session
+from acounts.services.password_permissions import (
+    require_global_password_change_permission,
+    user_can_change_password_globally,
+)
 from acounts.services.session_info import get_current_session_info
 from common.http import get_client_ip
 import time
@@ -42,7 +46,7 @@ def _process_password_change(request):
     return form, False
 
 
-@verificar_permiso("Accounts - Cambiar Password", "modificar")
+@require_global_password_change_permission
 def _procesar_cambio_password_en_perfil(request, user, avatar):
     """Procesa el cambio de contraseña dentro de la pestaña del perfil."""
     password_form, changed = _process_password_change(request)
@@ -51,12 +55,7 @@ def _procesar_cambio_password_en_perfil(request, user, avatar):
 
     user_form = CustomUserForm(instance=user)
     avatar_form = AvatarForm(instance=avatar)
-    can_change_password = _usuario_tiene_permiso(
-        request.user,
-        request.session.get('empresa_id'),
-        'Accounts - Cambiar Password',
-        'modificar',
-    )
+    can_change_password = user_can_change_password_globally(request.user)
 
     for field in user_form.fields.values():
         field.widget.attrs.update({'class': 'form-control'})
@@ -97,12 +96,7 @@ def _procesar_actualizacion_datos_personales(request, user, avatar):
         return redirect('editar_perfil')
 
     messages.error(request, 'Revisa los datos ingresados.')
-    can_change_password = _usuario_tiene_permiso(
-        request.user,
-        request.session.get('empresa_id'),
-        'Accounts - Cambiar Password',
-        'modificar',
-    )
+    can_change_password = user_can_change_password_globally(request.user)
     password_form = AccountPasswordChangeForm(request.user)
     for field in password_form.fields.values():
         field.widget.attrs.update({'class': 'form-control'})
@@ -144,12 +138,7 @@ def editar_perfil(request):
     user = request.user
     avatar, _ = Avatar.objects.get_or_create(user=user)
     active_tab = request.GET.get('tab', 'personal')
-    can_change_password = _usuario_tiene_permiso(
-        user,
-        request.session.get('empresa_id'),
-        'Accounts - Cambiar Password',
-        'modificar',
-    )
+    can_change_password = user_can_change_password_globally(user)
 
     if request.method == 'POST':
         form_action = request.POST.get('form_action', 'profile')
@@ -282,7 +271,7 @@ def subeAvatar(request):
 
 
 @login_required
-@verificar_permiso("Accounts - Cambiar Password", "modificar")
+@require_global_password_change_permission
 def cambiar_password(request):
     """Cambiar contraseña del usuario (URL legacy, misma política que el tab de perfil)."""
     if request.method == 'POST':
