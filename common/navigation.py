@@ -64,9 +64,8 @@ def is_valid_internal_path(path):
         return False
 
 
-def is_navigable_request(request):
-    if request.method != "GET":
-        return False
+def _is_real_user_request(request):
+    """Chequeos compartidos: autenticado, no AJAX/HTMX/JSON, ruta no excluida ni tecnica."""
     if not getattr(request.user, "is_authenticated", False):
         return False
 
@@ -91,3 +90,21 @@ def is_navigable_request(request):
     if is_excluded_navigation_path(path):
         return False
     return is_valid_internal_path(path)
+
+
+def is_navigable_request(request):
+    if request.method != "GET":
+        return False
+    return _is_real_user_request(request)
+
+
+def is_human_activity_request(request):
+    """Actividad humana real (GET navegable o POST de formulario/accion del usuario).
+
+    Excluye explicitamente polling/heartbeat/AJAX y rutas tecnicas, para que
+    la renovacion del timeout de sesion por inactividad nunca dependa de
+    requests automaticos en segundo plano.
+    """
+    if request.method not in ("GET", "POST"):
+        return False
+    return _is_real_user_request(request)

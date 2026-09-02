@@ -88,22 +88,31 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 vistas_auto_permiso = ["Settings - Theme preference", "Accounts - Editar Perfil"]
                 if vista_nombre in vistas_auto_permiso:
                     if not permiso:
+                        # Solo se concede automaticamente la capacidad solicitada (mas
+                        # 'ingresar' como base minima), nunca todas por defecto.
+                        create_kwargs = {
+                            'ingresar': True,
+                            'crear': False,
+                            'modificar': False,
+                            'eliminar': False,
+                            'autorizar': False,
+                            'supervisor': False,
+                        }
+                        if permiso_requerido in create_kwargs:
+                            create_kwargs[permiso_requerido] = True
                         permiso = Permiso.objects.create(
                             usuario=request.user,
                             empresa=empresa,
                             vista=vista,
-                            ingresar=True,
-                            crear=False,
-                            modificar=True,
-                            eliminar=False,
-                            autorizar=False,
-                            supervisor=False
+                            **create_kwargs,
                         )
-                    elif not permiso.modificar:
-                        # Actualizar permiso existente para vistas de usuario
-                        permiso.modificar = True
+                    elif not getattr(permiso, permiso_requerido, False):
+                        # Auto-conceder unicamente la capacidad solicitada (mas 'ingresar' como
+                        # base minima). Evita que, p.ej., una vista con acciones de lectura
+                        # ('ingresar') termine auto-concediendo tambien 'modificar'.
                         permiso.ingresar = True
-                        permiso.save(update_fields=['modificar', 'ingresar'])
+                        setattr(permiso, permiso_requerido, True)
+                        permiso.save(update_fields=list({'ingresar', permiso_requerido}))
                 elif not permiso:
                     # Crear permiso sin acceso para otras vistas
                     logger = logging.getLogger(__name__)

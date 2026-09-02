@@ -1,8 +1,13 @@
+from datetime import timedelta
 from pathlib import Path
+from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.sessions.models import Session
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, Vista
 
@@ -91,3 +96,86 @@ class LoginSessionExpiryTests(TestCase):
         self.assertNotIn('sessionStorage', template)
         self.assertNotIn('type="hidden" name="password"', template)
         self.assertNotIn('type="hidden" name="token"', template)
+
+    def test_session_cookie_age_es_ocho_horas(self):
+        self.assertEqual(settings.SESSION_COOKIE_AGE, 8 * 60 * 60)
+
+    def test_login_sin_recordarme_no_supera_ocho_horas_en_backend(self):
+        """set_expiry(0) cae en SESSION_COOKIE_AGE (8h), nunca en el default de 14 dias."""
+        self.client.post(
+            self.login_url,
+            data={'username': self.user.username, 'password': self.password},
+        )
+
+        session = self.client.session
+        self.assertEqual(session.get_expiry_age(), 8 * 60 * 60)
+
+    def _session_row(self):
+        key = self.client.session.session_key
+        return Session.objects.get(session_key=key)
+
+    def test_actividad_desplaza_la_expiracion_por_inactividad(self):
+        self.client.post(
+            self.login_url,
+            data={'username': self.user.username, 'password': self.password, 'remember_me': '1'},
+        )
+        expire_antes = self._session_row().expire_date
+
+        future = timezone.now() + timedelta(hours=4)
+        with mock.patch('django.utils.timezone.now', return_value=future):
+            self.client.get(reverse('editar_perfil'))
+
+        expire_despues = self._session_row().expire_date
+        self.assertGreater(expire_despues, expire_antes)
+
+    def test_sesion_expirada_redirige_a_login(self):
+        self.client.post(
+            self.login_url,
+            data={'username': self.user.username, 'password': self.password, 'remember_me': '1'},
+        )
+        key = self.client.session.session_key
+        Session.objects.filter(session_key=key).update(expire_date=timezone.now() - timedelta(hours=1))
+
+        response = self.client.get(reverse('editar_perfil'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)
+
+    def test_fecha_sistema_no_interviene_en_la_expiracion(self):
+        frozen_now = timezone.now()
+        with mock.patch('django.utils.timezone.now', return_value=frozen_now):
+            self.client.post(
+                self.login_url,
+                data={'username': self.user.username, 'password': self.password, 'remember_me': '1'},
+            )
+            expire_antes = self._session_row().expire_date
+
+            session = self.client.session
+            session['fecha_sistema'] = (timezone.localdate() - timedelta(days=30)).isoformat()
+            session.save()
+
+            expire_despues = self._session_row().expire_date
+
+        self.assertEqual(expire_antes, expire_despues)
+
+    def test_login_registra_datos_de_sesion(self):
+        self.client.post(
+            self.login_url,
+            data={'username': self.user.username, 'password': self.password, 'remember_me': '1'},
+            HTTP_USER_AGENT='UnitTestAgent/1.0',
+        )
+
+        session = self.client.session
+        self.assertIn('login_at', session)
+        self.assertIn('last_activity', session)
+        self.assertEqual(session.get('ip_address'), '127.0.0.1')
+        self.assertEqual(session.get('user_agent'), 'UnitTestAgent/1.0')
+        self.assertTrue(session.get('remember_me'))
+
+    def test_login_sin_recordarme_registra_remember_me_false(self):
+        self.client.post(
+            self.login_url,
+            data={'username': self.user.username, 'password': self.password},
+        )
+
+        self.assertFalse(self.client.session.get('remember_me'))

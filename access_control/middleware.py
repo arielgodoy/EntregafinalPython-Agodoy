@@ -1,9 +1,11 @@
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.http import JsonResponse
+from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from access_control.services.empresa_activa import remember_last_valid_view
+from common.navigation import is_human_activity_request
 
 
 class EmpresaActivaMiddleware:
@@ -26,8 +28,12 @@ class EmpresaActivaMiddleware:
 
         response = self.get_response(request)
 
-        if request.method == "GET" and getattr(request.user, "is_authenticated", False):
-            remember_last_valid_view(request)
+        if getattr(request.user, "is_authenticated", False):
+            if request.method == "GET":
+                remember_last_valid_view(request)
+            # Timeout de sesion deslizante: solo actividad humana real renueva la ventana de 8h.
+            if is_human_activity_request(request):
+                request.session["last_activity"] = timezone.now().isoformat()
 
         return response
 

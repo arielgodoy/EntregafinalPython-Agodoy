@@ -51,6 +51,12 @@ ALLOWED_HOSTS = _env_list('DJANGO_ALLOWED_HOSTS', default=['*'])
 SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=False)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+# Timeout de seguridad: 8 horas desde la ULTIMA actividad real, no desde el login.
+# SESSION_SAVE_EVERY_REQUEST asegura que expire_date se recalcule en cada request,
+# logrando un timeout deslizante. set_expiry(0) en login_view (recuerdame no marcado)
+# cae en este mismo valor como fallback, evitando el default de Django de 14 dias.
+SESSION_COOKIE_AGE = 8 * 60 * 60
+SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=False)
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
@@ -244,6 +250,11 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
+# Zona horaria SOLO de presentacion (no afecta almacenamiento, comparaciones ni
+# seguridad, que siguen operando en UTC/aware via TIME_ZONE/USE_TZ arriba).
+# Debe ser un nombre IANA (no un offset fijo) para resolver DST automaticamente.
+SYSTEM_LOCAL_TIME_ZONE = 'America/Santiago'
 
 
 

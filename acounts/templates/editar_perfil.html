@@ -74,6 +74,13 @@ Editar Perfil
                                     </a>
                                 </li>
                                 {% endif %}
+                                <li class="nav-item">
+                                    <a class="nav-link {% if active_tab == 'sessions' %}active{% endif %}" data-bs-toggle="tab" href="#userSessions" role="tab"
+                                        data-key="account.profile.sessions">
+                                        <i class="ri-shield-user-line align-bottom me-1" aria-hidden="true"></i>
+                                        Sesiones
+                                    </a>
+                                </li>
                             </ul>
                         </div>
 
@@ -222,6 +229,66 @@ Editar Perfil
                                     </form>
                                 </div>
                                 {% endif %}
+
+                                <div class="tab-pane fade {% if active_tab == 'sessions' %}show active{% endif %}" id="userSessions" role="tabpanel">
+                                    <div class="row justify-content-center">
+                                        <div class="col-lg-8">
+                                            <div class="card border shadow-none mb-0">
+                                                <div class="card-header">
+                                                    <h6 class="card-title mb-0" data-key="account.sessions.current_title">Sesión actual</h6>
+                                                </div>
+                                                <div class="card-body">
+                                                    <ul class="list-group list-group-flush">
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.status">Estado</span>
+                                                            <span class="badge bg-success-subtle text-success" data-key="account.sessions.status_active">Activa</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.login_at">Inicio de sesión</span>
+                                                            <span>{{ session_info.login_at|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.last_activity">Última actividad</span>
+                                                            <span>{{ session_info.last_activity|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.inactive_time">Tiempo inactivo</span>
+                                                            <span>{{ session_info.inactive_time_display|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.expires_at">Expira por inactividad</span>
+                                                            <span>{{ session_info.expires_at|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.remaining">Tiempo restante</span>
+                                                            <span>{{ session_info.remaining_display|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.empresa_activa">Empresa activa</span>
+                                                            <span>{{ session_info.empresa_nombre|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.ip">IP</span>
+                                                            <span>{{ session_info.ip_address|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.browser">Navegador</span>
+                                                            <span>{{ session_info.user_agent_display|default:"—" }}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.remember_me">Recuérdame</span>
+                                                            <span>{% if session_info.remember_me %}<span data-key="account.sessions.yes">Sí</span>{% else %}<span data-key="account.sessions.no">No</span>{% endif %}</span>
+                                                        </li>
+                                                        <li class="list-group-item d-flex justify-content-between">
+                                                            <span data-key="account.sessions.fecha_proceso_erp">Fecha de proceso ERP</span>
+                                                            <span>{{ session_info.fecha_sistema|default:"—" }}</span>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

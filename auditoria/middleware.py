@@ -1,6 +1,7 @@
 import time
 import logging
 from django.utils.deprecation import MiddlewareMixin
+from common.http import get_client_ip
 from common.navigation import is_navigable_request
 from .services import AuditoriaService
 
@@ -136,7 +137,4 @@ class AuditMiddleware(MiddlewareMixin):
     
     def _get_client_ip(self, request):
         """Extraer IP real del cliente."""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            return x_forwarded_for.split(',')[0].strip()
-        return request.META.get('REMOTE_ADDR')
+        return get_client_ip(request)
