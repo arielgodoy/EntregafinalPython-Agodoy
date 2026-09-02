@@ -51,7 +51,10 @@
                                 </div>
                                 <div class="p-2 mt-4">
                                     <form method="post" class="needs-validation" id="activation-form" novalidate
-                                          data-password-min-length="{{ password_min_length }}">
+                                          data-password-strength="1"
+                                          data-password-min-length="{{ password_min_length }}"
+                                          data-password1-field="id_password1"
+                                          data-password2-field="id_password2">
                                         {% csrf_token %}
 
                                         {% if form.non_field_errors %}
@@ -84,10 +87,10 @@
 
                                             <div class="mt-2">
                                                 <div class="progress" style="height: 6px;">
-                                                    <div id="password-strength-bar" class="progress-bar" role="progressbar" style="width: 0%;"></div>
+                                                    <div class="progress-bar password-strength-bar" role="progressbar" style="width: 0%;"></div>
                                                 </div>
                                                 <div class="small mt-1" data-key="activation.password.strength.label">
-                                                    Seguridad: <span id="password-strength-label" data-key="activation.password.strength.empty">—</span>
+                                                    Seguridad: <span class="password-strength-label" data-key="activation.password.strength.empty">—</span>
                                                 </div>
                                             </div>
 
@@ -120,7 +123,7 @@
                                         </div>
 
                                         <div class="mt-4">
-                                            <button class="btn btn-success w-100" id="activation-submit-btn" type="submit" data-key="activation.submit">Activar cuenta</button>
+                                            <button class="btn btn-success w-100" type="submit" data-key="activation.submit">Activar cuenta</button>
                                         </div>
                                     </form>
                                 </div>

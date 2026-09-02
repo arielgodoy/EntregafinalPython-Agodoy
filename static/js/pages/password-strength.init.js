@@ -82,45 +82,53 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    var form = document.getElementById("activation-form");
-    var password1 = document.getElementById("id_password1");
-    var password2 = document.getElementById("id_password2");
-    var submitBtn = document.getElementById("activation-submit-btn");
-    var strengthBar = document.getElementById("password-strength-bar");
-    var strengthLabelEl = document.getElementById("password-strength-label");
-    var reqMinLength = document.getElementById("req-min-length");
+    // Genérico: cualquier <form data-password-strength> en la página activa el medidor.
+    // Los ids de los campos y el largo mínimo se leen de atributos data-* del propio form,
+    // para poder reutilizar este mismo script en activación y en cambio de contraseña del perfil.
+    var forms = document.querySelectorAll("[data-password-strength]");
 
-    if (!form || !password1 || !password2 || !submitBtn) {
-      return;
-    }
+    forms.forEach(function (form) {
+      var password1Id = form.getAttribute("data-password1-field") || "id_password1";
+      var password2Id = form.getAttribute("data-password2-field") || "id_password2";
+      var password1 = document.getElementById(password1Id);
+      var password2 = document.getElementById(password2Id);
+      var submitBtn = form.querySelector('button[type="submit"]');
+      var strengthBar = form.querySelector(".password-strength-bar");
+      var strengthLabelEl = form.querySelector(".password-strength-label");
+      var reqMinLength = form.querySelector('[data-requirement="min-length"]');
 
-    var minLength = parseInt(form.getAttribute("data-password-min-length"), 10) || 12;
-
-    function refresh() {
-      var value = password1.value || "";
-      var meetsMinLength = value.length >= minLength;
-
-      setChecklistState(reqMinLength, meetsMinLength);
-
-      var score = computeScore(value);
-      var label = strengthLabel(score, meetsMinLength);
-
-      if (strengthBar) {
-        strengthBar.style.width = score + "%";
-        strengthBar.className = "progress-bar " + label.cssClass;
-      }
-      if (strengthLabelEl) {
-        strengthLabelEl.textContent = value ? label.text : "—";
-        strengthLabelEl.setAttribute("data-key", value ? label.key : "activation.password.strength.empty");
+      if (!password1 || !password2 || !submitBtn) {
+        return;
       }
 
-      var passwordsMatch = value.length > 0 && value === password2.value;
-      // Deshabilitar el botón es solo UX; el backend sigue rechazando cualquier POST inválido.
-      submitBtn.disabled = !(meetsMinLength && password2.value.length > 0 && passwordsMatch);
-    }
+      var minLength = parseInt(form.getAttribute("data-password-min-length"), 10) || 12;
 
-    password1.addEventListener("input", refresh);
-    password2.addEventListener("input", refresh);
-    refresh();
+      function refresh() {
+        var value = password1.value || "";
+        var meetsMinLength = value.length >= minLength;
+
+        setChecklistState(reqMinLength, meetsMinLength);
+
+        var score = computeScore(value);
+        var label = strengthLabel(score, meetsMinLength);
+
+        if (strengthBar) {
+          strengthBar.style.width = score + "%";
+          strengthBar.className = "progress-bar password-strength-bar " + label.cssClass;
+        }
+        if (strengthLabelEl) {
+          strengthLabelEl.textContent = value ? label.text : "—";
+          strengthLabelEl.setAttribute("data-key", value ? label.key : "activation.password.strength.empty");
+        }
+
+        var passwordsMatch = value.length > 0 && value === password2.value;
+        // Deshabilitar el botón es solo UX; el backend sigue rechazando cualquier POST inválido.
+        submitBtn.disabled = !(meetsMinLength && password2.value.length > 0 && passwordsMatch);
+      }
+
+      password1.addEventListener("input", refresh);
+      password2.addEventListener("input", refresh);
+      refresh();
+    });
   });
 })();

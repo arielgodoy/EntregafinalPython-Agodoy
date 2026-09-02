@@ -4,10 +4,15 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import Avatar
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.forms import UserChangeForm
 #from .models import CustomUser
 from django.forms import ModelForm
 from django.contrib.auth.models import User
+
+
+# Longitud minima exigida para contrasenas nuevas (activacion y cambio desde perfil).
+STRONG_PASSWORD_MIN_LENGTH = 12
 
 
 class CustomUserForm(UserChangeForm):
@@ -46,7 +51,7 @@ class CustomLoginForm(AuthenticationForm):
 
 
 class ActivationPasswordForm(forms.Form):
-    ACTIVATION_MIN_LENGTH = 12
+    ACTIVATION_MIN_LENGTH = STRONG_PASSWORD_MIN_LENGTH
 
     password1 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
     password2 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
@@ -80,6 +85,22 @@ class ActivationPasswordForm(forms.Form):
     def save(self, user):
         user.set_password(self.cleaned_data['password1'])
         return user
+
+
+class AccountPasswordChangeForm(PasswordChangeForm):
+    """PasswordChangeForm nativo + minimo de caracteres propio de este proyecto."""
+
+    MIN_LENGTH = STRONG_PASSWORD_MIN_LENGTH
+
+    def clean_new_password1(self):
+        password1 = self.cleaned_data.get('new_password1')
+        if password1 and len(password1) < self.MIN_LENGTH:
+            raise ValidationError(
+                'La nueva contraseña debe tener al menos %(min_length)d caracteres.',
+                params={'min_length': self.MIN_LENGTH},
+                code='password_too_short',
+            )
+        return password1
 
 
 

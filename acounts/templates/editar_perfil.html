@@ -154,7 +154,11 @@ Editar Perfil
 
                                 {% if can_change_password %}
                                 <div class="tab-pane fade {% if active_tab == 'password' %}show active{% endif %}" id="passwordChange" role="tabpanel">
-                                    <form method="post" class="needs-validation" novalidate>
+                                    <form method="post" class="needs-validation" novalidate
+                                          data-password-strength="1"
+                                          data-password-min-length="{{ password_min_length }}"
+                                          data-password1-field="id_new_password1"
+                                          data-password2-field="id_new_password2">
                                         {% csrf_token %}
                                         <input type="hidden" name="form_action" value="password">
                                         <div class="row justify-content-center">
@@ -175,6 +179,34 @@ Editar Perfil
                                                             {{ error }}
                                                         {% endfor %}
                                                     </div>
+                                                    {% endif %}
+
+                                                    {% if field.name == 'new_password1' %}
+                                                    <div class="mt-2">
+                                                        <div class="progress" style="height: 6px;">
+                                                            <div class="progress-bar password-strength-bar" role="progressbar" style="width: 0%;"></div>
+                                                        </div>
+                                                        <div class="small mt-1" data-key="activation.password.strength.label">
+                                                            Seguridad: <span class="password-strength-label" data-key="activation.password.strength.empty">—</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <ul class="list-unstyled small mt-2 mb-0">
+                                                        <li data-requirement="min-length">
+                                                            <span class="req-icon">○</span>
+                                                            <span data-key="activation.password.requirement.min_length">{{ password_min_length }} o más caracteres</span>
+                                                        </li>
+                                                    </ul>
+                                                    <ul class="list-unstyled small mt-2 mb-0 text-muted">
+                                                        <li>
+                                                            <span class="req-icon">ℹ</span>
+                                                            <span data-key="activation.password.recommendation.no_personal_info">Evita usar tu nombre, usuario o correo (se valida al enviar)</span>
+                                                        </li>
+                                                        <li>
+                                                            <span class="req-icon">ℹ</span>
+                                                            <span data-key="activation.password.recommendation.not_common">Evita contraseñas comunes (se valida al enviar)</span>
+                                                        </li>
+                                                    </ul>
                                                     {% endif %}
                                                 </div>
                                                 {% endfor %}
@@ -199,3 +231,7 @@ Editar Perfil
     </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'js/pages/password-strength.init.js' %}"></script>
+{% endblock extra_js %}

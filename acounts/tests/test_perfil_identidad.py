@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from acounts.models import Avatar
+from acounts.tests.test_activation_flow import _find_common_password
 
 
 def _set_permission(user, empresa, vista_name, **flags):
@@ -155,8 +156,8 @@ class PerfilIdentidadTests(TestCase):
             {
                 "form_action": "password",
                 "old_password": "wrong-password",
-                "new_password1": "NewPass123!",
-                "new_password2": "NewPass123!",
+                "new_password1": "NewPass1234!",
+                "new_password2": "NewPass1234!",
             },
         )
 
@@ -171,14 +172,14 @@ class PerfilIdentidadTests(TestCase):
             {
                 "form_action": "password",
                 "old_password": "pass1234",
-                "new_password1": "NewPass123!",
-                "new_password2": "NewPass123!",
+                "new_password1": "NewPass1234!",
+                "new_password2": "NewPass1234!",
             },
             follow=True,
         )
 
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("NewPass123!"))
+        self.assertTrue(self.user.check_password("NewPass1234!"))
         self.assertTrue(self.client.session.session_key is not None)
         self.assertContains(response, "Tu contraseña ha sido cambiada con éxito.")
 
@@ -206,8 +207,8 @@ class PerfilIdentidadTests(TestCase):
             {
                 "form_action": "password",
                 "old_password": "pass1234",
-                "new_password1": "NewPass123!",
-                "new_password2": "NewPass123!",
+                "new_password1": "NewPass1234!",
+                "new_password2": "NewPass1234!",
             },
         )
 
@@ -233,8 +234,8 @@ class PerfilIdentidadTests(TestCase):
             {
                 "form_action": "password",
                 "old_password": "pass1234",
-                "new_password1": "NewPass123!",
-                "new_password2": "NewPass123!",
+                "new_password1": "NewPass1234!",
+                "new_password2": "NewPass1234!",
             },
         )
 
@@ -252,14 +253,14 @@ class PerfilIdentidadTests(TestCase):
             {
                 "form_action": "password",
                 "old_password": "pass1234",
-                "new_password1": "NewPass123!",
-                "new_password2": "NewPass123!",
+                "new_password1": "NewPass1234!",
+                "new_password2": "NewPass1234!",
             },
             follow=True,
         )
 
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("NewPass123!"))
+        self.assertTrue(self.user.check_password("NewPass1234!"))
         self.assertContains(response, "Tu contraseña ha sido cambiada con éxito.")
 
     def test_avatar_upload_template_reads_identity_from_user(self):
@@ -268,3 +269,159 @@ class PerfilIdentidadTests(TestCase):
         self.assertContains(response, "Nombre original")
         self.assertContains(response, "Apellido original")
         self.assertContains(response, "original@example.com")
+
+
+class PasswordChangePolicyTests(TestCase):
+    """Politica de contrasena (minimo 12) para el cambio desde perfil y la URL legacy."""
+
+    def setUp(self):
+        self.old_password = "pass1234"
+        self.user = User.objects.create_user(
+            username="perfil-pw-user",
+            password=self.old_password,
+            email="perfil-pw-user@example.com",
+        )
+        self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
+        _set_permission(self.user, self.empresa, "Accounts - Editar Perfil", modificar=True)
+        _set_permission(self.user, self.empresa, "Accounts - Cambiar Password", modificar=True)
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session.save()
+
+    def _post_perfil_password(self, old_password, new_password1, new_password2=None, **kwargs):
+        return self.client.post(
+            reverse("editar_perfil"),
+            {
+                "form_action": "password",
+                "old_password": old_password,
+                "new_password1": new_password1,
+                "new_password2": new_password2 if new_password2 is not None else new_password1,
+            },
+            **kwargs,
+        )
+
+    def _post_legacy_password(self, old_password, new_password1, new_password2=None):
+        return self.client.post(
+            reverse("cambiar_password"),
+            {
+                "old_password": old_password,
+                "new_password1": new_password1,
+                "new_password2": new_password2 if new_password2 is not None else new_password1,
+            },
+        )
+
+    def test_password_menor_a_minimo_es_rechazada(self):
+        response = self._post_perfil_password(self.old_password, "Corta12")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_password_valida_de_12_o_mas_cambia_correctamente(self):
+        response = self._post_perfil_password(self.old_password, "CorrectHorse9")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("tab=password", response.url)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("CorrectHorse9"))
+
+    def test_password_comun_es_rechazada(self):
+        common_password = _find_common_password(min_length=12)
+        response = self._post_perfil_password(self.old_password, common_password)
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_password_completamente_numerica_es_rechazada(self):
+        response = self._post_perfil_password(self.old_password, "123456789012")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_password_similar_al_username_es_rechazada(self):
+        response = self._post_perfil_password(self.old_password, self.user.username)
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_password_similar_al_nombre_es_rechazada(self):
+        self.user.first_name = "Alejandroperez"
+        self.user.save(update_fields=["first_name"])
+
+        response = self._post_perfil_password(self.old_password, "Alejandroperez")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_old_password_incorrecta_es_rechazada(self):
+        response = self._post_perfil_password("clave-incorrecta", "CorrectHorse9")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_new_password_no_coincide_es_rechazada(self):
+        response = self._post_perfil_password(self.old_password, "CorrectHorse9", "DifferentHorse9")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+    def test_password_valida_check_password_es_true(self):
+        self._post_perfil_password(self.old_password, "CorrectHorse9")
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("CorrectHorse9"))
+
+    def test_password_valida_mantiene_sesion_autenticada(self):
+        self._post_perfil_password(self.old_password, "CorrectHorse9")
+
+        self.assertIsNotNone(self.client.session.session_key)
+        response = self.client.get(reverse("editar_perfil"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_usuario_anonimo_es_redirigido_a_login(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("editar_perfil"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+        response = self.client.get(reverse("cambiar_password"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_legacy_url_aplica_mismo_minimo_y_validadores(self):
+        response = self._post_legacy_password(self.old_password, "Corta12")
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+        common_password = _find_common_password(min_length=12)
+        response = self._post_legacy_password(self.old_password, common_password)
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.old_password))
+
+        response = self._post_legacy_password(self.old_password, "CorrectHorse9")
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("CorrectHorse9"))
+
+    def test_password_igual_a_la_anterior_no_esta_prohibida_actualmente(self):
+        """Documenta el comportamiento actual: Django permite reutilizar la misma contrasena."""
+        self._post_perfil_password(self.old_password, "CorrectHorse9")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("CorrectHorse9"))
+
+        response = self._post_perfil_password("CorrectHorse9", "CorrectHorse9")
+
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("CorrectHorse9"))
