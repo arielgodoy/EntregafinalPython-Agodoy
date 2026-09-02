@@ -13,6 +13,7 @@ from access_control.services.empresa_activa import (
     set_empresa_activa_en_sesion,
 )
 from access_control.decorators import verificar_permiso
+from acounts.services.active_session import clear_active_session, register_active_session
 from acounts.services.session_info import get_current_session_info
 from common.http import get_client_ip
 import time
@@ -188,6 +189,8 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
+            new_session_key = request.session.session_key
+            register_active_session(user, new_session_key)
             remember_me = bool(request.POST.get('remember_me'))
             if remember_me:
                 request.session.set_expiry(8 * 60 * 60)
@@ -214,6 +217,7 @@ def login_view(request):
             if status == "MANY":
                 return redirect('access_control:seleccionar_empresa')
 
+            clear_active_session(user, new_session_key)
             logout(request)
             return render(
                 request,
@@ -237,7 +241,11 @@ def login_view(request):
 
 def logout_view(request):
     # Vista para realizar el logout (opcional)
+    user = request.user if request.user.is_authenticated else None
+    current_session_key = request.session.session_key
     request.session.pop('ultima_vista_url', None)
+    if user is not None:
+        clear_active_session(user, current_session_key)
     logout(request)
     return redirect('login')
 
