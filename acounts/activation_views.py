@@ -37,7 +37,7 @@ def activate_account(request, token):
         return redirect('login')
 
     if request.method == 'POST':
-        form = ActivationPasswordForm(request.POST)
+        form = ActivationPasswordForm(request.POST, user=user)
         if form.is_valid():
             activated_user = validate_and_use_token(token, UserEmailTokenPurpose.ACTIVATE)
             if not activated_user:
@@ -50,6 +50,11 @@ def activate_account(request, token):
             messages.success(request, 'Cuenta activada correctamente. Ya puedes iniciar sesión.')
             return redirect('login')
     else:
-        form = ActivationPasswordForm()
+        form = ActivationPasswordForm(user=user)
 
-    return render(request, 'acounts/activation_form.html', {'form': form, 'user': user})
+    context = {
+        'form': form,
+        'user': user,
+        'password_min_length': ActivationPasswordForm.ACTIVATION_MIN_LENGTH,
+    }
+    return render(request, 'acounts/activation_form.html', context)

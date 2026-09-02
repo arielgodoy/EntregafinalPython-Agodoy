@@ -50,7 +50,8 @@
                                     <p class="text-muted" data-key="activation.header.subtitle">Crea tu contrasena para continuar.</p>
                                 </div>
                                 <div class="p-2 mt-4">
-                                    <form method="post" class="needs-validation" novalidate>
+                                    <form method="post" class="needs-validation" id="activation-form" novalidate
+                                          data-password-min-length="{{ password_min_length }}">
                                         {% csrf_token %}
 
                                         {% if form.non_field_errors %}
@@ -80,6 +81,32 @@
                                                     <div class="text-danger small" data-key="{{ error }}">{{ error }}</div>
                                                 {% endfor %}
                                             {% endif %}
+
+                                            <div class="mt-2">
+                                                <div class="progress" style="height: 6px;">
+                                                    <div id="password-strength-bar" class="progress-bar" role="progressbar" style="width: 0%;"></div>
+                                                </div>
+                                                <div class="small mt-1" data-key="activation.password.strength.label">
+                                                    Seguridad: <span id="password-strength-label" data-key="activation.password.strength.empty">—</span>
+                                                </div>
+                                            </div>
+
+                                            <ul class="list-unstyled small mt-2 mb-0" id="password-requirements-checklist">
+                                                <li id="req-min-length" data-requirement="min-length">
+                                                    <span class="req-icon">○</span>
+                                                    <span data-key="activation.password.requirement.min_length">{{ password_min_length }} o más caracteres</span>
+                                                </li>
+                                            </ul>
+                                            <ul class="list-unstyled small mt-2 mb-0 text-muted" id="password-recommendations-list">
+                                                <li>
+                                                    <span class="req-icon">ℹ</span>
+                                                    <span data-key="activation.password.recommendation.no_personal_info">Evita usar tu nombre, usuario o correo (se valida al enviar)</span>
+                                                </li>
+                                                <li>
+                                                    <span class="req-icon">ℹ</span>
+                                                    <span data-key="activation.password.recommendation.not_common">Evita contraseñas comunes (se valida al enviar)</span>
+                                                </li>
+                                            </ul>
                                         </div>
 
                                         <div class="mb-3">
@@ -93,10 +120,11 @@
                                         </div>
 
                                         <div class="mt-4">
-                                            <button class="btn btn-success w-100" type="submit" data-key="activation.submit">Activar cuenta</button>
+                                            <button class="btn btn-success w-100" id="activation-submit-btn" type="submit" data-key="activation.submit">Activar cuenta</button>
                                         </div>
                                     </form>
                                 </div>
+
                             </div>
                         </div>
                     </div>
@@ -126,5 +154,6 @@
     <script src="{% static 'libs/particles.js/particles.js'%}"></script>
     <script src="{% static 'js/pages/particles.app.js'%}"></script>
     <script src="{% static 'js/pages/password-addon.init.js'%}"></script>
+    <script src="{% static 'js/pages/password-strength.init.js'%}"></script>
 </body>
 </html>

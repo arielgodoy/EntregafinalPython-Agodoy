@@ -46,8 +46,23 @@ class CustomLoginForm(AuthenticationForm):
 
 
 class ActivationPasswordForm(forms.Form):
+    ACTIVATION_MIN_LENGTH = 12
+
     password1 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
     password2 = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}))
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_password1(self):
+        password1 = self.cleaned_data.get('password1')
+        if password1 and len(password1) < self.ACTIVATION_MIN_LENGTH:
+            raise ValidationError(
+                'La contraseña debe tener al menos %(min_length)d caracteres.',
+                params={'min_length': self.ACTIVATION_MIN_LENGTH},
+            )
+        return password1
 
     def clean(self):
         cleaned_data = super().clean()
@@ -58,7 +73,7 @@ class ActivationPasswordForm(forms.Form):
             raise ValidationError('Las contraseñas no coinciden.')
 
         if password1:
-            validate_password(password1)
+            validate_password(password1, user=self.user)
 
         return cleaned_data
 
