@@ -13,6 +13,7 @@ Consultar `COPILOT/historico/` unicamente cuando sea necesario investigar una im
 ## DOCUMENTACION VIGENTE
 
 - `INDICE.md`: indice de la documentacion operativa actual.
+- `ESTADO_ACTUAL.md`: fotografia tecnica vigente del sistema y punto de entrada para conocer su estado actual.
 - `REGLAS_CODIGO_VENDOR.md`: regla vigente para archivos vendor e infraestructura.
 - `LOGIN_RECUERDAME_SESIONES.md`: comportamiento y seguridad de sesiones del login.
 - `ARQUITECTURA_APPS.md`: clasificacion tecnica de apps, proteccion de SYSTEM_APPS y deuda arquitectonica.
