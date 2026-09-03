@@ -119,6 +119,25 @@ class PerfilIdentidadTests(TestCase):
         self.avatar.refresh_from_db()
         self.assertNotEqual(self.avatar.imagen.name, previous_image_name)
 
+    def test_profile_can_clear_current_avatar_from_sidebar_control(self):
+        self.avatar.imagen = SimpleUploadedFile(
+            "current-avatar.png",
+            base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            ),
+            content_type="image/png",
+        )
+        self.avatar.save()
+
+        payload = {
+            "imagen-clear": "on",
+        }
+        response = self._post_profile(**payload)
+
+        self.assertRedirects(response, reverse("editar_perfil"), fetch_redirect_response=False)
+        self.avatar.refresh_from_db()
+        self.assertFalse(self.avatar.imagen)
+
     def test_profile_does_not_change_username(self):
         self._post_profile(username="otro-usuario")
 
@@ -148,6 +167,18 @@ class PerfilIdentidadTests(TestCase):
         self.assertContains(response, 'name="new_password1"')
         self.assertContains(response, 'name="new_password2"')
         self.assertIn('id="passwordChange"', content)
+
+    def test_profile_template_places_avatar_controls_in_profile_card(self):
+        response = self.client.get(reverse("editar_perfil"))
+        content = response.content.decode("utf-8")
+
+        self.assertContains(response, 'id="profile-form"')
+        self.assertContains(response, 'enctype="multipart/form-data"')
+        self.assertContains(response, 'name="imagen"')
+        self.assertContains(response, 'form="profile-form"')
+        self.assertContains(response, 'name="imagen-clear"')
+        self.assertContains(response, "Eliminar foto actual")
+        self.assertLess(content.index('name="imagen"'), content.index('Datos personales'))
 
     def test_password_change_with_incorrect_old_password_keeps_user_and_does_not_change_password(self):
         old_password = "pass1234"
