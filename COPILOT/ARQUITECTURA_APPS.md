@@ -45,6 +45,46 @@ Antes de modificar una `CORE_SYSTEM_APP` expresamente autorizada, Copilot debe:
 6. Ejecutar `git diff --check` y revisar el diff final completo.
 7. No hacer commit ni push sin autorizacion expresa.
 
+## Autocontencion de APPLICATION_APPS (regla permanente)
+
+Toda nueva `APPLICATION_APP` debe ser AUTOCONTENIDA: la logica funcional de una app de
+negocio vive dentro de su propia carpeta (`models.py`, `views.py`, `forms.py`, `urls.py`,
+`templates/`, `static/`, `tests/`, `services/`, `migrations/` y demas archivos propios).
+
+Una `APPLICATION_APP` nueva NO debe modificar otras apps ni archivos globales para
+implementar su logica funcional, salvo el registro tecnico minimo indispensable para
+integrarse al proyecto. Fuera de la app solo se permiten, cuando sean necesarios, cambios
+minimos y focalizados en:
+
+- `AppDocs/app_classification.py` — registrar la app en `APPLICATION_APPS`;
+- `AppDocs/settings.py` — agregarla a `INSTALLED_APPS`;
+- `AppDocs/urls.py` — incluir las URLs raiz de la app.
+
+Esta regla NO autoriza modificar: `access_control/`, `settings/`, `dashboard/`,
+`notificaciones/`, `common/`, templates globales, static global, otras APPLICATION_APPS,
+ni otras SYSTEM_APPS o CORE_SYSTEM_APPS.
+
+Si una nueva app necesita funcionalidades de otra app o de una SYSTEM_APP, debe CONSUMIR
+sus interfaces, modelos, servicios, mixins, decorators o APIs existentes desde dentro de
+su propia carpeta (p. ej., `tareas` importa y usa `VerificarPermisoMixin` de
+`access_control`), sin modificar la app consumida.
+
+### Regla de detencion
+
+Si durante el desarrollo de una `APPLICATION_APP` el agente determina que necesita
+modificar un archivo fuera de: la carpeta propia de la app, `AppDocs/app_classification.py`,
+`AppDocs/settings.py` o `AppDocs/urls.py`, debe DETENERSE antes de editar e informar:
+
+1. que archivo externo necesita modificar;
+2. por que no puede resolverse dentro de la app;
+3. que dependencia o comportamiento transversal esta involucrado;
+4. que alternativas existen;
+5. cual es el impacto y riesgo;
+6. solicitar autorizacion expresa del usuario.
+
+No se asume autorizacion por el solo hecho de que la feature requiera integracion con otra
+app. Esta regla aplica a todo desarrollo futuro de nuevas APPLICATION_APPS.
+
 ## Deuda arquitectonica conocida
 
 - `api -> biblioteca`: una app SYSTEM importa el modelo `Propietario`.

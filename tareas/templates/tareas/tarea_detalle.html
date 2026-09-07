@@ -1,0 +1,71 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}
+Detalle de tarea
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            <div class="row">
+                <div class="col-lg-8 offset-lg-2">
+                    <div class="card shadow-lg rounded">
+                        <div class="card-body">
+                            <h4 class="card-title mb-4">{{ tarea.titulo }}</h4>
+
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
+                                <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt>
+                                <dd class="col-sm-8"><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripción</span></dt>
+                                <dd class="col-sm-8">{{ tarea.descripcion|default:"—"|linebreaksbr }}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.responsable">Responsable</span></dt>
+                                <dd class="col-sm-8">{% if tarea.responsable %}{{ tarea.responsable.username }}{% else %}—{% endif %}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.empresa">Empresa</span></dt>
+                                <dd class="col-sm-8">{{ tarea.empresa }}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fecha_creacion">Fecha de creación</span></dt>
+                                <dd class="col-sm-8">{{ tarea.fecha_creacion }}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fecha_publicacion">Fecha de publicación</span></dt>
+                                <dd class="col-sm-8">{% if tarea.fecha_publicacion %}{{ tarea.fecha_publicacion }}{% else %}—{% endif %}</dd>
+                            </dl>
+
+                            <div class="text-end mt-4">
+                                <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
+                                <a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.editar">Editar</span></a>
+                                {% if tarea.estado == "BORRADOR" %}
+                                <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-success"><span data-key="tareas.actions.publicar">Publicar</span></button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

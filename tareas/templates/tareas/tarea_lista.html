@@ -1,0 +1,75 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}
+Tareas
+{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h4 class="fw-bold"><span data-key="tareas.list.title">Tareas</span></h4>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="{% url 'tareas:crear_tarea' %}" class="btn btn-primary">
+                        <i class="bx bx-plus"></i> <span data-key="tareas.actions.crear">Nueva Tarea</span>
+                    </a>
+                </div>
+            </div>
+
+            {% if tareas %}
+            <div class="row">
+                <div class="col-12">
+                    <div class="card shadow-lg mb-5 rounded">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th><span data-key="tareas.fields.titulo">Título</span></th>
+                                        <th><span data-key="tareas.fields.prioridad">Prioridad</span></th>
+                                        <th><span data-key="tareas.fields.estado">Estado</span></th>
+                                        <th><span data-key="tareas.fields.responsable">Responsable</span></th>
+                                        <th><span data-key="tareas.fields.fecha_creacion">Fecha creación</span></th>
+                                        <th><span data-key="tareas.list.acciones">Acciones</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tarea in tareas %}
+                                    <tr>
+                                        <td>{{ tarea.titulo }}</td>
+                                        <td><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></td>
+                                        <td><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></td>
+                                        <td>{% if tarea.responsable %}{{ tarea.responsable.username }}{% else %}—{% endif %}</td>
+                                        <td>{{ tarea.fecha_creacion }}</td>
+                                        <td>
+                                            <a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary">
+                                                <span data-key="tareas.actions.ver">Ver</span>
+                                            </a>
+                                            <a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-sm btn-outline-secondary">
+                                                <span data-key="tareas.actions.editar">Editar</span>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <span data-key="tareas.empty_list">No hay tareas para la empresa activa.</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}

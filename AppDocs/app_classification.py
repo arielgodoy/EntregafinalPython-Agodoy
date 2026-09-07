@@ -42,6 +42,7 @@ APPLICATION_APPS = (
     "evaluaciones",
     "control_de_proyectos",
     "control_operacional",
+    "tareas",
 )
 
 PROJECT_APPS = SYSTEM_APPS + APPLICATION_APPS

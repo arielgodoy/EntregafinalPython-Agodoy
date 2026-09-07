@@ -39,6 +39,7 @@ Para patrones generales de implementacion, revisar primero las reglas globales y
 
 - `COPILOT/ARQUITECTURA_APPS.md`
   - Cargar para tareas que creen, modifiquen o dependan de apps Django, settings, integraciones o cambios transversales.
+  - Incluye la regla permanente de **autocontención de APPLICATION_APPS** (una app nueva no modifica otras apps ni archivos globales salvo el registro técnico mínimo, con regla de detención).
 
 ### Theme / Frontend
 
