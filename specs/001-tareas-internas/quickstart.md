@@ -98,6 +98,8 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 - Confirmar que una hija anulada directamente (`anulada=True`) sigue anulada tras
   reactivar el padre.
 - Confirmar que fechas afectadas quedan pendientes, sin recálculo automático.
+- Bloqueo documentado: la notificación a participantes no está conectada desde
+   `tareas`; queda pendiente de integración y no se implementa P1 Local en esta fase.
 
 ### E10. Hitos, mini-tareas y documentos (Phase 3)
 
