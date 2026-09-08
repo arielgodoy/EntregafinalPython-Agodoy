@@ -69,6 +69,20 @@ class Tarea(models.Model):
     )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_publicacion = models.DateTimeField(null=True, blank=True)
+    todo_origen = models.ForeignKey(
+        "Todo",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas_origen",
+    )
+    tarea_origen = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas_derivadas",
+    )
 
     class Meta:
         indexes = [
@@ -80,6 +94,11 @@ class Tarea(models.Model):
             models.UniqueConstraint(
                 fields=["empresa", "correlativo"],
                 name="tareas_empresa_correlativo_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(todo_origen__isnull=True)
+                | models.Q(tarea_origen__isnull=True),
+                name="tareas_unico_origen_canonico",
             ),
         ]
 
@@ -118,6 +137,15 @@ class Tarea(models.Model):
         """
         super().clean()
         errores = {}
+
+        if self.todo_origen_id and self.tarea_origen_id:
+            errores["todo_origen"] = (
+                "Una tarea no puede tener TO-DO y tarea como origen canónico simultáneamente."
+            )
+        if self.todo_origen_id and self.empresa_id != self.todo_origen.empresa_id:
+            errores["todo_origen"] = "El TO-DO de origen debe pertenecer a la misma empresa."
+        if self.tarea_origen_id and self.empresa_id != self.tarea_origen.empresa_id:
+            errores["tarea_origen"] = "La tarea de origen debe pertenecer a la misma empresa."
 
         if self.estado in {
             self.Estado.ACTIVA,
@@ -205,6 +233,122 @@ class CorrelativoEmpresa(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["empresa"])]
+
+
+class CorrelativoTodoEmpresa(models.Model):
+    empresa = models.OneToOneField(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="correlativo_todos",
+    )
+    siguiente_numero = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        indexes = [models.Index(fields=["empresa"])]
+
+
+class Todo(models.Model):
+    class Estado(models.TextChoices):
+        ABIERTO = "ABIERTO", "ABIERTO"
+        CERRADO = "CERRADO", "CERRADO"
+
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="todos",
+    )
+    correlativo = models.CharField(max_length=9)
+    titulo = models.CharField(max_length=200)
+    descripcion = models.TextField(blank=True, default="")
+    estado = models.CharField(
+        max_length=8,
+        choices=Estado.choices,
+        default=Estado.ABIERTO,
+    )
+    creada_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="todos_creados",
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    cerrada_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="todos_cerrados",
+    )
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
+    comentario_cierre = models.TextField(blank=True, default="")
+    todo_anterior = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="episodios_siguientes",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "correlativo"],
+                name="tareas_empresa_todo_correlativo_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "estado"]),
+            models.Index(fields=["empresa", "fecha_creacion"]),
+        ]
+
+    def __str__(self):
+        return f"{self.correlativo}: {self.titulo}"
+
+    def save(self, *args, **kwargs):
+        if self.pk and self.estado == self.Estado.ABIERTO:
+            original = type(self).objects.filter(pk=self.pk).only("estado").first()
+            if original and original.estado == self.Estado.CERRADO:
+                raise ValidationError("Un TO-DO cerrado no puede reabrirse.")
+        if self._state.adding and not self.correlativo:
+            if not self.empresa_id:
+                raise ValidationError("Un TO-DO requiere empresa para reservar correlativo.")
+            from .services.correlativos import reserve_next_todo_number
+
+            with transaction.atomic(using=kwargs.get("using")):
+                self.correlativo = f"TD{reserve_next_todo_number(self.empresa_id):07d}"
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        if self.todo_anterior_id and self.todo_anterior.empresa_id != self.empresa_id:
+            raise ValidationError({"todo_anterior": "El episodio anterior debe pertenecer a la misma empresa."})
+        if self.estado == self.Estado.ABIERTO and self.pk:
+            original = type(self).objects.filter(pk=self.pk).only("estado").first()
+            if original and original.estado == self.Estado.CERRADO:
+                raise ValidationError({"estado": "Un TO-DO cerrado no puede reabrirse."})
+
+
+class TodoEvento(models.Model):
+    class Tipo(models.TextChoices):
+        CREADO = "CREADO", "CREADO"
+        CERRADO = "CERRADO", "CERRADO"
+        TAREA_CREADA = "TAREA_CREADA", "TAREA_CREADA"
+
+    todo = models.ForeignKey(Todo, on_delete=models.PROTECT, related_name="eventos")
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="eventos_todo")
+    timestamp = models.DateTimeField(auto_now_add=True)
+    comentario = models.TextField(blank=True, default="")
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="eventos_todo",
+    )
+
+    class Meta:
+        indexes = [models.Index(fields=["todo", "timestamp"])]
 
 
 class TareaTransicion(models.Model):

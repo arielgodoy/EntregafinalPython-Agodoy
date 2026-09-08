@@ -146,12 +146,12 @@ description: "Task list for the Tareas Internas master feature"
 
 ### TO-DO y origen canónico (diseño aprobado; implementación futura)
 
-- [ ] T070 [US6] Implementar la entidad `Todo` separada de `Tarea`, obligatoriamente asociada a Empresa, con estados `ABIERTO`/`CERRADO`, cierre explícito y campos de auditoría definidos en FR-S01…S07; no permitir reapertura.
-- [ ] T071 [US6] Implementar `CorrelativoTodoEmpresa` y la reserva atómica de correlativos `TD#######` por Empresa, con namespace y secuencia independientes de A/B; no modificar la secuencia de `Tarea`.
-- [ ] T072 [US6] Implementar la creación de una o varias Tareas desde TO-DO, registrando usuario y fecha/hora y comentario opcional, conservando el lifecycle normal de Tarea y bloqueando el cierre de TO-DO ante Tareas originadas pendientes operativamente.
-- [ ] T073 [US6] Implementar el origen canónico exclusivo de Tarea mediante `todo_origen` y `tarea_origen` nullable, con constraint que impida ambos simultáneamente; mantener separadas las referencias históricas/similitud, `TareaRelacion`, clonación y trabajo en equipo.
-- [ ] T074 [US6] Diseñar e implementar la relación histórica entre un TO-DO nuevo y el TO-DO cerrado anterior cuando reaparezca el problema, sin reabrir el TO-DO original y sin mezclarla con el origen canónico de Tarea.
-- [ ] T075 [US6] Añadir tests de unicidad y secuencia TD por Empresa, lifecycle ABIERTO/CERRADO, bloqueo por Tareas pendientes, derivación auditada, origen canónico exclusivo y distinción entre TO-DO y Tarea formal sin fecha; no alterar ni ejecutar T030 como parte de estas tasks.
+- [x] T070 [US6] Implementar la entidad `Todo` separada de `Tarea`, obligatoriamente asociada a Empresa, con estados `ABIERTO`/`CERRADO`, cierre explícito y campos de auditoría definidos en FR-S01…S07; no permitir reapertura.
+- [x] T071 [US6] Implementar `CorrelativoTodoEmpresa` y la reserva atómica de correlativos `TD#######` por Empresa, con namespace y secuencia independientes de A/B; no modificar la secuencia de `Tarea`.
+- [x] T072 [US6] Implementar la creación de una o varias Tareas desde TO-DO, registrando usuario y fecha/hora y comentario opcional, conservando el lifecycle normal de Tarea y bloqueando el cierre de TO-DO ante Tareas originadas pendientes operativamente.
+- [x] T073 [US6] Implementar el origen canónico exclusivo de Tarea mediante `todo_origen` y `tarea_origen` nullable, con constraint que impida ambos simultáneamente; mantener separadas las referencias históricas/similitud, `TareaRelacion`, clonación y trabajo en equipo.
+- [x] T074 [US6] Diseñar e implementar la relación histórica entre un TO-DO nuevo y el TO-DO cerrado anterior cuando reaparezca el problema, sin reabrir el TO-DO original y sin mezclarla con el origen canónico de Tarea.
+- [x] T075 [US6] Añadir tests de unicidad y secuencia TD por Empresa, lifecycle ABIERTO/CERRADO, bloqueo por Tareas pendientes, derivación auditada, origen canónico exclusivo y distinción entre TO-DO y Tarea formal sin fecha; no alterar ni ejecutar T030 como parte de estas tasks.
 
 ## Phase 7: Polish and cross-cutting validation
 
