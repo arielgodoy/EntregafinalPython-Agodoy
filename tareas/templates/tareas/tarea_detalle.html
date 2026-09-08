@@ -28,6 +28,41 @@ Detalle de tarea
                         <div class="card-body">
                             <h4 class="card-title mb-4">{{ tarea.titulo }}</h4>
 
+                            {% if tarea_anulada_efectivamente %}
+                            <div class="alert alert-warning" role="status">
+                                <span data-key="tareas.hierarchy.anulada_efectivamente">Anulada{% if not tarea.anulada %} por tarea superior{% endif %}</span>
+                            </div>
+                            {% endif %}
+
+                            <section class="mb-4" aria-labelledby="tareas-jerarquia-titulo">
+                                <h5 id="tareas-jerarquia-titulo"><span data-key="tareas.hierarchy.title">Jerarquía</span></h5>
+                                {% if tarea_padre %}
+                                <p class="mb-2">
+                                    <span data-key="tareas.hierarchy.parent">Padre:</span>
+                                    <a href="{% url 'tareas:detalle_tarea' tarea_padre.pk %}">
+                                        {{ tarea_padre.correlativo|default:"—" }} - {{ tarea_padre.titulo }}
+                                    </a>
+                                    <span data-key="tareas.state.{{ tarea_padre.estado|lower }}">({{ tarea_padre.get_estado_display }})</span>
+                                </p>
+                                {% endif %}
+                                {% if tareas_hijas %}
+                                <div>
+                                    <span data-key="tareas.hierarchy.children">Hijas:</span>
+                                    <ul class="mb-0">
+                                        {% for hija in tareas_hijas %}
+                                        <li>
+                                            <a href="{% url 'tareas:detalle_tarea' hija.pk %}">
+                                                {{ hija.correlativo|default:"—" }} - {{ hija.titulo }}
+                                            </a>
+                                            <span data-key="tareas.state.{{ hija.estado|lower }}">({{ hija.get_estado_display }})</span>
+                                            {% if hija.anulada %}<span data-key="tareas.hierarchy.annulled">Anulada</span>{% endif %}
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </section>
+
                             <dl class="row mb-0">
                                 <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
                                 <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>

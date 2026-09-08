@@ -20,6 +20,7 @@ from access_control.views import VerificarPermisoMixin
 from .forms import TareaForm
 from .models import Tarea
 from .services.context import get_active_company_id
+from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
     annul_task,
     approve_closure,
@@ -66,6 +67,18 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     context_object_name = "tarea"
     vista_nombre = "Tareas - Detalle"
     permiso_requerido = "ingresar"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        parent = get_parent(self.object)
+        context["tarea_padre"] = (
+            parent if parent and parent.empresa_id == self.object.empresa_id else None
+        )
+        context["tareas_hijas"] = get_children(self.object).filter(
+            empresa_id=self.object.empresa_id
+        )
+        context["tarea_anulada_efectivamente"] = is_effectively_annulled(self.object)
+        return context
 
 
 class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
