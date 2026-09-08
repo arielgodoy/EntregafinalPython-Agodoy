@@ -275,6 +275,49 @@ class Avance(models.Model):
             raise ValidationError({"porcentaje": "El avance debe estar entre 0 y 100."})
 
 
+class Hito(models.Model):
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="hitos",
+    )
+    nombre = models.CharField(max_length=200)
+    cumplimiento = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+    peso = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["fecha_creacion", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(cumplimiento__gte=0)
+                & models.Q(cumplimiento__lte=100),
+                name="tareas_hito_cumplimiento_rango",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(peso__gt=0),
+                name="tareas_hito_peso_positivo",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errores = {}
+        if self.cumplimiento < 0 or self.cumplimiento > 100:
+            errores["cumplimiento"] = "El cumplimiento debe estar entre 0 y 100."
+        if self.peso <= 0:
+            errores["peso"] = "El peso debe ser mayor que cero."
+        if errores:
+            raise ValidationError(errores)
+
+
 class MiniTarea(models.Model):
     tarea = models.ForeignKey(
         Tarea,
