@@ -342,6 +342,99 @@ class MiniTarea(models.Model):
         return self.descripcion
 
 
+class DocumentoTarea(models.Model):
+    class Tipo(models.TextChoices):
+        COTIZACION = "COTIZACION", "Cotización"
+        FOTOGRAFIA = "FOTOGRAFIA", "Fotografía"
+        INFORME = "INFORME", "Informe"
+        ORDEN_TRABAJO = "ORDEN_TRABAJO", "Orden de trabajo"
+        FACTURA = "FACTURA", "Factura"
+        CONTRATO = "CONTRATO", "Contrato"
+        PLANO = "PLANO", "Plano"
+        CERTIFICADO = "CERTIFICADO", "Certificado"
+        OTRO = "OTRO", "Otro"
+
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="documentos",
+    )
+    tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    archivo = models.FileField(
+        upload_to="tareas/documentos/",
+        blank=True,
+        default="",
+    )
+    url = models.URLField(blank=True, default="")
+    fecha_documento = models.DateField(default=timezone.localdate)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="documentos_tareas",
+    )
+    estado = models.CharField(max_length=20, blank=True, default="")
+
+    def clean(self):
+        super().clean()
+        tiene_archivo = bool(self.archivo)
+        tiene_url = bool(self.url)
+        if tiene_archivo == tiene_url:
+            raise ValidationError(
+                "El documento debe indicar exactamente un archivo o una URL."
+            )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["tarea", "tipo"]),
+            models.Index(fields=["tarea", "estado"]),
+        ]
+
+
+class DocumentoHistorial(models.Model):
+    documento = models.ForeignKey(
+        DocumentoTarea,
+        on_delete=models.PROTECT,
+        related_name="historial",
+    )
+    accion = models.CharField(max_length=20)
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="historial_documentos_tareas",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["fecha", "pk"]
+        indexes = [models.Index(fields=["documento", "fecha"])]
+
+
+class EvidenciaCierre(models.Model):
+    tarea = models.OneToOneField(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="evidencia_cierre",
+    )
+    documento = models.ForeignKey(
+        DocumentoTarea,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="evidencias_cierre",
+    )
+    requerida = models.BooleanField(default=False)
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="evidencias_cierre_registradas",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [models.Index(fields=["tarea", "requerida"])]
+
+
 # Compatibility access for existing MVP callers; ACTIVA is the persisted choice.
 Tarea.Estado.PUBLICADA = Tarea.Estado.ACTIVA
 
