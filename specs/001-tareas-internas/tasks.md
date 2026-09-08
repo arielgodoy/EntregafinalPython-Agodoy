@@ -85,7 +85,7 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T030 [US3] Implementar `fecha_tope` nullable durante edición pero obligatoria al publicar, `fecha_cumplimiento` con limpieza al rechazo de cierre, cálculo derivado de atraso, causas múltiples por reprogramación y reprogramación con justificación obligatoria en `tareas/services/scheduling.py`, conforme a FR-G01…G05.
 - [x] T031 [US3] Implementar `MiniTarea` con una persona, checkbox hecho/no hecho y bloqueo de cierre en `tareas/models.py` y `tareas/services/closure.py`.
 - [x] T032 [US3] Añadir tests de asignación, usuarios inactivos, participantes, lectura, reasignación, jerarquía, fechas, atraso, reprogramación y mini-tareas en `tareas/tests/test_assignment.py`, `tareas/tests/test_hierarchy.py` y `tareas/tests/test_scheduling.py`.
-- [ ] T033 [US3] Preparar migraciones aditivas de asignación, jerarquía, fechas y mini-tareas en `tareas/migrations/`, preservando datos existentes; la migración de jerarquía introduce `Tarea.anulada` y la relación, sin snapshots de estados de descendientes ni cascada física; no ejecutar migraciones durante esta generación.
+- [x] T033 [US3] Preparar migraciones aditivas de asignación, jerarquía, fechas y mini-tareas en `tareas/migrations/`, preservando datos existentes; la migración de jerarquía introduce `Tarea.anulada` y la relación, sin snapshots de estados de descendientes ni cascada física; no ejecutar migraciones durante esta generación.
 - [ ] T034 [US3] Validar escenarios E9 de `specs/001-tareas-internas/quickstart.md` y documentar cualquier bloqueo de integración externa sin implementar P1 Local.
 
 ## Phase 4: Progress, milestones, documents and evidence [US4]
