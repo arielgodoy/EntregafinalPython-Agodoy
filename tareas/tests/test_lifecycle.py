@@ -6,7 +6,6 @@ from access_control.models import Empresa
 from tareas.models import (
     CorrelativoEmpresa,
     Tarea,
-    TareaAnulacionSnapshot,
     TareaCierre,
     TareaTransicion,
 )
@@ -80,7 +79,7 @@ class Phase2LifecycleTest(TestCase):
         self.assertTrue(task.cierre_completado)
         self.assertEqual(TareaTransicion.objects.filter(tarea=task).count(), 4)
         self.assertEqual(TareaCierre.objects.get(tarea=task).resultado, TareaCierre.Resultado.RECHAZADO)
-        approve_task = complete_task(task, self.responsible)
+        complete_task(task, self.responsible)
         approve_closure(task, self.authorizer, "OK")
         task.refresh_from_db()
         self.assertEqual(task.estado, Tarea.Estado.CERRADA)
@@ -93,15 +92,102 @@ class Phase2LifecycleTest(TestCase):
         with self.assertRaises(ValidationError):
             task.full_clean()
 
-    def test_individual_annulment_reactivation_and_pending_dates(self):
+    def test_anular_no_cambia_estado_funcional(self):
         task = self.make_task()
         task.publicar(self.creator)
         transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        task.refresh_from_db()
         annul_task(task, self.authorizer, "Pausa")
         task.refresh_from_db()
-        self.assertEqual(task.estado, Tarea.Estado.ANULADA)
-        self.assertTrue(TareaAnulacionSnapshot.objects.filter(tarea=task).exists())
+        self.assertEqual(task.estado, Tarea.Estado.GESTION)
+        self.assertTrue(task.anulada)
+
+    def test_reactivar_no_cambia_estado_funcional(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        annul_task(task, self.authorizer)
+        task.refresh_from_db()
         reactivate_task(task, self.authorizer)
         task.refresh_from_db()
         self.assertEqual(task.estado, Tarea.Estado.GESTION)
-        self.assertTrue(task.fechas_pendientes_confirmacion)
+        self.assertFalse(task.anulada)
+
+    def test_anular_tarea_cerrada_conserva_estado(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        complete_task(task, self.responsible)
+        approve_closure(task, self.authorizer)
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.CERRADA)
+        # Anular una tarea CERRADA: el estado funcional se conserva; solo cambia el flag.
+        annul_task(task, self.authorizer)
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.CERRADA)
+        self.assertTrue(task.anulada)
+
+    def test_reactivar_tarea_cerrada_conserva_estado(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        complete_task(task, self.responsible)
+        approve_closure(task, self.authorizer)
+        annul_task(task, self.authorizer)
+        task.refresh_from_db()
+        reactivate_task(task, self.authorizer)
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.CERRADA)
+        self.assertFalse(task.anulada)
+
+    def test_reactivar_conserva_datos(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        complete_task(task, self.responsible)
+        correlativo = task.correlativo
+        cierre = task.cierre_completado
+        annul_task(task, self.authorizer)
+        reactivate_task(task, self.authorizer)
+        task.refresh_from_db()
+        self.assertEqual(task.correlativo, correlativo)
+        self.assertEqual(task.cierre_completado, cierre)
+        self.assertEqual(task.responsable, self.responsible)
+        self.assertEqual(task.empresa, self.empresa)
+
+    def test_lifecycle_bloqueado_cuando_anulada(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        annul_task(task, self.authorizer)
+        task.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            transition_task(task, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, self.responsible, "MARCAR_100")
+        with self.assertRaises(ValidationError):
+            complete_task(task, self.responsible)
+        with self.assertRaises(ValidationError):
+            approve_closure(task, self.authorizer)
+        with self.assertRaises(ValidationError):
+            reject_closure(task, self.authorizer)
+
+    def test_transicion_registra_anular_y_reactivar(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        annul_task(task, self.authorizer, "motivo anulación")
+        reactivate_task(task, self.authorizer, "motivo reactivación")
+        acciones = list(
+            TareaTransicion.objects.filter(tarea=task)
+            .values_list("accion_evento", flat=True)
+        )
+        self.assertIn("ANULAR", acciones)
+        self.assertIn("REACTIVAR", acciones)
+
+    def test_anular_no_crea_snapshot_de_restauracion(self):
+        from tareas.models import TareaAnulacionSnapshot
+
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        annul_task(task, self.authorizer)
+        self.assertFalse(TareaAnulacionSnapshot.objects.filter(tarea=task).exists())

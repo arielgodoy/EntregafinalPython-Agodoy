@@ -87,11 +87,16 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 - Rechazar cierre y comprobar retorno a `GESTION` conservando `cierre_completado == True`;
    esta señal es lifecycle, no porcentaje general de avance.
 
-### E9. Asignación y jerarquía (Phase 2)
+### E9. Asignación y jerarquía (Phase 3)
 
-- Crear padre, hijos y nietos dentro del máximo permitido.
-- Anular y comprobar cascada, snapshot y notificaciones; reactivar y comprobar restauración
-   de estados, responsables, participantes, relaciones y avance.
+- Crear padre, hijos y nietos dentro del máximo permitido (padre→hija→nieta, sin cuarto nivel).
+- Anular el padre y comprobar que SOLO cambia `padre.anulada=True`; hijas/nietas conservan
+  `anulada=False` y sus estados funcionales intactos, pero todas quedan anuladas
+  efectivamente (lógica: tarea+padre+abuelo). Verificar notificación a participantes.
+- Reactivar el padre y comprobar que SOLO cambia `padre.anulada=False`; los estados
+  funcionales de toda la estructura siguen intactos (nunca cambiaron; no hay restauración).
+- Confirmar que una hija anulada directamente (`anulada=True`) sigue anulada tras
+  reactivar el padre.
 - Confirmar que fechas afectadas quedan pendientes, sin recálculo automático.
 
 ### E10. Hitos, mini-tareas y documentos (Phase 3)

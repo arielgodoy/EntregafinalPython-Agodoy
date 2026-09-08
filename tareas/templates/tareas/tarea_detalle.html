@@ -84,12 +84,14 @@ Detalle de tarea
                                     {% csrf_token %}<button type="submit" class="btn btn-warning"><span data-key="tareas.actions.rechazar_cierre">Rechazar cierre</span></button>
                                 </form>
                                 {% endif %}
+                                {% if not tarea.anulada %}
                                 {% if tarea.estado == "ACTIVA" or tarea.estado == "GESTION" or tarea.estado == "PENDIENTE_APROBACION_CIERRE" %}
                                 <form method="post" action="{% url 'tareas:anular_tarea' tarea.pk %}" class="d-inline">
                                     {% csrf_token %}<button type="submit" class="btn btn-outline-danger"><span data-key="tareas.actions.anular">Anular</span></button>
                                 </form>
                                 {% endif %}
-                                {% if tarea.estado == "ANULADA" %}
+                                {% endif %}
+                                {% if tarea.anulada %}
                                 <form method="post" action="{% url 'tareas:reactivar_tarea' tarea.pk %}" class="d-inline">
                                     {% csrf_token %}<button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.reactivar">Reactivar</span></button>
                                 </form>

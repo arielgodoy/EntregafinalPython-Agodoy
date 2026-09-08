@@ -1,27 +1,39 @@
-"""Phase 2 lifecycle actions for one task only."""
+"""Lifecycle de tareas: ciclo funcional por estado + anulación por flag.
+
+Remediación Phase 2 (aprobada 2026-09-08): la anulación deja de ser el estado
+`ANULADA` y pasa a ser el flag `Tarea.anulada`. Anular/reactivar solo cambian ese flag;
+el `estado` funcional nunca se modifica. La auditoría de ANULAR/REACTIVAR se registra en
+`TareaTransicion`. No existe jerarquía ni `anulada_efectivamente` todavía (eso llega en
+T028); aquí solo hay anulación directa de la tarea.
+"""
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from tareas.models import Tarea, TareaAnulacionSnapshot, TareaCierre, TareaTransicion
+from tareas.models import Tarea, TareaCierre, TareaTransicion
 
 
 _ALLOWED = {
-    Tarea.Estado.ACTIVA: {Tarea.Estado.GESTION, Tarea.Estado.ANULADA},
+    Tarea.Estado.ACTIVA: {Tarea.Estado.GESTION},
     Tarea.Estado.GESTION: {
         Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
-        Tarea.Estado.ANULADA,
     },
     Tarea.Estado.PENDIENTE_APROBACION_CIERRE: {
         Tarea.Estado.CERRADA,
         Tarea.Estado.GESTION,
-        Tarea.Estado.ANULADA,
     },
 }
 
 
+def _raise_si_anulada(tarea):
+    """Bloquea operaciones de lifecycle mientras la tarea está anulada (flag)."""
+    if tarea.anulada:
+        raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
+
+
 def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
+    _raise_si_anulada(tarea)
     if destino not in _ALLOWED.get(tarea.estado, set()):
         raise ValidationError(
             f"Transición no permitida: {tarea.estado} -> {destino}."
@@ -41,12 +53,14 @@ def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
 
 
 def publish_task(tarea, usuario):
+    _raise_si_anulada(tarea)
     with transaction.atomic():
         tarea.publicar(usuario=usuario)
     return tarea
 
 
 def complete_task(tarea, usuario):
+    _raise_si_anulada(tarea)
     tarea.cierre_completado = True
     tarea.save(update_fields=["cierre_completado"])
     return transition_task(
@@ -58,6 +72,7 @@ def complete_task(tarea, usuario):
 
 
 def approve_closure(tarea, usuario, comentario=""):
+    _raise_si_anulada(tarea)
     with transaction.atomic():
         transition = transition_task(
             tarea,
@@ -78,6 +93,7 @@ def approve_closure(tarea, usuario, comentario=""):
 
 
 def reject_closure(tarea, usuario, comentario=""):
+    _raise_si_anulada(tarea)
     with transaction.atomic():
         transition = transition_task(
             tarea,
@@ -98,37 +114,39 @@ def reject_closure(tarea, usuario, comentario=""):
 
 
 def annul_task(tarea, usuario, motivo=""):
-    if tarea.estado in {Tarea.Estado.BORRADOR, Tarea.Estado.CERRADA, Tarea.Estado.ANULADA}:
-        raise ValidationError("La tarea no puede anularse desde su estado actual.")
+    """Anula la tarea poniendo el flag `anulada=True`; NO cambia el estado funcional.
+
+    Registra la acción ANULAR en TareaTransicion (auditoría). No crea snapshot para
+    restauración de estado (ya no es necesario: el estado nunca cambia).
+    """
+    if tarea.anulada:
+        raise ValidationError("La tarea ya está anulada.")
+    if tarea.estado == Tarea.Estado.BORRADOR:
+        raise ValidationError("Una tarea en borrador no puede anularse.")
     with transaction.atomic():
-        TareaAnulacionSnapshot.objects.create(
+        tarea.anulada = True
+        tarea.save(update_fields=["anulada"])
+        TareaTransicion.objects.create(
             tarea=tarea,
-            estado_anterior=tarea.estado,
-            fechas_pendientes_confirmacion=tarea.fechas_pendientes_confirmacion,
-            usuario_anulo=usuario,
+            estado_origen=tarea.estado,
+            estado_destino=tarea.estado,
+            accion_evento="ANULAR",
+            usuario=usuario,
+            motivo=motivo,
         )
-        transition_task(tarea, Tarea.Estado.ANULADA, usuario, "ANULAR", motivo)
     return tarea
 
 
 def reactivate_task(tarea, usuario, motivo=""):
-    snapshot = (
-        TareaAnulacionSnapshot.objects.filter(tarea=tarea, usuario_reactivo__isnull=True)
-        .order_by("-timestamp_anulacion")
-        .first()
-    )
-    if tarea.estado != Tarea.Estado.ANULADA or snapshot is None:
-        raise ValidationError("La tarea no tiene una anulación individual restaurable.")
+    """Reactiva la tarea poniendo `anulada=False`; NO restaura ni cambia el estado."""
+    if not tarea.anulada:
+        raise ValidationError("La tarea no está anulada.")
     with transaction.atomic():
-        tarea.estado = snapshot.estado_anterior
-        tarea.fechas_pendientes_confirmacion = True
-        tarea.save(update_fields=["estado", "fechas_pendientes_confirmacion"])
-        snapshot.usuario_reactivo = usuario
-        snapshot.timestamp_reactivacion = timezone.now()
-        snapshot.save(update_fields=["usuario_reactivo", "timestamp_reactivacion"])
+        tarea.anulada = False
+        tarea.save(update_fields=["anulada"])
         TareaTransicion.objects.create(
             tarea=tarea,
-            estado_origen=Tarea.Estado.ANULADA,
+            estado_origen=tarea.estado,
             estado_destino=tarea.estado,
             accion_evento="REACTIVAR",
             usuario=usuario,

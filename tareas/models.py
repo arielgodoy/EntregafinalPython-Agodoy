@@ -27,7 +27,6 @@ class Tarea(models.Model):
             "PENDIENTE_APROBACION_CIERRE",
         )
         CERRADA = "CERRADA", "CERRADA"
-        ANULADA = "ANULADA", "ANULADA"
 
     class Prioridad(models.TextChoices):
         SIMPLE = "SIMPLE", "SIMPLE"
@@ -43,6 +42,7 @@ class Tarea(models.Model):
         default=Prioridad.NORMAL,
     )
     correlativo = models.CharField(max_length=9)
+    anulada = models.BooleanField(default=False)
     fechas_pendientes_confirmacion = models.BooleanField(default=False)
     cierre_completado = models.BooleanField(default=False)
     estado = models.CharField(
@@ -233,6 +233,14 @@ class TareaCierre(models.Model):
 
 
 class TareaAnulacionSnapshot(models.Model):
+    """Modelo histórico de Phase 2 (estado ANULADA + restauración de estado).
+
+    Conservado temporalmente solo para que la migración de datos pueda leer
+    `estado_anterior` de tareas que quedaron en estado ANULADA y restaurar su estado
+    funcional. Sin uso nuevo tras la remediación al flag `Tarea.anulada`. Su retiro se
+    evaluará en una migración futura (documentado en data-model.md).
+    """
+
     tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="snapshots_anulacion")
     estado_anterior = models.CharField(max_length=32)
     fechas_pendientes_confirmacion = models.BooleanField(default=False)

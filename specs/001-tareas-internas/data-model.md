@@ -12,7 +12,8 @@
 | `titulo` | CharField(max_length=200) | no | — | Obligatorio siempre (FR-001). `blank=False`. |
 | `descripcion` | TextField | sí (`blank=True, default=""`) | `""` | Opcional en borrador y publicada. |
 | `prioridad` | CharField (choices aprobados: `SIMPLE`, `NORMAL`, `URGENTE`, `CRITICA`) | no | `NORMAL` (default aprobado por el usuario) | Valores aprobados: simple < normal < urgente < crítica (jerarquía: crítica > urgente > normal > simple). Default: `NORMAL`. Sin comportamientos adicionales asociados (sin colores, SLA, notificaciones ni vencimientos). |
-| `estado` | CharField(choices=Estado) | no | `BORRADOR` | Estados persistentes canónicos: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`, `CERRADA`, `ANULADA`. `PUBLICADA` MVP se migra a `ACTIVA`; rechazo y reactivación son eventos/acciones. |
+| `estado` | CharField(choices=Estado) | no | `BORRADOR` | Estados persistentes canónicos del ciclo funcional: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`, `CERRADA`. `PUBLICADA` MVP se migra a `ACTIVA`; rechazo y reactivación son eventos/acciones. `ANULADA` deja de ser estado canónico (la anulación es un flag separado). |
+| `anulada` | BooleanField | no | `False` | Flag de anulación, independiente del `estado` funcional. Anular pone `anulada=True`; reactivar pone `anulada=False`. NO cambia `estado` ni ningún otro dato. La condición efectiva es lógica (`anulada_efectivamente`), no una cascada física. |
 | `responsable` | FK(`auth.User`, on_delete=PROTECT, related_name="tareas_responsable") | sí (`null=True, blank=True`) | `None` | Opcional en borrador (FR-004); obligatorio y válido en publicada (FR-007/FR-008). PROTECT evita borrar un usuario con tareas asignadas. |
 | `empresa` | FK(`access_control.Empresa`, on_delete=PROTECT, related_name="tareas") | no | — | Asignada desde `session['empresa_id']` al crear (FR-003); nunca editable desde el request. |
 | `creada_por` | FK(`auth.User`, on_delete=PROTECT, related_name="tareas_creadas") | no | — | Auditoría mínima coherente con el sistema. |
@@ -22,9 +23,10 @@
 ## Enums
 
 ```text
-Estados persistentes: BORRADOR | ACTIVA | GESTION | PENDIENTE_APROBACION_CIERRE |
-                     CERRADA | ANULADA.
-Eventos/acciones no persistentes como estado: PUBLICAR, RECHAZAR_CIERRE, REACTIVAR.
+Estados persistentes del ciclo funcional: BORRADOR | ACTIVA | GESTION |
+                     PENDIENTE_APROBACION_CIERRE | CERRADA.
+Anulación: NO es un estado. Es el flag `Tarea.anulada` (True/False), separado del ciclo.
+Eventos/acciones no persistentes como estado: PUBLICAR, RECHAZAR_CIERRE, ANULAR, REACTIVAR.
 Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el usuario)
             Jerarquía: CRITICA > URGENTE > NORMAL > SIMPLE
             Default: NORMAL (aprobado por el usuario)
@@ -70,9 +72,10 @@ Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el u
                           ▼               ▼
                       CERRADA          GESTION (100%)
 
-          ACTIVA/GESTION/PENDIENTE_APROBACION_CIERRE --anular--> ANULADA
-          ANULADA --reactivar--> estado persistente anterior (acción auditada)
+          ACTIVA/GESTION/PENDIENTE_APROBACION_CIERRE: anular -> anulada=True (estado intacto)
+          anulada=True: reactivar -> anulada=False (estado intacto, nunca cambió)
           Publicada no puede volver a BORRADOR.
+          Anulación efectiva (jerárquica, LÓGICA): tarea.anulada OR padre.anulada OR abuelo.anulada.
 ```
 
 ## Relaciones
@@ -92,11 +95,15 @@ Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el u
 
 ### Fechas pendientes tras reactivación
 
-Phase 2 usa la opción A: `Tarea.fechas_pendientes_confirmacion`, campo persistente booleano,
-default `False`, nullable durante backfill y `False` para datos MVP. Al reactivar una tarea
-con fechas afectadas se establece en `True`; la confirmación/reacomodo posterior lo devuelve
-a `False`. No se inventan fechas nuevas ni se recalculan automáticamente. El snapshot y los
-eventos conservan la auditoría de quién/cuándo anuló y reactivó.
+Con el diseño de anulación por flag, NO se requiere snapshot de estados para restaurar
+jerarquía: las relaciones no se eliminan y los estados/responsables/participantes no cambian.
+`TareaAnulacionSnapshot` (construido en Phase 2) queda en revisión: su responsabilidad de
+restaurar estado/estructura deja de ser necesaria. La información de auditoría que sigue
+siendo útil (quién anuló/reactivó, cuándo, motivo) se cubre con `TareaTransicion`
+(acciones ANULAR/REACTIVAR). Evolución posterior: el modelo puede simplificarse o
+eliminarse en una migración aditiva futura; en esta intervención NO se elimina ni se
+diseña su migración. `Tarea.fechas_pendientes_confirmacion` se conserva como señal de
+fechas afectadas pendientes de confirmación (sin recálculo automático).
 
 ### Señal de cierre completado
 
@@ -117,10 +124,11 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
   usuario, timestamp y `motivo` opcional.
 - `TareaCierre`: FK a Tarea, usuario aprobador/rechazador, timestamp, `resultado` (`APROBADO`
   o `RECHAZADO`) y `comentario` opcional; no incluye documentos/evidencias de Phase 4.
-- `TareaAnulacionSnapshot`: FK a una Tarea, `estado_anterior`,
-  `fechas_pendientes_confirmacion` anterior, usuario que anuló, timestamp de anulación, usuario que
-  reactivó nullable y timestamp de reactivación nullable. No incluye hijos, nietos,
-  participantes ni `TareaRelacion`.
+- `TareaAnulacionSnapshot`: **EN REVISIÓN** (ver nota de anulación por flag). Construido en
+  Phase 2 con FK a una Tarea, `estado_anterior`, `fechas_pendientes_confirmacion` anterior,
+  usuario que anuló, timestamps de anulación/reactivación. Su rol de restaurar estados deja
+  de ser necesario con el flag `anulada`; se evaluará su simplificación o retiro en una
+  migración aditiva futura. La auditoría de anular/reactivar la cubre `TareaTransicion`.
 - `CorrelativoEmpresa`: FK a Empresa con `OneToOneField`/unicidad efectiva por empresa,
   `siguiente_numero` entero positivo inicial `1`, constraint única sobre empresa e índice
   por empresa. En una reserva se bloquea la fila dentro de `transaction.atomic()`, se toma
@@ -169,8 +177,10 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 
 - Toda entidad de negocio se filtra por empresa activa; los parámetros nunca eligen empresa.
 - El avance usa `sum(cumplimiento * peso) / sum(pesos)`; mini-tareas no ponderan.
-- Anular/reactivar guarda y restaura la estructura completa; las fechas afectadas quedan
-  pendientes de confirmación sin recálculo automático.
+- Anular/reactivar SOLO cambia el flag `anulada` de la tarea afectada; NO escribe estados,
+  responsables, participantes ni relaciones de descendientes. La anulación efectiva es
+  lógica (`anulada_efectivamente` = propia OR padre OR abuelo), no una cascada física.
+  Las fechas afectadas quedan pendientes de confirmación sin recálculo automático.
 - Estados, reasignaciones, cierres, documentos, cotizaciones y accesos generan auditoría.
 - Todo texto visible nuevo lleva `data-key`; no se editan diccionarios globales silenciosamente.
 
@@ -182,7 +192,7 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 
 ## Límites y fuera de alcance
 
-- No hay eliminación física; la anulación es una transición auditada.
+- No hay eliminación física; la anulación es un flag persistente con auditoría.
 - No hay usuarios externos ni enlaces públicos.
 - No hay plantilla de hitos ni vencimiento automático de documentos.
 - Local permanece `LEGACY API PENDIENTE`; no se modelan tabla, ID o elegibilidad cerrada.

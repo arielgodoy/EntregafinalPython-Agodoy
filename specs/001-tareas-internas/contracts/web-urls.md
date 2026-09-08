@@ -76,7 +76,7 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | Fase | Operación | Método | Nombre sugerido | Regla principal |
 |---|---|---|---|---|
 | 1 | Transición de estado | POST | `transicionar_tarea` | Solo pares permitidos; registra auditoría |
-| 1 | Anular/reactivar | POST | `anular_tarea` / `reactivar_tarea` | Cascada y snapshot; nunca borrar |
+| 1 | Anular/reactivar | POST | `anular_tarea` / `reactivar_tarea` | Solo cambia el flag `anulada` de la tarea; anulación efectiva lógica (tarea+padre+abuelo); nunca borrar ni tocar estados |
 | 2 | Participantes/reasignación | GET/POST | `participantes_tarea` / `reasignar_tarea` | Usuarios activos y empresa activa |
 | 2 | Jerarquía/mini-tareas | GET/POST | `jerarquia_tarea` / `minitareas_tarea` | Máximo dos niveles; mini-tareas bloquean cierre |
 | 2 | Reprogramación | POST | `reprogramar_tarea` | Justificación y auditoría obligatorias |

@@ -44,13 +44,18 @@ legacy, no por una decisión técnica pendiente dentro de la app.
 - **Rationale**: FR-C08/C09 y la restauración exacta requieren auditoría distinta del estado.
 - **Alternatives considered**: cambios directos desde formularios; rechazados.
 
-### D6. Jerarquía y restauración
+### D6. Jerarquía y anulación (REVISADO — diseño simplificado aprobado)
 
-- **Decision**: máximo dos niveles bajo el padre; anulación guarda snapshot de estados,
-  responsables, participantes, relaciones y avance. Reactivación restaura en cascada y
-  deja fechas afectadas pendientes de confirmación.
-- **Rationale**: cumple FR-E05/E07 sin recalcular fechas históricas.
-- **Alternatives considered**: cascada física o recálculo desde reactivación; rechazadas.
+- **Decision**: la anulación usa un flag persistente `Tarea.anulada` (BooleanField,
+  default False). `estado` representa SOLO el ciclo funcional (BORRADOR, ACTIVA, GESTION,
+  PENDIENTE_APROBACION_CIERRE, CERRADA); `ANULADA` deja de ser estado canónico. La
+  anulación jerárquica es LÓGICA (`anulada_efectivamente` = propia OR padre OR abuelo),
+  NO una cascada física de escritura. Anular/reactivar solo cambia `anulada` de la tarea
+  afectada; no modifica estados, responsables, participantes, correlativo ni relaciones.
+- **Rationale**: elimina la cascada física y la necesidad de snapshot de estados para
+  restaurar jerarquía; los datos nunca cambian, por lo que no hay nada que reconstruir.
+- **Alternatives considered**: cascada física de estados ANULADA y snapshot de estructura
+  para reactivación; rechazadas por duplicar fuente de verdad y complejidad.
 
 ### D7. Avance ponderado
 

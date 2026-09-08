@@ -61,7 +61,7 @@
 
 ## C. Ciclo de Vida y Cierre
 
-- **FR-C01**: Estados persistentes canónicos: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`, `CERRADA` y `ANULADA`. Publicación, aprobación/rechazo de cierre y reactivación son acciones/eventos auditables, no estados persistentes adicionales.
+- **FR-C01**: Estados persistentes canónicos del ciclo funcional: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE` y `CERRADA`. `ANULADA` deja de ser estado canónico: la anulación es el flag separado `Tarea.anulada` (ver E). Publicación, aprobación/rechazo de cierre, anulación y reactivación son acciones/eventos auditables, no estados persistentes adicionales.
 - **FR-C02**: Toda tarea nace como borrador (vida indefinida).
 - **FR-C03**: Publicar exige responsable válido/activo, registra fecha de publicación, convierte correlativo A→B, transforma `BORRADOR` en `ACTIVA` y es irreversible hacia borrador. El valor MVP `PUBLICADA` se migra a `ACTIVA`.
 - **FR-C04**: El responsable puede llevar la tarea a 100%; entonces pasa a "en espera de aprobación de cierre".
@@ -69,7 +69,7 @@
 - **FR-C06**: Si el cierre se rechaza, la tarea queda "cierre rechazado / vuelve a gestión" y MUST mantener el 100% aunque vuelva a gestión.
 - **FR-C07**: MUST registrarse quién cerró/canceló y cuándo.
 - **FR-C08**: Cada transición MUST registrar fecha y usuario (auditoría).
-- **FR-C09**: Las transiciones MUST seguir un flujo explícito: `BORRADOR` --publicar--> `ACTIVA` → `GESTION` → `PENDIENTE_APROBACION_CIERRE` --aprobar--> `CERRADA`; rechazar el cierre es un evento auditado que devuelve a `GESTION` conservando el 100%. Anular lleva a `ANULADA`; reactivar es una acción auditada que restaura el estado persistente anterior, sin crear un estado `REACTIVADA`. Ninguna transición puede devolver una tarea publicada a `BORRADOR`.
+- **FR-C09**: Las transiciones MUST seguir un flujo explícito: `BORRADOR` --publicar--> `ACTIVA` → `GESTION` → `PENDIENTE_APROBACION_CIERRE` --aprobar--> `CERRADA`; rechazar el cierre es un evento auditado que devuelve a `GESTION` conservando el 100%. Anular/reactivar NO son transiciones de estado: solo cambian el flag `anulada` (ver E), sin tocar `estado` ni crear un estado `REACTIVADA`. Ninguna transición puede devolver una tarea publicada a `BORRADOR`.
 
 **Key Entities — C**: Estado, Transición (origen, destino, fecha, usuario), Cierre/Cancelación (por, fecha).
 
@@ -126,11 +126,15 @@ posteriores de reprogramación.
 - **FR-E02**: Los descendientes MUST heredar las dimensiones base del padre, pero MUST poder cambiar el departamento.
 - **FR-E03**: El padre MUST NOT cerrar mientras haya descendientes sin cerrar.
 - **FR-E04**: MUST existir navegación vertical (padre ↔ descendientes).
-- **FR-E05**: Cuando exista jerarquía padre/hijo/nieto, anular un padre MUST anular hijos y nietos en cascada; esta cascada se implementa después de introducir la relación jerárquica.
-- **FR-E06**: Reactivar MUST restituir la tarea y, cuando exista jerarquía implementada, toda la estructura exactamente como estaba al momento de la anulación, conservando estados, responsables, participantes, relaciones, avance y auditoría histórica.
-- **FR-E07**: Al reactivar, las fechas NO deben recalcularse automáticamente desde la fecha de reactivación; las fechas pendientes afectadas MUST quedar pendientes de reacomodo o confirmación por los responsables o participantes correspondientes antes de continuar normalmente la gestión.
-- **FR-E08**: Al anular o reactivar MUST notificarse a todos los participantes afectados.
+- **FR-E05**: **Anulación por flag (diseño simplificado aprobado)**: `Tarea.anulada` (BooleanField, default False). Anular una tarea pone `anulada=True` y reactivar pone `anulada=False`, SIN cambiar `estado`, responsable, participantes, correlativo, `cierre_completado`, relaciones ni ningún otro dato funcional. NO se usa `estado == ANULADA` junto a `anulada == True` como doble fuente de verdad.
+- **FR-E06**: **Anulación efectiva jerárquica (LÓGICA, no física)**: una tarea se considera `anulada_efectivamente` cuando ella misma tiene `anulada=True`, OR su padre está anulado efectivamente, OR su abuelo está anulado efectivamente (máximo padre→hija→nieta, sin cuarto nivel). NO existe cascada física de escritura (`for descendiente: anulada=True` está prohibido); la cascada la calcula `is_effectively_annulled(tarea)` considerando tarea+padre+abuelo.
+- **FR-E07**: **Reactivación sin restauración de estados**: reactivar el padre (`anulada=False`) hace que hijas y nietas vuelvan a operar automáticamente con sus estados previos intactos (nunca cambiaron). NO se restauran estados, NO se reconstruye estructura, NO se modifica descendencia. Una hija anulada directamente (`anulada=True`) sigue anulada aunque el padre se reactive. Las fechas NO se recalculan automáticamente: quedan pendientes de reacomodo/confirmación por los responsables o participantes antes de continuar la gestión.
+- **FR-E08**: Al anular o reactivar MUST notificarse a todos los participantes afectados. La trazabilidad (tarea, usuario, fecha/hora, acción ANULAR/REACTIVAR, motivo) se registra reutilizando `TareaTransicion` o el mecanismo vigente, sin crear otra auditoría.
 - **FR-E09**: MUST existir el concepto de subtarea y de mini-tarea (ver F).
+- **FR-E10**: **Reglas de operación mientras `anulada_efectivamente` es True**: la tarea sigue visible según filtros y conserva todos sus datos, pero MUST NOT permitir operaciones normales de gestión, modificaciones de lifecycle, cierre, reasignaciones u otras acciones operativas, salvo lectura/auditoría/reactivación.
+- **FR-E11**: **Cierre de padre con descendientes**: el padre no puede cerrarse mientras tenga descendientes operativos pendientes. Una descendiente anulada efectivamente MUST NOT considerarse trabajo pendiente activo.
+- **FR-E12**: **Empresa en jerarquía**: toda relación jerárquica MUST permanecer dentro de la misma Empresa; padre, hija y nieta comparten el mismo `empresa_id` obligatorio.
+- **FR-E13**: **Ciclos y profundidad**: una tarea MUST NOT ser hija de sí misma; MUST NOT existir ciclo (A→B→A); cada tarea tiene como máximo un padre; máximo padre→hija→nieta (sin tercer nivel bajo la raíz). La validación concreta se implementa en el servicio de jerarquía.
 
 **Key Entities — E**: Relación padre/hija (tarea_padre), Subtarea, Mini-tarea.
 
@@ -329,7 +333,7 @@ BLOQUEADA POR P2**.
 - **FR-R03**: Sin vencimiento automático de documentos (vencimiento informativo solamente).
 - **FR-R04**: Sin prioridad "baja" (solo Simple/Normal/Urgente/Crítica).
 - **FR-R05**: Integración real con legacy de LOCALES y PROVEEDORES fuera de alcance hasta revisión (`LEGACY API PENDIENTE`).
-- **FR-R06**: Sin eliminación física de tareas (el ciclo usa cancelación/anulación).
+- **FR-R06**: Sin eliminación física de tareas (la anulación usa el flag `anulada`, ver E; no se borran registros ni se cambian estados).
 
 ---
 
