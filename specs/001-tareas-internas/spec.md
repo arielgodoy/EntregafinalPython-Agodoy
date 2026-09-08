@@ -149,8 +149,12 @@ posteriores de reprogramación.
 - **FR-F05**: Los hitos MUST mostrarse ordenados por fecha de creación; los hitos de la misma fecha se muestran juntos.
 - **FR-F06**: La evidencia de cierre MUST ser configurable/requerida cuando corresponda.
 - **FR-F07**: Las mini-tareas son ultra simples (checkbox hecho/no hecho), con UNA persona por mini-tarea, MUST NOT ponderar el avance y MUST impedir el cierre mientras estén pendientes.
+- **FR-F08**: Todo hito MUST tener exactamente un responsable obligatorio, referenciado a un usuario del sistema; el responsable del hito puede ser distinto del responsable principal de la tarea.
+- **FR-F09**: El responsable de un hito MUST estar activo y pertenecer/tener acceso válido a la Empresa de la tarea; una asignación inválida, inactiva o cross-company MUST rechazarse sin cambios parciales. No se crean permisos nuevos en `access_control`; se reutiliza la política existente de validación de usuarios y Empresa.
+- **FR-F10**: Los hitos MUST conservar su distinción respecto de las mini-tareas: el hito participa en el avance ponderado mediante cumplimiento `0..100` y peso relativo; la mini-tarea representa una persona única y estado hecho/no hecho, y MUST NOT ponderar el avance.
+- **FR-F11**: El hito MUST NOT tener prioridad o clasificación propia ni asumir una `fecha_tope` propia o heredada; para presentación y dashboard hereda la prioridad/clasificación de su tarea padre.
 
-**Key Entities — F**: Avance, Hito (peso, fecha_creacion), Evidencia, Mini-tarea (hecho/no hecho, persona).
+**Key Entities — F**: Avance, Hito (responsable, peso, cumplimiento, fecha_creacion), Evidencia, Mini-tarea (hecho/no hecho, persona).
 
 ---
 
@@ -249,6 +253,9 @@ BLOQUEADA POR P2**.
 - **FR-L05**: Presentación con DataTables, modal "Ver info de la tarea" y opción de abrir la tarea completa.
 - **FR-L06**: Las dimensiones Local y Proveedor dependen de `LEGACY API PENDIENTE` (A y J).
 - **FR-L07**: Los ocho KPI de FR-L02 MUST repetirse en cada dimensión permitida del drill-down; no se definirán KPI adicionales por dimensión.
+- **FR-L08**: El dashboard personal MUST mostrar las tareas donde el usuario es responsable directo y los hitos donde el usuario es responsable directo, aunque no sea responsable de la tarea padre.
+- **FR-L09**: Los hitos del dashboard personal MUST agruparse para presentación según la prioridad/clasificación de la tarea padre; el hito no tiene clasificación propia ni se agrega un campo `prioridad` al hito.
+- **FR-L10**: Cada hito mostrado en el dashboard personal MUST identificar conceptualmente tipo `HITO`, nombre, correlativo y título de la tarea padre, prioridad/clasificación heredada, cumplimiento, peso, responsable y enlace a la tarea/hito. La navegación MUST conservar Clasificación → Tarea → Hito y no convertir el hito en tarea independiente.
 
 **Key Entities — L**: Dashboard (dimensión), KPI, Drill-down.
 

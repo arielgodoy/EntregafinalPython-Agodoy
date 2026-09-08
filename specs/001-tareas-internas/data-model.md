@@ -195,7 +195,8 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 
 ### Avance, fechas, reprogramación y documentos
 
-- `Hito`: tarea, nombre, cumplimiento, peso relativo, fecha de creación y orden.
+- `Hito`: tarea, nombre, `responsable` FK obligatorio a `auth.User` con `on_delete=PROTECT`, cumplimiento `0..100`, peso relativo, fecha de creación y orden. El responsable puede diferir del responsable principal de la Tarea, pero MUST estar activo y pertenecer/tener acceso válido a la Empresa de la Tarea; la validación debe impedir cruces multiempresa y rechazar la operación sin cambios parciales.
+- `Hito` no tiene campo propio de `prioridad` ni `fecha_tope`; para presentación y dashboard hereda únicamente la clasificación/prioridad de su Tarea padre. No se asume herencia de vencimiento.
 - `Avance`: tarea, modo manual/ponderado, porcentaje calculado y fecha.
 - `Tarea.fecha_asignacion`: DateTime nullable mientras no se publica, fijada al publicar/asignar oficialmente y conservada como referencia histórica original; una reasignación no la modifica.
 - `Tarea.fecha_tope`: Date nullable; puede ser NULL solo en `BORRADOR` durante edición y es el dato funcional principal de vencimiento. Toda Tarea publicada/operativa MUST tenerla.
@@ -203,6 +204,9 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 - `CausaAtraso`: catálogo inicial cerrado a imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas.
 - `Reprogramacion`: tarea, `fecha_tope_anterior`, `fecha_tope_nueva`, justificación obligatoria, usuario y `fecha_operacion`; cambiar una `fecha_tope` existente es una reprogramación explícita y no una reasignación. Cada reprogramación se relaciona con una o varias `CausaAtraso` mediante M:N.
 - `dias_atraso` es derivado: durante la edición de un `BORRADOR` sin `fecha_tope` vale cero; toda Tarea publicada tiene fecha y, si no está cumplida, se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
+- `MiniTarea`: mantiene una persona única y estado hecho/no hecho; no pondera el avance y no se fusiona con `Hito`.
+- No existe todavía una regla de reasignación ni historial de reasignación específico para el responsable de Hito. Si el dashboard futuro requiere esa trazabilidad, deberá definirse como decisión posterior antes de implementarla.
+- Los Hitos históricos existentes sin responsable requieren una estrategia de migración segura posterior. La implementación futura debe detenerse/reportar ante esos registros y no puede asignar automáticamente el responsable de la Tarea, creador, administrador ni otro usuario sin autorización explícita.
 - `DocumentoTarea`: tipo, archivo o URL, fechas informativas, usuario y estado.
 - `DocumentoHistorial` y `EvidenciaCierre`: historial de cambios y evidencia requerida.
 
