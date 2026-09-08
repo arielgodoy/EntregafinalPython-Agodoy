@@ -247,6 +247,34 @@ class Tarea(models.Model):
         )
 
 
+class Avance(models.Model):
+    class Modo(models.TextChoices):
+        MANUAL = "MANUAL", "Manual"
+        PONDERADO = "PONDERADO", "Ponderado"
+
+    tarea = models.OneToOneField(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="avance",
+    )
+    modo = models.CharField(
+        max_length=10,
+        choices=Modo.choices,
+        default=Modo.MANUAL,
+    )
+    porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.porcentaje < 0 or self.porcentaje > 100:
+            raise ValidationError({"porcentaje": "El avance debe estar entre 0 y 100."})
+
+
 class MiniTarea(models.Model):
     tarea = models.ForeignKey(
         Tarea,
