@@ -19,6 +19,47 @@
 | `creada_por` | FK(`auth.User`, on_delete=PROTECT, related_name="tareas_creadas") | no | — | Auditoría mínima coherente con el sistema. |
 | `fecha_creacion` | DateTimeField(auto_now_add=True) | no | auto | UTC (D9). |
 | `fecha_publicacion` | DateTimeField | sí (`null=True, blank=True`) | `None` | Se fija solo al publicar; inmutable después (D4). |
+| `todo_origen` | FK conceptual nullable a `Todo` | sí | `None` | Origen canónico opcional; mutuamente excluyente con `tarea_origen`. |
+| `tarea_origen` | FK conceptual nullable a `Tarea` | sí | `None` | Origen canónico opcional; cadenas históricas permitidas; mutuamente excluyente con `todo_origen`. |
+
+## Entidad: `Todo` (diseño funcional, implementación futura)
+
+| Campo | Tipo conceptual | Nulable | Reglas |
+|---|---|---|---|
+| `id` | PK | no | Identidad propia, separada de `Tarea`. |
+| `empresa` | FK a `Empresa` | no | Todo TO-DO pertenece obligatoriamente a una Empresa. |
+| `correlativo` | `CharField(max_length=9)` | no | Formato `TD` + 7 dígitos; único por Empresa; usa namespace propio. |
+| `titulo` | texto | no | Asunto breve del problema o necesidad. |
+| `descripcion` | texto | sí | Observación o contexto pendiente de formalización. |
+| `estado` | choices | no | Solo `ABIERTO` o `CERRADO`. Un TO-DO cerrado no se reabre. |
+| `creada_por` | FK a usuario | no | Usuario creador. |
+| `fecha_creacion` | DateTime | no | Fecha/hora de creación. |
+| `cerrada_por` | FK a usuario | sí | Usuario que ejecutó el cierre explícito. |
+| `fecha_cierre` | DateTime | sí | Fecha/hora del cierre explícito. |
+| `comentario_cierre` | texto | sí | Comentario del cierre. |
+
+### Secuencia y relaciones conceptuales de TO-DO
+
+- `CorrelativoTodoEmpresa`: secuencia propia por Empresa para `TD0000001`, `TD0000002`, etc.; no comparte contador con `CorrelativoEmpresa` ni con A/B.
+- `Todo -> Tarea`: un TO-DO puede originar cero, una o varias Tareas mediante `Tarea.todo_origen`.
+- `Tarea -> Tarea`: `Tarea.tarea_origen` representa derivación directa y permite cadenas históricas.
+- `Todo -> Todo`: un TO-DO nuevo puede quedar relacionado con un TO-DO cerrado anterior cuando reaparece el problema; el modelo concreto de esta relación queda pendiente.
+
+La restricción conceptual del origen canónico es:
+
+```text
+NO permitir simultáneamente:
+Tarea.todo_origen IS NOT NULL
+AND Tarea.tarea_origen IS NOT NULL
+```
+
+Referencias históricas o de similitud pueden ser múltiples, pero no son origen canónico. Tampoco lo son `TareaRelacion` padre/hija/nieta, clonación ni trabajo en equipo.
+
+TO-DO y Tarea sin fecha son conceptos distintos: el primero aún no está formalizado como Tarea; el segundo ya es una Tarea formal sin fecha tope.
+
+### Auditoría mínima de TO-DO
+
+Debe persistirse conceptualmente la creación, el cierre explícito, la creación de una Tarea desde TO-DO y el usuario y fecha/hora de cada evento. El comentario de derivación es opcional; el comentario de cierre pertenece al cierre del TO-DO.
 
 ## Enums
 

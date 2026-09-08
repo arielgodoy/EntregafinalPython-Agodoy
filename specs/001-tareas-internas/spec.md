@@ -276,17 +276,34 @@ BLOQUEADA POR P2**.
 
 ## N. Origen, Derivación y Similitud
 
-- **FR-N01**: Una tarea MUST poder provenir de otra (una sola tarea origen directa).
+- **FR-N01**: Una tarea MUST poder tener como máximo un origen canónico directo: otra tarea, un TO-DO o ninguno. Una tarea no puede tener simultáneamente `todo_origen` y `tarea_origen`.
 - **FR-N02**: El historial de origen MUST ser accesible en lectura.
 - **FR-N03**: MUST NOT convertir una tarea antigua en la nueva: se crea una nueva y se referencia. Cadenas históricas permitidas.
 - **FR-N04**: Al publicar, el sistema MUST advertir si parece un problema repetido cuando la coincidencia aproximada alcance el umbral configurado para la empresa, cuyo valor predeterminado es 80%.
 - **FR-N05**: La evaluación de similitud MUST incluir también tareas cerradas.
 - **FR-N06**: El usuario MUST confirmar "es el mismo problema nuevamente"; aun confirmando, la tarea es NUEVA.
-- **FR-N07**: La nueva tarea MUST poder referenciar una o varias tareas antiguas si corresponde.
+- **FR-N07**: La nueva tarea MUST poder mantener una o varias referencias históricas o de similitud a tareas antiguas si corresponde; estas referencias no sustituyen ni multiplican el origen canónico único.
 - **FR-N08**: Cambio de repuesto MUST NOT implicar automáticamente "mismo problema".
 - **FR-N09**: El umbral de similitud MUST ser configurable por empresa; solo usuarios autorizados podrán modificarlo y cada cambio MUST aplicar únicamente a nuevas evaluaciones de similitud.
 
 **Key Entities — N**: Origen/derivación, Relación de similitud, Cadena histórica, Umbral (80%).
+
+## S. TO-DO y Origen Canónico
+
+- **FR-S01**: TO-DO MUST ser una entidad separada de `Tarea`, perteneciente obligatoriamente a una Empresa. Representa un problema, necesidad, asunto pendiente u observación todavía no formalizado ni planificado como Tarea.
+- **FR-S02**: El correlativo de TO-DO MUST usar el namespace propio `TD` y una secuencia independiente por Empresa (`TD0000001`, `TD0000002`); no comparte secuencia numérica con los correlativos A/B de `Tarea`.
+- **FR-S03**: TO-DO MUST incluir conceptualmente correlativo, título, descripción, estado, creador, fecha de creación, usuario de cierre, fecha de cierre y comentario de cierre. Puede existir sin responsable, fecha tope o planificación formal.
+- **FR-S04**: Los únicos estados persistentes mínimos de TO-DO son `ABIERTO` y `CERRADO`. Un TO-DO `CERRADO` NO se reabre.
+- **FR-S05**: Si el problema reaparece después del cierre, MUST crearse un nuevo TO-DO relacionado históricamente con el anterior; la relación concreta queda pendiente de diseño técnico y no crea todavía un modelo.
+- **FR-S06**: Un TO-DO MUST poder originar una o varias Tareas a lo largo del tiempo. Cada Tarea originada conserva el lifecycle, responsable, fechas, cierre, jerarquía y correlativo A/B normales de una Tarea.
+- **FR-S07**: Cerrar una Tarea originada NO cierra automáticamente el TO-DO. El cierre de TO-DO MUST ser explícito y no puede realizarse mientras exista alguna Tarea originada pendiente operativamente; una Tarea `CERRADA` o efectivamente anulada no es bloqueante. La desaparición de la última pendiente no cierra el TO-DO automáticamente.
+- **FR-S08**: La creación de una Tarea desde un TO-DO MUST registrar usuario y fecha/hora; el comentario o motivo de derivación es opcional.
+- **FR-S09**: Una Tarea MUST tener como máximo un origen canónico: `todo_origen`, `tarea_origen` o ninguno. MUST existir una restricción de exclusión que impida ambos orígenes simultáneamente.
+- **FR-S10**: Las referencias históricas, evaluaciones de similitud, jerarquía `TareaRelacion`, clonación y trabajo en equipo son conceptos distintos del origen canónico y no lo reemplazan.
+- **FR-S11**: No se usará `GenericForeignKey` para el origen salvo necesidad arquitectónica real; se prefieren FK explícitas a TO-DO y Tarea.
+- **FR-S12**: Una Tarea formal puede no tener fecha tope. La ausencia de fecha no la convierte en TO-DO: TO-DO es un asunto todavía no formalizado como Tarea, mientras que una Tarea sin fecha ya es una Tarea formal.
+
+**Key Entities — S**: TO-DO, CorrelativoTodoEmpresa, OrigenTodoTarea, OrigenTareaTarea y auditoría de TO-DO.
 
 ---
 
@@ -415,3 +432,4 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 | P | Seguridad, Multiempresa y Enlaces | FR-P01…P05 | P1 | Definido (Fase 1 implementada) |
 | Q | Reglas de Cierre | FR-Q01…Q06 | P2 | Definido |
 | R | Exclusiones Actuales | FR-R01…R06 | — | Definido |
+| S | TO-DO y Origen Canónico | FR-S01…S12 | P2 | Definido (implementación futura) |
