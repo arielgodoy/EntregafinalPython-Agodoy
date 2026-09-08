@@ -19,6 +19,9 @@
 | `creada_por` | FK(`auth.User`, on_delete=PROTECT, related_name="tareas_creadas") | no | — | Auditoría mínima coherente con el sistema. |
 | `fecha_creacion` | DateTimeField(auto_now_add=True) | no | auto | UTC (D9). |
 | `fecha_publicacion` | DateTimeField | sí (`null=True, blank=True`) | `None` | Se fija solo al publicar; inmutable después (D4). |
+| `fecha_asignacion` | DateTimeField | sí (`null=True, blank=True`) | `None` | Se fija al publicar/asignar oficialmente; es histórica y no cambia por reasignación. |
+| `fecha_tope` | DateField | sí (`null=True, blank=True`) | `None` | Nullable técnicamente solo durante edición en `BORRADOR`; MUST estar definida antes de publicar/activar. Una Tarea publicada/operativa no puede carecer de fecha. |
+| `fecha_cumplimiento` | DateTimeField | sí (`null=True, blank=True`) | `None` | Se fija al completar operativamente y pasar a `PENDIENTE_APROBACION_CIERRE`; la aprobación no la modifica. Si el cierre se rechaza y vuelve a `GESTION`, vuelve a NULL y el intento queda auditado en `TareaTransicion`. |
 | `todo_origen` | FK conceptual nullable a `Todo` | sí | `None` | Origen canónico opcional; mutuamente excluyente con `tarea_origen`. |
 | `tarea_origen` | FK conceptual nullable a `Tarea` | sí | `None` | Origen canónico opcional; cadenas históricas permitidas; mutuamente excluyente con `todo_origen`. |
 
@@ -41,7 +44,7 @@
 ### Secuencia y relaciones conceptuales de TO-DO
 
 - `CorrelativoTodoEmpresa`: secuencia propia por Empresa para `TD0000001`, `TD0000002`, etc.; no comparte contador con `CorrelativoEmpresa` ni con A/B.
-- `Todo -> Tarea`: un TO-DO puede originar cero, una o varias Tareas mediante `Tarea.todo_origen`.
+- `Todo -> Tarea`: un TO-DO puede originar cero, una o varias Tareas mediante `Tarea.todo_origen`; cada una es un registro Tarea independiente, conserva el TO-DO y exige `fecha_tope` para publicarse. El TO-DO permanece existente y no se transforma.
 - `Tarea -> Tarea`: `Tarea.tarea_origen` representa derivación directa y permite cadenas históricas.
 - `Todo -> Todo`: un TO-DO nuevo puede quedar relacionado con un TO-DO cerrado anterior cuando reaparece el problema; el modelo concreto de esta relación queda pendiente.
 
@@ -55,7 +58,7 @@ AND Tarea.tarea_origen IS NOT NULL
 
 Referencias históricas o de similitud pueden ser múltiples, pero no son origen canónico. Tampoco lo son `TareaRelacion` padre/hija/nieta, clonación ni trabajo en equipo.
 
-TO-DO y Tarea sin fecha son conceptos distintos: el primero aún no está formalizado como Tarea; el segundo ya es una Tarea formal sin fecha tope.
+TO-DO es el asunto aún no formalizado como Tarea y puede existir sin `fecha_tope`. Una Tarea solo puede carecer técnicamente de `fecha_tope` mientras está en `BORRADOR` y edición; una Tarea publicada/operativa siempre debe tenerla.
 
 ### Auditoría mínima de TO-DO
 
@@ -81,8 +84,12 @@ Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el u
   válido/activo (`is_active=True`). Si no → `ValidationError` y la tarea permanece en
   `BORRADOR`. (Incluye Clarification Q1: responsable desactivado tras la asignación
   bloquea la publicación.)
-- **V2 (FR-008)**: Una tarea en `PUBLICADA` MUST NOT guardarse sin `responsable` válido;
-  `fecha_publicacion` MUST estar fijada y no cambia en ediciones posteriores.
+- **V1b (FR-G01/FR-S12)**: Al publicar, `fecha_tope` MUST existir. Si es NULL →
+  `ValidationError` y la tarea permanece en `BORRADOR`; una Tarea publicada/operativa
+  nunca puede carecer de `fecha_tope`.
+- **V2 (FR-008)**: Una tarea en `PUBLICADA` MUST NOT guardarse sin `responsable` válido ni
+  `fecha_tope`; `fecha_publicacion` y `fecha_asignacion` MUST estar fijadas y no cambian
+  en ediciones posteriores. Una reasignación no modifica `fecha_tope`.
 - **V3 (Q2)**: La transición `PUBLICADA → BORRADOR` MUST ser imposible (no existe operación
   de "despublicar"; cualquier intento es error de validación).
 - **V4 (FR-003)**: `empresa` se asigna en creación desde la sesión y no cambia.
@@ -190,12 +197,12 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 
 - `Hito`: tarea, nombre, cumplimiento, peso relativo, fecha de creación y orden.
 - `Avance`: tarea, modo manual/ponderado, porcentaje calculado y fecha.
-- `Tarea.fecha_asignacion`: DateTime nullable, fijada al publicar/asignar oficialmente y conservada como referencia histórica original; una reasignación no la modifica.
-- `Tarea.fecha_tope`: Date nullable; puede ser NULL y es el dato funcional principal de vencimiento. Sin `fecha_tope` no hay vencimiento ni días de atraso.
-- `Tarea.fecha_cumplimiento`: DateTime nullable; fecha/hora real en que se completa la última acción operativa necesaria. Es distinta de la fecha de cierre/aprobación y corta el cálculo de atraso desde el cumplimiento operativo.
+- `Tarea.fecha_asignacion`: DateTime nullable mientras no se publica, fijada al publicar/asignar oficialmente y conservada como referencia histórica original; una reasignación no la modifica.
+- `Tarea.fecha_tope`: Date nullable; puede ser NULL solo en `BORRADOR` durante edición y es el dato funcional principal de vencimiento. Toda Tarea publicada/operativa MUST tenerla.
+- `Tarea.fecha_cumplimiento`: DateTime nullable; fecha/hora real en que se completa la última acción operativa necesaria. Es distinta de la fecha de cierre/aprobación, corta el cálculo de atraso y vuelve a NULL si el cierre es rechazado y la Tarea vuelve a `GESTION`; el intento queda en `TareaTransicion`.
 - `CausaAtraso`: catálogo inicial cerrado a imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas.
 - `Reprogramacion`: tarea, `fecha_tope_anterior`, `fecha_tope_nueva`, justificación obligatoria, usuario y `fecha_operacion`; cambiar una `fecha_tope` existente es una reprogramación explícita y no una reasignación. Cada reprogramación se relaciona con una o varias `CausaAtraso` mediante M:N.
-- `dias_atraso` es derivado: sin `fecha_tope` vale cero; con fecha y Tarea no cumplida se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
+- `dias_atraso` es derivado: durante la edición de un `BORRADOR` sin `fecha_tope` vale cero; toda Tarea publicada tiene fecha y, si no está cumplida, se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
 - `DocumentoTarea`: tipo, archivo o URL, fechas informativas, usuario y estado.
 - `DocumentoHistorial` y `EvidenciaCierre`: historial de cambios y evidencia requerida.
 
