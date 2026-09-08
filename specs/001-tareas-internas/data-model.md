@@ -144,7 +144,9 @@ siendo útil (quién anuló/reactivó, cuándo, motivo) se cubre con `TareaTrans
 (acciones ANULAR/REACTIVAR). Evolución posterior: el modelo puede simplificarse o
 eliminarse en una migración aditiva futura; en esta intervención NO se elimina ni se
 diseña su migración. `Tarea.fechas_pendientes_confirmacion` se conserva como señal de
-fechas afectadas pendientes de confirmación (sin recálculo automático).
+fechas afectadas pendientes de confirmación (sin recálculo automático). En T030 se
+mantiene únicamente por compatibilidad histórica: no activa un flujo especial, no
+extiende fechas, no resetea atraso ni fuerza confirmación al reactivar.
 
 ### Señal de cierre completado
 
@@ -184,11 +186,16 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 - `TareaRelacion`: padre/hija con máximo dos niveles bajo el padre.
 - `MiniTarea`: tarea, descripción, persona única, hecho y fechas.
 
-### Avance, fechas y documentos
+### Avance, fechas, reprogramación y documentos
 
 - `Hito`: tarea, nombre, cumplimiento, peso relativo, fecha de creación y orden.
 - `Avance`: tarea, modo manual/ponderado, porcentaje calculado y fecha.
-- `CausaAtraso` y `Reprogramacion`: catálogo, fechas, causa, justificación, usuario y auditoría.
+- `Tarea.fecha_asignacion`: DateTime nullable, fijada al publicar/asignar oficialmente y conservada como referencia histórica original; una reasignación no la modifica.
+- `Tarea.fecha_tope`: Date nullable; puede ser NULL y es el dato funcional principal de vencimiento. Sin `fecha_tope` no hay vencimiento ni días de atraso.
+- `Tarea.fecha_cumplimiento`: DateTime nullable; fecha/hora real en que se completa la última acción operativa necesaria. Es distinta de la fecha de cierre/aprobación y corta el cálculo de atraso desde el cumplimiento operativo.
+- `CausaAtraso`: catálogo inicial cerrado a imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas.
+- `Reprogramacion`: tarea, `fecha_tope_anterior`, `fecha_tope_nueva`, justificación obligatoria, usuario y `fecha_operacion`; cambiar una `fecha_tope` existente es una reprogramación explícita y no una reasignación. Cada reprogramación se relaciona con una o varias `CausaAtraso` mediante M:N.
+- `dias_atraso` es derivado: sin `fecha_tope` vale cero; con fecha y Tarea no cumplida se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
 - `DocumentoTarea`: tipo, archivo o URL, fechas informativas, usuario y estado.
 - `DocumentoHistorial` y `EvidenciaCierre`: historial de cambios y evidencia requerida.
 

@@ -156,11 +156,13 @@ posteriores de reprogramación.
 
 ## G. Fechas, Atrasos y Reprogramación
 
-- **FR-G01**: El vencimiento MUST definirse por días desde la asignación.
-- **FR-G02**: MUST calcularse días atrasados acumulados hasta el cierre.
-- **FR-G03**: MUST soportar múltiples causas de atraso; la lista inicial incluye: imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas, causas externas.
+- **FR-G01**: La Tarea MUST poder tener una fecha concreta de vencimiento `fecha_tope`, que puede ser NULL. Una Tarea sin `fecha_tope` sigue siendo formal, no es TO-DO, no está vencida y tiene `dias_atraso = 0`. Con `fecha_tope`, empieza a estar atrasada cuando la fecha de referencia supera dicha fecha. `fecha_tope` es el dato funcional principal.
+- **FR-G02**: MUST calcularse `dias_atraso` de forma derivada, sin almacenarlo si puede calcularse. Mientras la Tarea no esté cumplida, si `fecha_referencia > fecha_tope`, el atraso es la diferencia entre ambas fechas; sin `fecha_tope`, es cero. `fecha_cumplimiento` MUST registrar la fecha/hora real en que se completa la última acción operativa necesaria y, al pasar a `PENDIENTE_APROBACION_CIERRE`, MUST ser el corte del atraso: la aprobación administrativa posterior no suma días. La fecha de asignación/publicación MUST conservarse como referencia histórica original y una reasignación no la cambia ni reinicia la planificación.
+- **FR-G03**: MUST soportarse múltiples causas de atraso por cada reprogramación. La lista inicial incluye únicamente: imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas. La relación `Reprogramacion` ↔ `CausaAtraso` MUST ser M:N y conservar el contexto histórico de cada operación.
 - **FR-G04**: La justificación MUST ser obligatoria para reprogramar.
-- **FR-G05**: La reprogramación MUST ser trazable (registro de fecha anterior/nueva, justificación, usuario).
+- **FR-G05**: Cambiar una `fecha_tope` existente MUST tratarse como reprogramación y ser trazable mediante registro de `fecha_tope` anterior/nueva, justificación obligatoria, usuario, fecha/hora de operación y una o varias causas asociadas. La reprogramación explícita no se confunde con la reasignación. La anulación no cambia fechas, no pausa el reloj histórico, no borra atraso ni limpia desempeño; la reactivación conserva las fechas existentes y no recalcula ni extiende la planificación. `fechas_pendientes_confirmacion` se conserva únicamente por compatibilidad histórica, sin semántica nueva en T030.
+
+**Fórmula funcional de atraso**: sin `fecha_tope`, `dias_atraso = 0`; con Tarea no cumplida, se calcula la diferencia cuando `fecha_referencia > fecha_tope`; con Tarea cumplida, `fecha_cumplimiento` es el corte; con Tarea anulada, se conserva el atraso histórico generado hasta la anulación sin resetearlo.
 
 **Key Entities — G**: Fechas (asignación, vencimiento), Causa de atraso, Reprogramación.
 
