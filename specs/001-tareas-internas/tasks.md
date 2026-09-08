@@ -77,9 +77,9 @@ description: "Task list for the Tareas Internas master feature"
 
 **FR coverage**: FR-B03, FR-B04, FR-D01, FR-D02, FR-D03, FR-D04, FR-D05, FR-D06, FR-D07, FR-D08, FR-D09, FR-D10, FR-E01, FR-E02, FR-E03, FR-E04, FR-E05, FR-E06, FR-E07, FR-E08, FR-E09, FR-F07, FR-G01, FR-G02, FR-G03, FR-G04, FR-G05.
 
-- [ ] T025 [US3] Implementar `TareaParticipante`, roles, invitados y confirmación de lectura en `tareas/models.py` o servicios propios, validando usuarios activos y empresa activa.
-- [ ] T026 [US3] Implementar reasignación trazable en `tareas/services/assignment.py`, incluyendo responsable anterior/nuevo, usuario, fecha y motivo.
-- [ ] T027 [US3] Implementar asignación independiente por responsable y asignación masiva en `tareas/services/assignment.py`, conservando nombre propio y fecha común por tarea.
+- [x] T025 [US3] Implementar `TareaParticipante`, roles, invitados y confirmación de lectura en `tareas/models.py` o servicios propios, validando usuarios activos y empresa activa.
+- [x] T026 [US3] Implementar reasignación trazable en `tareas/services/assignment.py`, incluyendo responsable anterior/nuevo, usuario, fecha y motivo.
+- [x] T027 [US3] Implementar asignación independiente por responsable y asignación masiva en `tareas/services/assignment.py`, conservando nombre propio y fecha común por tarea.
 - [ ] T028 [US3] Implementar `TareaRelacion` con padre/hijo/nieto y límite de dos niveles en `tareas/services/hierarchy.py`, adoptando el nuevo contrato de anulación por flag: `Tarea.anulada` (BooleanField) y `anulada_efectivamente` LÓGICA (tarea OR padre OR abuelo), SIN snapshots de estados de descendientes NI cascadas físicas de `ANULADA`. Anular/reactivar solo cambia `anulada` de la tarea afectada; una hija anulada directamente sigue anulada tras reactivar el padre. Validar anti-ciclo, un solo padre y máximo padre→hija→nieta. Integrar participantes cuando corresponda; el cambio de departamento solo se permite cuando su definición esté cerrada, sin inventar Local. REQUIERE primero la remediación del modelo de anulación de Phase 2 (ver nota en T018).
 - [ ] T029 [US3] Implementar navegación vertical y validación de cierre bloqueado por descendientes en `tareas/views.py`, `tareas/urls.py` y templates propios.
 - [ ] T030 [US3] Implementar vencimiento por días, atraso acumulado, causas cerradas y reprogramación con justificación obligatoria en `tareas/services/scheduling.py`.

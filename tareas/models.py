@@ -254,3 +254,65 @@ class TareaAnulacionSnapshot(models.Model):
         related_name="tareas_reactivadas",
     )
     timestamp_reactivacion = models.DateTimeField(null=True, blank=True)
+
+
+class TareaParticipante(models.Model):
+    class Rol(models.TextChoices):
+        CREADOR = "CREADOR", "CREADOR"
+        RESPONSABLE_LIDER = "RESPONSABLE_LIDER", "RESPONSABLE_LIDER"
+        SUPERVISOR = "SUPERVISOR", "SUPERVISOR"
+        AUTORIZADOR = "AUTORIZADOR", "AUTORIZADOR"
+        PARTICIPANTE = "PARTICIPANTE", "PARTICIPANTE"
+        INVITADO_OBSERVADOR = "INVITADO_OBSERVADOR", "INVITADO_OBSERVADOR"
+
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="participantes")
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="participaciones_tareas")
+    rol = models.CharField(max_length=32, choices=Rol.choices, default=Rol.PARTICIPANTE)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tarea", "usuario"],
+                name="tareas_participante_unico_por_tarea",
+            ),
+        ]
+        indexes = [models.Index(fields=["tarea", "usuario"])]
+
+
+class TareaLectura(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="lecturas")
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="lecturas_tareas")
+    leido = models.BooleanField(default=False)
+    fecha_lectura = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tarea", "usuario"],
+                name="tareas_lectura_unica_por_usuario",
+            ),
+        ]
+        indexes = [models.Index(fields=["tarea", "usuario", "leido"])]
+
+
+class TareaReasignacion(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="reasignaciones")
+    responsable_anterior = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas_reasignadas_desde",
+    )
+    responsable_nuevo = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="tareas_reasignadas_a",
+    )
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tareas_reasignaciones_realizadas")
+    fecha = models.DateTimeField(default=timezone.now)
+    motivo = models.TextField(blank=True, default="")
+
+    class Meta:
+        indexes = [models.Index(fields=["tarea", "fecha"])]
