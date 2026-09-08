@@ -247,6 +247,30 @@ class Tarea(models.Model):
         )
 
 
+class MiniTarea(models.Model):
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="mini_tareas",
+    )
+    descripcion = models.CharField(max_length=200)
+    persona = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="mini_tareas_asignadas",
+    )
+    hecho = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_completado = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["fecha_creacion", "pk"]
+        indexes = [models.Index(fields=["tarea", "hecho"])]
+
+    def __str__(self):
+        return self.descripcion
+
+
 # Compatibility access for existing MVP callers; ACTIVA is the persisted choice.
 Tarea.Estado.PUBLICADA = Tarea.Estado.ACTIVA
 
