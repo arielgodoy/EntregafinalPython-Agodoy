@@ -85,6 +85,15 @@ Detalle de tarea
                                 <dt class="col-sm-4"><span data-key="tareas.fields.fecha_publicacion">Fecha de publicación</span></dt>
                                 <dd class="col-sm-8">{% if tarea.fecha_publicacion %}{{ tarea.fecha_publicacion }}{% else %}—{% endif %}</dd>
 
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fecha_asignacion">Fecha de asignación</span></dt>
+                                <dd class="col-sm-8">{% if tarea.fecha_asignacion %}{{ tarea.fecha_asignacion }}{% else %}—{% endif %}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></dt>
+                                <dd class="col-sm-8">{% if tarea.fecha_tope %}{{ tarea.fecha_tope }}{% else %}—{% endif %}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fecha_cumplimiento">Fecha de cumplimiento</span></dt>
+                                <dd class="col-sm-8">{% if tarea.fecha_cumplimiento %}{{ tarea.fecha_cumplimiento }}{% else %}—{% endif %}</dd>
+
                                 <dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
                                 <dd class="col-sm-8">{{ tarea.correlativo|default:"—" }}</dd>
 

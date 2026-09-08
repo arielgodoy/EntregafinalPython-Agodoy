@@ -90,6 +90,69 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(tarea.titulo, "Editada")
         self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
 
+    def test_crear_borrador_sin_fecha_tope_y_con_fecha_tope(self):
+        self._permiso(self.vista_crear, crear=True, ingresar=True)
+        self._permiso(self.vista_detalle, ingresar=True)
+        self._login()
+        self.client.post(reverse("tareas:crear_tarea"), {"titulo": "Sin fecha"})
+        self.client.post(
+            reverse("tareas:crear_tarea"),
+            {"titulo": "Con fecha", "fecha_tope": "2026-09-20"},
+        )
+        self.assertIsNone(Tarea.objects.get(titulo="Sin fecha").fecha_tope)
+        self.assertEqual(Tarea.objects.get(titulo="Con fecha").fecha_tope, date(2026, 9, 20))
+
+    def test_editar_borrador_conserva_y_modifica_fecha_tope(self):
+        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea(fecha_tope=None)
+        self._login()
+        self.client.post(
+            reverse("tareas:editar_tarea", args=[tarea.pk]),
+            {"titulo": tarea.titulo, "fecha_tope": "2026-09-21"},
+        )
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.fecha_tope, date(2026, 9, 21))
+
+    def test_editar_tarea_operativa_no_cambia_fecha_tope(self):
+        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea(responsable=self.responsable)
+        tarea.publicar()
+        original = tarea.fecha_tope
+        self._login()
+        self.client.post(
+            reverse("tareas:editar_tarea", args=[tarea.pk]),
+            {
+                "titulo": tarea.titulo,
+                "prioridad": tarea.prioridad,
+                "responsable": self.responsable.pk,
+                "fecha_tope": "2026-09-25",
+            },
+        )
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.fecha_tope, original)
+
+    def test_detalle_muestra_fechas_temporales_y_guiones_para_null(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        tarea = self._crear_tarea()
+        self._login()
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
+        self.assertContains(response, "Fecha de asignación")
+        self.assertContains(response, "Fecha tope")
+        self.assertContains(response, "Fecha de cumplimiento")
+        self.assertContains(response, "—")
+
+    def test_detalle_muestra_fecha_asignacion_y_cumplimiento(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        tarea = self._crear_tarea(responsable=self.responsable)
+        tarea.publicar()
+        tarea.fecha_cumplimiento = tarea.fecha_publicacion
+        tarea.save(update_fields=["fecha_cumplimiento"])
+        self._login()
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
+        self.assertContains(response, "Fecha de publicación")
+        self.assertContains(response, "Fecha de asignación")
+        self.assertContains(response, "Fecha de cumplimiento")
+
     def test_crear_sin_permiso_devuelve_403(self):
         self._permiso(self.vista_crear, crear=False, ingresar=False)
         self._login()
@@ -150,6 +213,24 @@ class PublicarTests(TareasViewsBase):
         tarea.refresh_from_db()
         self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
         self.assertIsNone(tarea.fecha_publicacion)
+
+    def test_publicar_sin_fecha_tope_sigue_rechazado(self):
+        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea(responsable=self.responsable, fecha_tope=None)
+        self._login()
+        response = self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
+        self.assertEqual(response.status_code, 302)
+
+    def test_publicar_con_fecha_tope_funciona(self):
+        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea(responsable=self.responsable, fecha_tope=date(2026, 9, 20))
+        self._login()
+        self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.estado, Tarea.Estado.ACTIVA)
+        self.assertIsNotNone(tarea.fecha_asignacion)
 
     def test_publicar_con_responsable_inactivo_rechazado(self):
         self._permiso(self.vista_publicar, modificar=True, ingresar=True)

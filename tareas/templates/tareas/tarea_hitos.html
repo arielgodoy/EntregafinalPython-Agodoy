@@ -29,7 +29,7 @@
                             {% if hitos %}
                             <div class="table-responsive">
                                 <table class="table table-sm">
-                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento</span></th><th><span data-key="tareas.milestones.weight">Peso</span></th><th><span data-key="tareas.milestones.created">Creado</span></th></tr></thead>
+                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></th><th><span data-key="tareas.milestones.weight">Peso del hito (%)</span></th><th><span data-key="tareas.milestones.created">Creado</span></th></tr></thead>
                                     <tbody>
                                     {% for hito in hitos %}
                                     <tr><td>{{ hito.nombre }}</td><td>{{ hito.cumplimiento }}%</td><td>{{ hito.peso }}</td><td>{{ hito.fecha_creacion }}</td></tr>
@@ -43,8 +43,8 @@
                                 {% csrf_token %}<input type="hidden" name="accion" value="hito">
                                 {{ hito_form.non_field_errors }}
                                 <div class="mb-2"><label for="{{ hito_form.nombre.id_for_label }}"><span data-key="tareas.milestones.name">Nombre</span></label>{{ hito_form.nombre }}{{ hito_form.nombre.errors }}</div>
-                                <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>
-                                <div class="mb-2"><label for="{{ hito_form.peso.id_for_label }}"><span data-key="tareas.milestones.weight">Peso</span></label>{{ hito_form.peso }}{{ hito_form.peso.errors }}</div>
+                                <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>
+                                <div class="mb-2"><label for="{{ hito_form.peso.id_for_label }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>{{ hito_form.peso }}{{ hito_form.peso.errors }}</div>
                                 <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.create_milestone">Crear hito</span></button>
                             </form>
                         </div>

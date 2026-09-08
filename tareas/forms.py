@@ -70,9 +70,15 @@ class TareaForm(forms.ModelForm):
         initial=Tarea.Prioridad.NORMAL,
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.estado != Tarea.Estado.BORRADOR:
+            self.fields["fecha_tope"].disabled = True
+
     class Meta:
         model = Tarea
-        fields = ["titulo", "descripcion", "prioridad", "responsable"]
+        fields = ["titulo", "descripcion", "prioridad", "responsable", "fecha_tope"]
         widgets = {
             "descripcion": forms.Textarea(attrs={"rows": 4}),
+            "fecha_tope": forms.DateInput(attrs={"type": "date"}),
         }

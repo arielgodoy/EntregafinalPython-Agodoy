@@ -34,6 +34,8 @@ class ProgressViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Plan")
         self.assertContains(response, "Hitos y avance")
+        self.assertContains(response, "Cumplimiento (%)")
+        self.assertContains(response, "Peso del hito (%)")
 
     def test_post_crea_hito_mediante_servicio(self):
         response = self.client.post(
