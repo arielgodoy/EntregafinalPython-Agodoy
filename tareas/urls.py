@@ -18,4 +18,6 @@ urlpatterns = [
     path('<int:pk>/rechazar-cierre/', views.RechazarCierreView.as_view(), name='rechazar_cierre'),
     path('<int:pk>/anular/', views.AnularTareaView.as_view(), name='anular_tarea'),
     path('<int:pk>/reactivar/', views.ReactivarTareaView.as_view(), name='reactivar_tarea'),
+    path('<int:pk>/hitos/', views.HitosTareaView.as_view(), name='hitos_tarea'),
+    path('<int:pk>/documentos/', views.DocumentosTareaView.as_view(), name='documentos_tarea'),
 ]

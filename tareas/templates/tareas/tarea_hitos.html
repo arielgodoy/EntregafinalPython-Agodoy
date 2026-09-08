@@ -1,0 +1,81 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Hitos y avance{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Hitos y avance" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><span data-key="tareas.progress.title">Hitos y avance</span></h4>
+                <a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
+            </div>
+            <p><span data-key="tareas.fields.titulo">Tarea</span>: {{ tarea.titulo }}</p>
+
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5><span data-key="tareas.milestones.list">Hitos</span></h5>
+                            {% if hitos %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento</span></th><th><span data-key="tareas.milestones.weight">Peso</span></th><th><span data-key="tareas.milestones.created">Creado</span></th></tr></thead>
+                                    <tbody>
+                                    {% for hito in hitos %}
+                                    <tr><td>{{ hito.nombre }}</td><td>{{ hito.cumplimiento }}%</td><td>{{ hito.peso }}</td><td>{{ hito.fecha_creacion }}</td></tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}<p><span data-key="tareas.milestones.empty">No hay hitos registrados.</span></p>{% endif %}
+                            <h6 class="mt-3"><span data-key="tareas.milestones.create">Crear hito</span></h6>
+                            <form method="post">
+                                {% csrf_token %}<input type="hidden" name="accion" value="hito">
+                                {{ hito_form.non_field_errors }}
+                                <div class="mb-2"><label for="{{ hito_form.nombre.id_for_label }}"><span data-key="tareas.milestones.name">Nombre</span></label>{{ hito_form.nombre }}{{ hito_form.nombre.errors }}</div>
+                                <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>
+                                <div class="mb-2"><label for="{{ hito_form.peso.id_for_label }}"><span data-key="tareas.milestones.weight">Peso</span></label>{{ hito_form.peso }}{{ hito_form.peso.errors }}</div>
+                                <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.create_milestone">Crear hito</span></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5><span data-key="tareas.progress.summary">Avance</span></h5>
+                            <dl class="row">
+                                <dt class="col-7"><span data-key="tareas.progress.mode">Modo</span></dt><dd class="col-5">{% if avance %}{{ avance.get_modo_display }}{% else %}<span data-key="tareas.progress.not_configured">No configurado</span>{% endif %}</dd>
+                                <dt class="col-7"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-5">{% if avance %}{{ avance.porcentaje }}%{% else %}0.00%{% endif %}</dd>
+                                <dt class="col-7"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-5">{{ avance_calculado }}%</dd>
+                            </dl>
+                            <h6><span data-key="tareas.progress.manual">Configurar avance manual</span></h6>
+                            <form method="post" class="mb-3">
+                                {% csrf_token %}<input type="hidden" name="accion" value="manual">{{ manual_form.non_field_errors }}
+                                <label for="{{ manual_form.porcentaje.id_for_label }}"><span data-key="tareas.progress.percentage">Porcentaje</span></label>
+                                {{ manual_form.porcentaje }}{{ manual_form.porcentaje.errors }}
+                                <button type="submit" class="btn btn-outline-primary mt-2"><span data-key="tareas.actions.save_progress">Guardar avance</span></button>
+                            </form>
+                            <h6><span data-key="tareas.progress.weighted_mode">Usar avance ponderado</span></h6>
+                            <form method="post">
+                                {% csrf_token %}<input type="hidden" name="accion" value="ponderado">{{ ponderado_form.non_field_errors }}
+                                <button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.set_weighted">Configurar ponderado</span></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

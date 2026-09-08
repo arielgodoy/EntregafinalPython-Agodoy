@@ -11,14 +11,22 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
 
 from access_control.views import VerificarPermisoMixin
 
-from .forms import TareaForm
-from .models import Tarea
+from .forms import (
+    AvanceManualForm,
+    AvancePonderadoForm,
+    DocumentoForm,
+    EvidenciaConfigForm,
+    EvidenciaRegistroForm,
+    HitoForm,
+    TareaForm,
+)
+from .models import Avance, DocumentoHistorial, DocumentoTarea, Tarea
 from .services.context import get_active_company_id
 from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
@@ -29,6 +37,17 @@ from .services.lifecycle import (
     reject_closure,
     reactivate_task,
     transition_task,
+)
+from .services.documents import (
+    configure_closure_evidence,
+    create_document,
+    register_closure_evidence,
+)
+from .services.progress import (
+    create_milestone,
+    set_manual_progress,
+    set_weighted_progress_mode,
+    weighted_progress,
 )
 
 logger = logging.getLogger(__name__)
@@ -187,3 +206,139 @@ class AnularTareaView(TareaLifecycleView):
 class ReactivarTareaView(TareaLifecycleView):
     accion = "reactivar"
     vista_nombre = "Tareas - Reactivar tarea"
+
+
+class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    vista_nombre = "Tareas - Hitos"
+    permiso_requerido = "modificar"
+
+    def get_tarea(self, pk):
+        return get_object_or_404(self.get_queryset(), pk=pk)
+
+    def get_context(self, tarea, **forms):
+        avance = Avance.objects.filter(tarea=tarea).first()
+        return {
+            "tarea": tarea,
+            "hitos": tarea.hitos.all(),
+            "avance": avance,
+            "avance_calculado": weighted_progress(tarea),
+            "hito_form": forms.get("hito_form", HitoForm()),
+            "manual_form": forms.get("manual_form", AvanceManualForm()),
+            "ponderado_form": forms.get("ponderado_form", AvancePonderadoForm()),
+        }
+
+    def get(self, request, pk):
+        tarea = self.get_tarea(pk)
+        return render(request, "tareas/tarea_hitos.html", self.get_context(tarea))
+
+    def post(self, request, pk):
+        tarea = self.get_tarea(pk)
+        accion = request.POST.get("accion")
+        if accion == "hito":
+            form = HitoForm(request.POST)
+            if form.is_valid():
+                create_milestone(
+                    tarea,
+                    form.cleaned_data["nombre"],
+                    form.cleaned_data["cumplimiento"],
+                    form.cleaned_data["peso"],
+                )
+                messages.success(request, "Hito creado correctamente.")
+                return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
+        if accion == "manual":
+            form = AvanceManualForm(request.POST)
+            if form.is_valid():
+                try:
+                    set_manual_progress(tarea, form.cleaned_data["porcentaje"])
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Avance manual actualizado.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, manual_form=form))
+        if accion == "ponderado":
+            form = AvancePonderadoForm(request.POST)
+            if form.is_valid():
+                try:
+                    set_weighted_progress_mode(tarea)
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Modo ponderado configurado.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, ponderado_form=form))
+        raise ValidationError("Acción de avance no configurada.")
+
+
+class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    vista_nombre = "Tareas - Documentos y evidencia"
+    permiso_requerido = "modificar"
+
+    def get_tarea(self, pk):
+        return get_object_or_404(self.get_queryset(), pk=pk)
+
+    def get_context(self, tarea, **forms):
+        documentos = tarea.documentos.all().prefetch_related("historial__usuario")
+        evidencia = getattr(tarea, "evidencia_cierre", None)
+        return {
+            "tarea": tarea,
+            "documentos": documentos,
+            "evidencia": evidencia,
+            "document_form": forms.get("document_form", DocumentoForm()),
+            "evidencia_config_form": forms.get(
+                "evidencia_config_form", EvidenciaConfigForm(
+                    initial={"requerida": evidencia.requerida if evidencia else False}
+                )
+            ),
+            "evidencia_registro_form": forms.get(
+                "evidencia_registro_form", EvidenciaRegistroForm(documentos=documentos)
+            ),
+        }
+
+    def get(self, request, pk):
+        tarea = self.get_tarea(pk)
+        return render(request, "tareas/tarea_documentos.html", self.get_context(tarea))
+
+    def post(self, request, pk):
+        tarea = self.get_tarea(pk)
+        accion = request.POST.get("accion")
+        if accion == "documento":
+            form = DocumentoForm(request.POST, request.FILES)
+            if form.is_valid():
+                create_document(
+                    tarea=tarea,
+                    usuario=request.user,
+                    tipo=form.cleaned_data["tipo"],
+                    archivo=form.cleaned_data["archivo"],
+                    url=form.cleaned_data["url"],
+                    fecha_documento=form.cleaned_data["fecha_documento"],
+                    fecha_vencimiento=form.cleaned_data["fecha_vencimiento"],
+                )
+                messages.success(request, "Documento registrado correctamente.")
+                return redirect("tareas:documentos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, document_form=form))
+        if accion == "configurar_evidencia":
+            form = EvidenciaConfigForm(request.POST)
+            if form.is_valid():
+                configure_closure_evidence(
+                    tarea=tarea,
+                    usuario=request.user,
+                    requerida=form.cleaned_data["requerida"],
+                )
+                messages.success(request, "Configuración de evidencia actualizada.")
+                return redirect("tareas:documentos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_config_form=form))
+        if accion == "registrar_evidencia":
+            documentos = tarea.documentos.all()
+            form = EvidenciaRegistroForm(request.POST, documentos=documentos)
+            if form.is_valid():
+                register_closure_evidence(
+                    tarea=tarea,
+                    documento=form.cleaned_data["documento"],
+                    usuario=request.user,
+                )
+                messages.success(request, "Evidencia registrada correctamente.")
+                return redirect("tareas:documentos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_registro_form=form))
+        raise ValidationError("Acción documental no configurada.")

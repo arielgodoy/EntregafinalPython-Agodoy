@@ -101,7 +101,7 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T037 [US4] Implementar redistribución al agregar hitos sin alterar cumplimientos anteriores en `tareas/services/progress.py`.
 - [x] T038 [US4] Implementar tipos de documento, archivo/URL, fechas informativas, historial y evidencia configurable en `tareas/models.py` y `tareas/services/documents.py`.
 - [ ] T039 [US4] Integrar evidencia, mini-tareas, descendientes y cotizaciones disponibles como validaciones de cierre en `tareas/services/closure.py`, sin resolver identidad de proveedor.
-- [ ] T040 [US4] Añadir vistas, formularios y templates de hitos, avance, documentos y evidencia en `tareas/forms.py`, `tareas/views.py` y `tareas/templates/tareas/`.
+- [x] T040 [US4] Añadir vistas, formularios y templates de hitos, avance, documentos y evidencia en `tareas/forms.py`, `tareas/views.py` y `tareas/templates/tareas/`.
 - [ ] T041 [US4] Añadir tests de fórmula, redistribución, orden, archivos/URLs, historial, evidencia y bloqueos de cierre en `tareas/tests/test_progress.py` y `tareas/tests/test_documents.py`.
 - [ ] T042 [US4] Preparar migraciones aditivas de avance, hitos, documentos y evidencia en `tareas/migrations/`, sin crear migraciones durante esta generación.
 - [ ] T043 [US4] Validar escenarios E10 de `specs/001-tareas-internas/quickstart.md`.

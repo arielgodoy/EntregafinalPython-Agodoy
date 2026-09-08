@@ -95,6 +95,8 @@ Detalle de tarea
                             <div class="text-end mt-4">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
                                 <a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.editar">Editar</span></a>
+                                <a href="{% url 'tareas:hitos_tarea' tarea.pk %}" class="btn btn-outline-primary"><span data-key="tareas.actions.hitos">Hitos y avance</span></a>
+                                <a href="{% url 'tareas:documentos_tarea' tarea.pk %}" class="btn btn-outline-primary"><span data-key="tareas.actions.documentos">Documentos y evidencia</span></a>
                                 {% if tarea.estado == "BORRADOR" %}
                                 <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">
                                     {% csrf_token %}
