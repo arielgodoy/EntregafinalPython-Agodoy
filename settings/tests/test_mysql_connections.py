@@ -10,7 +10,7 @@ class MySQLConnectionsTests(TestCase):
         self.user = User.objects.create_user(username='u', password='p')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 1')
 
-        vista, _ = Vista.objects.get_or_create(nombre='Settings - Conexiones MySQL')
+        vista, _ = Vista.objects.get_or_create(nombre='Configuración - Conexiones MySQL')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

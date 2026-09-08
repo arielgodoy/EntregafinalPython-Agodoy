@@ -7,9 +7,9 @@ VISTAS = [
         "descripcion": "Gestión de permisos ICMEAS por empresa y vista",
         "route_name": "access_control:permisos_por_vista",
     },
-    {"nombre": "Settings - Configuracion de Empresa", "descripcion": "Configuración por empresa (UI)"},
-    {"nombre": "Settings - Emails Acounts", "descripcion": "Cuentas de correo del sistema"},
-    {"nombre": "Settings - Configuración del Sistema", "descripcion": "Configuración global del sistema"},
+    {"nombre": "Configuración - Configuracion de Empresa", "descripcion": "Configuración por empresa (UI)"},
+    {"nombre": "Configuración - Cuentas de Correo", "descripcion": "Cuentas de correo del sistema"},
+    {"nombre": "Configuración - Configuración del Sistema", "descripcion": "Configuración global del sistema"},
     {"nombre": "API - Acceso", "descripcion": "Acceso a la API protegido por ICMEAS"},
     {"nombre": "API - Maestros Locales", "descripcion": "Acceso API al maestro de locales"},
 ]

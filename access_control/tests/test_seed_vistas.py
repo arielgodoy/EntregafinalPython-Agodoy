@@ -9,9 +9,9 @@ from access_control.models import Empresa, Permiso, Vista
 class SeedVistasTests(TestCase):
     def test_seed_vistas_command_creates_required_vista(self):
         # Asegurar estado clean
-        Vista.objects.filter(nombre="Settings - Configuracion de Empresa").delete()
+        Vista.objects.filter(nombre="Configuración - Configuracion de Empresa").delete()
         call_command("seed_vistas")
-        self.assertTrue(Vista.objects.filter(nombre="Settings - Configuracion de Empresa").exists())
+        self.assertTrue(Vista.objects.filter(nombre="Configuración - Configuracion de Empresa").exists())
 
     def test_seed_vistas_creates_api_catalog_entries_without_permissions(self):
         call_command("seed_vistas")

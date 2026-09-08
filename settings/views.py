@@ -60,7 +60,7 @@ def _require_empresa_activa_for_view(request, vista_nombre):
 
 class ProbarConfiguracionEntradaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Probar conexión con servidor de correo de entrada (IMAP/POP3)."""
-    vista_nombre = "Settings - Probar Configuración Entrada"
+    vista_nombre = "Configuración - Probar Configuración Entrada"
     permiso_requerido = "ingresar"
 
     def dispatch(self, request, *args, **kwargs):
@@ -102,7 +102,7 @@ class ProbarConfiguracionEntradaView(VerificarPermisoMixin, LoginRequiredMixin, 
 
 class ProbarConfiguracionSalidaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Probar conexión con servidor SMTP."""
-    vista_nombre = "Settings - Probar Configuración Salida"
+    vista_nombre = "Configuración - Probar Configuración Salida"
     permiso_requerido = "ingresar"
 
     def dispatch(self, request, *args, **kwargs):
@@ -135,7 +135,7 @@ class ProbarConfiguracionSalidaView(VerificarPermisoMixin, LoginRequiredMixin, V
 
 class EnviarCorreoPruebaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Enviar correo de prueba usando configuración SMTP del usuario."""
-    vista_nombre = "Settings - Enviar Correo Prueba"
+    vista_nombre = "Configuración - Enviar Correo Prueba"
     permiso_requerido = "ingresar"
 
     def dispatch(self, request, *args, **kwargs):
@@ -205,7 +205,7 @@ class EnviarCorreoPruebaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 class RecibirCorreoPruebaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Recibir correo de prueba desde servidor de entrada."""
-    vista_nombre = "Settings - Recibir Correo Prueba"
+    vista_nombre = "Configuración - Recibir Correo Prueba"
     permiso_requerido = "ingresar"
 
     def dispatch(self, request, *args, **kwargs):
@@ -251,7 +251,7 @@ class RecibirCorreoPruebaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 class SetFechaSistemaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Configurar fecha del sistema."""
-    vista_nombre = "Settings - Establecer Fecha Sistema"
+    vista_nombre = "Configuración - Establecer Fecha Sistema"
     permiso_requerido = "modificar"
 
     def dispatch(self, request, *args, **kwargs):
@@ -324,7 +324,7 @@ class ConfigurarEmailView(LoginRequiredMixin, View):
 
 @login_required
 @require_POST
-@verificar_permiso("Settings - Theme preference", "modificar")
+@verificar_permiso("Configuración - Theme preference", "modificar")
 def guardar_preferencias(request):
     """Guardar preferencias de tema del usuario."""
     try:
@@ -371,7 +371,7 @@ class MySQLConnectionListView(VerificarPermisoMixin, LoginRequiredMixin, ListVie
     model = SettingsMySQLConnection
     template_name = 'settings/mysql_connections_list.html'
     context_object_name = 'connections'
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'ingresar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -391,7 +391,7 @@ class MySQLConnectionCreateView(VerificarPermisoMixin, LoginRequiredMixin, Creat
     form_class = SettingsMySQLConnectionForm
     template_name = 'settings/mysql_connection_form.html'
     success_url = reverse_lazy('mysql_connections_list')
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
@@ -421,7 +421,7 @@ class MySQLConnectionUpdateView(VerificarPermisoMixin, LoginRequiredMixin, Updat
     form_class = SettingsMySQLConnectionForm
     template_name = 'settings/mysql_connection_form.html'
     success_url = reverse_lazy('mysql_connections_list')
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'modificar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -455,7 +455,7 @@ class MySQLConnectionDeleteView(VerificarPermisoMixin, LoginRequiredMixin, Delet
     model = SettingsMySQLConnection
     template_name = 'settings/mysql_connection_confirm_delete.html'
     success_url = reverse_lazy('mysql_connections_list')
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'eliminar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -487,7 +487,7 @@ class MySQLConnectionDeleteView(VerificarPermisoMixin, LoginRequiredMixin, Delet
 
 
 class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'ingresar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -664,7 +664,7 @@ class MySQLConnectionTestView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 
 class MySQLConnectionsExportView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'ingresar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -704,7 +704,7 @@ class MySQLConnectionsExportView(VerificarPermisoMixin, LoginRequiredMixin, View
 
 
 class MySQLConnectionsImportView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = 'Settings - Conexiones MySQL'
+    vista_nombre = 'Configuración - Conexiones MySQL'
     permiso_requerido = 'modificar'
 
     def dispatch(self, request, *args, **kwargs):

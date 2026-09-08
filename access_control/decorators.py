@@ -85,7 +85,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                 # para vistas listadas en `vistas_auto_permiso`.
 
                 # Auto-crear o actualizar permisos para vistas de usuario
-                vistas_auto_permiso = ["Settings - Theme preference", "Accounts - Editar Perfil"]
+                vistas_auto_permiso = ["Configuración - Theme preference", "Accounts - Editar Perfil"]
                 if vista_nombre in vistas_auto_permiso:
                     if not permiso:
                         # Solo se concede automaticamente la capacidad solicitada (mas

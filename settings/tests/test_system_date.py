@@ -78,7 +78,7 @@ class SystemDateTests(TestCase):
         session["empresa_nombre"] = f"{self.empresa.codigo} - {self.empresa.descripcion}"
         session.save()
 
-        vista_fecha = Vista.objects.get_or_create(nombre="Settings - Establecer Fecha Sistema")[0]
+        vista_fecha = Vista.objects.get_or_create(nombre="Configuración - Establecer Fecha Sistema")[0]
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

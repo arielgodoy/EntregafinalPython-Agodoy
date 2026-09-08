@@ -9,7 +9,7 @@ from settings.models import UserPreferences
 
 
 class SetFechaSistemaTests(TestCase):
-    vista_nombre = "Settings - Establecer Fecha Sistema"
+    vista_nombre = "Configuración - Establecer Fecha Sistema"
 
     def setUp(self):
         self.user = User.objects.create_user(username="user2", password="pass123")

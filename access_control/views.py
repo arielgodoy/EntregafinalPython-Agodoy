@@ -106,7 +106,7 @@ class VerificarPermisoSafeMixin(VerificarPermisoMixin):
 
 
 class EmailAccountVistaRequiredMixin:
-    vista_nombre = 'Settings - Emails Acounts'
+    vista_nombre = 'Configuración - Cuentas de Correo'
 
     def dispatch(self, request, *args, **kwargs):
         # Asegurar que la Vista exista; crearla si falta (idempotente).
@@ -121,7 +121,7 @@ class EmailAccountVistaRequiredMixin:
 
 class CompanyConfigVistaRequiredMixin:
     
-    vista_nombre = 'Settings - Configuracion de Empresa'
+    vista_nombre = 'Configuración - Configuracion de Empresa'
 
     def dispatch(self, request, *args, **kwargs):
         # Asegurar que la Vista exista; crearla si falta (idempotente).
@@ -136,7 +136,7 @@ class CompanyConfigVistaRequiredMixin:
 class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView):
     template_name = 'access_control/permisos_filtrados.html'
     form_class = PermisoFiltroForm
-    vista_nombre = "Control de Acceso - Maestro Permisos"
+    vista_nombre = "Control de Acceso - Permisos Filtrados"
     permiso_requerido = "modificar"
     success_url = reverse_lazy('access_control:permisos_filtrados')    
 
@@ -345,7 +345,7 @@ def toggle_permiso(request):
 #     }
 #     return render(request, 'access_control/permisos_filtrados.html', context)
 class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Control de Acceso - Maestro Permisos"
+    vista_nombre = "Control de Acceso - Copiar permisos"
     permiso_requerido = "supervisor"
 
     def post(self, request, *args, **kwargs):
@@ -359,13 +359,22 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
             destino_usuario = Usuario.objects.get(id=destino_usuario_id)
             destino_empresa = Empresa.objects.get(id=destino_empresa_id)
 
-            empresas_autorizadas = [origen_empresa]
+            if not user_has_permission_for_empresa(
+                user=request.user,
+                empresa=origen_empresa,
+                vista_nombre=self.vista_nombre,
+                accion=self.permiso_requerido,
+            ):
+                return self.handle_no_permission(
+                    request,
+                    "No tienes permiso supervisor para operar esta empresa.",
+                )
+
             if destino_empresa != origen_empresa:
-                empresas_autorizadas.append(destino_empresa)
-            for empresa in empresas_autorizadas:
-                if not user_has_permission_for_empresa(
+                destino_inicializada = Permiso.objects.filter(empresa=destino_empresa).exists()
+                if destino_inicializada and not user_has_permission_for_empresa(
                     user=request.user,
-                    empresa=empresa,
+                    empresa=destino_empresa,
                     vista_nombre=self.vista_nombre,
                     accion=self.permiso_requerido,
                 ):
@@ -631,7 +640,7 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
     form_class = SystemConfigForm
     template_name = 'access_control/settings_system.html'
     success_url = reverse_lazy('access_control:system_config')
-    vista_nombre = 'Settings - Configuración del Sistema'
+    vista_nombre = 'Configuración - Configuración del Sistema'
     permiso_requerido = 'modificar'
 
     def _get_or_create_active_config(self):
@@ -648,11 +657,11 @@ class SystemConfigUpdateView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVi
     def dispatch(self, request, *args, **kwargs):
         # Asegurar que la Vista exista; crearla si no existe.
         vista, created = Vista.objects.get_or_create(
-            nombre='Settings - Configuración del Sistema',
+            nombre='Configuración - Configuración del Sistema',
             defaults={"descripcion": ""},
         )
         if created:
-            messages.info(request, _('Se creó la Vista {vista}').format(vista='Settings - Configuración del Sistema'))
+            messages.info(request, _('Se creó la Vista {vista}').format(vista='Configuración - Configuración del Sistema'))
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
@@ -676,7 +685,7 @@ class EmailAccountListView(EmailAccountVistaRequiredMixin, VerificarPermisoSafeM
     model = EmailAccount
     template_name = 'access_control/settings_email_accounts_list.html'
     context_object_name = 'email_accounts'
-    vista_nombre = 'Settings - Emails Acounts'
+    vista_nombre = 'Configuración - Cuentas de Correo'
     permiso_requerido = 'ingresar'
 
     def get_context_data(self, **kwargs):
@@ -699,7 +708,7 @@ class EmailAccountCreateView(EmailAccountVistaRequiredMixin, VerificarPermisoSaf
     form_class = EmailAccountForm
     template_name = 'access_control/settings_email_accounts_form.html'
     success_url = reverse_lazy('access_control:email_accounts_list')
-    vista_nombre = 'Settings - Emails Acounts'
+    vista_nombre = 'Configuración - Cuentas de Correo'
     permiso_requerido = 'crear'
 
 
@@ -708,7 +717,7 @@ class EmailAccountUpdateView(EmailAccountVistaRequiredMixin, VerificarPermisoSaf
     form_class = EmailAccountForm
     template_name = 'access_control/settings_email_accounts_form.html'
     success_url = reverse_lazy('access_control:email_accounts_list')
-    vista_nombre = 'Settings - Emails Acounts'
+    vista_nombre = 'Configuración - Cuentas de Correo'
     permiso_requerido = 'modificar'
 
 
@@ -716,7 +725,7 @@ class CompanyConfigListView(CompanyConfigVistaRequiredMixin, VerificarPermisoSaf
     model = Empresa
     template_name = 'access_control/settings_company_list.html'
     context_object_name = 'empresas'
-    vista_nombre = 'Settings - Configuracion de Empresa'
+    vista_nombre = 'Configuración - Configuracion de Empresa'
     permiso_requerido = 'modificar'
 
 
@@ -725,7 +734,7 @@ class CompanyConfigUpdateView(CompanyConfigVistaRequiredMixin, VerificarPermisoS
     form_class = CompanyConfigForm
     template_name = 'access_control/settings_company_form.html'
     success_url = reverse_lazy('access_control:company_config_list')
-    vista_nombre = 'Settings - Configuracion de Empresa'
+    vista_nombre = 'Configuración - Configuracion de Empresa'
     permiso_requerido = 'modificar'
 
     def dispatch(self, request, *args, **kwargs):
@@ -743,12 +752,12 @@ class CompanyConfigUpdateView(CompanyConfigVistaRequiredMixin, VerificarPermisoS
 
 
 class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = 'Settings - Configuración del Sistema'
+    vista_nombre = 'Configuración - Configuración del Sistema'
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
         # Asegurar la existencia de la Vista antes de continuar (idempotente).
-        Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
+        Vista.objects.get_or_create(nombre='Configuración - Configuración del Sistema', defaults={"descripcion": ""})
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -756,12 +765,12 @@ class SystemEmailTestOutgoingView(VerificarPermisoSafeMixin, LoginRequiredMixin,
 
 
 class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, View):
-    vista_nombre = 'Settings - Configuración del Sistema'
+    vista_nombre = 'Configuración - Configuración del Sistema'
     permiso_requerido = 'crear'
 
     def dispatch(self, request, *args, **kwargs):
         # Asegurar la existencia de la Vista antes de continuar (idempotente).
-        Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
+        Vista.objects.get_or_create(nombre='Configuración - Configuración del Sistema', defaults={"descripcion": ""})
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
@@ -771,7 +780,7 @@ class SystemEmailSendTestView(VerificarPermisoSafeMixin, LoginRequiredMixin, Vie
 def _send_system_test_email(request, subject, body_text):
     logger = logging.getLogger(__name__)
     # Asegurar existencia de la Vista necesaria para las comprobaciones.
-    Vista.objects.get_or_create(nombre='Settings - Configuración del Sistema', defaults={"descripcion": ""})
+    Vista.objects.get_or_create(nombre='Configuración - Configuración del Sistema', defaults={"descripcion": ""})
 
     config = SystemConfig.objects.filter(is_active=True).select_related(
         'security_email_account'

@@ -97,7 +97,7 @@ class SystemConfigViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_view_ok_with_permission(self):
-        vista = Vista.objects.create(nombre='Settings - Configuración del Sistema')
+        vista, _ = Vista.objects.get_or_create(nombre='Configuración - Configuración del Sistema')
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,

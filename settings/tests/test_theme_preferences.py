@@ -15,7 +15,7 @@ class ThemePreferencesPreloaderTests(TestCase):
         self.user = User.objects.create_user(username='theme-user', password='pass1234')
         self.empresa_a = Empresa.objects.create(codigo='01', descripcion='Empresa A')
         self.empresa_b = Empresa.objects.create(codigo='02', descripcion='Empresa B')
-        self.vista = Vista.objects.create(nombre='Settings - Theme preference')
+        self.vista = Vista.objects.create(nombre='Configuración - Theme preference')
         self._set_active_empresa(self.empresa_a)
         Permiso.objects.create(
             usuario=self.user,
@@ -51,7 +51,10 @@ class ThemePreferencesPreloaderTests(TestCase):
         self.assertFalse(ThemePreferences.objects.filter(user=self.user).exists())
 
     def test_cambio_de_empresa_mantiene_preferencias_visuales(self):
-        UserPreferences.objects.create(user=self.user, data_bs_theme='dark', data_preloader='enable')
+        prefs, _ = UserPreferences.objects.get_or_create(user=self.user)
+        prefs.data_bs_theme = 'dark'
+        prefs.data_preloader = 'enable'
+        prefs.save(update_fields=['data_bs_theme', 'data_preloader'])
         request = type('Request', (), {'user': self.user, 'session': self.client.session})()
         context = user_preferences_to_localstorage(request)
 
@@ -65,7 +68,10 @@ class ThemePreferencesPreloaderTests(TestCase):
         self.assertEqual(context['theme_preferences']['data-preloader'], 'enable')
 
     def test_dashboard_renderiza_preferencias_del_usuario(self):
-        UserPreferences.objects.create(user=self.user, data_bs_theme='dark', data_preloader='enable')
+        prefs, _ = UserPreferences.objects.get_or_create(user=self.user)
+        prefs.data_bs_theme = 'dark'
+        prefs.data_preloader = 'enable'
+        prefs.save(update_fields=['data_bs_theme', 'data_preloader'])
 
         response = self.client.get(reverse('dashboard:dashboard_general'))
 
@@ -82,7 +88,9 @@ class ThemePreferencesPreloaderTests(TestCase):
         self.assertEqual(context['theme_preferences']['data-preloader'], 'disable')
 
     def test_otro_usuario_no_hereda_preferencia_visual(self):
-        UserPreferences.objects.create(user=self.user, data_bs_theme='dark')
+        prefs, _ = UserPreferences.objects.get_or_create(user=self.user)
+        prefs.data_bs_theme = 'dark'
+        prefs.save(update_fields=['data_bs_theme'])
         other_user = User.objects.create_user(username='other-theme-user', password='pass1234')
         request = type('Request', (), {'user': other_user, 'session': self.client.session})()
 
@@ -116,7 +124,11 @@ class ThemePreferencesPreloaderTests(TestCase):
         self.assertNotIn('localStorage.getItem(attr) || sessionStorage.getItem(attr)', theme_config)
         self.assertNotIn('localStorage.setItem(attr, serverValue)', theme_config)
         self.assertNotIn('localStorage.setItem(attr, value)', theme_config)
-        self.assertIn('savePreferences();', theme_config)
+        # El JS vigente guarda via savePreferences() (debounced por queueSave)
+        # y la usa en el boton de reset; ya no invoca el literal 'savePreferences();'.
+        self.assertIn('const savePreferences = () =>', theme_config)
+        self.assertIn('queueSave()', theme_config)
+        self.assertIn('savePreferences().finally(', theme_config)
         self.assertNotIn('localStorage.getItem(attr)', Path(__file__).resolve().parents[2].joinpath('static/js/layout.js').read_text(encoding='utf-8'))
         self.assertEqual(customizer.count('id="status"'), 1)
         self.assertIn('id="preloader-preview-status"', customizer)
