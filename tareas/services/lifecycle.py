@@ -28,7 +28,9 @@ _ALLOWED = {
 
 def _raise_si_anulada(tarea):
     """Bloquea operaciones de lifecycle mientras la tarea está anulada (flag)."""
-    if tarea.anulada:
+    from tareas.services.hierarchy import is_effectively_annulled
+
+    if is_effectively_annulled(tarea):
         raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
 
 
@@ -73,6 +75,10 @@ def complete_task(tarea, usuario):
 
 def approve_closure(tarea, usuario, comentario=""):
     _raise_si_anulada(tarea)
+    from tareas.services.hierarchy import has_open_operational_descendants
+
+    if has_open_operational_descendants(tarea):
+        raise ValidationError("No se puede cerrar una tarea con descendientes operativos pendientes.")
     with transaction.atomic():
         transition = transition_task(
             tarea,

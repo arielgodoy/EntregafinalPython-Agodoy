@@ -316,3 +316,21 @@ class TareaReasignacion(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["tarea", "fecha"])]
+
+
+class TareaRelacion(models.Model):
+    padre = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="relaciones_hijas")
+    hija = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="relaciones_padre")
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hija"],
+                name="tareas_relacion_hija_unico_padre",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["padre"]),
+            models.Index(fields=["hija"]),
+        ]
