@@ -55,11 +55,56 @@ class WeightedProgressTests(TestCase):
 
     def test_adding_milestone_redistributes_existing_progress(self):
         set_weighted_progress_mode(self.tarea)
-        create_milestone(self.tarea, "Completado", 100, 1)
-        create_milestone(self.tarea, "Nuevo", 0, 1)
+        anterior = create_milestone(self.tarea, "Completado", 100, 4)
+        self.tarea.avance.refresh_from_db()
+        porcentaje_previo = self.tarea.avance.porcentaje
+        fecha_previa = anterior.fecha_creacion
+
+        nuevo = create_milestone(self.tarea, "Nuevo", 0, 1)
 
         self.tarea.avance.refresh_from_db()
-        self.assertEqual(self.tarea.avance.porcentaje, Decimal("50.00"))
+        anterior.refresh_from_db()
+        self.assertEqual(porcentaje_previo, Decimal("100.00"))
+        self.assertEqual(anterior.cumplimiento, Decimal("100.00"))
+        self.assertEqual(anterior.peso, Decimal("4.00"))
+        self.assertEqual(anterior.fecha_creacion, fecha_previa)
+        self.assertEqual(self.tarea.avance.porcentaje, Decimal("80.00"))
+        self.assertEqual(nuevo.cumplimiento, Decimal("0.00"))
+
+    def test_adding_partially_completed_milestone_recalculates_progress(self):
+        set_weighted_progress_mode(self.tarea)
+        anterior = create_milestone(self.tarea, "Completado", 100, 4)
+
+        create_milestone(self.tarea, "En curso", 50, 1)
+
+        anterior.refresh_from_db()
+        self.tarea.avance.refresh_from_db()
+        self.assertEqual(anterior.cumplimiento, Decimal("100.00"))
+        self.assertEqual(self.tarea.avance.porcentaje, Decimal("90.00"))
+
+    def test_successive_milestones_preserve_previous_identity_and_completion(self):
+        set_weighted_progress_mode(self.tarea)
+        primero = create_milestone(self.tarea, "Primero", 100, 4)
+        segundo = create_milestone(self.tarea, "Segundo", 50, 1)
+        ids_previos = (primero.pk, segundo.pk)
+
+        tercero = create_milestone(self.tarea, "Tercero", 0, 2)
+
+        primero.refresh_from_db()
+        segundo.refresh_from_db()
+        self.tarea.avance.refresh_from_db()
+        self.assertEqual((primero.pk, segundo.pk), ids_previos)
+        self.assertEqual(primero.cumplimiento, Decimal("100.00"))
+        self.assertEqual(primero.peso, Decimal("4.00"))
+        self.assertEqual(segundo.cumplimiento, Decimal("50.00"))
+        formula = (
+            (primero.cumplimiento * primero.peso)
+            + (segundo.cumplimiento * segundo.peso)
+            + (tercero.cumplimiento * tercero.peso)
+        ) / (primero.peso + segundo.peso + tercero.peso)
+        self.assertEqual(formula.quantize(Decimal("0.01")), Decimal("64.29"))
+        self.assertEqual(self.tarea.avance.porcentaje, Decimal("64.29"))
+        self.assertEqual(tercero.cumplimiento, Decimal("0.00"))
 
     def test_milestones_are_ordered_by_creation(self):
         primero = create_milestone(self.tarea, "Primero")
@@ -68,10 +113,19 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(list(Hito.objects.filter(tarea=self.tarea)), [primero, segundo])
 
     def test_invalid_milestone_does_not_persist(self):
+        set_weighted_progress_mode(self.tarea)
+        anterior = create_milestone(self.tarea, "Valido", 100, 1)
+        self.tarea.avance.refresh_from_db()
+        porcentaje_previo = self.tarea.avance.porcentaje
+
         with self.assertRaises(ValidationError):
             create_milestone(self.tarea, "Invalido", 101, 1)
 
-        self.assertFalse(Hito.objects.filter(tarea=self.tarea).exists())
+        self.assertEqual(Hito.objects.filter(tarea=self.tarea).count(), 1)
+        anterior.refresh_from_db()
+        self.tarea.avance.refresh_from_db()
+        self.assertEqual(anterior.cumplimiento, Decimal("100.00"))
+        self.assertEqual(self.tarea.avance.porcentaje, porcentaje_previo)
 
     def test_manual_progress_is_rejected_in_weighted_mode(self):
         set_weighted_progress_mode(self.tarea)

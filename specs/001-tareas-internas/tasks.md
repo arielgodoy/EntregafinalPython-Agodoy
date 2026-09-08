@@ -98,7 +98,7 @@ description: "Task list for the Tareas Internas master feature"
 
 - [x] T035 [US4] Implementar `Avance` y modos manual/ponderado en `tareas/models.py` y `tareas/services/progress.py`.
 - [x] T036 [US4] Implementar `Hito` con peso relativo, orden por fecha de creación y cálculo `sum(cumplimiento * peso) / sum(pesos)` en `tareas/services/progress.py`.
-- [ ] T037 [US4] Implementar redistribución al agregar hitos sin alterar cumplimientos anteriores en `tareas/services/progress.py`.
+- [x] T037 [US4] Implementar redistribución al agregar hitos sin alterar cumplimientos anteriores en `tareas/services/progress.py`.
 - [ ] T038 [US4] Implementar tipos de documento, archivo/URL, fechas informativas, historial y evidencia configurable en `tareas/models.py` y `tareas/services/documents.py`.
 - [ ] T039 [US4] Integrar evidencia, mini-tareas, descendientes y cotizaciones disponibles como validaciones de cierre en `tareas/services/closure.py`, sin resolver identidad de proveedor.
 - [ ] T040 [US4] Añadir vistas, formularios y templates de hitos, avance, documentos y evidencia en `tareas/forms.py`, `tareas/views.py` y `tareas/templates/tareas/`.
