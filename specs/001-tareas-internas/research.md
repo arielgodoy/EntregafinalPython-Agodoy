@@ -1,112 +1,106 @@
-# Research: Tareas Internas
+# Research: Tareas Internas - SPEC MAESTRA
 
 **Date**: 2026-09-07 | **Feature**: [spec.md](spec.md)
 
-Todas las decisiones se resolvieron contra el código y la documentación vigente del
-repositorio; no quedan NEEDS CLARIFICATION.
+Las decisiones se mantienen dentro de `tareas/` y reutilizan interfaces existentes. No
+quedan `NEEDS CLARIFICATION` para P4, P6 o P8. P1 y P2 siguen bloqueados por contrato
+legacy, no por una decisión técnica pendiente dentro de la app.
 
-## Decisiones
+## Decisions
 
-### D1. Ubicación de la feature: nueva app `tareas` (APPLICATION_APP)
+### D1. Frontera y compatibilidad
 
-- **Decision**: Crear una nueva app Django `tareas` registrada como APPLICATION_APP.
-- **Rationale**: `control_de_proyectos` ya posee un modelo `Tarea` acoplado a proyectos
-  (estados operativos, horas, dependencias, documentos, avance). La spec exige un ciclo
-  simple borrador/publicada y excluye esos conceptos; mezclar ambos modelos en la misma
-  app generaría confusión de conceptos y acoplamiento no solicitado.
-- **Alternatives considered**: (a) Dentro de `control_de_proyectos` — rechazada por
-  colisión semántica con la `Tarea` de proyectos; (b) Otra APPLICATION_APP existente —
-  rechazada porque ninguna (biblioteca, gestiondte, evaluaciones, control_operacional)
-  tiene dominio afín.
-- **Condición**: registrar la app exige modificar `AppDocs/app_classification.py`,
-  `AppDocs/settings.py` (INSTALLED_APPS) y `AppDocs/urls.py` (include), todos archivos
-  CORE/SYSTEM. La elección de app nueva NO constituye autorización para tocarlos: esos
-  cambios quedan **PENDIENTES DE AUTORIZACIÓN EXPRESA DEL USUARIO ANTES DE IMPLEMENTAR**.
-  Hasta obtenerla, la implementación del registro está bloqueada.
+- **Decision**: ampliar la app existente `tareas`, sin reutilizar ni modificar
+  `control_de_proyectos.Tarea`.
+- **Rationale**: ciclos y responsabilidades distintos; la Fase 1 debe conservar PK, URLs
+  y comportamiento.
+- **Alternatives considered**: fusionar modelos o mover el dominio a proyectos; rechazadas.
 
-### D2. Control de acceso: `VerificarPermisoMixin` + `LoginRequiredMixin` (CBV)
+### D2. Seguridad y empresa activa
 
-- **Decision**: Todas las vistas usan `VerificarPermisoMixin` (con `vista_nombre` y
-  `permiso_requerido`) delante de `LoginRequiredMixin`, siguiendo el patrón exacto de
-  `control_de_proyectos/views.py`.
-- **Rationale**: Es el mecanismo ICMEAS vigente (constitución, principio V). El mixin
-  delega en el decorador `verificar_permiso`, que resuelve empresa desde la sesión,
-  crea la `Vista` si no existe, aplica deny-by-default y responde con
-  `access_control/403_forbidden.html` permitiendo solicitar acceso.
-- **Alternatives considered**: decorador de función `@verificar_permiso` — equivalente,
-  pero las CBV son el patrón dominante en las APPLICATION_APPS recientes.
+- **Decision**: ICMEAS, `LoginRequiredMixin` cuando corresponda y
+  `request.session['empresa_id']` en toda vista/acción; validar cada queryset y objeto.
+- **Rationale**: es la frontera vigente y evita exposición cross-company.
+- **Alternatives considered**: permisos Django estándar o empresa recibida por POST; rechazadas.
 
-### D3. Aislamiento multiempresa
+### D3. Persistencia incremental
 
-- **Decision**: Campo `empresa = FK(access_control.Empresa)` en el modelo; los querysets
-  filtran por `request.session['empresa_id']` (helper local `_get_empresa_id` igual que
-  en `control_de_proyectos`); al crear, la empresa se asigna desde la sesión, nunca desde
-  parámetros del request.
-- **Rationale**: Principio II/V de la constitución y regla vigente: nunca confiar en
-  parámetros para selección de empresa; validar pertenencia en detalle/edición/eliminación.
-- **Alternatives considered**: queryset global + validación posterior — rechazada:
-  expone existencia de objetos de otras empresas.
+- **Decision**: migraciones aditivas por fase, backfills idempotentes y activación gradual.
+- **Rationale**: la Fase 1 contiene datos que deben conservarse mientras se agregan estados,
+  relaciones y auditoría.
+- **Alternatives considered**: reemplazo de `Tarea` o migración única; rechazadas.
 
-### D4. Ciclo de vida borrador → publicada
+### D4. Correlativos A/B
 
-- **Decision**: Campo `estado` con choices `BORRADA`/`PUBLICADA` (valores string) y
-  `fecha_publicacion` nullable. `publicar()` es un método del modelo que valida
-  responsable válido (asignado, activo) antes de transicionar y fijar
-  `fecha_publicacion = timezone.now()`. La publicación es irreversible: no existe
-  operación de retorno a borrador.
-- **Rationale**: FR-005…FR-009 + Clarifications (Q1: bloquear publicación con responsable
-  inválido; Q2: edición libre post-publicación sin retorno a borrador).
-- **Alternatives considered**: flag booleano `publicada` — rechazada porque el enum deja
-  espacio documentado a estados futuros sin migración conceptual, y la spec habla de
-  "estado" como atributo propio.
+- **Decision**: un único registro cambia de A a B al publicar; unicidad por empresa y
+  generación transaccional segura.
+- **Rationale**: FR-A01/A06 exige transformación sin duplicación.
+- **Alternatives considered**: tabla separada o duplicar al publicar; rechazadas.
 
-### D5. Prioridad
+### D5. Estados y auditoría
 
-- **Decision**: Valores aprobados por el usuario: `simple`, `normal`, `urgente`,
-  `crítica`, con jerarquía `crítica > urgente > normal > simple`. **Default: `NORMAL`**
-  (aprobado por el usuario).
-- **Rationale**: Definición oficial entregada por el usuario. NO se inventan
-  comportamientos adicionales por prioridad: sin colores, SLA, notificaciones,
-  vencimientos ni reglas especiales en esta versión.
-- **Alternatives considered**: niveles baja/media/alta — rechazados explícitamente por el
-  usuario.
+- **Decision**: servicio de transiciones explícitas, historial inmutable de origen/destino,
+  usuario y fecha; anulación/reactivación separadas.
+- **Rationale**: FR-C08/C09 y la restauración exacta requieren auditoría distinta del estado.
+- **Alternatives considered**: cambios directos desde formularios; rechazados.
 
-### D6. Eliminación: FUERA DE ALCANCE en esta versión
+### D6. Jerarquía y restauración
 
-- **Decision**: Esta primera spec NO incluye eliminación de tareas. No se define ruta,
-  vista, modal, JS ni permiso `eliminar` para la app `tareas`.
-- **Rationale**: El alcance aprobado por el usuario se limita a crear/editar/publicar y
-  listar. Si en el futuro se solicita eliminación, se evaluará entonces conforme a las
-  reglas vigentes del proyecto; esta feature no presupone ningún patrón de eliminación.
-- **Alternatives considered**: incluir eliminación desde el inicio — rechazada por no
-  estar en el alcance aprobado.
+- **Decision**: máximo dos niveles bajo el padre; anulación guarda snapshot de estados,
+  responsables, participantes, relaciones y avance. Reactivación restaura en cascada y
+  deja fechas afectadas pendientes de confirmación.
+- **Rationale**: cumple FR-E05/E07 sin recalcular fechas históricas.
+- **Alternatives considered**: cascada física o recálculo desde reactivación; rechazadas.
 
-### D7. Internacionalización
+### D7. Avance ponderado
 
-- **Decision**: Todo texto visible con `data-key`; las claves nuevas se reportan al usuario
-  para su alta en `static/lang/sp.json` y `static/lang/en.json` (no se editan silenciosamente).
-- **Rationale**: Regla i18n vigente (AGENTS.md / copilot-instructions.md).
+- **Decision**: pesos relativos normalizados; `avance = sum(cumplimiento * peso) / sum(pesos)`.
+  Agregar hitos actualiza el denominador sin alterar cumplimientos anteriores.
+- **Rationale**: decisión P4.
+- **Alternatives considered**: pesos fijos que suman 100 o pesos iguales; rechazadas.
 
-### D8. Visibilidad en menú
+### D8. Local y Proveedor legacy
 
-- **Decision**: El mecanismo exacto de registro de la vista "Tareas" en menú e ICMEAS
-  queda como tarea de LECTURA/VERIFICACIÓN durante la implementación (T026). NO se asume
-  visibilidad sin permiso ni auto-creación de `Vista`. Si se requiere crear `Vista`,
-  modificar menú, seed, `access_control` u otra SYSTEM_APP, se detiene y se solicita
-  autorización expresa indicando archivos exactos.
-- **Rationale**: `copilot-instructions.md` establece preferencias de visibilidad/autorización,
-  pero el mecanismo concreto debe verificarse en el código vigente antes de actuar.
+- **Decision**: no crear maestros duplicados. Local solo se consumirá con contrato autorizado;
+  Proveedor queda como referencia/adaptador pendiente, sin tabla, ID, API ni `rut_contable`.
+- **Rationale**: FR-A07/J05/L06 y las restricciones explícitas.
+- **Alternatives considered**: copiar datos o inferir claves; rechazadas.
 
-### D9. Fechas
+### D9. Cotizaciones
 
-- **Decision**: `fecha_creacion = auto_now_add` (UTC); `fecha_publicacion` seteada con
-  `timezone.now()` al publicar. Presentación con `timezone.localtime` (tz local del sistema).
-- **Rationale**: Coherente con `ESTADO_ACTUAL.md` (USE_TZ, UTC, presentación
-  America/Santiago vía localtime).
+- **Decision**: rondas históricas, mínimo configurable por ronda con default 3 y máximo de
+  3 versiones por proveedor/ronda; el cierre verifica el mínimo.
+- **Rationale**: P3 y FR-I01/I08.
+- **Alternatives considered**: mínimo global o versiones ilimitadas; rechazadas.
 
-### D10. Router de bases de datos
+### D10. KPI y consultas
 
-- **Decision**: La app no define router ni `app_label` especial; sus tablas van al alias
-  `default` según `api.Router_Databases.MultiDatabaseRouter`.
-- **Rationale**: `common/utils.py` y `api/Router_Databases.py` son archivos protegidos; el
-  comportamiento por defecto ya enruta apps de negocio al alias estándar.
+- **Decision**: ocho KPI repetidos en dimensiones permitidas: total por estado, atrasadas,
+  próximas a vencer, sin movimiento, esperando aprobación, carga abierta por responsable,
+  cumplimiento y tiempo promedio de cierre.
+- **Rationale**: P6 evita divergencias; Local/Proveedor no se habilitan sin legacy.
+- **Alternatives considered**: KPI distintos por dimensión o métricas adicionales; rechazadas.
+
+### D11. Similitud y enlaces
+
+- **Decision**: comparar también tareas cerradas; umbral configurable por empresa con default
+  80%, cambios solo para nuevas evaluaciones. Enlaces solo para usuarios autenticados, con
+  ICMEAS, empresa activa y auditoría de acceso.
+- **Rationale**: P8 y FR-N04/P03.
+- **Alternatives considered**: umbral por usuario/tarea, enlaces públicos o convertir la tarea
+  antigua; rechazadas.
+
+### D12. Integraciones transversales
+
+- **Decision**: consumir `notificaciones` y email de `acounts`; JS nuevo, si hace falta, vive
+  en `tareas/`; no se editan vendor, apps consumidas ni templates globales.
+- **Rationale**: FR-K04 y reglas de autocontención.
+- **Alternatives considered**: subsistemas paralelos o editar `static/js/app.js`; rechazadas.
+
+## Unresolved by design
+
+- P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
+- P2: maestro/API/identidad de Proveedor, `LEGACY API PENDIENTE`.
+- Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
+  ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
+  autorización expresa.

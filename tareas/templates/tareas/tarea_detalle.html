@@ -49,6 +49,12 @@ Detalle de tarea
 
                                 <dt class="col-sm-4"><span data-key="tareas.fields.fecha_publicacion">Fecha de publicación</span></dt>
                                 <dd class="col-sm-8">{% if tarea.fecha_publicacion %}{{ tarea.fecha_publicacion }}{% else %}—{% endif %}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
+                                <dd class="col-sm-8">{{ tarea.correlativo|default:"—" }}</dd>
+
+                                <dt class="col-sm-4"><span data-key="tareas.fields.fechas_pendientes">Fechas pendientes</span></dt>
+                                <dd class="col-sm-8">{{ tarea.fechas_pendientes_confirmacion }}</dd>
                             </dl>
 
                             <div class="text-end mt-4">
@@ -58,6 +64,34 @@ Detalle de tarea
                                 <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-success"><span data-key="tareas.actions.publicar">Publicar</span></button>
+                                </form>
+                                {% endif %}
+                                {% if tarea.estado == "ACTIVA" %}
+                                <form method="post" action="{% url 'tareas:gestionar_tarea' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.gestionar">Iniciar gestión</span></button>
+                                </form>
+                                {% endif %}
+                                {% if tarea.estado == "GESTION" %}
+                                <form method="post" action="{% url 'tareas:completar_tarea' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-outline-success"><span data-key="tareas.actions.completar">Marcar 100%</span></button>
+                                </form>
+                                {% endif %}
+                                {% if tarea.estado == "PENDIENTE_APROBACION_CIERRE" %}
+                                <form method="post" action="{% url 'tareas:aprobar_cierre' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-success"><span data-key="tareas.actions.aprobar_cierre">Aprobar cierre</span></button>
+                                </form>
+                                <form method="post" action="{% url 'tareas:rechazar_cierre' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-warning"><span data-key="tareas.actions.rechazar_cierre">Rechazar cierre</span></button>
+                                </form>
+                                {% endif %}
+                                {% if tarea.estado == "ACTIVA" or tarea.estado == "GESTION" or tarea.estado == "PENDIENTE_APROBACION_CIERRE" %}
+                                <form method="post" action="{% url 'tareas:anular_tarea' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-outline-danger"><span data-key="tareas.actions.anular">Anular</span></button>
+                                </form>
+                                {% endif %}
+                                {% if tarea.estado == "ANULADA" %}
+                                <form method="post" action="{% url 'tareas:reactivar_tarea' tarea.pk %}" class="d-inline">
+                                    {% csrf_token %}<button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.reactivar">Reactivar</span></button>
                                 </form>
                                 {% endif %}
                             </div>

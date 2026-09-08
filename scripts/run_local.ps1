@@ -3,7 +3,10 @@ param(
 )
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$python = Join-Path $repoRoot "venv\Scripts\python.exe"
+$python = Join-Path $repoRoot "..\venv312\Scripts\python.exe"
+if (-not (Test-Path $python)) {
+    $python = Join-Path $repoRoot "venv\Scripts\python.exe"
+}
 if (-not (Test-Path $python)) {
     $python = Join-Path $repoRoot "..\venv\Scripts\python.exe"
 }

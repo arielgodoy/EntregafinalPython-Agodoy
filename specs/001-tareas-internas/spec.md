@@ -16,6 +16,12 @@
 
 - Q: ¿Publicar con responsable desactivado/eliminado? → A: Bloquear la publicación e informar; el usuario debe asignar un responsable válido antes de publicar.
 - Q: ¿Operaciones sobre una tarea ya publicada? → A: Edición libre de campos (manteniendo responsable válido); la tarea publicada no puede volver a borrador.
+- Q: ¿Qué valores predeterminados deben aplicarse al mínimo de cotizaciones por ronda y al máximo de versiones permitidas por proveedor? → A: Mínimo 3 cotizaciones y máximo 3 versiones por proveedor.
+- Q: ¿Qué regla debe controlar las transiciones entre los estados de una tarea publicada? → A: Flujo explícito con transiciones autorizadas; el cierre requiere aprobación y la anulación/reactivación son acciones separadas.
+- Q: ¿Qué debe ocurrir con los descendientes y las fechas cuando se anula y luego se reactiva una tarea padre? → A: Anular padre, hijos y nietos en cascada; reactivar toda la estructura exactamente como estaba, sin recalcular fechas automáticamente, dejando las fechas afectadas pendientes de reacomodo o confirmación y notificando a los participantes afectados.
+- Q: ¿Cómo debe calcularse exactamente el avance ponderado cuando los hitos tienen pesos distintos y se agrega un nuevo hito? → A: Los pesos son relativos y se normalizan automáticamente; el avance es la suma de (cumplimiento × peso) dividida por la suma de pesos, redistribuyéndose proporcionalmente al agregar hitos.
+- Q: ¿Cuál debe ser el catálogo cerrado de KPI disponible en los dashboards y repetido en cada dimensión permitida? → A: Total de tareas por estado; tareas atrasadas; tareas próximas a vencer; tareas sin movimiento; tareas esperando aprobación; carga abierta por responsable; porcentaje de cumplimiento; tiempo promedio de cierre.
+- Q: ¿Debe el umbral de similitud del 80% ser configurable y, si lo es, cuál debe ser su alcance? → A: Configurable por empresa, con valor predeterminado de 80%, modificación restringida a usuarios autorizados y aplicación a nuevas evaluaciones de similitud.
 
 ---
 
@@ -30,10 +36,10 @@
 
 ## A. Identidad, Correlativos y Contexto
 
-- **FR-A01**: Todo borrador MUST tener correlativo de borrador tipo `A0000001`. Al publicar, el correlativo MUST convertirse a activo tipo `B0000001`. El borrador MUST transformarse, NO duplicarse.
+- **FR-A01**: Al crear una tarea se MUST reservar un único número secuencial por empresa; el borrador MUST mostrarlo como `A0000001` y al publicar el mismo número MUST mostrarse como `B0000001`. La publicación transforma el mismo registro, conserva la misma PK, NO consume un segundo número y NO existen secuencias A/B independientes.
 - **FR-A02**: Un borrador MUST tener vida indefinida y ser visible inicialmente SOLO en el dashboard propio del creador.
-- **FR-A03**: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a local y a departamento/área.
-- **FR-A04**: Una tarea MUST poder asociarse opcionalmente a un equipo/máquina/activo cuando corresponda.
+- **FR-A03** `[PARCIAL — definición de Departamento pendiente]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a local y a departamento/área. Local sigue bloqueado por P1; no se define aún el modelo/campo de Departamento.
+- **FR-A04** `[PARCIAL — definición de Equipo/Activo pendiente]`: Una tarea MUST poder asociarse opcionalmente a un equipo/máquina/activo cuando corresponda. No se define aún modelo, campo, código ni relación de Equipo/Activo.
 - **FR-A05**: Toda tarea MUST registrar su creador (creada_por) automáticamente desde el usuario autenticado.
 - **FR-A06**: El correlativo MUST ser único por empresa y legible.
 - **FR-A07**: LOCAL es concepto legacy → **`LEGACY API PENDIENTE`**: no se define tabla/IDs/sincronización sin autorización y lectura del legacy.
@@ -55,16 +61,45 @@
 
 ## C. Ciclo de Vida y Cierre
 
-- **FR-C01**: Estados: borrador, publicación (transición), activa, gestión, 100% pendiente de aprobación, cierre aprobado, cierre rechazado, cerrada, cancelada/anulada, reactivada.
+- **FR-C01**: Estados persistentes canónicos: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`, `CERRADA` y `ANULADA`. Publicación, aprobación/rechazo de cierre y reactivación son acciones/eventos auditables, no estados persistentes adicionales.
 - **FR-C02**: Toda tarea nace como borrador (vida indefinida).
-- **FR-C03**: Publicar exige responsable válido/activo, registra fecha de publicación, convierte correlativo A→B y es irreversible hacia borrador.
+- **FR-C03**: Publicar exige responsable válido/activo, registra fecha de publicación, convierte correlativo A→B, transforma `BORRADOR` en `ACTIVA` y es irreversible hacia borrador. El valor MVP `PUBLICADA` se migra a `ACTIVA`.
 - **FR-C04**: El responsable puede llevar la tarea a 100%; entonces pasa a "en espera de aprobación de cierre".
 - **FR-C05**: El creador o un perfil autorizado MUST aprobar el cierre.
 - **FR-C06**: Si el cierre se rechaza, la tarea queda "cierre rechazado / vuelve a gestión" y MUST mantener el 100% aunque vuelva a gestión.
 - **FR-C07**: MUST registrarse quién cerró/canceló y cuándo.
 - **FR-C08**: Cada transición MUST registrar fecha y usuario (auditoría).
+- **FR-C09**: Las transiciones MUST seguir un flujo explícito: `BORRADOR` --publicar--> `ACTIVA` → `GESTION` → `PENDIENTE_APROBACION_CIERRE` --aprobar--> `CERRADA`; rechazar el cierre es un evento auditado que devuelve a `GESTION` conservando el 100%. Anular lleva a `ANULADA`; reactivar es una acción auditada que restaura el estado persistente anterior, sin crear un estado `REACTIVADA`. Ninguna transición puede devolver una tarea publicada a `BORRADOR`.
 
 **Key Entities — C**: Estado, Transición (origen, destino, fecha, usuario), Cierre/Cancelación (por, fecha).
+
+### Señal mínima de lifecycle para la condición de 100%
+
+No existe actualmente en los artefactos una representación persistente equivalente a
+"alcanzó la condición funcional para solicitar cierre". Phase 2 incorporará únicamente
+`Tarea.cierre_completado`, un `BooleanField(default=False)`. Esta señal no representa el
+porcentaje general de avance, no implementa pesos, hitos ni el futuro modelo `Avance`; solo
+persiste que la tarea alcanzó la condición funcional equivalente al 100% necesaria para
+solicitar cierre. Una fase posterior podrá derivarla, sustituirla o ampliarla mediante
+migración aditiva cuando exista el modelo real de avance.
+
+La señal se comporta así: en gestión normal es `False`; al marcar 100% pasa a `True` y el
+estado pasa a `PENDIENTE_APROBACION_CIERRE`; al aprobar queda `CERRADA` y `True`; al rechazar
+vuelve a `GESTION` y conserva `True`. No se define todavía cómo vuelve a `False` en flujos
+posteriores de reprogramación.
+
+### Tabla canónica de estados y eventos
+
+| Estado origen | Acción/evento | Estado destino | Condiciones | Auditoría |
+|---|---|---|---|---|
+| `BORRADOR` | Publicar | `ACTIVA` | Responsable activo y válido | Publicación, usuario y fecha |
+| `ACTIVA` | Iniciar gestión | `GESTION` | Tarea publicada | Transición, usuario y fecha |
+| `GESTION` | Marcar 100% | `PENDIENTE_APROBACION_CIERRE` | Responsable completa la tarea | Transición y avance |
+| `PENDIENTE_APROBACION_CIERRE` | Aprobar cierre | `CERRADA` | Creador o perfil autorizado | Aprobación, usuario, fecha y comentario |
+| `PENDIENTE_APROBACION_CIERRE` | Rechazar cierre | `GESTION` | Rechazo autorizado; conserva 100% | Evento de rechazo, usuario, fecha y motivo |
+| `ACTIVA`/`GESTION`/`PENDIENTE_APROBACION_CIERRE` | Anular/cancelar | `ANULADA` | Acción autorizada | Anulación, snapshot, usuario y fecha |
+| `ANULADA` | Reactivar | Estado persistente anterior | Acción autorizada; no recalcula fechas | Reactivación y restauración |
+| Cualquier estado publicado | Intentar volver a borrador | Sin transición | Siempre prohibido | Intento rechazado, si corresponde |
 
 ---
 
@@ -91,10 +126,10 @@
 - **FR-E02**: Los descendientes MUST heredar las dimensiones base del padre, pero MUST poder cambiar el departamento.
 - **FR-E03**: El padre MUST NOT cerrar mientras haya descendientes sin cerrar.
 - **FR-E04**: MUST existir navegación vertical (padre ↔ descendientes).
-- **FR-E05**: Anular un padre MUST anular hijos y nietos (cascada).
-- **FR-E06**: Reactivar MUST restituir la estructura tal como estaba.
-- **FR-E07**: Al reactivar, las fechas MUST reconfigurarse.
-- **FR-E08**: Al anular/reactivar MUST notificarse a los participantes (ver K).
+- **FR-E05**: Cuando exista jerarquía padre/hijo/nieto, anular un padre MUST anular hijos y nietos en cascada; esta cascada se implementa después de introducir la relación jerárquica.
+- **FR-E06**: Reactivar MUST restituir la tarea y, cuando exista jerarquía implementada, toda la estructura exactamente como estaba al momento de la anulación, conservando estados, responsables, participantes, relaciones, avance y auditoría histórica.
+- **FR-E07**: Al reactivar, las fechas NO deben recalcularse automáticamente desde la fecha de reactivación; las fechas pendientes afectadas MUST quedar pendientes de reacomodo o confirmación por los responsables o participantes correspondientes antes de continuar normalmente la gestión.
+- **FR-E08**: Al anular o reactivar MUST notificarse a todos los participantes afectados.
 - **FR-E09**: MUST existir el concepto de subtarea y de mini-tarea (ver F).
 
 **Key Entities — E**: Relación padre/hija (tarea_padre), Subtarea, Mini-tarea.
@@ -105,8 +140,8 @@
 
 - **FR-F01**: Tarea simple con porcentaje de avance manual.
 - **FR-F02**: Tarea ponderada: avance calculado por hitos.
-- **FR-F03**: Cada hito MUST tener un peso; el avance ponderado MUST calcularse proporcionalmente.
-- **FR-F04**: Agregar un nuevo hito MUST recalcular el avance (ej. conceptual: si se incorpora un nuevo 20%, el avance se redistribuye).
+- **FR-F03**: Cada hito MUST tener un peso relativo; los pesos MUST normalizarse automáticamente y el avance ponderado MUST calcularse como la suma de (porcentaje de cumplimiento × peso) dividida por la suma total de pesos.
+- **FR-F04**: Agregar un nuevo hito MUST actualizar la suma total de pesos y redistribuir proporcionalmente el avance existente sin alterar los porcentajes de cumplimiento registrados en los hitos anteriores.
 - **FR-F05**: Los hitos MUST mostrarse ordenados por fecha de creación; los hitos de la misma fecha se muestran juntos.
 - **FR-F06**: La evidencia de cierre MUST ser configurable/requerida cuando corresponda.
 - **FR-F07**: Las mini-tareas son ultra simples (checkbox hecho/no hecho), con UNA persona por mini-tarea, MUST NOT ponderar el avance y MUST impedir el cierre mientras estén pendientes.
@@ -142,14 +177,14 @@
 
 ## I. Cotizaciones
 
-- **FR-I01**: Una tarea MUST poder requerir o no cotización; si la requiere, MUST existir un mínimo configurable por tarea (ejemplo posible: 3).
-- **FR-I02**: MUST soportar un máximo sugerido de versiones por proveedor (según lo ya acordado).
-- **FR-I03**: Las cotizaciones MUST organizarse por rondas; MUST existir histórico por ronda y MUST poder abrirse una nueva ronda.
-- **FR-I04**: El mínimo de cotizaciones MUST poder cambiar en una nueva ronda.
-- **FR-I05**: MUST existir una última cotización válida por proveedor.
-- **FR-I06**: Estados de cotización por proveedor: "Participó cotizando" y "Proveedor seleccionado".
-- **FR-I07**: El proveedor adjudicado MUST ser visible.
-- **FR-I08**: El cierre MUST bloquearse si no se cumple el mínimo de cotizaciones cuando aplique.
+- **FR-I01** `[PARCIAL — IMPLEMENTABLE AHORA hasta el mínimo por ronda]`: Una tarea MUST poder requerir o no cotización; si la requiere, MUST existir un mínimo configurable por tarea, con valor predeterminado de 3 cotizaciones por ronda.
+- **FR-I02** `[PARCIAL — regla documentable ahora; validación efectiva DEFERRED POR P2]`: MUST soportar un máximo de 3 versiones por proveedor en cada ronda.
+- **FR-I03** `[IMPLEMENTABLE AHORA]`: Las cotizaciones MUST organizarse por rondas; MUST existir histórico por ronda y MUST poder abrirse una nueva ronda.
+- **FR-I04** `[IMPLEMENTABLE AHORA]`: El mínimo de cotizaciones MUST poder cambiar en una nueva ronda.
+- **FR-I05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir una última cotización válida por proveedor.
+- **FR-I06** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Estados de cotización por proveedor: "Participó cotizando" y "Proveedor seleccionado".
+- **FR-I07** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: El proveedor adjudicado MUST ser visible.
+- **FR-I08** `[PARCIAL — regla general implementable; conteo por proveedor DEFERRED POR P2]`: El cierre MUST bloquearse si no se cumple el mínimo de cotizaciones cuando aplique.
 
 **Key Entities — I**: Cotización (proveedor, ronda, versión, vigente, monto, estado), Adjudicación.
 
@@ -157,13 +192,34 @@
 
 ## J. Proveedores
 
-- **FR-J01**: MUST existir un maestro de proveedores en Django.
-- **FR-J02**: Evaluación manual 1–5 del proveedor: malo / deficiente / regular / normal / sobresaliente.
-- **FR-J03**: Califica el responsable líder.
-- **FR-J04**: MUST existir promedio global del proveedor.
-- **FR-J05**: Vínculo con legacy mediante `rut_contable` → **`LEGACY API PENDIENTE`**: NO se define integración real (tabla/IDs/sincronización/contrato) sin revisar primero el legacy con el usuario.
+- **FR-J01** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir un maestro de proveedores en Django.
+- **FR-J02** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Evaluación manual 1–5 del proveedor: malo / deficiente / regular / normal / sobresaliente.
+- **FR-J03** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Califica el responsable líder.
+- **FR-J04** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir promedio global del proveedor.
+- **FR-J05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Vínculo con legacy mediante `rut_contable` → **`LEGACY API PENDIENTE`**: NO se define integración real (tabla/IDs/sincronización/contrato) sin revisar primero el legacy con el usuario.
 
-**Key Entities — J**: Proveedor (datos maestros, rut_contable [LEGACY], evaluación 1–5, promedio global).
+**Key Entities — J**: Proveedor como **ENTIDAD CONCEPTUAL FUTURA**. Los datos maestros,
+`rut_contable`, evaluación 1–5, promedio global e identidad externa son necesidades
+funcionales futuras, no diseño actual de modelo, campos ni contrato.
+
+### Estado de implementación del bloque J
+
+Todo el bloque J queda `DEFERRED — BLOQUEADO POR P2 LEGACY`. No se define actualmente
+maestro, tabla, campos, ID externo, endpoint, sincronización, evaluación ni promedio.
+`ProveedorReferencia` permanece únicamente como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN
+BLOQUEADA POR P2**.
+
+### Estado de implementación frente a P2
+
+- Antes de resolver P2 solo son implementables las rondas, su histórico, mínimo configurable,
+	fechas, observaciones, documentos asociados y reglas generales de cierre que declaren la
+	dependencia pendiente.
+- La regla de máximo 3 versiones por proveedor se documenta ahora, pero no se valida
+	efectivamente sin identidad real.
+- Quedan bloqueados por P2: identificar proveedores, contar proveedores distintos, imponer el
+	máximo por proveedor, determinar la última válida, adjudicar, asignar estados por proveedor,
+	evaluar proveedores, calcular promedio global y cualquier relación/FK lógica con proveedor.
+- `ProveedorReferencia` permanece como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2**.
 
 ---
 
@@ -181,13 +237,22 @@
 ## L. Dashboards y KPI
 
 - **FR-L01**: Dashboard Usuario: urgentes/por vencer arriba; acordeones por clasificación; tareas donde participa como Invitado; leído/no leído manual; vista Equipo para jefaturas; acumulación de trabajo.
-- **FR-L02**: Dashboard Jefatura/General: tareas por responsable, atrasadas, sin movimiento, próximas a vencer, esperando aprobación, carga por persona, cumplimiento, tiempo promedio de cierre, detectar "sin gestión".
-- **FR-L03**: Dimensiones con drill-down: General → Empresa → Local → Departamento → Usuario → Tarea; también por Proveedor.
-- **FR-L04**: Los mismos KPI por dimensión.
+- **FR-L02**: Dashboard Jefatura/General MUST mostrar exactamente estos ocho KPI: total de tareas por estado, tareas atrasadas, tareas próximas a vencer, tareas sin movimiento, tareas esperando aprobación, carga abierta por responsable, porcentaje de cumplimiento y tiempo promedio de cierre.
+- **FR-L03**: Dimensiones activas con drill-down: General → Empresa → Departamento → Usuario → Tarea. Local queda DEFERRED por P1 y Proveedor queda DEFERRED por P2.
+- **FR-L04**: Los mismos ocho KPI por cada dimensión activa: General, Empresa, Departamento, Usuario y Tarea. No se habilitan dimensiones adicionales.
 - **FR-L05**: Presentación con DataTables, modal "Ver info de la tarea" y opción de abrir la tarea completa.
 - **FR-L06**: Las dimensiones Local y Proveedor dependen de `LEGACY API PENDIENTE` (A y J).
+- **FR-L07**: Los ocho KPI de FR-L02 MUST repetirse en cada dimensión permitida del drill-down; no se definirán KPI adicionales por dimensión.
 
 **Key Entities — L**: Dashboard (dimensión), KPI, Drill-down.
+
+### Estado de dimensiones KPI
+
+- **ACTIVAS AHORA**: General, Empresa, Departamento, Usuario, Tarea.
+- **DEFERRED**: Local — bloqueada por P1; Proveedor — bloqueada por P2.
+- Catálogo cerrado: total de tareas por estado; atrasadas; próximas a vencer; sin movimiento;
+	esperando aprobación; carga abierta por responsable; porcentaje de cumplimiento; tiempo
+	promedio de cierre.
 
 ---
 
@@ -210,11 +275,12 @@
 - **FR-N01**: Una tarea MUST poder provenir de otra (una sola tarea origen directa).
 - **FR-N02**: El historial de origen MUST ser accesible en lectura.
 - **FR-N03**: MUST NOT convertir una tarea antigua en la nueva: se crea una nueva y se referencia. Cadenas históricas permitidas.
-- **FR-N04**: Al publicar, el sistema MUST advertir si parece un problema repetido con coincidencia aproximada desde el 80%.
+- **FR-N04**: Al publicar, el sistema MUST advertir si parece un problema repetido cuando la coincidencia aproximada alcance el umbral configurado para la empresa, cuyo valor predeterminado es 80%.
 - **FR-N05**: La evaluación de similitud MUST incluir también tareas cerradas.
 - **FR-N06**: El usuario MUST confirmar "es el mismo problema nuevamente"; aun confirmando, la tarea es NUEVA.
 - **FR-N07**: La nueva tarea MUST poder referenciar una o varias tareas antiguas si corresponde.
 - **FR-N08**: Cambio de repuesto MUST NOT implicar automáticamente "mismo problema".
+- **FR-N09**: El umbral de similitud MUST ser configurable por empresa; solo usuarios autorizados podrán modificarlo y cada cambio MUST aplicar únicamente a nuevas evaluaciones de similitud.
 
 **Key Entities — N**: Origen/derivación, Relación de similitud, Cadena histórica, Umbral (80%).
 
@@ -247,9 +313,9 @@
 
 - **FR-Q01**: El cierre MUST exigir evidencia adjunta (cuando sea requerida, ver F06).
 - **FR-Q02**: El cierre MUST estar bloqueado por mini-tareas pendientes y por descendientes sin cerrar.
-- **FR-Q03**: Si la tarea requiere cotización, el cierre MUST exigir el mínimo configurable.
+- **FR-Q03** `[PARCIAL — IMPLEMENTABLE AHORA hasta la regla general de cierre; validaciones que requieran contar proveedores distintos o identidad real DEFERRED POR P2]`: Si la tarea requiere cotización, el cierre MUST exigir el mínimo configurable.
 - **FR-Q04**: El cierre MUST requerir aprobación del creador o perfil autorizado.
-- **FR-Q05**: Al cerrar una tarea con proveedor, el responsable líder MUST calificar al proveedor (1–5, ver J).
+- **FR-Q05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Al cerrar una tarea con proveedor, el responsable líder MUST calificar al proveedor (1–5, ver J). No se implementarán evaluación ni promedio de proveedor hasta resolver P2.
 - **FR-Q06**: MUST registrarse quién cerró/canceló y cuándo.
 
 **Key Entities — Q**: Regla de cierre, Evidencia, Cierre/Cancelación (por, fecha).
@@ -316,12 +382,12 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 
 - **P1 (LEGACY)**: Contrato de Local (A) — campos, IDs, sincronización. `LEGACY API PENDIENTE`.
 - **P2 (LEGACY)**: Contrato de Proveedor (J) — `rut_contable`, datos maestros, sincronización. `LEGACY API PENDIENTE`.
-- **P3**: Mínimo configurable de cotizaciones (valor por defecto; ejemplo sugerido 3) y máximo sugerido de versiones por proveedor (I) — confirmar valores.
-- **P4**: Pesos/reglas exactas de hitos y criterio de "proporcional" en el recálculo (F04) — detallar en planificación.
-- **P5**: Máquina de estados exacta de C (transiciones permitidas entre cada par de estados) — detallar en planificación.
-- **P6**: Lista cerrada de KPI por dimensión (L) — definir métricas exactas.
-- **P7**: Reglas de cascada en anulación/reactivación de jerarquía (E05–E07) — confirmar comportamiento de fechas al reactivar.
-- **P8**: Umbral de similitud: se usa 80% (N04) como punto de partida acordado; confirmar si es configurable.
+- **P3**: Resuelto: mínimo predeterminado de 3 cotizaciones por ronda y máximo de 3 versiones por proveedor.
+- **P4**: Resuelto: los pesos de hitos son relativos y se normalizan automáticamente; el avance es la suma de (cumplimiento × peso) dividida por la suma de pesos, y agregar hitos redistribuye proporcionalmente el avance sin alterar cumplimientos anteriores.
+- **P5**: Resuelto: las transiciones siguen un flujo explícito y auditado; el cierre requiere aprobación, el rechazo vuelve a gestión conservando el 100%, y anulación/reactivación son acciones separadas y autorizadas.
+- **P6**: Resuelto: el catálogo cerrado contiene total de tareas por estado, tareas atrasadas, tareas próximas a vencer, tareas sin movimiento, tareas esperando aprobación, carga abierta por responsable, porcentaje de cumplimiento y tiempo promedio de cierre; se repite en cada dimensión permitida, sin KPI adicionales.
+- **P7**: Resuelto funcionalmente: anulación y reactivación en cascada para padre, hijos y nietos; la reactivación conserva la estructura y datos históricos, no recalcula fechas automáticamente, deja las fechas afectadas pendientes de confirmación o reacomodo y notifica a los participantes afectados. La cascada queda implementada en la fase que introduce la jerarquía (Phase 3), no en el núcleo de Phase 2.
+- **P8**: Resuelto: el umbral de similitud es configurable por empresa, con valor predeterminado de 80%, modificación restringida a usuarios autorizados y aplicación solo a nuevas evaluaciones.
 
 ## Tabla de cobertura por bloque
 
@@ -329,18 +395,18 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 |---|---|---|---|---|
 | A | Identidad, Correlativos y Contexto | FR-A01…A07 | P1 | Definido (Local: LEGACY PENDIENTE) |
 | B | Tipos y Clasificación | FR-B01…B04 | P1 | Definido |
-| C | Ciclo de Vida y Cierre | FR-C01…C08 | P1 | Definido (Fase 1 parcial implementada) |
+| C | Ciclo de Vida y Cierre | FR-C01…C09 | P1 | Definido (Fase 1 parcial implementada) |
 | D | Asignación, Responsables y Participantes | FR-D01…D10 | P1 | Definido |
 | E | Jerarquía de Trabajo | FR-E01…E09 | P2 | Definido |
 | F | Avance, Hitos y Mini-tareas | FR-F01…F07 | P2 | Definido |
 | G | Fechas, Atrasos y Reprogramación | FR-G01…G05 | P2 | Definido |
 | H | Documentos y Evidencias | FR-H01…H06 | P2 | Definido |
-| I | Cotizaciones | FR-I01…I08 | P3 | Definido (pendiente valores P3) |
+| I | Cotizaciones | FR-I01…I08 | P3 | Definido |
 | J | Proveedores | FR-J01…J05 | P3 | Definido (LEGACY PENDIENTE) |
 | K | Notificaciones y Email | FR-K01…K04 | P2 | Definido |
-| L | Dashboards y KPI | FR-L01…L06 | P3 | Definido (pendiente KPI P6) |
+| L | Dashboards y KPI | FR-L01…L07 | P3 | Definido |
 | M | Reuniones de Revisión | FR-M01…M07 | P3 | Definido |
-| N | Origen, Derivación y Similitud | FR-N01…N08 | P3 | Definido |
+| N | Origen, Derivación y Similitud | FR-N01…N09 | P3 | Definido |
 | O | Equipos / Máquinas | FR-O01…O04 | P2 | Definido (sin legacy) |
 | P | Seguridad, Multiempresa y Enlaces | FR-P01…P05 | P1 | Definido (Fase 1 implementada) |
 | Q | Reglas de Cierre | FR-Q01…Q06 | P2 | Definido |

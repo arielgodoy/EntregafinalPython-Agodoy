@@ -19,13 +19,23 @@ from access_control.views import VerificarPermisoMixin
 
 from .forms import TareaForm
 from .models import Tarea
+from .services.context import get_active_company_id
+from .services.lifecycle import (
+    annul_task,
+    approve_closure,
+    complete_task,
+    publish_task,
+    reject_closure,
+    reactivate_task,
+    transition_task,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _get_empresa_id(request):
     """Empresa activa desde la sesión (patrón vigente)."""
-    return request.session.get("empresa_id")
+    return get_active_company_id(request)
 
 
 class TareaEmpresaQuerysetMixin:
@@ -92,10 +102,75 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
 
             raise Http404
         try:
-            tarea.publicar()
+            publish_task(tarea, request.user)
         except ValidationError as e:
             mensaje = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
             messages.error(request, mensaje)
         else:
             messages.success(request, "Tarea publicada correctamente.")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+
+class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    """Protected Phase 2 action endpoint for one task."""
+
+    permiso_requerido = "modificar"
+    accion = None
+    vista_nombre = "Tareas - Transición"
+
+    def post(self, request, *args, **kwargs):
+        tarea = self.get_queryset().filter(pk=kwargs["pk"]).first()
+        if tarea is None:
+            from django.http import Http404
+
+            raise Http404
+        try:
+            if self.accion == "gestion":
+                transition_task(tarea, Tarea.Estado.GESTION, request.user, "INICIAR_GESTION")
+            elif self.accion == "completar":
+                complete_task(tarea, request.user)
+            elif self.accion == "aprobar":
+                approve_closure(tarea, request.user)
+            elif self.accion == "rechazar":
+                reject_closure(tarea, request.user)
+            elif self.accion == "anular":
+                annul_task(tarea, request.user)
+            elif self.accion == "reactivar":
+                reactivate_task(tarea, request.user)
+            else:
+                raise ValidationError("Acción de ciclo no configurada.")
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, "Acción de ciclo aplicada correctamente.")
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+
+class IniciarGestionView(TareaLifecycleView):
+    accion = "gestion"
+    vista_nombre = "Tareas - Iniciar gestión"
+
+
+class CompletarTareaView(TareaLifecycleView):
+    accion = "completar"
+    vista_nombre = "Tareas - Completar tarea"
+
+
+class AprobarCierreView(TareaLifecycleView):
+    accion = "aprobar"
+    vista_nombre = "Tareas - Aprobar cierre"
+
+
+class RechazarCierreView(TareaLifecycleView):
+    accion = "rechazar"
+    vista_nombre = "Tareas - Rechazar cierre"
+
+
+class AnularTareaView(TareaLifecycleView):
+    accion = "anular"
+    vista_nombre = "Tareas - Anular tarea"
+
+
+class ReactivarTareaView(TareaLifecycleView):
+    accion = "reactivar"
+    vista_nombre = "Tareas - Reactivar tarea"

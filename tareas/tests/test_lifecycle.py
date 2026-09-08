@@ -1,0 +1,107 @@
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.test import TestCase
+
+from access_control.models import Empresa
+from tareas.models import (
+    CorrelativoEmpresa,
+    Tarea,
+    TareaAnulacionSnapshot,
+    TareaCierre,
+    TareaTransicion,
+)
+from tareas.services.lifecycle import (
+    annul_task,
+    approve_closure,
+    complete_task,
+    reject_closure,
+    reactivate_task,
+    transition_task,
+)
+
+
+class Phase2LifecycleTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.empresa = Empresa.objects.create(codigo="P2", descripcion="Phase 2")
+        cls.creator = User.objects.create_user(username="p2_creator", password="x")
+        cls.responsible = User.objects.create_user(username="p2_resp", password="x")
+        cls.authorizer = User.objects.create_user(username="p2_auth", password="x")
+
+    def make_task(self):
+        return Tarea.objects.create(
+            titulo="Phase 2 task",
+            empresa=self.empresa,
+            creada_por=self.creator,
+            responsable=self.responsible,
+        )
+
+    def test_creation_reserves_one_company_sequence(self):
+        first = self.make_task()
+        second = self.make_task()
+        self.assertEqual(first.correlativo, "A0000001")
+        self.assertEqual(second.correlativo, "A0000002")
+        self.assertEqual(CorrelativoEmpresa.objects.get(empresa=self.empresa).siguiente_numero, 3)
+
+    def test_publish_changes_prefix_without_consuming_number(self):
+        task = self.make_task()
+        original_pk = task.pk
+        original_sequence = CorrelativoEmpresa.objects.get(empresa=self.empresa).siguiente_numero
+        task.publicar(self.creator)
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.ACTIVA)
+        self.assertEqual(task.correlativo, "B0000001")
+        self.assertEqual(task.pk, original_pk)
+        self.assertEqual(
+            CorrelativoEmpresa.objects.get(empresa=self.empresa).siguiente_numero,
+            original_sequence,
+        )
+        self.assertEqual(Tarea.objects.filter(correlativo="B0000001").count(), 1)
+
+    def test_publish_rejects_invalid_draft_correlativo(self):
+        task = self.make_task()
+        task.correlativo = "INVALID"
+        task.save(update_fields=["correlativo"])
+        with self.assertRaises(ValidationError):
+            task.publicar(self.creator)
+
+    def test_lifecycle_and_rejected_closure(self):
+        task = self.make_task()
+        self.assertFalse(task.cierre_completado)
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        complete_task(task, self.responsible)
+        task.refresh_from_db()
+        self.assertTrue(task.cierre_completado)
+        self.assertEqual(task.estado, Tarea.Estado.PENDIENTE_APROBACION_CIERRE)
+        reject_closure(task, self.authorizer, "Falta información")
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.GESTION)
+        self.assertTrue(task.cierre_completado)
+        self.assertEqual(TareaTransicion.objects.filter(tarea=task).count(), 4)
+        self.assertEqual(TareaCierre.objects.get(tarea=task).resultado, TareaCierre.Resultado.RECHAZADO)
+        approve_task = complete_task(task, self.responsible)
+        approve_closure(task, self.authorizer, "OK")
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.CERRADA)
+        self.assertTrue(task.cierre_completado)
+
+    def test_invalid_published_to_draft_transition(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        task.estado = Tarea.Estado.BORRADOR
+        with self.assertRaises(ValidationError):
+            task.full_clean()
+
+    def test_individual_annulment_reactivation_and_pending_dates(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        annul_task(task, self.authorizer, "Pausa")
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.ANULADA)
+        self.assertTrue(TareaAnulacionSnapshot.objects.filter(tarea=task).exists())
+        reactivate_task(task, self.authorizer)
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.GESTION)
+        self.assertTrue(task.fechas_pendientes_confirmacion)

@@ -1,14 +1,10 @@
-"""Modelos de la app tareas (Tareas Internas).
+"""Persistent Phase 1/2 domain for internal tasks."""
 
-Implementa specs/001-tareas-internas/data-model.md:
-- Ciclo BORRADOR -> PUBLICADA (publicación irreversible).
-- Publicación exige responsable válido/activo (FR-007/FR-008, Clarification Q1).
-- Aislamiento por empresa (FK access_control.Empresa; FR-003).
-"""
+import re
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from access_control.models import Empresa
@@ -24,7 +20,14 @@ class Tarea(models.Model):
 
     class Estado(models.TextChoices):
         BORRADOR = "BORRADOR", "BORRADOR"
-        PUBLICADA = "PUBLICADA", "PUBLICADA"
+        ACTIVA = "ACTIVA", "ACTIVA"
+        GESTION = "GESTION", "GESTION"
+        PENDIENTE_APROBACION_CIERRE = (
+            "PENDIENTE_APROBACION_CIERRE",
+            "PENDIENTE_APROBACION_CIERRE",
+        )
+        CERRADA = "CERRADA", "CERRADA"
+        ANULADA = "ANULADA", "ANULADA"
 
     class Prioridad(models.TextChoices):
         SIMPLE = "SIMPLE", "SIMPLE"
@@ -39,8 +42,11 @@ class Tarea(models.Model):
         choices=Prioridad.choices,
         default=Prioridad.NORMAL,
     )
+    correlativo = models.CharField(max_length=9)
+    fechas_pendientes_confirmacion = models.BooleanField(default=False)
+    cierre_completado = models.BooleanField(default=False)
     estado = models.CharField(
-        max_length=10,
+        max_length=32,
         choices=Estado.choices,
         default=Estado.BORRADOR,
     )
@@ -68,6 +74,13 @@ class Tarea(models.Model):
         indexes = [
             models.Index(fields=["empresa", "estado"]),
             models.Index(fields=["empresa", "fecha_creacion"]),
+            models.Index(fields=["empresa", "correlativo"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "correlativo"],
+                name="tareas_empresa_correlativo_uniq",
+            ),
         ]
 
     def __str__(self):
@@ -82,6 +95,17 @@ class Tarea(models.Model):
         """Responsable asignado y activo (Q1)."""
         return self.responsable is not None and self.responsable.is_active
 
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.correlativo:
+            if not self.empresa_id:
+                raise ValidationError("Una tarea requiere empresa para reservar correlativo.")
+            from .services.correlativos import reserve_next_number
+
+            with transaction.atomic(using=kwargs.get("using")):
+                self.correlativo = f"A{reserve_next_number(self.empresa_id):07d}"
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
     def clean(self):
         """Reglas respaldadas por spec/clarifications.
 
@@ -95,7 +119,12 @@ class Tarea(models.Model):
         super().clean()
         errores = {}
 
-        if self.estado == self.Estado.PUBLICADA:
+        if self.estado in {
+            self.Estado.ACTIVA,
+            self.Estado.GESTION,
+            self.Estado.PENDIENTE_APROBACION_CIERRE,
+            self.Estado.CERRADA,
+        }:
             if not self._responsable_es_valido():
                 errores["responsable"] = (
                     "Una tarea publicada debe tener un responsable válido y activo."
@@ -113,14 +142,14 @@ class Tarea(models.Model):
             )
             if original is not None:
                 if (
-                    original.estado == self.Estado.PUBLICADA
+                    original.estado != self.Estado.BORRADOR
                     and self.estado == self.Estado.BORRADOR
                 ):
                     errores["estado"] = (
                         "La publicación es irreversible: una tarea publicada no puede volver a borrador."
                     )
                 if (
-                    original.estado == self.Estado.PUBLICADA
+                    original.estado != self.Estado.BORRADOR
                     and original.fecha_publicacion
                     and self.fecha_publicacion != original.fecha_publicacion
                 ):
@@ -131,20 +160,89 @@ class Tarea(models.Model):
         if errores:
             raise ValidationError(errores)
 
-    def publicar(self):
+    def publicar(self, usuario=None):
         """Publica el borrador: exige responsable válido/activo (Q1, FR-007).
 
         Fija estado=PUBLICADA y fecha_publicacion (FR-008). Si el responsable falta o
         está inactivo, lanza ValidationError sin persistir (la tarea permanece en
         BORRADOR).
         """
-        if self.estado == self.Estado.PUBLICADA:
+        if self.estado != self.Estado.BORRADOR:
             raise ValidationError("La tarea ya está publicada.")
         if not self._responsable_es_valido():
             raise ValidationError(
                 "No se puede publicar: la tarea requiere un responsable válido y activo."
             )
-        self.estado = self.Estado.PUBLICADA
+        if not re.fullmatch(r"A[0-9]{7}", self.correlativo or ""):
+            raise ValidationError(
+                "No se puede publicar: el correlativo de borrador no es válido."
+            )
+        self.estado = self.Estado.ACTIVA
+        self.correlativo = f"B{self.correlativo[1:]}"
         self.fecha_publicacion = timezone.now()
         self.full_clean()
         self.save()
+        TareaTransicion.objects.create(
+            tarea=self,
+            estado_origen=self.Estado.BORRADOR,
+            estado_destino=self.Estado.ACTIVA,
+            accion_evento="PUBLICAR",
+            usuario=usuario or self.creada_por,
+        )
+
+
+# Compatibility access for existing MVP callers; ACTIVA is the persisted choice.
+Tarea.Estado.PUBLICADA = Tarea.Estado.ACTIVA
+
+
+class CorrelativoEmpresa(models.Model):
+    empresa = models.OneToOneField(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="correlativo_tareas",
+    )
+    siguiente_numero = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        indexes = [models.Index(fields=["empresa"])]
+
+
+class TareaTransicion(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="transiciones")
+    estado_origen = models.CharField(max_length=32)
+    estado_destino = models.CharField(max_length=32, blank=True, default="")
+    accion_evento = models.CharField(max_length=64)
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tareas_transiciones")
+    timestamp = models.DateTimeField(auto_now_add=True)
+    motivo = models.TextField(blank=True, default="")
+
+    class Meta:
+        indexes = [models.Index(fields=["tarea", "timestamp"])]
+
+
+class TareaCierre(models.Model):
+    class Resultado(models.TextChoices):
+        APROBADO = "APROBADO", "APROBADO"
+        RECHAZADO = "RECHAZADO", "RECHAZADO"
+
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="cierres")
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tareas_cierres")
+    timestamp = models.DateTimeField(auto_now_add=True)
+    resultado = models.CharField(max_length=10, choices=Resultado.choices)
+    comentario = models.TextField(blank=True, default="")
+
+
+class TareaAnulacionSnapshot(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="snapshots_anulacion")
+    estado_anterior = models.CharField(max_length=32)
+    fechas_pendientes_confirmacion = models.BooleanField(default=False)
+    usuario_anulo = models.ForeignKey(User, on_delete=models.PROTECT, related_name="tareas_anuladas")
+    timestamp_anulacion = models.DateTimeField(auto_now_add=True)
+    usuario_reactivo = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas_reactivadas",
+    )
+    timestamp_reactivacion = models.DateTimeField(null=True, blank=True)

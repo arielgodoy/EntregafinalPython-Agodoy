@@ -1,14 +1,15 @@
-# Contracts: Tareas Internas — URLs web y respuestas
+# Contracts: Tareas Internas - URLs web y respuestas por fases
 
 **Date**: 2026-09-07 | **Feature**: [spec.md](../spec.md) | **Data model**: [data-model.md](../data-model.md)
 
-Contrato de la interfaz web (server-side rendered). No se expone API REST en esta versión
-(el sistema usa APIs internas separadas en `api/`; esta feature no las requiere).
-La eliminación de tareas NO forma parte de esta versión (FUERA DE ALCANCE).
+Contrato de la interfaz web server-side rendered. No se inventa una API REST pública;
+si una fase requiere integración, se documenta un adaptador dentro de `tareas/` y se
+mantiene bloqueado hasta autorización del contrato externo. La eliminación física no existe;
+la anulación es una acción protegida y auditada.
 
-> **PENDIENTE DE AUTORIZACIÓN EXPRESA**: las rutas siguientes requieren registrar la app
-> en `AppDocs/urls.py` (archivo CORE). La elección de app nueva NO autoriza ese cambio;
-> queda bloqueado hasta autorización expresa del usuario.
+> **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
+> `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
+> adicional de esos archivos requiere autorización expresa.
 
 Todas las rutas viven bajo el include `tareas/` con namespace `tareas`. Todas requieren
 sesión autenticada + empresa activa + permiso ICMEAS; ante falta de permiso responden
@@ -64,9 +65,29 @@ empresa activa, redirigen al selector de empresa (comportamiento del decorador v
 
 ### Eliminación — FUERA DE ALCANCE
 
-Esta primera versión NO expone eliminación de tareas: no hay ruta, vista, modal, JS ni
-permiso `eliminar`. Si en el futuro se solicita, se evaluará conforme a las reglas
-vigentes del proyecto en ese momento.
+No existe eliminación física, ruta de borrado ni permiso `eliminar`. La anulación/reactivación
+se exponen como acciones de ciclo de vida protegidas por ICMEAS y no destruyen datos.
+
+## Rutas adicionales por fase
+
+Las rutas siguientes son contratos previstos, no implementación actual. Cada una conserva
+sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controladas.
+
+| Fase | Operación | Método | Nombre sugerido | Regla principal |
+|---|---|---|---|---|
+| 1 | Transición de estado | POST | `transicionar_tarea` | Solo pares permitidos; registra auditoría |
+| 1 | Anular/reactivar | POST | `anular_tarea` / `reactivar_tarea` | Cascada y snapshot; nunca borrar |
+| 2 | Participantes/reasignación | GET/POST | `participantes_tarea` / `reasignar_tarea` | Usuarios activos y empresa activa |
+| 2 | Jerarquía/mini-tareas | GET/POST | `jerarquia_tarea` / `minitareas_tarea` | Máximo dos niveles; mini-tareas bloquean cierre |
+| 2 | Reprogramación | POST | `reprogramar_tarea` | Justificación y auditoría obligatorias |
+| 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental |
+| 4 | Cotizaciones | GET/POST | `rondas_cotizacion` / `cotizaciones_ronda` | Default 3; máximo 3 versiones |
+| 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` | Tareas cerradas incluidas; confirmar repetición |
+| 5 | Enlace compartible | GET | `enlace_tarea` | Solo autenticado, lectura e ICMEAS |
+| 6 | Dashboard/KPI | GET | `dashboard_tareas` | Ocho KPI por dimensión permitida |
+
+Local y Proveedor no tienen rutas propias ni endpoints inventados: sus referencias solo se
+habilitan cuando P1/P2 tengan contrato autorizado.
 
 ## Claves i18n nuevas (a reportar para alta en `static/lang/sp.json` / `en.json`)
 
