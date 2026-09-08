@@ -1,3 +1,5 @@
+from datetime import date
+
 """Tests de vistas de tareas (T019, T024, T027).
 
 Cubre: creación/edición de borradores (US1), publicación (US2) y aislamiento
@@ -46,6 +48,7 @@ class TareasViewsBase(TestCase):
             "titulo": "Tarea X",
             "empresa": empresa or self.empresa,
             "creada_por": self.user,
+            "fecha_tope": date.today(),
         }
         datos.update(kwargs)
         return Tarea.objects.create(**datos)

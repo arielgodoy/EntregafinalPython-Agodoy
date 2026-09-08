@@ -1,3 +1,5 @@
+from datetime import date
+
 """Pruebas focalizadas de navegación jerárquica en modo lectura."""
 
 from django.test import TestCase
@@ -29,6 +31,7 @@ class HierarchyViewsTests(TestCase):
             self.user,
             titulo=title,
             responsable=self.user,
+            fecha_tope=date.today(),
         )
 
     def get_detail(self, task):

@@ -13,6 +13,8 @@ Nota: la empresa no se valida como inmutable a nivel de modelo (regla descartada
 aislamiento multiempresa se verifica en las vistas (test_views.py).
 """
 
+from datetime import date
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -33,6 +35,7 @@ class TareaModelTest(TestCase):
             "titulo": "Tarea de prueba",
             "empresa": self.empresa,
             "creada_por": self.creador,
+            "fecha_tope": date.today(),
         }
         datos.update(kwargs)
         return Tarea.objects.create(**datos)

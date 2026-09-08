@@ -69,6 +69,9 @@ class Tarea(models.Model):
     )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_publicacion = models.DateTimeField(null=True, blank=True)
+    fecha_asignacion = models.DateTimeField(null=True, blank=True)
+    fecha_tope = models.DateField(null=True, blank=True)
+    fecha_cumplimiento = models.DateTimeField(null=True, blank=True)
     todo_origen = models.ForeignKey(
         "Todo",
         on_delete=models.PROTECT,
@@ -165,7 +168,7 @@ class Tarea(models.Model):
         if self.pk:
             original = (
                 Tarea.objects.filter(pk=self.pk)
-                .only("estado", "fecha_publicacion")
+                .only("estado", "fecha_publicacion", "fecha_asignacion")
                 .first()
             )
             if original is not None:
@@ -184,6 +187,24 @@ class Tarea(models.Model):
                     errores["fecha_publicacion"] = (
                         "La fecha de publicación es inmutable."
                     )
+                if (
+                    original.estado != self.Estado.BORRADOR
+                    and original.fecha_asignacion
+                    and self.fecha_asignacion != original.fecha_asignacion
+                ):
+                    errores["fecha_asignacion"] = (
+                        "La fecha de asignación es inmutable."
+                    )
+
+        if self.estado in {
+            self.Estado.ACTIVA,
+            self.Estado.GESTION,
+            self.Estado.PENDIENTE_APROBACION_CIERRE,
+            self.Estado.CERRADA,
+        } and self.fecha_tope is None:
+            errores["fecha_tope"] = (
+                "Una tarea publicada debe tener fecha tope."
+            )
 
         if errores:
             raise ValidationError(errores)
@@ -201,13 +222,20 @@ class Tarea(models.Model):
             raise ValidationError(
                 "No se puede publicar: la tarea requiere un responsable válido y activo."
             )
+        if self.fecha_tope is None:
+            raise ValidationError(
+                "No se puede publicar: la tarea requiere fecha tope."
+            )
         if not re.fullmatch(r"B[0-9]{7}", self.correlativo or ""):
             raise ValidationError(
                 "No se puede publicar: el correlativo de borrador no es válido."
             )
         self.estado = self.Estado.ACTIVA
         self.correlativo = f"A{self.correlativo[1:]}"
-        self.fecha_publicacion = timezone.now()
+        ahora = timezone.now()
+        self.fecha_publicacion = ahora
+        if self.fecha_asignacion is None:
+            self.fecha_asignacion = ahora
         self.full_clean()
         self.save()
         TareaTransicion.objects.create(
@@ -460,6 +488,41 @@ class TareaReasignacion(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["tarea", "fecha"])]
+
+
+class CausaAtraso(models.Model):
+    codigo = models.CharField(max_length=40, unique=True)
+    nombre = models.CharField(max_length=120, unique=True)
+
+    class Meta:
+        ordering = ["codigo"]
+
+    def __str__(self):
+        return self.nombre
+
+
+class Reprogramacion(models.Model):
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="reprogramaciones",
+    )
+    fecha_tope_anterior = models.DateField()
+    fecha_tope_nueva = models.DateField()
+    justificacion = models.TextField()
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="reprogramaciones_tareas",
+    )
+    fecha_operacion = models.DateTimeField(default=timezone.now)
+    causas = models.ManyToManyField(
+        CausaAtraso,
+        related_name="reprogramaciones",
+    )
+
+    class Meta:
+        indexes = [models.Index(fields=["tarea", "fecha_operacion"])]
 
 
 class TareaRelacion(models.Model):

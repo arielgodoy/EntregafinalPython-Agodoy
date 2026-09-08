@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -33,6 +35,7 @@ class Phase2LifecycleTest(TestCase):
             empresa=self.empresa,
             creada_por=self.creator,
             responsable=self.responsible,
+            fecha_tope=date.today(),
         )
 
     def test_creation_reserves_one_company_sequence(self):

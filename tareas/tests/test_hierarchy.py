@@ -1,3 +1,5 @@
+from datetime import date
+
 """Tests Phase 3 T028: task hierarchy and effective annulment."""
 
 from django.core.exceptions import ValidationError
@@ -39,6 +41,7 @@ class HierarchyPhase3Tests(TestCase):
             self.creator,
             titulo=titulo,
             responsable=self.responsible,
+            fecha_tope=date.today(),
         )
 
     def make_active_task(self, titulo="Tarea", empresa=None):

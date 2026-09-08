@@ -63,14 +63,16 @@ def publish_task(tarea, usuario):
 
 def complete_task(tarea, usuario):
     _raise_si_anulada(tarea)
-    tarea.cierre_completado = True
-    tarea.save(update_fields=["cierre_completado"])
-    return transition_task(
-        tarea,
-        Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
-        usuario,
-        "MARCAR_100",
-    )
+    with transaction.atomic():
+        tarea.cierre_completado = True
+        tarea.fecha_cumplimiento = timezone.now()
+        tarea.save(update_fields=["cierre_completado", "fecha_cumplimiento"])
+        return transition_task(
+            tarea,
+            Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+            usuario,
+            "MARCAR_100",
+        )
 
 
 def approve_closure(tarea, usuario, comentario=""):
@@ -109,7 +111,8 @@ def reject_closure(tarea, usuario, comentario=""):
             comentario,
         )
         tarea.cierre_completado = True
-        tarea.save(update_fields=["cierre_completado"])
+        tarea.fecha_cumplimiento = None
+        tarea.save(update_fields=["cierre_completado", "fecha_cumplimiento"])
         TareaCierre.objects.create(
             tarea=tarea,
             usuario=usuario,

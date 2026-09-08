@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -103,7 +105,8 @@ class TodoDomainTests(TestCase):
         todo = create_todo(self.empresa, self.usuario, "Pendiente")
         task = create_task_from_todo(todo, self.usuario, "Formalizada")
         task.responsable = self.usuario
-        task.save(update_fields=["responsable"])
+        task.fecha_tope = date.today()
+        task.save(update_fields=["responsable", "fecha_tope"])
         task.publicar(self.usuario)
         task.refresh_from_db()
 
