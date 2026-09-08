@@ -38,8 +38,8 @@ class Phase2LifecycleTest(TestCase):
     def test_creation_reserves_one_company_sequence(self):
         first = self.make_task()
         second = self.make_task()
-        self.assertEqual(first.correlativo, "A0000001")
-        self.assertEqual(second.correlativo, "A0000002")
+        self.assertEqual(first.correlativo, "B0000001")
+        self.assertEqual(second.correlativo, "B0000002")
         self.assertEqual(CorrelativoEmpresa.objects.get(empresa=self.empresa).siguiente_numero, 3)
 
     def test_publish_changes_prefix_without_consuming_number(self):
@@ -49,20 +49,25 @@ class Phase2LifecycleTest(TestCase):
         task.publicar(self.creator)
         task.refresh_from_db()
         self.assertEqual(task.estado, Tarea.Estado.ACTIVA)
-        self.assertEqual(task.correlativo, "B0000001")
+        self.assertEqual(task.correlativo, "A0000001")
         self.assertEqual(task.pk, original_pk)
         self.assertEqual(
             CorrelativoEmpresa.objects.get(empresa=self.empresa).siguiente_numero,
             original_sequence,
         )
-        self.assertEqual(Tarea.objects.filter(correlativo="B0000001").count(), 1)
+        self.assertEqual(Tarea.objects.filter(correlativo="A0000001").count(), 1)
 
     def test_publish_rejects_invalid_draft_correlativo(self):
         task = self.make_task()
-        task.correlativo = "INVALID"
+        task.correlativo = "A0000001"
         task.save(update_fields=["correlativo"])
         with self.assertRaises(ValidationError):
             task.publicar(self.creator)
+
+    def test_td_is_not_generated(self):
+        task = self.make_task()
+        self.assertRegex(task.correlativo, r"^B[0-9]{7}$")
+        self.assertNotRegex(task.correlativo, r"^TD[0-9]{7}$")
 
     def test_lifecycle_and_rejected_closure(self):
         task = self.make_task()

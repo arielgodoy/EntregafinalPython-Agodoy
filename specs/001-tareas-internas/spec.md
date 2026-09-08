@@ -36,7 +36,7 @@
 
 ## A. Identidad, Correlativos y Contexto
 
-- **FR-A01**: Al crear una tarea se MUST reservar un único número secuencial por empresa; el borrador MUST mostrarlo como `A0000001` y al publicar el mismo número MUST mostrarse como `B0000001`. La publicación transforma el mismo registro, conserva la misma PK, NO consume un segundo número y NO existen secuencias A/B independientes.
+- **FR-A01**: Al crear una tarea se MUST reservar un único número secuencial por empresa; el borrador MUST mostrarlo como `B0000001` y al publicar el mismo número MUST mostrarse como `A0000001`. `TD` queda reservado para TO-DO futuro. La publicación transforma el mismo registro, conserva la misma PK, NO consume un segundo número y NO existen secuencias A/B independientes.
 - **FR-A02**: Un borrador MUST tener vida indefinida y ser visible inicialmente SOLO en el dashboard propio del creador.
 - **FR-A03** `[PARCIAL — definición de Departamento pendiente]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a local y a departamento/área. Local sigue bloqueado por P1; no se define aún el modelo/campo de Departamento.
 - **FR-A04** `[PARCIAL — definición de Equipo/Activo pendiente]`: Una tarea MUST poder asociarse opcionalmente a un equipo/máquina/activo cuando corresponda. No se define aún modelo, campo, código ni relación de Equipo/Activo.
@@ -44,7 +44,7 @@
 - **FR-A06**: El correlativo MUST ser único por empresa y legible.
 - **FR-A07**: LOCAL es concepto legacy → **`LEGACY API PENDIENTE`**: no se define tabla/IDs/sincronización sin autorización y lectura del legacy.
 
-**Key Entities — A**: Tarea (correlativo_borrador `A*`, correlativo_activo `B*`, empresa, local [LEGACY], departamento, equipo_activo [opcional], creada_por).
+**Key Entities — A**: Tarea (correlativo_borrador `B*`, correlativo_activo `A*`, `TD*` reservado para TO-DO futuro, empresa, local [LEGACY], departamento, equipo_activo [opcional], creada_por).
 
 ---
 
@@ -63,7 +63,7 @@
 
 - **FR-C01**: Estados persistentes canónicos del ciclo funcional: `BORRADOR`, `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE` y `CERRADA`. `ANULADA` deja de ser estado canónico: la anulación es el flag separado `Tarea.anulada` (ver E). Publicación, aprobación/rechazo de cierre, anulación y reactivación son acciones/eventos auditables, no estados persistentes adicionales.
 - **FR-C02**: Toda tarea nace como borrador (vida indefinida).
-- **FR-C03**: Publicar exige responsable válido/activo, registra fecha de publicación, convierte correlativo A→B, transforma `BORRADOR` en `ACTIVA` y es irreversible hacia borrador. El valor MVP `PUBLICADA` se migra a `ACTIVA`.
+- **FR-C03**: Publicar exige responsable válido/activo, registra fecha de publicación, convierte correlativo B→A, transforma `BORRADOR` en `ACTIVA` y es irreversible hacia borrador. El valor MVP `PUBLICADA` se migra a `ACTIVA`.
 - **FR-C04**: El responsable puede llevar la tarea a 100%; entonces pasa a "en espera de aprobación de cierre".
 - **FR-C05**: El creador o un perfil autorizado MUST aprobar el cierre.
 - **FR-C06**: Si el cierre se rechaza, la tarea queda "cierre rechazado / vuelve a gestión" y MUST mantener el 100% aunque vuelva a gestión.
@@ -362,7 +362,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - **SC-007**: 100% de notificaciones críticas por sistema y email.
 - **SC-008**: Dashboards muestran los mismos KPI en todas las dimensiones con drill-down.
 - **SC-009**: Advertencia de similitud al publicar cuando coincidencia ≥ 80%.
-- **SC-010**: Correlativo borrador `A*` se convierte a activo `B*` al publicar, sin duplicar la tarea.
+- **SC-010**: Correlativo borrador `B*` se convierte a activo `A*` al publicar, sin duplicar la tarea.
 
 ## Assumptions
 

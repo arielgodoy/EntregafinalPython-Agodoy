@@ -102,7 +102,7 @@ class Tarea(models.Model):
             from .services.correlativos import reserve_next_number
 
             with transaction.atomic(using=kwargs.get("using")):
-                self.correlativo = f"A{reserve_next_number(self.empresa_id):07d}"
+                self.correlativo = f"B{reserve_next_number(self.empresa_id):07d}"
                 return super().save(*args, **kwargs)
         return super().save(*args, **kwargs)
 
@@ -173,12 +173,12 @@ class Tarea(models.Model):
             raise ValidationError(
                 "No se puede publicar: la tarea requiere un responsable válido y activo."
             )
-        if not re.fullmatch(r"A[0-9]{7}", self.correlativo or ""):
+        if not re.fullmatch(r"B[0-9]{7}", self.correlativo or ""):
             raise ValidationError(
                 "No se puede publicar: el correlativo de borrador no es válido."
             )
         self.estado = self.Estado.ACTIVA
-        self.correlativo = f"B{self.correlativo[1:]}"
+        self.correlativo = f"A{self.correlativo[1:]}"
         self.fecha_publicacion = timezone.now()
         self.full_clean()
         self.save()

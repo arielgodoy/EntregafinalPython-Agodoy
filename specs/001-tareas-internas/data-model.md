@@ -7,7 +7,7 @@
 | Campo | Tipo (Django) | Nulable | Default | Reglas |
 |---|---|---|---|---|
 | `id` | BigAutoField (PK) | no | auto | Se conserva exactamente para compatibilidad MVP; no se cambia el tipo ni el valor. |
-| `correlativo` | `CharField(max_length=9)` | sí durante backfill, no al finalizar | nullable durante backfill | Constraint única `(empresa, correlativo)`; índice compuesto `(empresa, correlativo)`; formato exacto `A`/`B` + 7 dígitos (`A0000001` / `B0000001`). Solo se guarda este string; el número no se duplica en `Tarea`. |
+| `correlativo` | `CharField(max_length=9)` | sí durante backfill, no al finalizar | nullable durante backfill | Constraint única `(empresa, correlativo)`; índice compuesto `(empresa, correlativo)`; formato exacto `A`/`B` + 7 dígitos (`B0000001` borrador / `A0000001` activa-publicada). `TD` queda reservado para TO-DO futuro. Solo se guarda este string; el número no se duplica en `Tarea`. |
 | `cierre_completado` | BooleanField | no | `False` | Señal de lifecycle: la tarea alcanzó la condición funcional equivalente al 100% para solicitar cierre; no es porcentaje general de avance. |
 | `titulo` | CharField(max_length=200) | no | — | Obligatorio siempre (FR-001). `blank=False`. |
 | `descripcion` | TextField | sí (`blank=True, default=""`) | `""` | Opcional en borrador y publicada. |
@@ -207,7 +207,7 @@ campos de auditoría/snapshot y
 el estado ampliado; después ejecuta backfill idempotente y finalmente aplica unicidad/constraints.
 Para cada Empresa, el backfill selecciona tareas existentes ordenadas por `fecha_creacion ASC`
 y luego `id ASC` como desempate. Asigna números secuenciales desde `0000001`; una tarea en
-`BORRADOR` recibe prefijo `A`, y una tarea `PUBLICADA` recibe prefijo `B` y se migra a `ACTIVA`.
+`BORRADOR` recibe prefijo `B`, y una tarea `PUBLICADA` recibe prefijo `A` y se migra a `ACTIVA`.
 Se preservan PK, registro, empresa, creador, responsable, prioridad y fechas; no se consume un
 segundo número al publicar. Después del backfill, `CorrelativoEmpresa.siguiente_numero` es el
 máximo número asignado para esa Empresa más 1, o `1` si no existen tareas. Publicar después
