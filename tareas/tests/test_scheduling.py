@@ -60,6 +60,21 @@ class SchedulingT030Tests(TestCase):
         self.assertIsNotNone(task.fecha_cumplimiento)
         self.assertEqual(dias_atraso(task, task.fecha_cumplimiento), 2)
 
+    def test_borrador_sin_fecha_no_tiene_atraso(self):
+        task = self.make_task()
+        self.assertFalse(esta_vencida(task, timezone.now()))
+        self.assertEqual(dias_atraso(task, timezone.now()), 0)
+
+    def test_fecha_tope_en_el_limite_no_esta_vencida(self):
+        task = self.make_task(fecha_tope=date.today())
+        task.publicar(self.creador)
+        transition_task(task, Tarea.Estado.GESTION, self.creador, "INICIAR_GESTION")
+        referencia = timezone.make_aware(
+            timezone.datetime.combine(task.fecha_tope, timezone.datetime.min.time())
+        )
+        self.assertFalse(esta_vencida(task, referencia))
+        self.assertEqual(dias_atraso(task, referencia), 0)
+
     def test_rechazo_limpia_cumplimiento_y_conserva_cierre(self):
         task = self.publish_and_start()
         complete_task(task, self.responsable)
@@ -97,3 +112,51 @@ class SchedulingT030Tests(TestCase):
         self.assertEqual(historial.causas.count(), 2)
         with self.assertRaises(ValidationError):
             reprogramar(task, date.today() + timedelta(days=6), "", self.creador, causas)
+
+    def test_reprogramacion_sin_causas_no_cambia_fecha(self):
+        task = self.publish_and_start()
+        fecha_original = task.fecha_tope
+        with self.assertRaises(ValidationError):
+            reprogramar(
+                task,
+                fecha_original + timedelta(days=1),
+                "Nueva dependencia",
+                self.creador,
+                [],
+            )
+        task.refresh_from_db()
+        self.assertEqual(task.fecha_tope, fecha_original)
+        self.assertFalse(task.reprogramaciones.exists())
+
+    def test_reprogramacion_rechaza_usuario_de_otra_empresa_sin_cambios(self):
+        otra_empresa = Empresa.objects.create(codigo="T31", descripcion="Otra")
+        otro_usuario = create_user("t30_otro_contexto")
+        assign_permission(otro_usuario, otra_empresa, "Tareas - Listado", ingresar=True)
+        task = self.publish_and_start()
+        fecha_original = task.fecha_tope
+        causas = list(CausaAtraso.objects.order_by("codigo")[:1])
+        with self.assertRaises(ValidationError):
+            reprogramar(
+                task,
+                fecha_original + timedelta(days=1),
+                "Nueva dependencia",
+                otro_usuario,
+                causas,
+            )
+        task.refresh_from_db()
+        self.assertEqual(task.fecha_tope, fecha_original)
+        self.assertFalse(task.reprogramaciones.exists())
+
+    def test_reprogramacion_conserva_fecha_de_asignacion(self):
+        task = self.publish_and_start()
+        fecha_asignacion = task.fecha_asignacion
+        causas = list(CausaAtraso.objects.order_by("codigo")[:1])
+        reprogramar(
+            task,
+            task.fecha_tope + timedelta(days=1),
+            "Nueva dependencia",
+            self.creador,
+            causas,
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.fecha_asignacion, fecha_asignacion)

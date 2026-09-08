@@ -206,6 +206,25 @@ class HierarchyPhase3Tests(TestCase):
         self.assertEqual(get_parent(child), parent)
         self.assertEqual(TareaRelacion.objects.count(), 1)
 
+    def test_anulacion_no_escribe_flags_en_descendientes(self):
+        parent = self.make_gestion_task("Padre")
+        child = self.make_gestion_task("Hija")
+        grandchild = self.make_gestion_task("Nieta")
+        add_child(parent, child)
+        add_child(child, grandchild)
+        annul_task(parent, self.creator)
+        child.refresh_from_db()
+        grandchild.refresh_from_db()
+        self.assertFalse(child.anulada)
+        self.assertFalse(grandchild.anulada)
+
+    def test_relacion_invalida_no_crea_registro_parcial(self):
+        parent = self.make_task("Padre")
+        child = self.make_task("Hija", empresa=self.otra_empresa)
+        with self.assertRaises(ValidationError):
+            add_child(parent, child)
+        self.assertFalse(TareaRelacion.objects.exists())
+
     def test_cerrar_padre_con_descendiente_operativa_abierta_rechazado(self):
         parent = self.make_gestion_task("Padre")
         child = self.make_gestion_task("Hija")

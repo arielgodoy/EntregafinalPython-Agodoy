@@ -143,6 +143,22 @@ class AssignmentPhase3Tests(TestCase):
         with self.assertRaises(ValidationError):
             assign_responsible(tarea, self.inactivo, self.creador)
 
+    def test_asignacion_rechaza_usuario_inactivo_sin_mutar_tarea(self):
+        tarea = create_tarea(self.empresa, self.creador)
+        with self.assertRaises(ValidationError):
+            assign_responsible(tarea, self.inactivo, self.creador)
+        tarea.refresh_from_db()
+        self.assertIsNone(tarea.responsable)
+        self.assertFalse(TareaReasignacion.objects.filter(tarea=tarea).exists())
+
+    def test_asignacion_rechaza_usuario_de_otra_empresa_sin_mutar_tarea(self):
+        tarea = create_tarea(self.empresa, self.creador)
+        with self.assertRaises(ValidationError):
+            assign_responsible(tarea, self.usuario_otra_empresa, self.creador)
+        tarea.refresh_from_db()
+        self.assertIsNone(tarea.responsable)
+        self.assertFalse(TareaReasignacion.objects.filter(tarea=tarea).exists())
+
     def test_reasignacion_preserva_empresa_y_creador(self):
         tarea = self.make_task()
         assign_responsible(tarea, self.nuevo_responsable, self.creador)
@@ -213,6 +229,29 @@ class AssignmentPhase3Tests(TestCase):
                 creada_por=self.creador,
                 responsables=responsables,
                 titulos_por_usuario=titulos,
+            )
+        self.assertEqual(Tarea.objects.count(), before)
+
+    def test_clonacion_sin_responsables_rechazada_sin_crear_tareas(self):
+        before = Tarea.objects.count()
+        with self.assertRaises(ValidationError):
+            create_independent_tasks_for_responsibles(
+                empresa=self.empresa,
+                creada_por=self.creador,
+                responsables=[],
+                titulos_por_usuario={},
+            )
+        self.assertEqual(Tarea.objects.count(), before)
+
+    def test_clonacion_sin_nombre_propio_rechazada_sin_crear_tareas(self):
+        responsables = [self.responsable, self.nuevo_responsable]
+        before = Tarea.objects.count()
+        with self.assertRaises(ValidationError):
+            create_independent_tasks_for_responsibles(
+                empresa=self.empresa,
+                creada_por=self.creador,
+                responsables=responsables,
+                titulos_por_usuario={self.responsable.pk: "Con nombre"},
             )
         self.assertEqual(Tarea.objects.count(), before)
 
