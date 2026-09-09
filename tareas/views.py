@@ -23,10 +23,12 @@ from .forms import (
     DocumentoForm,
     EvidenciaConfigForm,
     EvidenciaRegistroForm,
+    HitoCumplimientoForm,
     HitoForm,
+    HitoReasignacionForm,
     TareaForm,
 )
-from .models import Avance, DocumentoHistorial, DocumentoTarea, Tarea
+from .models import Avance, DocumentoHistorial, DocumentoTarea, Hito, Tarea
 from .services.context import get_active_company_id
 from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
@@ -45,8 +47,13 @@ from .services.documents import (
 )
 from .services.progress import (
     create_milestone,
+    delete_milestone_safely,
+    milestone_capability,
+    reassign_milestone,
     set_manual_progress,
+    set_milestone_annulled,
     set_weighted_progress_mode,
+    update_milestone,
     weighted_progress,
 )
 
@@ -210,19 +217,28 @@ class ReactivarTareaView(TareaLifecycleView):
 
 class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Hitos"
-    permiso_requerido = "modificar"
+    permiso_requerido = "ingresar"
 
     def get_tarea(self, pk):
         return get_object_or_404(self.get_queryset(), pk=pk)
 
     def get_context(self, tarea, **forms):
         avance = Avance.objects.filter(tarea=tarea).first()
+        hitos = list(tarea.hitos.select_related("responsable"))
+        for hito in hitos:
+            hito.puede_gestionar = milestone_capability(tarea, hito, self.request.user) == "manage"
+            hito.puede_actualizar = milestone_capability(tarea, hito, self.request.user) in {
+                "progress",
+                "manage",
+            }
         return {
             "tarea": tarea,
-            "hitos": tarea.hitos.all(),
+            "hitos": hitos,
+            "responsables_validos": HitoForm(tarea=tarea).fields["responsable"].queryset,
             "avance": avance,
             "avance_calculado": weighted_progress(tarea),
-            "hito_form": forms.get("hito_form", HitoForm()),
+            "hito_form": forms.get("hito_form", HitoForm(tarea=tarea)),
+            "reasignar_form": forms.get("reasignar_form", HitoReasignacionForm(tarea=tarea)),
             "manual_form": forms.get("manual_form", AvanceManualForm()),
             "ponderado_form": forms.get("ponderado_form", AvancePonderadoForm()),
         }
@@ -235,17 +251,96 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
         tarea = self.get_tarea(pk)
         accion = request.POST.get("accion")
         if accion == "hito":
-            form = HitoForm(request.POST)
+            form = HitoForm(request.POST, tarea=tarea)
             if form.is_valid():
-                create_milestone(
-                    tarea,
-                    form.cleaned_data["nombre"],
-                    form.cleaned_data["cumplimiento"],
-                    form.cleaned_data["peso"],
-                )
-                messages.success(request, "Hito creado correctamente.")
-                return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                try:
+                    create_milestone(
+                        tarea,
+                        form.cleaned_data["nombre"],
+                        form.cleaned_data["cumplimiento"],
+                        form.cleaned_data["peso"],
+                        form.cleaned_data["responsable"],
+                        request.user,
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Hito creado correctamente.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
+        hito = None
+        if request.POST.get("hito_id"):
+            hito = get_object_or_404(
+                Hito.objects.select_related("tarea", "responsable"),
+                pk=request.POST["hito_id"],
+                tarea=tarea,
+            )
+        if accion == "editar_hito":
+            form = HitoForm(request.POST, instance=hito, tarea=tarea)
+            if form.is_valid():
+                try:
+                    update_milestone(
+                        hito,
+                        request.user,
+                        nombre=form.cleaned_data["nombre"],
+                        cumplimiento=form.cleaned_data["cumplimiento"],
+                        peso=form.cleaned_data["peso"],
+                        responsable=form.cleaned_data["responsable"],
+                        motivo=form.cleaned_data.get("motivo", ""),
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Hito actualizado correctamente.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
+        if accion == "cumplimiento_hito":
+            form = HitoCumplimientoForm(request.POST, instance=hito)
+            if form.is_valid():
+                try:
+                    update_milestone(
+                        hito,
+                        request.user,
+                        cumplimiento=form.cleaned_data["cumplimiento"],
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Cumplimiento actualizado correctamente.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, cumplimiento_form=form))
+        if accion == "reasignar_hito":
+            form = HitoReasignacionForm(request.POST, tarea=tarea)
+            if form.is_valid():
+                try:
+                    reassign_milestone(
+                        hito,
+                        request.user,
+                        form.cleaned_data["responsable"],
+                        form.cleaned_data["motivo"],
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Hito reasignado correctamente.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, reasignar_form=form))
+        if accion in {"anular_hito", "reactivar_hito"}:
+            try:
+                set_milestone_annulled(hito, request.user, accion == "anular_hito")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Estado del hito actualizado correctamente.")
+            return redirect("tareas:hitos_tarea", pk=tarea.pk)
+        if accion == "eliminar_hito":
+            try:
+                delete_milestone_safely(hito, request.user)
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, "Hito eliminado o anulado correctamente.")
+            return redirect("tareas:hitos_tarea", pk=tarea.pk)
         if accion == "manual":
             form = AvanceManualForm(request.POST)
             if form.is_valid():

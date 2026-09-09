@@ -2,15 +2,46 @@
 
 from django import forms
 
+from access_control.services.permissions import get_valid_users_for_empresa
+
 from .models import Avance, DocumentoTarea, Hito
 
 from .models import Tarea
 
 
 class HitoForm(forms.ModelForm):
+    motivo = forms.CharField(required=False, strip=True)
+
+    def __init__(self, *args, tarea=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tarea is None:
+            self.fields["responsable"].queryset = self.fields["responsable"].queryset.none()
+        else:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(tarea.empresa).filter(
+                is_active=True
+            )
+
     class Meta:
         model = Hito
-        fields = ["nombre", "cumplimiento", "peso"]
+        fields = ["nombre", "responsable", "cumplimiento", "peso"]
+
+
+class HitoCumplimientoForm(forms.ModelForm):
+    class Meta:
+        model = Hito
+        fields = ["cumplimiento"]
+
+
+class HitoReasignacionForm(forms.Form):
+    responsable = forms.ModelChoiceField(queryset=Hito._meta.get_field("responsable").remote_field.model.objects.none())
+    motivo = forms.CharField(required=True, strip=True)
+
+    def __init__(self, *args, tarea=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tarea is not None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(tarea.empresa).filter(
+                is_active=True
+            )
 
 
 class AvanceManualForm(forms.Form):

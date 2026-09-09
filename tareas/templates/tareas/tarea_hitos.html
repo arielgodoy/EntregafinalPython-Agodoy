@@ -29,10 +29,53 @@
                             {% if hitos %}
                             <div class="table-responsive">
                                 <table class="table table-sm">
-                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></th><th><span data-key="tareas.milestones.weight">Peso del hito (%)</span></th><th><span data-key="tareas.milestones.created">Creado</span></th></tr></thead>
+                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.responsible">Responsable</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></th><th><span data-key="tareas.milestones.weight">Peso del hito (%)</span></th><th><span data-key="tareas.milestones.status">Estado</span></th><th><span data-key="tareas.milestones.created">Creado</span></th><th><span data-key="tareas.milestones.actions">Acciones</span></th></tr></thead>
                                     <tbody>
                                     {% for hito in hitos %}
-                                    <tr><td>{{ hito.nombre }}</td><td>{{ hito.cumplimiento }}%</td><td>{{ hito.peso }}</td><td>{{ hito.fecha_creacion }}</td></tr>
+                                    <tr>
+                                        <td>{{ hito.nombre }}</td>
+                                        <td>{{ hito.responsable.username }}</td>
+                                        <td>{{ hito.cumplimiento }}%</td>
+                                        <td>{{ hito.peso }}</td>
+                                        <td>{% if hito.anulado %}<span data-key="tareas.milestones.cancelled">Anulado</span>{% else %}<span data-key="tareas.milestones.active">Activo</span>{% endif %}</td>
+                                        <td>{{ hito.fecha_creacion }}</td>
+                                        <td>
+                                            {% if hito.puede_gestionar %}
+                                            <form method="post" class="mb-1">
+                                                {% csrf_token %}<input type="hidden" name="accion" value="editar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                                                <input class="form-control form-control-sm mb-1" name="nombre" value="{{ hito.nombre }}" aria-label="Nombre del hito">
+                                                <select class="form-select form-select-sm mb-1" name="responsable" aria-label="Responsable del hito">
+                                                    {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}" {% if responsable.pk == hito.responsable_id %}selected{% endif %}>{{ responsable.username }}</option>{% endfor %}
+                                                </select>
+                                                <input class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
+                                                <input class="form-control form-control-sm mb-1" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01" aria-label="Peso del hito">
+                                                <input class="form-control form-control-sm mb-1" name="motivo" placeholder="Motivo si reasigna" aria-label="Motivo de reasignación">
+                                                <button type="submit" class="btn btn-sm btn-primary"><span data-key="tareas.actions.save">Guardar</span></button>
+                                            </form>
+                                            <form method="post" class="mb-1">
+                                                {% csrf_token %}<input type="hidden" name="accion" value="reasignar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                                                <select class="form-select form-select-sm mb-1" name="responsable" aria-label="Nuevo responsable">
+                                                    {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}">{{ responsable.username }}</option>{% endfor %}
+                                                </select>
+                                                <input class="form-control form-control-sm mb-1" name="motivo" required placeholder="Motivo" aria-label="Motivo de reasignación">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary"><span data-key="tareas.actions.reassign">Reasignar</span></button>
+                                            </form>
+                                            {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
+                                            <button type="submit" form="eliminar-{{ hito.pk }}" class="btn btn-sm btn-outline-danger"><span data-key="tareas.actions.delete">Eliminar</span></button>
+                                            {% elif hito.puede_actualizar and not hito.anulado %}
+                                            <form method="post">
+                                                {% csrf_token %}<input type="hidden" name="accion" value="cumplimiento_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                                                <input class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
+                                                <button type="submit" class="btn btn-sm btn-primary"><span data-key="tareas.actions.save_compliance">Guardar cumplimiento</span></button>
+                                            </form>
+                                            {% endif %}
+                                            {% if hito.puede_gestionar %}
+                                            <form id="anular-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="anular_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
+                                            <form id="reactivar-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="reactivar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
+                                            <form id="eliminar-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="eliminar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
                                     {% endfor %}
                                     </tbody>
                                 </table>
@@ -43,6 +86,7 @@
                                 {% csrf_token %}<input type="hidden" name="accion" value="hito">
                                 {{ hito_form.non_field_errors }}
                                 <div class="mb-2"><label for="{{ hito_form.nombre.id_for_label }}"><span data-key="tareas.milestones.name">Nombre</span></label>{{ hito_form.nombre }}{{ hito_form.nombre.errors }}</div>
+                                <div class="mb-2"><label for="{{ hito_form.responsable.id_for_label }}"><span data-key="tareas.milestones.responsible">Responsable</span></label>{{ hito_form.responsable }}{{ hito_form.responsable.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.peso.id_for_label }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>{{ hito_form.peso }}{{ hito_form.peso.errors }}</div>
                                 <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.create_milestone">Crear hito</span></button>

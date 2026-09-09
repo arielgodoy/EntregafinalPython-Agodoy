@@ -13,8 +13,13 @@ class ProgressViewsTests(TestCase):
         cls.empresa = create_empresa(codigo="PV1")
         cls.otra_empresa = create_empresa(codigo="PV2")
         cls.usuario = create_user(username="progress-view-user")
-        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", modificar=True)
-        cls.tarea = create_tarea(cls.empresa, cls.usuario, titulo="Tarea progreso")
+        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
+        cls.tarea = create_tarea(
+            cls.empresa,
+            cls.usuario,
+            titulo="Tarea progreso",
+            responsable=cls.usuario,
+        )
         cls.tarea_externa = create_tarea(cls.otra_empresa, cls.usuario, titulo="Tarea externa")
 
     def setUp(self):
@@ -29,7 +34,7 @@ class ProgressViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_get_muestra_hitos_y_avance_de_la_empresa(self):
-        Hito.objects.create(tarea=self.tarea, nombre="Plan", peso=2)
+        Hito.objects.create(tarea=self.tarea, nombre="Plan", peso=2, responsable=self.usuario)
         response = self.client.get(reverse("tareas:hitos_tarea", args=[self.tarea.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Plan")
@@ -40,7 +45,13 @@ class ProgressViewsTests(TestCase):
     def test_post_crea_hito_mediante_servicio(self):
         response = self.client.post(
             reverse("tareas:hitos_tarea", args=[self.tarea.pk]),
-            {"accion": "hito", "nombre": "Ejecución", "cumplimiento": "25", "peso": "2"},
+            {
+                "accion": "hito",
+                "nombre": "Ejecución",
+                "responsable": self.usuario.pk,
+                "cumplimiento": "25",
+                "peso": "2",
+            },
         )
         self.assertRedirects(response, reverse("tareas:hitos_tarea", args=[self.tarea.pk]))
         self.assertTrue(Hito.objects.filter(tarea=self.tarea, nombre="Ejecución").exists())

@@ -282,6 +282,12 @@ class Hito(models.Model):
         related_name="hitos",
     )
     nombre = models.CharField(max_length=200)
+    responsable = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="hitos_responsable",
+    )
+    anulado = models.BooleanField(default=False)
     cumplimiento = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -310,12 +316,51 @@ class Hito(models.Model):
     def clean(self):
         super().clean()
         errores = {}
+        if self.responsable_id is None:
+            errores["responsable"] = "El hito requiere un responsable."
+        elif not self.responsable.is_active:
+            errores["responsable"] = "El responsable del hito debe estar activo."
         if self.cumplimiento < 0 or self.cumplimiento > 100:
             errores["cumplimiento"] = "El cumplimiento debe estar entre 0 y 100."
         if self.peso <= 0:
             errores["peso"] = "El peso debe ser mayor que cero."
         if errores:
             raise ValidationError(errores)
+
+
+class HitoHistorial(models.Model):
+    class Evento(models.TextChoices):
+        CREACION = "CREACION", "Creación"
+        CAMBIO_NOMBRE = "CAMBIO_NOMBRE", "Cambio de nombre"
+        CAMBIO_CUMPLIMIENTO = "CAMBIO_CUMPLIMIENTO", "Cambio de cumplimiento"
+        CAMBIO_PESO = "CAMBIO_PESO", "Cambio de peso"
+        REASIGNACION = "REASIGNACION", "Reasignación"
+        ANULACION = "ANULACION", "Anulación"
+        REACTIVACION = "REACTIVACION", "Reactivación"
+        ELIMINACION_FISICA = "ELIMINACION_FISICA", "Eliminación física"
+
+    hito = models.ForeignKey(Hito, on_delete=models.CASCADE, related_name="historial")
+    tipo_evento = models.CharField(max_length=32, choices=Evento.choices)
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="historial_hitos",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+    datos_anteriores = models.JSONField(default=dict)
+    datos_nuevos = models.JSONField(default=dict)
+    motivo = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["fecha", "pk"]
+        indexes = [
+            models.Index(
+                fields=["hito", "fecha"],
+                name="tareas_hh_hito_fecha_idx",
+            )
+        ]
 
 
 class MiniTarea(models.Model):
