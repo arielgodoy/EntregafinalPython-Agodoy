@@ -195,7 +195,7 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 
 ### Avance, fechas, reprogramación y documentos
 
-- `Hito`: tarea, nombre, `responsable` FK obligatorio a `auth.User` con `on_delete=PROTECT`, cumplimiento `0..100`, peso relativo, fecha de creación y orden. El responsable puede diferir del responsable principal de la Tarea, pero MUST estar activo y pertenecer/tener acceso válido a la Empresa de la Tarea; la validación debe impedir cruces multiempresa y rechazar la operación sin cambios parciales.
+- `Hito`: tarea, nombre, `responsable` FK obligatorio a `auth.User` con `on_delete=PROTECT`, `anulado` BooleanField(default=False), cumplimiento `0..100`, peso relativo, fecha de creación y orden. El responsable puede diferir del responsable principal de la Tarea, pero MUST estar activo y pertenecer/tener acceso válido a la Empresa de la Tarea; la validación debe impedir cruces multiempresa y rechazar la operación sin cambios parciales.
 - `Hito` no tiene campo propio de `prioridad` ni `fecha_tope`; para presentación y dashboard hereda únicamente la clasificación/prioridad de su Tarea padre. No se asume herencia de vencimiento.
 - `Avance`: tarea, modo manual/ponderado, porcentaje calculado y fecha.
 - `Tarea.fecha_asignacion`: DateTime nullable mientras no se publica, fijada al publicar/asignar oficialmente y conservada como referencia histórica original; una reasignación no la modifica.
@@ -205,7 +205,13 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 - `Reprogramacion`: tarea, `fecha_tope_anterior`, `fecha_tope_nueva`, justificación obligatoria, usuario y `fecha_operacion`; cambiar una `fecha_tope` existente es una reprogramación explícita y no una reasignación. Cada reprogramación se relaciona con una o varias `CausaAtraso` mediante M:N.
 - `dias_atraso` es derivado: durante la edición de un `BORRADOR` sin `fecha_tope` vale cero; toda Tarea publicada tiene fecha y, si no está cumplida, se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
 - `MiniTarea`: mantiene una persona única y estado hecho/no hecho; no pondera el avance y no se fusiona con `Hito`.
-- No existe todavía una regla de reasignación ni historial de reasignación específico para el responsable de Hito. Si el dashboard futuro requiere esa trazabilidad, deberá definirse como decisión posterior antes de implementarla.
+- `HitoHistorial`: historial específico de Hito con `hito`, `tipo_evento`, `usuario`, fecha/hora, datos anteriores, datos nuevos y motivo cuando corresponda. Cubre creación, cambios de nombre/cumplimiento/peso/responsable, anulación, reactivación y eliminación física cuando corresponda; debe conservar evidencia de actividad/progreso histórica aunque el cumplimiento actual sea `0`. La representación física de datos anteriores/nuevos queda abierta.
+- La reasignación de Hito se resuelve en `HitoHistorial` como fuente auditable única, sin reutilizar físicamente `TareaReasignacion`.
+- Matriz de autorización de Hito: el responsable del Hito solo puede cambiar su propio cumplimiento; el responsable principal y el creador de la Tarea pueden editar nombre/cumplimiento/peso, reasignar, anular, reactivar y eliminar cuando el historial lo permita; supervisor y autorizador pueden editar, reasignar, anular, reactivar y eliminar dentro del alcance vigente de Tarea/Empresa; invitado/observador solo puede visualizar. El responsable del Hito no puede auto-reasignarse ni ejecutar acciones de gestión fuera de su cumplimiento.
+- Si un usuario tiene varios roles, se aplica la facultad más amplia dentro de la Tarea. Toda acción debe respetar Empresa activa, Empresa de la Tarea, usuario válido y aislamiento multiempresa; ningún rol habilita cruces de Empresa. La política de autorización no crea perfiles nuevos y los intentos no autorizados no deben producir cambios parciales.
+- La edición, reasignación, anulación/reactivación y eliminación de Hitos quedan sujetas a esta matriz y a la política vigente de `tareas`; el cambio de cumplimiento realizado por el responsable del Hito también se registra en `HitoHistorial`.
+- Un Hito sin actividad histórica puede eliminarse físicamente. Un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica debe conservarse con `anulado=True`; anular preserva datos e historial, lo excluye del avance y de asignaciones pendientes, y lo mantiene disponible para historial/consulta. Reactivar limpia solo `anulado`, conserva responsable, cumplimiento, peso e historial y lo reincorpora al avance y asignaciones activas.
+- Al introducir `Hito.anulado`, los Hitos históricos existentes se consideran inicialmente no anulados salvo evidencia contractual en contrario.
 - Los Hitos históricos existentes sin responsable requieren una estrategia de migración segura posterior. La implementación futura debe detenerse/reportar ante esos registros y no puede asignar automáticamente el responsable de la Tarea, creador, administrador ni otro usuario sin autorización explícita.
 - `DocumentoTarea`: tipo, archivo o URL, fechas informativas, usuario y estado.
 - `DocumentoHistorial` y `EvidenciaCierre`: historial de cambios y evidencia requerida.
@@ -236,6 +242,7 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 
 - Toda entidad de negocio se filtra por empresa activa; los parámetros nunca eligen empresa.
 - El avance usa `sum(cumplimiento * peso) / sum(pesos)`; mini-tareas no ponderan.
+- El avance ponderado usa `sum(cumplimiento * peso) / sum(pesos)` solo sobre Hitos operativos (`anulado=False`). Crear, editar cumplimiento/peso, anular, reactivar o eliminar físicamente un Hito requiere recalcular el Avance cuando corresponda.
 - Anular/reactivar SOLO cambia el flag `anulada` de la tarea afectada; NO escribe estados,
   responsables, participantes ni relaciones de descendientes. La anulación efectiva es
   lógica (`anulada_efectivamente` = propia OR padre OR abuelo), no una cascada física.

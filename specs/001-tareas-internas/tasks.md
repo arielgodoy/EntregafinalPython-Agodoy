@@ -94,7 +94,7 @@ description: "Task list for the Tareas Internas master feature"
 
 **Independent test criteria**: La fórmula ponderada es reproducible, agregar hitos redistribuye sin alterar cumplimientos, mini-tareas no ponderan y documentos/evidencias conservan historial.
 
-**FR coverage**: FR-F01, FR-F02, FR-F03, FR-F04, FR-F05, FR-F06, FR-F07, FR-F08, FR-F09, FR-F10, FR-F11, FR-H01, FR-H02, FR-H03, FR-H04, FR-H05, FR-H06, FR-Q01, FR-Q02.
+**FR coverage**: FR-F01, FR-F02, FR-F03, FR-F04, FR-F05, FR-F06, FR-F07, FR-F08, FR-F09, FR-F10, FR-F11, FR-F12, FR-F13, FR-F14, FR-F15, FR-F16, FR-F17, FR-F18, FR-F19, FR-F20, FR-F21, FR-F22, FR-F23, FR-F24, FR-F25, FR-H01, FR-H02, FR-H03, FR-H04, FR-H05, FR-H06, FR-Q01, FR-Q02.
 
 - [x] T035 [US4] Implementar `Avance` y modos manual/ponderado en `tareas/models.py` y `tareas/services/progress.py`.
 - [x] T036 [US4] Implementar `Hito` con peso relativo, orden por fecha de creación y cálculo `sum(cumplimiento * peso) / sum(pesos)` en `tareas/services/progress.py`.
@@ -105,7 +105,7 @@ description: "Task list for the Tareas Internas master feature"
 - [ ] T041 [US4] Añadir tests de fórmula, redistribución, orden, archivos/URLs, historial, evidencia y bloqueos de cierre en `tareas/tests/test_progress.py` y `tareas/tests/test_documents.py`.
 - [ ] T042 [US4] Preparar migraciones aditivas de avance, hitos, documentos y evidencia en `tareas/migrations/`, sin crear migraciones durante esta generación.
 - [ ] T043 [US4] Validar escenarios E10 de `specs/001-tareas-internas/quickstart.md`.
-- [ ] T076 [US4] Implementar responsable obligatorio de `Hito` en schema, servicio y UI, validando usuario activo, Empresa de la Tarea y aislamiento multiempresa; detener la migración si existen Hitos históricos sin responsable y no ejecutar backfill automático sin autorización (FR-F08, FR-F09, FR-F10, FR-F11).
+- [ ] T076 [US4] Implementar responsable obligatorio de `Hito` en schema, servicio y UI, validando usuario activo, Empresa de la Tarea y aislamiento multiempresa; implementar edición de nombre/cumplimiento/peso/responsable; reasignación auditada con motivo obligatorio; historial específico de Hito; anulación lógica y reactivación; eliminación física solo sin actividad histórica; recálculo de Avance y exclusión de anulados; aplicar la matriz FR-F20…FR-F25 sin crear perfiles nuevos; migración segura que inspeccione históricos sin responsable, se detenga y solicite decisión sin backfill automático. Añadir tests de: cumplimiento propio del responsable del Hito; bloqueo de nombre/peso/reasignación/anulación/eliminación para ese responsable; gestión completa por responsable principal, creador, supervisor y autorizador; solo lectura para invitado/observador; precedencia de roles; aislamiento multiempresa; auditoría de cambios autorizados, incluido cumplimiento; y ausencia de cambios parciales en intentos no autorizados (FR-F08…FR-F25).
 
 ## Phase 5: Quotations and blocked external provider boundary [US5]
 
@@ -131,7 +131,7 @@ description: "Task list for the Tareas Internas master feature"
 
 **Independent test criteria**: Eventos críticos reutilizan los canales existentes, similitud usa 80% por empresa para evaluaciones nuevas, enlaces respetan ICMEAS/empresa y los ocho KPI son consistentes.
 
-**FR coverage**: FR-K01, FR-K02, FR-K03, FR-K04, FR-L01, FR-L02, FR-L03, FR-L04, FR-L05, FR-L06, FR-L07, FR-L08, FR-L09, FR-L10, FR-M01, FR-M02, FR-M03, FR-M04, FR-M05, FR-M06, FR-M07, FR-N01, FR-N02, FR-N03, FR-N04, FR-N05, FR-N06, FR-N07, FR-N08, FR-N09, FR-O01, FR-O02, FR-O03, FR-O04, FR-P03, FR-P04, FR-P05.
+**FR coverage**: FR-K01, FR-K02, FR-K03, FR-K04, FR-L01, FR-L02, FR-L03, FR-L04, FR-L05, FR-L06, FR-L07, FR-L08, FR-L09, FR-L10, FR-L11, FR-M01, FR-M02, FR-M03, FR-M04, FR-M05, FR-M06, FR-M07, FR-N01, FR-N02, FR-N03, FR-N04, FR-N05, FR-N06, FR-N07, FR-N08, FR-N09, FR-O01, FR-O02, FR-O03, FR-O04, FR-P03, FR-P04, FR-P05.
 
 - [ ] T053 [US6] Implementar adaptadores locales en `tareas/services/notifications.py` para consumir `notificaciones` y email de `acounts`, sin modificar esas apps ni crear subsistema paralelo.
 - [ ] T054 [US6] Integrar notificaciones de asignación, lectura, comentarios, documentos, cambios, aprobación, anulación y reactivación en los servicios de `tareas/`.
@@ -141,7 +141,7 @@ description: "Task list for the Tareas Internas master feature"
 - [ ] T058 [US6] Implementar `EnlaceTarea` y auditoría de acceso en `tareas/services/links.py`, exigiendo autenticación, empresa activa, lectura e ICMEAS; no permitir usuarios externos.
 - [ ] T059 [US6] Implementar dashboard usuario y jefatura/general en `tareas/services/kpi.py` y `tareas/views.py` con exactamente ocho KPI en las dimensiones ACTIVAS General, Empresa, Departamento, Usuario y Tarea; Local queda DEFERRED por P1 y Proveedor DEFERRED por P2.
 - [ ] T060 [US6] Implementar templates propios de reuniones, similitud, enlaces y dashboards en `tareas/templates/tareas/`, con DataTables/modal según contrato y `data-key`.
-- [ ] T077 [US6] Implementar dashboard personal de tareas y hitos asignados: incluir tareas con responsabilidad directa y Hitos con responsable directo aunque difiera del responsable de la Tarea; agrupar Hitos por prioridad/clasificación heredada de la Tarea padre y conservar la navegación Clasificación → Tarea → Hito con el contexto requerido (FR-L08, FR-L09, FR-L10).
+- [ ] T077 [US6] Implementar dashboard personal de tareas y hitos asignados: incluir tareas con responsabilidad directa y Hitos activos (`responsable == usuario` y `anulado == False`) aunque difieran del responsable de la Tarea; agrupar Hitos por prioridad/clasificación heredada de la Tarea padre, excluir anulados de pendientes y conservar la navegación Clasificación → Tarea → Hito con el contexto requerido (FR-L08, FR-L09, FR-L10, FR-L11).
 - [ ] T061 [US6] Añadir tests con mocks de notificaciones/email, reuniones, similitud 80%/por empresa, enlaces cross-company y ocho KPI por dimensión en `tareas/tests/test_collaboration.py`, `tareas/tests/test_similarity.py` y `tareas/tests/test_kpi.py`.
 - [ ] T062 [US6] Preparar migraciones aditivas de colaboración, similitud, enlaces y configuración de umbral en `tareas/migrations/`, sin tocar proveedores/locales ni ejecutar migraciones durante esta generación.
 - [ ] T063 [US6] Validar escenarios E12–E13 de `specs/001-tareas-internas/quickstart.md`, manteniendo Local/Proveedor bloqueados en drill-down.
