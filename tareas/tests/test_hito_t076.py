@@ -197,16 +197,45 @@ class HitoT076Tests(TestCase):
     def test_manager_hitos_render_management_controls(self):
         self._login_with_company(self.manager)
         response = self.client.get(self._hitos_url())
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Responsable")
         self.assertContains(response, "Editar")
         self.assertContains(response, "Reasignar")
         self.assertContains(response, "Anular")
+        self.assertContains(response, 'data-bs-target="#crearHitoModal"')
+        self.assertContains(response, 'id="crearHitoModal"')
+        self.assertContains(response, "Motivo de reasignación")
+        self.assertContains(response, "Nuevo responsable")
+        self.assertContains(response, "Eliminar")
+        self.assertLess(
+            content.index("tareas.progress.summary"),
+            content.index("tareas.milestones.list"),
+        )
+        self.assertEqual(content.count('name="accion" value="hito"'), 1)
 
         set_milestone_annulled(self.hito, self.manager, True)
         response = self.client.get(self._hitos_url())
         self.assertContains(response, "Reactivar")
+
+    def test_invalid_create_reopens_modal_with_errors(self):
+        self._login_with_company(self.manager)
+        response = self.client.post(
+            self._hitos_url(),
+            data={
+                "accion": "hito",
+                "nombre": "",
+                "responsable": self.owner.pk,
+                "cumplimiento": "20",
+                "peso": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="crearHitoModal"')
+        self.assertContains(response, 'class="modal fade show d-block"')
+        self.assertContains(response, 'aria-hidden="false"')
 
     def test_responsible_renders_only_compliance_control(self):
         self._login_with_company(self.owner)

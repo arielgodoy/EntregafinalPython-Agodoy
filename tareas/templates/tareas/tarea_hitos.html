@@ -21,15 +21,53 @@
             </div>
             <p><span data-key="tareas.fields.titulo">Tarea</span>: {{ tarea.titulo }}</p>
 
-            <div class="row g-3">
-                <div class="col-lg-7">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5><span data-key="tareas.milestones.list">Hitos</span></h5>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <h5 class="mb-0"><span data-key="tareas.progress.summary">Avance</span></h5>
+                    </div>
+                    <div class="row g-3 align-items-end mt-1">
+                        <dl class="col-md-7 row mb-0">
+                            <dt class="col-sm-4"><span data-key="tareas.progress.mode">Modo</span></dt><dd class="col-sm-8">{% if avance %}{{ avance.get_modo_display }}{% else %}<span data-key="tareas.progress.not_configured">No configurado</span>{% endif %}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-sm-8">{% if avance %}{{ avance.porcentaje }}%{% else %}0.00%{% endif %}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-sm-8">{{ avance_calculado }}%</dd>
+                        </dl>
+                        <div class="col-md-5">
+                            <div class="row g-2">
+                                <div class="col-sm-6">
+                                    <h6><span data-key="tareas.progress.manual">Configurar avance manual</span></h6>
+                                    <form method="post">
+                                        {% csrf_token %}<input type="hidden" name="accion" value="manual">{{ manual_form.non_field_errors }}
+                                        <label for="{{ manual_form.porcentaje.id_for_label }}" class="visually-hidden"><span data-key="tareas.progress.percentage">Porcentaje</span></label>
+                                        {{ manual_form.porcentaje }}{{ manual_form.porcentaje.errors }}
+                                        <button type="submit" class="btn btn-outline-primary mt-2"><span data-key="tareas.actions.save_progress">Guardar avance</span></button>
+                                    </form>
+                                </div>
+                                <div class="col-sm-6">
+                                    <h6><span data-key="tareas.progress.weighted_mode">Usar avance ponderado</span></h6>
+                                    <form method="post">
+                                        {% csrf_token %}<input type="hidden" name="accion" value="ponderado">{{ ponderado_form.non_field_errors }}
+                                        <button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.set_weighted">Configurar ponderado</span></button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <h5 class="mb-0"><span data-key="tareas.milestones.list">Hitos</span></h5>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#crearHitoModal">
+                            <span data-key="tareas.actions.create_milestone">Crear hito</span>
+                        </button>
+                    </div>
                             {% if hitos %}
                             <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.responsible">Responsable</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></th><th><span data-key="tareas.milestones.weight">Peso del hito (%)</span></th><th><span data-key="tareas.milestones.status">Estado</span></th><th><span data-key="tareas.milestones.created">Creado</span></th><th><span data-key="tareas.milestones.actions">Acciones</span></th></tr></thead>
+                                <table class="table table-sm align-middle" style="min-width: 1200px;">
+                                    <thead><tr><th><span data-key="tareas.milestones.name">Nombre</span></th><th><span data-key="tareas.milestones.responsible">Responsable</span></th><th><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></th><th><span data-key="tareas.milestones.weight">Peso del hito (%)</span></th><th><span data-key="tareas.milestones.status">Estado</span></th><th><span data-key="tareas.milestones.created">Creado</span></th><th class="w-50"><span data-key="tareas.milestones.actions">Acciones</span></th></tr></thead>
                                     <tbody>
                                     {% for hito in hitos %}
                                     <tr>
@@ -39,25 +77,32 @@
                                         <td>{{ hito.peso }}</td>
                                         <td>{% if hito.anulado %}<span data-key="tareas.milestones.cancelled">Anulado</span>{% else %}<span data-key="tareas.milestones.active">Activo</span>{% endif %}</td>
                                         <td>{{ hito.fecha_creacion }}</td>
-                                        <td>
+                                        <td class="w-50">
                                             {% if hito.puede_gestionar %}
                                             <form method="post" class="mb-1">
                                                 {% csrf_token %}<input type="hidden" name="accion" value="editar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
-                                                <input class="form-control form-control-sm mb-1" name="nombre" value="{{ hito.nombre }}" aria-label="Nombre del hito">
-                                                <select class="form-select form-select-sm mb-1" name="responsable" aria-label="Responsable del hito">
+                                                <label class="form-label mb-1" for="editar-nombre-{{ hito.pk }}"><span data-key="tareas.milestones.name">Nombre</span></label>
+                                                <input id="editar-nombre-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="nombre" value="{{ hito.nombre }}" aria-label="Nombre del hito">
+                                                <label class="form-label mb-1" for="editar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.responsible">Responsable</span></label>
+                                                <select id="editar-responsable-{{ hito.pk }}" class="form-select form-select-sm mb-1" name="responsable" aria-label="Responsable del hito">
                                                     {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}" {% if responsable.pk == hito.responsable_id %}selected{% endif %}>{{ responsable.username }}</option>{% endfor %}
                                                 </select>
-                                                <input class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
-                                                <input class="form-control form-control-sm mb-1" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01" aria-label="Peso del hito">
-                                                <input class="form-control form-control-sm mb-1" name="motivo" placeholder="Motivo si reasigna" aria-label="Motivo de reasignación">
+                                                <label class="form-label mb-1" for="editar-cumplimiento-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>
+                                                <input id="editar-cumplimiento-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
+                                                <label class="form-label mb-1" for="editar-peso-{{ hito.pk }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>
+                                                <input id="editar-peso-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01" aria-label="Peso del hito">
+                                                <label class="form-label mb-1" for="editar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reassignment_reason">Motivo de reasignación</span></label>
+                                                <input id="editar-motivo-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="motivo" placeholder="Motivo si reasigna" aria-label="Motivo de reasignación">
                                                 <button type="submit" class="btn btn-sm btn-primary"><span data-key="tareas.actions.save">Guardar</span></button>
                                             </form>
                                             <form method="post" class="mb-1">
                                                 {% csrf_token %}<input type="hidden" name="accion" value="reasignar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
-                                                <select class="form-select form-select-sm mb-1" name="responsable" aria-label="Nuevo responsable">
+                                                <label class="form-label mb-1" for="reasignar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.new_responsible">Nuevo responsable</span></label>
+                                                <select id="reasignar-responsable-{{ hito.pk }}" class="form-select form-select-sm mb-1" name="responsable" aria-label="Nuevo responsable">
                                                     {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}">{{ responsable.username }}</option>{% endfor %}
                                                 </select>
-                                                <input class="form-control form-control-sm mb-1" name="motivo" required placeholder="Motivo" aria-label="Motivo de reasignación">
+                                                <label class="form-label mb-1" for="reasignar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reason">Motivo</span></label>
+                                                <input id="reasignar-motivo-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="motivo" required placeholder="Motivo" aria-label="Motivo de reasignación">
                                                 <button type="submit" class="btn btn-sm btn-outline-primary"><span data-key="tareas.actions.reassign">Reasignar</span></button>
                                             </form>
                                             {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
@@ -81,44 +126,35 @@
                                 </table>
                             </div>
                             {% else %}<p><span data-key="tareas.milestones.empty">No hay hitos registrados.</span></p>{% endif %}
-                            <h6 class="mt-3"><span data-key="tareas.milestones.create">Crear hito</span></h6>
-                            <form method="post">
-                                {% csrf_token %}<input type="hidden" name="accion" value="hito">
+                        </div>
+                    </div>
+            </div>
+
+            <div class="modal fade{% if hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <form method="post">
+                            {% csrf_token %}<input type="hidden" name="accion" value="hito">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="crearHitoModalLabel"><span data-key="tareas.milestones.create">Crear hito</span></h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body">
                                 {{ hito_form.non_field_errors }}
                                 <div class="mb-2"><label for="{{ hito_form.nombre.id_for_label }}"><span data-key="tareas.milestones.name">Nombre</span></label>{{ hito_form.nombre }}{{ hito_form.nombre.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.responsable.id_for_label }}"><span data-key="tareas.milestones.responsible">Responsable</span></label>{{ hito_form.responsable }}{{ hito_form.responsable.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.peso.id_for_label }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>{{ hito_form.peso }}{{ hito_form.peso.errors }}</div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button>
                                 <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.create_milestone">Crear hito</span></button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-5">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5><span data-key="tareas.progress.summary">Avance</span></h5>
-                            <dl class="row">
-                                <dt class="col-7"><span data-key="tareas.progress.mode">Modo</span></dt><dd class="col-5">{% if avance %}{{ avance.get_modo_display }}{% else %}<span data-key="tareas.progress.not_configured">No configurado</span>{% endif %}</dd>
-                                <dt class="col-7"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-5">{% if avance %}{{ avance.porcentaje }}%{% else %}0.00%{% endif %}</dd>
-                                <dt class="col-7"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-5">{{ avance_calculado }}%</dd>
-                            </dl>
-                            <h6><span data-key="tareas.progress.manual">Configurar avance manual</span></h6>
-                            <form method="post" class="mb-3">
-                                {% csrf_token %}<input type="hidden" name="accion" value="manual">{{ manual_form.non_field_errors }}
-                                <label for="{{ manual_form.porcentaje.id_for_label }}"><span data-key="tareas.progress.percentage">Porcentaje</span></label>
-                                {{ manual_form.porcentaje }}{{ manual_form.porcentaje.errors }}
-                                <button type="submit" class="btn btn-outline-primary mt-2"><span data-key="tareas.actions.save_progress">Guardar avance</span></button>
-                            </form>
-                            <h6><span data-key="tareas.progress.weighted_mode">Usar avance ponderado</span></h6>
-                            <form method="post">
-                                {% csrf_token %}<input type="hidden" name="accion" value="ponderado">{{ ponderado_form.non_field_errors }}
-                                <button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.set_weighted">Configurar ponderado</span></button>
-                            </form>
-                        </div>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
+            {% if hito_form.is_bound and hito_form.errors %}<div class="modal-backdrop fade show"></div>{% endif %}
         </div>
     </div>
 </div>
