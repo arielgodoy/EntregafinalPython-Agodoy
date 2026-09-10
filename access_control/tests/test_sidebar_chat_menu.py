@@ -10,7 +10,7 @@ class SidebarChatMenuTests(TestCase):
         self.user = User.objects.create_user(username="tester", password="pass")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
         self.vista_dashboard = Vista.objects.create(nombre="Control Operacional - Dashboard")
-        self.vista_chat = Vista.objects.create(nombre="chat.inbox")
+        self.vista_chat = Vista.objects.create(nombre="Chat - Bandeja de entrada")
         self.vista_auditoria_biblioteca = Vista.objects.create(nombre="Auditoría - Biblioteca")
         self.vista_auditoria_gestiondte = Vista.objects.create(nombre="Auditoría - Gestión DTE")
 
@@ -25,6 +25,7 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_dashboard,
+            ver=True,
             ingresar=True,
             crear=False,
             modificar=False,
@@ -40,6 +41,7 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_chat,
+            ver=True,
             ingresar=True,
             crear=False,
             modificar=False,
@@ -53,22 +55,22 @@ class SidebarChatMenuTests(TestCase):
         self.assertContains(response, 'data-key="menu.chat"')
         self.assertContains(response, reverse("chat_inbox"))
 
-    def test_sidebar_muestra_chat_sin_permiso(self):
+    def test_sidebar_oculta_chat_sin_ver(self):
         self._login_with_empresa()
         self._grant_dashboard_permiso()
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f'href="{reverse("chat_inbox")}"')
+        self.assertNotContains(response, f'href="{reverse("chat_inbox")}"')
 
-    def test_sidebar_muestra_permisos_por_vista_sin_permiso(self):
+    def test_sidebar_oculta_permisos_por_vista_sin_ver(self):
         self._login_with_empresa()
         self._grant_dashboard_permiso()
 
         response = self.client.get(reverse("control_operacional:dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
+        self.assertNotContains(
             response,
             f'href="{reverse("access_control:permisos_por_vista")}"',
         )
@@ -81,6 +83,7 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=vista,
+            ver=True,
             modificar=True,
         )
 
@@ -102,19 +105,21 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_dashboard,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_biblioteca,
+            ver=True,
             ingresar=True,
         )
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Auditoría Biblioteca")
-        self.assertContains(response, "Auditoría Gestión DTE")
+        self.assertNotContains(response, "Auditoría Gestión DTE")
 
     def test_sidebar_auditoria_muestra_dte_con_permiso(self):
         self._login_with_empresa()
@@ -122,19 +127,21 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_dashboard,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_gestiondte,
+            ver=True,
             ingresar=True,
         )
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Auditoría Gestión DTE")
-        self.assertContains(response, "Auditoría Biblioteca")
+        self.assertNotContains(response, "Auditoría Biblioteca")
 
     def test_sidebar_auditoria_muestra_ambos_permisos(self):
         self._login_with_empresa()
@@ -142,18 +149,21 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_dashboard,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_biblioteca,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_gestiondte,
+            ver=True,
             ingresar=True,
         )
 
@@ -162,7 +172,7 @@ class SidebarChatMenuTests(TestCase):
         self.assertContains(response, "Auditoría Biblioteca")
         self.assertContains(response, "Auditoría Gestión DTE")
 
-    def test_sidebar_auditoria_visible_sin_permisos(self):
+    def test_sidebar_auditoria_oculta_sin_ver(self):
         self._login_with_empresa()
         Permiso.objects.create(
             usuario=self.user,
@@ -173,8 +183,8 @@ class SidebarChatMenuTests(TestCase):
 
         response = self.client.get(reverse("control_operacional:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Auditoría Biblioteca")
-        self.assertContains(response, "Auditoría Gestión DTE")
+        self.assertNotContains(response, "Auditoría Biblioteca")
+        self.assertNotContains(response, "Auditoría Gestión DTE")
         self.assertEqual(
             Permiso.objects.filter(
                 usuario=self.user,
@@ -188,8 +198,8 @@ class SidebarChatMenuTests(TestCase):
         self._grant_dashboard_permiso()
 
         response = self.client.get(reverse("control_operacional:dashboard"))
-        self.assertContains(response, reverse("auditoria:auditoria_biblioteca_list"))
-        self.assertContains(response, reverse("auditoria:auditoria_gestiondte_list"))
+        self.assertNotContains(response, reverse("auditoria:auditoria_biblioteca_list"))
+        self.assertNotContains(response, reverse("auditoria:auditoria_gestiondte_list"))
         self.assertEqual(
             self.client.get(reverse("auditoria:auditoria_biblioteca_list")).status_code,
             403,
@@ -206,12 +216,14 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_biblioteca,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_gestiondte,
+            ver=True,
             ingresar=True,
         )
 
@@ -233,12 +245,14 @@ class SidebarChatMenuTests(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_dashboard,
+            ver=True,
             ingresar=True,
         )
         Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_auditoria_biblioteca,
+            ver=True,
             ingresar=True,
         )
 

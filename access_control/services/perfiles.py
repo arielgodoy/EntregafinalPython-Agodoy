@@ -15,6 +15,7 @@ def apply_profile_to_user_empresa(user, empresa, perfil, *, assigned_by=None, ov
     with transaction.atomic():
         for detalle in detalles:
             defaults = {
+                'ver': detalle.ver,
                 'ingresar': detalle.ingresar,
                 'crear': detalle.crear,
                 'modificar': detalle.modificar,

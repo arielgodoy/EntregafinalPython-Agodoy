@@ -54,6 +54,7 @@ def invite_user_flow(email, first_name, last_name, empresas, tipo_usuario, usuar
             empresa=empresa,
             vista=vista_base,
             defaults={
+                'ver': False,
                 'ingresar': True,
                 'crear': False,
                 'modificar': False,
@@ -74,6 +75,7 @@ def invite_user_flow(email, first_name, last_name, empresas, tipo_usuario, usuar
                     empresa=empresa,
                     vista=permiso.vista,
                     defaults={
+                        'ver': permiso.ver,
                         'ingresar': permiso.ingresar,
                         'crear': permiso.crear,
                         'modificar': permiso.modificar,

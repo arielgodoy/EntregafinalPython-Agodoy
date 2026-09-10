@@ -37,6 +37,7 @@ class Permiso(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     vista = models.ForeignKey(Vista, on_delete=models.CASCADE)
+    ver = models.BooleanField(default=False)
     ingresar = models.BooleanField(default=False)
     crear = models.BooleanField(default=False)
     modificar = models.BooleanField(default=False)
@@ -65,6 +66,7 @@ class PerfilAcceso(models.Model):
 class PerfilAccesoDetalle(models.Model):
     perfil = models.ForeignKey(PerfilAcceso, on_delete=models.CASCADE, related_name='detalles')
     vista = models.ForeignKey(Vista, on_delete=models.CASCADE)
+    ver = models.BooleanField(default=False)
     ingresar = models.BooleanField(default=False)
     crear = models.BooleanField(default=False)
     modificar = models.BooleanField(default=False)

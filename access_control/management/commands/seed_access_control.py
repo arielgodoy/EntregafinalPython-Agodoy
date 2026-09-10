@@ -141,6 +141,7 @@ class Command(BaseCommand):
                     continue
 
                 defaults = {
+                    'ver': flags.get('ver', False),
                     'ingresar': flags.get('ingresar', False),
                     'crear': flags.get('crear', False),
                     'modificar': flags.get('modificar', False),

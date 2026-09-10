@@ -8,8 +8,9 @@ from django.contrib.auth.models import User
 class PermisoForm(forms.ModelForm):
     class Meta:
         model = Permiso
-        fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        fields = ['usuario', 'empresa', 'vista', 'ver', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
         widgets = {
+            'ver': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'ingresar': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'crear': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'modificar': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -23,6 +24,7 @@ class AccessRequestGrantForm(forms.Form):
     usuario = forms.ModelChoiceField(queryset=User.objects.none(), required=False, disabled=True, label="Usuario")
     empresa = forms.ModelChoiceField(queryset=Empresa.objects.none(), required=False, disabled=True, label="Empresa")
     vista = forms.ModelChoiceField(queryset=Vista.objects.none(), required=False, disabled=True, label="Vista")
+    ver = forms.BooleanField(required=False, initial=False, label="Ver")
     ingresar = forms.BooleanField(required=False, initial=True, label="Ingresar")
     crear = forms.BooleanField(required=False, initial=False, label="Crear")
     modificar = forms.BooleanField(required=False, initial=False, label="Modificar")
@@ -39,6 +41,7 @@ class AccessRequestGrantForm(forms.Form):
         for field_name in ["usuario", "empresa", "vista"]:
             self.fields[field_name].widget.attrs.update({"class": "form-select"})
         for field_name in [
+            "ver",
             "ingresar",
             "crear",
             "modificar",

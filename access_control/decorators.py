@@ -91,6 +91,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                         # Solo se concede automaticamente la capacidad solicitada (mas
                         # 'ingresar' como base minima), nunca todas por defecto.
                         create_kwargs = {
+                            'ver': vista_nombre == "Accounts - Editar Perfil",
                             'ingresar': True,
                             'crear': False,
                             'modificar': False,
@@ -106,13 +107,20 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                             vista=vista,
                             **create_kwargs,
                         )
-                    elif not getattr(permiso, permiso_requerido, False):
+                    elif (
+                        not getattr(permiso, permiso_requerido, False)
+                        or (vista_nombre == "Accounts - Editar Perfil" and not permiso.ver)
+                    ):
                         # Auto-conceder unicamente la capacidad solicitada (mas 'ingresar' como
                         # base minima). Evita que, p.ej., una vista con acciones de lectura
                         # ('ingresar') termine auto-concediendo tambien 'modificar'.
                         permiso.ingresar = True
                         setattr(permiso, permiso_requerido, True)
-                        permiso.save(update_fields=list({'ingresar', permiso_requerido}))
+                        update_fields = {'ingresar', permiso_requerido}
+                        if vista_nombre == "Accounts - Editar Perfil":
+                            permiso.ver = True
+                            update_fields.add('ver')
+                        permiso.save(update_fields=list(update_fields))
                 elif not permiso:
                     # Crear permiso sin acceso para otras vistas
                     logger = logging.getLogger(__name__)
@@ -127,6 +135,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                         usuario=request.user,
                         empresa=empresa,
                         vista=vista,
+                        ver=False,
                         ingresar=False,
                         crear=False,
                         modificar=False,

@@ -89,6 +89,19 @@ class PermisosPorVistaTests(TestCase):
         self.assertFalse(permiso.autorizar)
         self.assertFalse(permiso.supervisor)
 
+    def test_toggle_ver_es_independiente_de_ingresar(self):
+        self._create_valid_profile_user()
+
+        response = self._toggle(permiso_field="ver", value="false")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Permiso.objects.filter(usuario=self.usuario_perfil, empresa=self.empresa_a, vista=self.vista_x).exists())
+
+        response = self._toggle(permiso_field="ver", value="true")
+        self.assertEqual(response.status_code, 200)
+        permiso = Permiso.objects.get(usuario=self.usuario_perfil, empresa=self.empresa_a, vista=self.vista_x)
+        self.assertTrue(permiso.ver)
+        self.assertFalse(permiso.ingresar)
+
     def test_toggle_preserva_flags_y_aislamiento_empresa_y_vista(self):
         self._create_valid_profile_user()
         Permiso.objects.create(usuario=self.usuario_perfil, empresa=self.empresa_a, vista=self.vista_x, ingresar=True, crear=True, modificar=True, autorizar=True)

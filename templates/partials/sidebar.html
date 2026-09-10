@@ -35,160 +35,161 @@
             <div id="two-column-menu"></div>
             <ul class="navbar-nav" id="navbar-nav">
 
+                {% if request.sidebar_visible_items %}
                 <!-- Menú de sistema -->
                 <li class="menu-title"><i class="ri-more-fill"></i> <span data-key="menu.system">Menú de sistema</span></li>
 
                 <!-- Menú Biblioteca Digital -->
-                <li class="nav-item">
+                {% if "library" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarBiblioteca" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarBiblioteca">
                         <i class="ri-folder-open-line"></i> <span data-key="menu.library">Biblioteca Digital</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarBiblioteca">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "library_add_owner" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:crear_propietario' %}" class="nav-link" data-key="menu.library.add_owner">Ingresar Propietario</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_add_property" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:crear_propiedad' %}" class="nav-link" data-key="menu.library.add_property">Ingresar Propiedad</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_add_document_type" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:crear_tipo_documento' %}" class="nav-link" data-key="menu.library.add_document_type">Ingresar Tipo Documento</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_list_owners" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:listar_propietarios' %}" class="nav-link" data-key="menu.library.list_owners">Listado de Propietarios</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_list_properties" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:listar_propiedades' %}" class="nav-link" data-key="menu.library.list_properties">Listado de Propiedades</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_list_document_types" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:listar_tipos_documentos' %}" class="nav-link" data-key="menu.library.list_document_types">Listado de Tipos de Documentos</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "library_list_documents" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="menu.library.list_documents">Listado General de Documentos</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Gestión DTE (nivel superior, app nueva) -->
-                <li class="nav-item">
+                {% if "gestion_dte" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarGestionDTE" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarGestionDTE">
                         <i class="ri-file-text-line"></i> <span data-key="menu.gestion_dte">Gestión DTE</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarGestionDTE">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "gestion_dte_index" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'gestion_dte:index' %}" class="nav-link" data-key="menu.gestion_dte.index">Dashboard DTE-SII-RPETC</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "gestion_dte_cesiones" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'gestion_dte:cesiones' %}" class="nav-link" data-key="menu.gestion_dte.cesiones">Control de Cesiones</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "gestion_dte_lectura" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'gestion_dte:lectura_automatica_cesiones' %}" class="nav-link" data-key="menu.gestion_dte.lectura_automatica">Lectura automática de Cesiones</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "gestion_dte_certificados" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'gestion_dte:certificados' %}" class="nav-link" data-key="menu.gestion_dte.certificados">Certificados PFX-DTE</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Evaluaciones -->
-                <li class="nav-item">
+                {% if "evaluaciones" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarEvaluaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarEvaluaciones">
                         <i class="ri-file-list-3-line"></i> <span data-key="menu.evaluations">Evaluaciones</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarEvaluaciones">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "evaluaciones_import" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="menu.evaluations.import_people">Importar Personas</span></a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Gestión de Proyectos (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "projects" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarGestionProyectos" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarGestionProyectos">
                         <i class="ri-folder-chart-2-line"></i> <span data-key="menu.projects">Gestión de Proyectos</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarGestionProyectos">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "projects_list" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:listar_proyectos' %}" class="nav-link"><span data-key="menu.projects.list">Listado de Proyectos</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "projects_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:crear_proyecto' %}" class="nav-link"><span data-key="menu.projects.create">Crear Proyecto</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "projects_clients" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:listar_clientes' %}" class="nav-link"><span data-key="menu.projects.list_clients">Listado de Clientes</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "projects_create_client" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:crear_cliente' %}" class="nav-link"><span data-key="menu.projects.create_client">Crear Cliente</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "projects_professionals" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:listar_profesionales' %}" class="nav-link"><span data-key="menu.projects.list_professionals">Listado de Profesionales</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "projects_create_professional" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_de_proyectos:crear_profesional' %}" class="nav-link"><span data-key="menu.projects.create_professional">Crear Profesional</span></a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Control Operacional (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "operational" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlOperacional" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlOperacional">
                         <i class="ri-dashboard-line"></i> <span data-key="menu.control_operacional">Control Operacional</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarControlOperacional">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "operational_dashboard" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_operacional:dashboard' %}" class="nav-link" data-key="control_operacional.dashboard.title">Dashboard</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "operational_alerts" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'control_operacional:alertas_operacionales' %}" class="nav-link" data-key="menu.control_operacional.alertas">Alertas Operacionales</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Tareas -->
-                <li class="nav-item">
+                {% if "tasks" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarTareas" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarTareas">
                         <i class="ri-task-line"></i> <span data-key="menu.tareas">Tareas</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarTareas">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "tasks_list" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="nav-link" data-key="menu.tareas.list">Listado de Tareas</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "tasks_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:crear_tarea' %}" class="nav-link" data-key="menu.tareas.create">Crear Tarea</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Cuentas -->
-                <li class="nav-item">
+                {% if "account" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarCuentaUsuario" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarCuentaUsuario">
                         <i class="ri-user-settings-line"></i> <span data-key="menu.user_account">Cuenta de Usuario</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarCuentaUsuario">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "account_profile" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'editar_perfil' %}" class="nav-link"><span data-key="menu.user_account.edit_profile">Editar Perfil</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "account_email" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'configurar_email' %}" class="nav-link"><span data-key="menu.user_account.email_settings">Configurar Correo</span></a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Chat (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "chat" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarChat" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarChat">
                         <i class="ri-chat-3-line"></i> <span data-key="menu.chat">Mensajería</span>
                         {% if chat_unread_count|default:0 > 0 %}
@@ -197,129 +198,130 @@
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarChat">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "chat_inbox" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'chat_inbox' %}" class="nav-link" data-key="menu.chat">Mensajería</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "chat_center" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'centro_mensajes' %}" class="nav-link" data-key="menu.chat.center">Centro de Mensajes</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Notificaciones (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "notifications" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarNotificaciones" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarNotificaciones">
                         <i class="ri-notification-3-line"></i> <span data-key="menu.notifications">Notificaciones</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarNotificaciones">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "notifications_list" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'notificaciones:mis_notificaciones' %}" class="nav-link d-flex align-items-center justify-content-between">
                                     <span data-key="menu.notifications">Notificaciones</span>
                                     {% if notifications_unread_all|default:0 > 0 %}
                                         <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_all }}</span>
                                     {% endif %}
                                 </a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "notifications_alerts" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'notificaciones:centro_alertas' %}" class="nav-link d-flex align-items-center justify-content-between">
                                     <span data-key="menu.notifications.center">Centro de Alertas</span>
                                     {% if notifications_unread_alerts|default:0 > 0 %}
                                         <span class="badge rounded-pill bg-danger ms-2">{{ notifications_unread_alerts }}</span>
                                     {% endif %}
                                 </a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "notifications_force" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'notificaciones:forzar_notificaciones' %}" class="nav-link" data-key="menu.notifications.force">Enviar notificaciones forzadas</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "notifications_custom" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'notificaciones:alerta_personalizada' %}" class="nav-link" data-key="menu.notifications.custom">Alerta personalizada</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
-                <li class="nav-item">
+                </li>{% endif %}
+                {% if "audit" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarAuditoria" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarAuditoria">
                         <i class="ri-search-eye-line"></i> <span data-key="menu.audit">Auditoría</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarAuditoria">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "audit_library" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'auditoria:auditoria_biblioteca_list' %}" class="nav-link" data-key="menu.audit.library">Auditoría Biblioteca</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "audit_gestion_dte" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'auditoria:auditoria_gestiondte_list' %}" class="nav-link" data-key="menu.audit.gestion_dte">Auditoría Gestión DTE</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
                 
                 <!-- Menú Control de Acceso (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "access" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
                         <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarControlAcceso">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "access_invite" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="menu.access_control.invite_user">Invitar Usuario</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_invitations" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:invitaciones_lista' %}" class="nav-link"><span data-key="menu.access_control.invitations">Gestión de Invitaciones</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_users" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="menu.access_control.user_management">Gestión de Usuarios</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_companies" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="menu.access_control.company_management">Gestión de Empresas</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_views" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="menu.access_control.view_management">Gestión de Vistas</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_permissions" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="menu.access_control.permission_management">Gestión de Permisos</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_filtered_permissions" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="menu.access_control.filter_permissions">Filtrar Permisos</span></a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "access_view_permissions" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:permisos_por_vista' %}" class="nav-link">Permisos por Vista</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú APIs (SIEMPRE VISIBLE) -->
-                <li class="nav-item">
+                {% if "api_home" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="{% url 'api_home' %}">
                         <i class="ri-code-s-slash-line"></i> <span data-key="menu.apis">APIs</span>
                     </a>
-                </li>
+                </li>{% endif %}
 
                 <!-- Menú Settings (SIEMPRE VISIBLE) -->
                  
-                <li class="nav-item">
+                {% if "settings" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarSettings" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarSettings">
                         <i class="ri-settings-3-line"></i> <span data-key="menu.settings">Settings</span>
                     </a>
                     <div class="collapse menu-dropdown" id="sidebarSettings">
                         <ul class="nav nav-sm flex-column">
-                            <li class="nav-item">
+                            {% if "settings_system" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:system_config' %}" class="nav-link" data-key="menu.settings.system_config">System Config</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "settings_company" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:company_config_list' %}" class="nav-link" data-key="menu.settings.company_settings">Company Settings</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "settings_email" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:email_accounts_list' %}" class="nav-link" data-key="menu.settings.email_accounts">Email Accounts</a>
-                            </li>
-                            <li class="nav-item">
+                            </li>{% endif %}
+                            {% if "settings_mysql" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'mysql_connections_list' %}" class="nav-link" data-key="menu.settings.mysql_connections">Conexiones MySQL</a>
-                            </li>
+                            </li>{% endif %}
                         </ul>
                     </div>
-                </li>
+                </li>{% endif %}
+                {% endif %}
             </ul>
         </div>
         <!-- Sidebar -->

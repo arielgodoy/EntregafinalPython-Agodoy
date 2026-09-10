@@ -29,6 +29,7 @@ class CopyPermisosViewTests(TestCase):
             usuario=self.origen_usuario,
             empresa=self.empresa_origen,
             vista=self.vista_copiada,
+            ver=True,
             ingresar=True,
             crear=True,
             modificar=True,
@@ -57,6 +58,7 @@ class CopyPermisosViewTests(TestCase):
 
     def _flags(self, permiso):
         return {
+            "ver": permiso.ver,
             "ingresar": permiso.ingresar,
             "crear": permiso.crear,
             "modificar": permiso.modificar,
@@ -80,7 +82,7 @@ class CopyPermisosViewTests(TestCase):
         )
         self.assertEqual(
             self._flags(permiso),
-            {"ingresar": True, "crear": True, "modificar": True,
+            {"ver": True, "ingresar": True, "crear": True, "modificar": True,
              "eliminar": False, "autorizar": True, "supervisor": False},
         )
 

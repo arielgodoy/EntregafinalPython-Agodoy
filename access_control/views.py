@@ -64,6 +64,7 @@ from access_control.services.empresa_activa import (
 )
 from access_control.services.permissions import (
     ICMEAS_FIELDS,
+    VICMEAS_FIELDS,
     get_valid_users_for_empresa,
     user_has_permission_for_empresa,
 )
@@ -185,7 +186,7 @@ class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         # Agrega los datos filtrados al contexto
         context = self.get_context_data(form=form)
         context['permisos'] = permisos
-        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        context['fields'] = VICMEAS_FIELDS
         return self.render_to_response(context)
 
     def form_invalid(self, form):
@@ -193,7 +194,7 @@ class PermisosFiltradosView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         print(f"Errores en el formulario: {form.errors}")
         context = self.get_context_data(form=form)
         context['permisos'] = None
-        context['fields'] = ['ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+        context['fields'] = VICMEAS_FIELDS
         return self.render_to_response(context)
 
 
@@ -204,7 +205,7 @@ class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         form = PermisoPorVistaFiltroForm(request.GET or None)
-        context = {"form": form, "fields": ICMEAS_FIELDS, "permission_rows": None}
+        context = {"form": form, "fields": VICMEAS_FIELDS, "permission_rows": None}
         if form.is_valid():
             empresa = form.cleaned_data["empresa"]
             vista = form.cleaned_data["vista"]
@@ -231,8 +232,8 @@ def toggle_permiso_por_vista(request):
 
     if not all(value.isdigit() for value in (usuario_id, empresa_id, vista_id)):
         return JsonResponse({"success": False, "error": "Identificadores inválidos."}, status=400)
-    if permiso_field not in ICMEAS_FIELDS:
-        return JsonResponse({"success": False, "error": "Campo ICMEAS inválido."}, status=400)
+    if permiso_field not in VICMEAS_FIELDS:
+        return JsonResponse({"success": False, "error": "Campo VICMEAS inválido."}, status=400)
     if value_str not in {"true", "false"}:
         return JsonResponse({"success": False, "error": "Valor booleano inválido."}, status=400)
 
@@ -281,7 +282,7 @@ def toggle_permiso(request):
     - CSRF token requerido (frontend envía X-CSRFToken)
     """
     # Campos válidos para toggle
-    VALID_FIELDS = ["ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor"]
+    VALID_FIELDS = VICMEAS_FIELDS
     
     # Obtener y validar parámetros
     permiso_id = request.POST.get("permiso_id", "").strip()
@@ -390,6 +391,7 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
                     empresa=destino_empresa,
                     vista=permiso.vista,
                     defaults={
+                        'ver': permiso.ver,
                         'ingresar': permiso.ingresar,
                         'crear': permiso.crear,
                         'modificar': permiso.modificar,
@@ -492,7 +494,7 @@ class PermisoListaView(VerificarPermisoMixin,LoginRequiredMixin, ListView):
 
 class PermisoCrearView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Permiso
-    fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+    fields = ['usuario', 'empresa', 'vista', 'ver', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
     vista_nombre = "Control de Acceso - Maestro Permisos"
@@ -500,7 +502,7 @@ class PermisoCrearView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
 
 class PermisoEditarView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Permiso
-    fields = ['usuario', 'empresa', 'vista', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
+    fields = ['usuario', 'empresa', 'vista', 'ver', 'ingresar', 'crear', 'modificar', 'eliminar', 'autorizar', 'supervisor']
     template_name = 'access_control/permisos_form.html'
     success_url = reverse_lazy('access_control:permisos_lista')
     vista_nombre = "Control de Acceso - Maestro Permisos"
@@ -1346,6 +1348,7 @@ def grant_access_request(request, pk):
     ).first()
 
     initial_flags = {
+        "ver": False,
         "ingresar": True,
         "crear": False,
         "modificar": False,
@@ -1355,6 +1358,7 @@ def grant_access_request(request, pk):
     }
     if permiso_existente:
         initial_flags = {
+            "ver": permiso_existente.ver,
             "ingresar": permiso_existente.ingresar,
             "crear": permiso_existente.crear,
             "modificar": permiso_existente.modificar,
@@ -1392,6 +1396,7 @@ def grant_access_request(request, pk):
                     empresa=empresa,
                     vista=vista,
                     defaults={
+                        "ver": bool(form.cleaned_data.get("ver")),
                         "ingresar": bool(form.cleaned_data.get("ingresar")),
                         "crear": bool(form.cleaned_data.get("crear")),
                         "modificar": bool(form.cleaned_data.get("modificar")),
