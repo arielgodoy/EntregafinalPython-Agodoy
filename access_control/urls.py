@@ -10,7 +10,7 @@ from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEl
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
 from .views import InvitacionesListView, InvitacionEliminarView
 from .views import toggle_permiso, toggle_permiso_por_vista, PermisosFiltradosView, PermisosPorVistaView, CopyPermisosView, seleccionar_empresa, actualizar_vista_inicial
-from .views import SolicitarAccesoView
+from .views import SolicitarAccesoView, AccessUtilityView
 
 
 #from .views import permisos_filtrados_view, toggle_permiso,PermisosFiltradosView
@@ -24,6 +24,7 @@ urlpatterns = [
     path('copiar-permisos/', CopyPermisosView.as_view(), name='copy_permissions'),
     path('permisos-filtrados/', PermisosFiltradosView.as_view(), name='permisos_filtrados'), 
     path('permisos-por-vista/', PermisosPorVistaView.as_view(), name='permisos_por_vista'),
+    path('utilitario-acceso/', AccessUtilityView.as_view(), name='utilitario_acceso'),
     
 
     

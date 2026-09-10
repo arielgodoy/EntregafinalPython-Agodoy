@@ -4,6 +4,67 @@ from django.core.exceptions import ValidationError
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig
 from .models import Permiso, Empresa, Vista
 from django.contrib.auth.models import User
+from access_control.services.permissions import VICMEAS_FIELDS, get_sidebar_group_options, get_valid_users_for_empresa
+
+
+class AccessUtilityForm(forms.Form):
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.order_by("codigo"),
+        required=True,
+        label="Empresa",
+        error_messages={"required": "Este campo es obligatorio."},
+    )
+    usuario = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=True,
+        label="Usuario",
+        error_messages={"required": "Este campo es obligatorio."},
+    )
+    alcance = forms.ChoiceField(
+        choices=get_sidebar_group_options(),
+        required=True,
+        label="Alcance",
+        error_messages={"required": "Este campo es obligatorio."},
+    )
+    ver = forms.BooleanField(required=False, label="V - Ver")
+    ingresar = forms.BooleanField(required=False, label="I - Ingresar")
+    crear = forms.BooleanField(required=False, label="C - Crear")
+    modificar = forms.BooleanField(required=False, label="M - Modificar")
+    eliminar = forms.BooleanField(required=False, label="E - Eliminar")
+    autorizar = forms.BooleanField(required=False, label="A - Autorizar")
+    supervisor = forms.BooleanField(required=False, label="S - Supervisor")
+    confirm_sensitive = forms.BooleanField(required=False, label="Confirmo que deseo asignar permisos sensibles.")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ("empresa", "usuario", "alcance"):
+            self.fields[field_name].widget.attrs["class"] = "form-select"
+        for field_name in VICMEAS_FIELDS:
+            self.fields[field_name].widget.attrs["class"] = "form-check-input"
+        self.fields["confirm_sensitive"].widget.attrs["class"] = "form-check-input"
+
+        empresa_id = self.data.get("empresa") if self.is_bound else None
+        if empresa_id and str(empresa_id).isdigit():
+            self.fields["usuario"].queryset = get_valid_users_for_empresa(
+                Empresa.objects.filter(pk=empresa_id).first(),
+                active_only=True,
+            ) if Empresa.objects.filter(pk=empresa_id).exists() else User.objects.none()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not any(cleaned_data.get(field_name) for field_name in VICMEAS_FIELDS):
+            raise forms.ValidationError("Selecciona al menos un permiso VICMEAS.")
+        usuario = cleaned_data.get("usuario")
+        if usuario is not None and not usuario.is_active:
+            self.add_error("usuario", "El usuario está inactivo y no puede recibir permisos.")
+        elif self.data.get("usuario"):
+            inactive_user = User.objects.filter(
+                pk=self.data.get("usuario"),
+                is_active=False,
+            ).first()
+            if inactive_user is not None:
+                self.add_error("usuario", "El usuario está inactivo y no puede recibir permisos.")
+        return cleaned_data
 
 class PermisoForm(forms.ModelForm):
     class Meta:

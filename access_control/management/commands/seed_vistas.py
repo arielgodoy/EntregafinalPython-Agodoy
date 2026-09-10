@@ -7,6 +7,11 @@ VISTAS = [
         "descripcion": "Gestión de permisos ICMEAS por empresa y vista",
         "route_name": "access_control:permisos_por_vista",
     },
+    {
+        "nombre": "Control de Acceso - Utilitario de Acceso",
+        "descripcion": "Asignación masiva aditiva de permisos VICMEAS",
+        "route_name": "access_control:utilitario_acceso",
+    },
     {"nombre": "Configuración - Configuracion de Empresa", "descripcion": "Configuración por empresa (UI)"},
     {"nombre": "Configuración - Cuentas de Correo", "descripcion": "Cuentas de correo del sistema"},
     {"nombre": "Configuración - Configuración del Sistema", "descripcion": "Configuración global del sistema"},

@@ -29,6 +29,7 @@ from .forms import (
     EmailAccountForm,
     CompanyConfigForm,
     AccessRequestGrantForm,
+    AccessUtilityForm,
 )
 from django.http import JsonResponse
 
@@ -67,6 +68,16 @@ from access_control.services.permissions import (
     VICMEAS_FIELDS,
     get_valid_users_for_empresa,
     user_has_permission_for_empresa,
+)
+from access_control.services.access_utility import (
+    ACCESS_UTILITY_VISTA_NAME,
+    apply_additive_permissions,
+    build_preview,
+    get_access_utility_user_options,
+    get_access_utility_vista,
+    get_scope_vistas,
+    has_explicit_permission,
+    validate_operation_authorization,
 )
 logger = logging.getLogger(__name__)
 #Decorador generar para verificar permispo por mixim
@@ -218,6 +229,116 @@ class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 for usuario in get_valid_users_for_empresa(empresa)
             ]
         return render(request, self.template_name, context)
+
+
+class AccessUtilityView(LoginRequiredMixin, View):
+    template_name = "access_control/utilitario_acceso.html"
+
+    def _get_active_empresa(self, request):
+        empresa_id = request.session.get("empresa_id")
+        if not empresa_id:
+            return None
+        return Empresa.objects.filter(pk=empresa_id).first()
+
+    def _forbidden(self, request, message):
+        context = build_access_request_context(request, ACCESS_UTILITY_VISTA_NAME, message)
+        return render(request, "access_control/403_forbidden.html", context, status=403)
+
+    def _base_context(self, form, **extra):
+        empresas = Empresa.objects.order_by("codigo")
+        context = {
+            "form": form,
+            "empresas": empresas,
+            "user_options": get_access_utility_user_options(empresas),
+            "vicmeas_fields": VICMEAS_FIELDS,
+            "access_utility_vista_name": ACCESS_UTILITY_VISTA_NAME,
+        }
+        context.update(extra)
+        return context
+
+    def get(self, request, *args, **kwargs):
+        empresa = self._get_active_empresa(request)
+        if empresa is None:
+            return redirect("access_control:seleccionar_empresa")
+        vista = get_access_utility_vista()
+        if vista is None:
+            return JsonResponse({"error": "La Vista canónica del utilitario no está catalogada."}, status=503)
+        if not has_explicit_permission(
+            user=request.user,
+            empresa=empresa,
+            vista=vista,
+            accion="ingresar",
+        ):
+            return self._forbidden(request, "No tienes permiso para ingresar al Utilitario de Acceso.")
+        return render(request, self.template_name, self._base_context(AccessUtilityForm()))
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+        form = AccessUtilityForm(request.POST)
+        if not form.is_valid():
+            return render(request, self.template_name, self._base_context(form), status=400)
+
+        if action not in {"preview", "confirm"}:
+            form.add_error(None, "Debes indicar una acción válida: preview o confirm.")
+            return render(request, self.template_name, self._base_context(form), status=400)
+
+        vista = get_access_utility_vista()
+        if vista is None:
+            return JsonResponse({"error": "La Vista canónica del utilitario no está catalogada."}, status=503)
+
+        empresa = form.cleaned_data["empresa"]
+        usuario = form.cleaned_data["usuario"]
+        selected_fields = tuple(
+            field_name
+            for field_name in VICMEAS_FIELDS
+            if form.cleaned_data.get(field_name)
+        )
+        try:
+            validate_operation_authorization(
+                executor=request.user,
+                empresa=empresa,
+                vista=vista,
+                selected_fields=selected_fields,
+            )
+        except PermissionError as error:
+            return self._forbidden(request, str(error))
+
+        try:
+            vistas = get_scope_vistas(form.cleaned_data["alcance"])
+        except Exception as error:
+            form.add_error("alcance", str(error))
+            return render(request, self.template_name, self._base_context(form), status=400)
+
+        preview = build_preview(
+            usuario=usuario,
+            empresa=empresa,
+            vistas=vistas,
+            selected_fields=selected_fields,
+        )
+        if action == "preview":
+            return render(
+                request,
+                self.template_name,
+                self._base_context(form, preview=preview),
+            )
+        if action != "confirm":
+            form.add_error(None, "Acción no válida.")
+            return render(request, self.template_name, self._base_context(form), status=400)
+        if set(selected_fields).intersection({"autorizar", "supervisor"}) and not form.cleaned_data.get("confirm_sensitive"):
+            form.add_error("confirm_sensitive", "Confirma la asignación de permisos sensibles.")
+            return render(request, self.template_name, self._base_context(form, preview=preview), status=400)
+
+        result = apply_additive_permissions(
+            usuario=usuario,
+            empresa=empresa,
+            vistas=vistas,
+            selected_fields=selected_fields,
+        )
+        return render(
+            request,
+            self.template_name,
+            self._base_context(form, result=result),
+        )
 
 
 @login_required

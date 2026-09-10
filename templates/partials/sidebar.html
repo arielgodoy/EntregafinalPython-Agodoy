@@ -287,6 +287,9 @@
                             {% if "access_view_permissions" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'access_control:permisos_por_vista' %}" class="nav-link">Permisos por Vista</a>
                             </li>{% endif %}
+                            {% if "access_utility" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'access_control:utilitario_acceso' %}" class="nav-link" data-key="menu.access_control.access_utility">Utilitario de Acceso</a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}

@@ -55,6 +55,7 @@ SIDEBAR_VIEW_NAMES = {
     "access_permissions": "Control de Acceso - Maestro Permisos",
     "access_filtered_permissions": "Control de Acceso - Permisos Filtrados",
     "access_view_permissions": "Control de Acceso - Permisos por Vista",
+    "access_utility": "Control de Acceso - Utilitario de Acceso",
     "api_home": "APIs - Inicio",
     "settings_system": "Configuración - Configuración del Sistema",
     "settings_company": "Configuración - Configuracion de Empresa",
@@ -73,12 +74,35 @@ SIDEBAR_GROUPS = {
     "chat": ("chat_inbox", "chat_center"),
     "notifications": ("notifications_list", "notifications_alerts", "notifications_force", "notifications_custom"),
     "audit": ("audit_library", "audit_gestion_dte"),
-    "access": ("access_invite", "access_invitations", "access_users", "access_companies", "access_views", "access_permissions", "access_filtered_permissions", "access_view_permissions"),
+    "access": ("access_invite", "access_invitations", "access_users", "access_companies", "access_views", "access_permissions", "access_filtered_permissions", "access_view_permissions", "access_utility"),
     "apis": ("api_home",),
     "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql"),
 }
 
+SIDEBAR_GROUP_LABELS = {
+    "library": "Biblioteca Digital",
+    "gestion_dte": "Gestión DTE",
+    "evaluaciones": "Evaluaciones",
+    "projects": "Gestión de Proyectos",
+    "operational": "Control Operacional",
+    "tasks": "Tareas",
+    "account": "Cuenta de Usuario",
+    "chat": "Mensajería",
+    "notifications": "Notificaciones",
+    "audit": "Auditoría",
+    "access": "Control de Acceso",
+    "apis": "APIs",
+    "settings": "Settings",
+}
+
 SIDEBAR_GLOBAL_ITEMS = {"account_email"}
+
+
+def get_sidebar_group_options():
+    return [("all", "Todo")] + [
+        (group, SIDEBAR_GROUP_LABELS[group])
+        for group in SIDEBAR_GROUPS
+    ]
 
 
 def get_sidebar_visible_items(user, empresa_id):
@@ -110,11 +134,14 @@ def get_sidebar_visible_items(user, empresa_id):
     return visible_items | SIDEBAR_GLOBAL_ITEMS
 
 
-def get_valid_users_for_empresa(empresa):
+def get_valid_users_for_empresa(empresa, *, active_only=False):
     """Return the compatibility union of assigned and permission-bearing users."""
     assigned_user_ids = UsuarioPerfilEmpresa.objects.filter(empresa=empresa).values("usuario_id")
     permission_user_ids = Permiso.objects.filter(empresa=empresa).values("usuario_id")
-    return User.objects.filter(id__in=assigned_user_ids.union(permission_user_ids)).order_by("username")
+    queryset = User.objects.filter(id__in=assigned_user_ids.union(permission_user_ids))
+    if active_only:
+        queryset = queryset.filter(is_active=True)
+    return queryset.order_by("username")
 
 
 def user_has_permission_for_empresa(*, user, empresa, vista_nombre, accion):

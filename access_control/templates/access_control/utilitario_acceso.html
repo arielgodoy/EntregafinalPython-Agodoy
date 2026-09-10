@@ -1,0 +1,186 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Utilitario de Acceso{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="UTILITARIO DE ACCESO" pagetitle="Control de Acceso" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                            <div>
+                                <h1 class="h4 mb-1">UTILITARIO DE ACCESO</h1>
+                                <p class="text-muted mb-0">Herramientas administrativas de permisos VICMEAS.</p>
+                            </div>
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#accessUtilityModal">
+                                <i class="ri-shield-user-line me-1"></i> Asignar permisos masivos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if result %}
+            <div class="alert alert-success" role="alert">
+                <h2 class="h6">Asignación completada</h2>
+                <p class="mb-1">Vistas procesadas: {{ result.processed }}</p>
+                <p class="mb-1">Permisos creados: {{ result.created }}</p>
+                <p class="mb-1">Permisos actualizados: {{ result.updated }}</p>
+                <p class="mb-1">Sin cambios: {{ result.unchanged }}</p>
+                <p class="mb-0">Permisos eliminados: {{ result.deleted }}</p>
+            </div>
+            {% endif %}
+
+            {% if preview %}
+            <div class="card border-primary" id="accessUtilityPreview">
+                <div class="card-body">
+                    <h2 class="h5">Preview de asignación</h2>
+                    <dl class="row mb-3">
+                        <dt class="col-sm-3">Usuario</dt>
+                        <dd class="col-sm-9">{{ preview.usuario.username }}</dd>
+                        <dt class="col-sm-3">Empresa</dt>
+                        <dd class="col-sm-9">{{ preview.empresa }}</dd>
+                        <dt class="col-sm-3">Alcance</dt>
+                        <dd class="col-sm-9">{{ form.cleaned_data.alcance }}</dd>
+                        <dt class="col-sm-3">Flags seleccionados</dt>
+                        <dd class="col-sm-9">{{ preview.selected_fields|join:", " }}</dd>
+                        <dt class="col-sm-3">Vistas afectadas</dt>
+                        <dd class="col-sm-9">{{ preview.processed }}</dd>
+                    </dl>
+                    <p class="alert alert-info mb-0">Esta operación solo agregará los permisos seleccionados. No se eliminarán permisos existentes.</p>
+                    <form method="post" class="mt-3">
+                        {% csrf_token %}
+                        <input type="hidden" name="empresa" value="{{ form.empresa.value }}">
+                        <input type="hidden" name="usuario" value="{{ form.usuario.value }}">
+                        <input type="hidden" name="alcance" value="{{ form.alcance.value }}">
+                        {% for field_name in vicmeas_fields %}
+                        {% if field_name in preview.selected_fields %}<input type="hidden" name="{{ field_name }}" value="on">{% endif %}
+                        {% endfor %}
+                        {% if form.confirm_sensitive.value %}<input type="hidden" name="confirm_sensitive" value="on">{% endif %}
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#accessUtilityModal">Editar selección</button>
+                            <button type="submit" class="btn btn-primary" name="action" value="confirm">Confirmar asignación</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="modal fade" id="accessUtilityModal" tabindex="-1" aria-labelledby="accessUtilityModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="accessUtilityModalLabel">Asignar permisos masivos</h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                        </div>
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="modal-body">
+                                {{ form.non_field_errors }}
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="id_empresa" class="form-label">Empresa</label>
+                                        {{ form.empresa }}
+                                        {{ form.empresa.errors }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="id_usuario" class="form-label">Usuario</label>
+                                        <select name="usuario" id="id_usuario" class="form-select" required>
+                                            <option value="">Seleccione un usuario</option>
+                                            {% for option in user_options %}
+                                            <option value="{{ option.user.id }}" data-empresas="{{ option.empresa_ids|join:',' }}"{% if form.usuario.value|stringformat:'s' == option.user.id|stringformat:'s' %} selected{% endif %}>{{ option.user.username }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        {{ form.usuario.errors }}
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="id_alcance" class="form-label">Alcance</label>
+                                        {{ form.alcance }}
+                                        {{ form.alcance.errors }}
+                                    </div>
+                                </div>
+                                <fieldset class="mt-4">
+                                    <legend class="h6">Permisos VICMEAS</legend>
+                                    <div class="row row-cols-2 row-cols-md-4 g-2">
+                                        <div class="col"><label class="form-check-label" for="id_ver">{{ form.ver }} V Ver</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_ingresar">{{ form.ingresar }} I Ingresar</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_crear">{{ form.crear }} C Crear</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_modificar">{{ form.modificar }} M Modificar</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_eliminar">{{ form.eliminar }} E Eliminar</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_autorizar">{{ form.autorizar }} A Autorizar</label></div>
+                                        <div class="col"><label class="form-check-label" for="id_supervisor">{{ form.supervisor }} S Supervisor</label></div>
+                                    </div>
+                                    {{ form.ver.errors }}
+                                    {{ form.ingresar.errors }}
+                                    {{ form.crear.errors }}
+                                    {{ form.modificar.errors }}
+                                    {{ form.eliminar.errors }}
+                                    {{ form.autorizar.errors }}
+                                    {{ form.supervisor.errors }}
+                                </fieldset>
+                                <div class="form-check mt-3" id="sensitiveConfirmation">
+                                    {{ form.confirm_sensitive }}
+                                    <label class="form-check-label" for="id_confirm_sensitive">Confirmo que deseo asignar permisos sensibles.</label>
+                                    {{ form.confirm_sensitive.errors }}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-outline-primary" name="action" value="preview">Previsualizar</button>
+                                {% if preview %}<button type="submit" class="btn btn-primary" name="action" value="confirm">Confirmar asignación</button>{% endif %}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var empresa = document.getElementById('id_empresa');
+    var usuario = document.getElementById('id_usuario');
+    var sensitiveFields = ['id_autorizar', 'id_supervisor'];
+    var confirmation = document.getElementById('sensitiveConfirmation');
+
+    function filterUsers() {
+        var empresaId = empresa ? empresa.value : '';
+        Array.prototype.forEach.call(usuario.options, function (option) {
+            if (!option.value) return;
+            var empresas = (option.dataset.empresas || '').split(',');
+            option.hidden = !empresaId || empresas.indexOf(empresaId) === -1;
+        });
+        var selected = usuario.options[usuario.selectedIndex];
+        if (selected && selected.hidden) usuario.value = '';
+    }
+
+    function updateSensitiveConfirmation() {
+        var sensitive = sensitiveFields.some(function (id) {
+            var field = document.getElementById(id);
+            return field && field.checked;
+        });
+        if (confirmation) confirmation.classList.toggle('d-none', !sensitive);
+    }
+
+    if (empresa && usuario) {
+        empresa.addEventListener('change', filterUsers);
+        filterUsers();
+    }
+    sensitiveFields.forEach(function (id) {
+        var field = document.getElementById(id);
+        if (field) field.addEventListener('change', updateSensitiveConfirmation);
+    });
+    updateSensitiveConfirmation();
+});
+</script>
+{% endblock extra_js %}
