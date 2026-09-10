@@ -4,14 +4,16 @@ from django import forms
 
 from access_control.services.permissions import get_valid_users_for_empresa
 
-from .models import Avance, DocumentoTarea, Hito
-
-from .models import Tarea
+from .models import Avance, DocumentoTarea, EvidenciaCierre, FormatoArchivo, Hito, Tarea
 
 
 class HitoForm(forms.ModelForm):
-    motivo = forms.CharField(required=False, strip=True)
+    class Meta:
+        model = Hito
+        fields = ["nombre", "cumplimiento", "peso"]
 
+
+class HitoCrearForm(forms.ModelForm):
     def __init__(self, *args, tarea=None, **kwargs):
         super().__init__(*args, **kwargs)
         if tarea is None:
@@ -44,6 +46,21 @@ class HitoReasignacionForm(forms.Form):
             )
 
 
+class CompletarHitoForm(forms.Form):
+    resena_cierre = forms.CharField(required=True, strip=True, widget=forms.Textarea(attrs={"rows": 3}))
+    formato_archivo = forms.ChoiceField(choices=FormatoArchivo.choices)
+    archivo = forms.FileField(required=False)
+    url = forms.URLField(required=False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        tiene_archivo = bool(cleaned_data.get("archivo"))
+        tiene_url = bool(cleaned_data.get("url"))
+        if tiene_archivo == tiene_url:
+            raise forms.ValidationError("La evidencia debe indicar exactamente un archivo o una URL.")
+        return cleaned_data
+
+
 class AvanceManualForm(forms.Form):
     porcentaje = forms.DecimalField(min_value=0, max_value=100, max_digits=5, decimal_places=2)
 
@@ -55,7 +72,14 @@ class AvancePonderadoForm(forms.Form):
 class DocumentoForm(forms.ModelForm):
     class Meta:
         model = DocumentoTarea
-        fields = ["tipo", "archivo", "url", "fecha_documento", "fecha_vencimiento"]
+        fields = [
+            "tipo",
+            "formato_archivo",
+            "archivo",
+            "url",
+            "fecha_documento",
+            "fecha_vencimiento",
+        ]
         widgets = {
             "fecha_documento": forms.DateInput(attrs={"type": "date"}),
             "fecha_vencimiento": forms.DateInput(attrs={"type": "date"}),
@@ -73,15 +97,23 @@ class DocumentoForm(forms.ModelForm):
 
 
 class EvidenciaConfigForm(forms.Form):
-    requerida = forms.BooleanField(required=False)
+    requiere_evidencia_cierre = forms.BooleanField(required=False)
 
 
 class EvidenciaRegistroForm(forms.Form):
-    documento = forms.ModelChoiceField(queryset=DocumentoTarea.objects.none())
+    formato_archivo = forms.ChoiceField(choices=EvidenciaCierre._meta.get_field("formato_archivo").choices)
+    archivo = forms.FileField(required=False)
+    url = forms.URLField(required=False)
 
-    def __init__(self, *args, documentos=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["documento"].queryset = documentos or DocumentoTarea.objects.none()
+    def clean(self):
+        cleaned_data = super().clean()
+        tiene_archivo = bool(cleaned_data.get("archivo"))
+        tiene_url = bool(cleaned_data.get("url"))
+        if tiene_archivo == tiene_url:
+            raise forms.ValidationError(
+                "La evidencia debe indicar exactamente un archivo o una URL."
+            )
+        return cleaned_data
 
 
 class TareaForm(forms.ModelForm):

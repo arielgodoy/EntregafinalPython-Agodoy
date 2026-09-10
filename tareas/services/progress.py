@@ -4,12 +4,13 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from access_control.services.permissions import (
     get_valid_users_for_empresa,
     user_has_permission_for_empresa,
 )
-from tareas.models import Avance, Hito, HitoHistorial, TareaParticipante
+from tareas.models import Avance, Hito, HitoEvidencia, HitoHistorial, TareaParticipante
 
 
 def validate_milestone_responsible(tarea, user):
@@ -159,8 +160,6 @@ def update_milestone(
     nombre=None,
     cumplimiento=None,
     peso=None,
-    responsable=None,
-    motivo="",
 ):
     capability = milestone_capability(hito.tarea, hito, actor)
     if capability not in {"progress", "manage"}:
@@ -172,33 +171,23 @@ def update_milestone(
             raise ValidationError("El responsable del hito solo puede cambiar cumplimiento.")
         changes["nombre"] = (hito.nombre, nombre)
     if cumplimiento is not None and Decimal(str(cumplimiento)) != hito.cumplimiento:
+        if hito.completado and Decimal(str(cumplimiento)) < 100:
+            raise ValidationError("Un hito completado no puede bajar de 100%.")
         changes["cumplimiento"] = (hito.cumplimiento, Decimal(str(cumplimiento)))
     if peso is not None and Decimal(str(peso)) != hito.peso:
         if not manager:
             raise ValidationError("El responsable del hito solo puede cambiar cumplimiento.")
         changes["peso"] = (hito.peso, Decimal(str(peso)))
-    if responsable is not None and responsable.pk != hito.responsable_id:
-        if not manager:
-            raise ValidationError("El responsable del hito no puede reasignarse.")
-        motivo = (motivo or "").strip()
-        if not motivo:
-            raise ValidationError("El motivo de reasignación es obligatorio.")
-        validate_milestone_responsible(hito.tarea, responsable)
-        changes["responsable"] = (hito.responsable_id, responsable.pk)
     if not changes:
         return hito
     for field, (_old, new) in changes.items():
-        if field == "responsable":
-            hito.responsable_id = new
-        else:
-            setattr(hito, field, new)
+        setattr(hito, field, new)
     hito.full_clean()
     hito.save(update_fields=list(changes))
     events = {
         "nombre": HitoHistorial.Evento.CAMBIO_NOMBRE,
         "cumplimiento": HitoHistorial.Evento.CAMBIO_CUMPLIMIENTO,
         "peso": HitoHistorial.Evento.CAMBIO_PESO,
-        "responsable": HitoHistorial.Evento.REASIGNACION,
     }
     for field, (old, new) in changes.items():
         _record_history(
@@ -207,8 +196,76 @@ def update_milestone(
             actor,
             {field: str(old)},
             {field: str(new)},
-            motivo if field == "responsable" else "",
+            "",
         )
+    _refresh_weighted_progress(hito.tarea)
+    return hito
+
+
+@transaction.atomic
+def complete_milestone(
+    hito,
+    actor,
+    *,
+    resena_cierre,
+    formato_archivo,
+    archivo=None,
+    url="",
+):
+    if milestone_capability(hito.tarea, hito, actor) not in {"progress", "manage"}:
+        raise ValidationError("No tienes autorización para completar este hito.")
+    if hito.anulado:
+        raise ValidationError("Un hito anulado debe reactivarse antes de completarse.")
+    if hito.completado:
+        raise ValidationError("El hito ya está completado.")
+    resena_cierre = (resena_cierre or "").strip()
+    if not resena_cierre:
+        raise ValidationError("La reseña de cierre es obligatoria.")
+
+    cumplimiento_anterior = hito.cumplimiento
+    evidencia = HitoEvidencia(
+        hito=hito,
+        formato_archivo=formato_archivo,
+        archivo=archivo or "",
+        url=url or "",
+        usuario=actor,
+    )
+    evidencia.full_clean()
+    evidencia.save()
+
+    fecha_completado = timezone.now()
+    responsable_id = hito.responsable_id
+    hito.completado = True
+    hito.cumplimiento = Decimal("100")
+    hito.completado_por = actor
+    hito.fecha_completado = fecha_completado
+    hito.resena_cierre = resena_cierre
+    hito.full_clean()
+    hito.save(
+        update_fields=[
+            "completado",
+            "cumplimiento",
+            "completado_por",
+            "fecha_completado",
+            "resena_cierre",
+        ]
+    )
+    _record_history(
+        hito,
+        HitoHistorial.Evento.COMPLETADO,
+        actor,
+        {"completado": False, "cumplimiento": str(cumplimiento_anterior)},
+        {
+            "completado": True,
+            "cumplimiento": "100",
+            "responsable": responsable_id,
+            "completado_por": actor.pk,
+            "fecha_completado": fecha_completado.isoformat(),
+            "resena_cierre": resena_cierre,
+            "evidencia_id": evidencia.pk,
+        },
+        resena_cierre,
+    )
     _refresh_weighted_progress(hito.tarea)
     return hito
 

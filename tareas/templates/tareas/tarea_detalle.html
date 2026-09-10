@@ -67,6 +67,22 @@ Detalle de tarea
                                 <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
                                 <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>
 
+                                <dt class="col-sm-4"><span data-key="tareas.evidence.configuration">Configuración de cierre</span></dt>
+                                <dd class="col-sm-8">
+                                    {% if puede_configurar_evidencia %}
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <label for="{{ evidencia_config_form.requiere_evidencia_cierre.id_for_label }}">{{ evidencia_config_form.requiere_evidencia_cierre }} <span data-key="tareas.evidence.requires_closure_evidence">Requiere evidencia de cierre</span></label>
+                                        {{ evidencia_config_form.requiere_evidencia_cierre.errors }}
+                                        <button type="submit" class="btn btn-outline-primary btn-sm ms-2"><span data-key="tareas.actions.save_evidence_config">Guardar configuración</span></button>
+                                    </form>
+                                    {% elif tarea.requiere_evidencia_cierre %}
+                                    <span data-key="tareas.common.yes">Sí</span>
+                                    {% else %}
+                                    <span data-key="tareas.common.no">No</span>
+                                    {% endif %}
+                                </dd>
+
                                 <dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt>
                                 <dd class="col-sm-8"><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></dd>
 

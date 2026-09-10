@@ -75,46 +75,29 @@
                                         <td>{{ hito.responsable.username }}</td>
                                         <td>{{ hito.cumplimiento }}%</td>
                                         <td>{{ hito.peso }}</td>
-                                        <td>{% if hito.anulado %}<span data-key="tareas.milestones.cancelled">Anulado</span>{% else %}<span data-key="tareas.milestones.active">Activo</span>{% endif %}</td>
+                                        <td>{% if hito.anulado %}<span data-key="tareas.milestones.cancelled">Anulado</span>{% elif hito.completado %}<span data-key="tareas.milestones.completed">Completado</span>{% else %}<span data-key="tareas.milestones.active">Activo</span>{% endif %}</td>
                                         <td>{{ hito.fecha_creacion }}</td>
-                                        <td class="w-50">
-                                            {% if hito.puede_gestionar %}
-                                            <form method="post" class="mb-1">
-                                                {% csrf_token %}<input type="hidden" name="accion" value="editar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
-                                                <label class="form-label mb-1" for="editar-nombre-{{ hito.pk }}"><span data-key="tareas.milestones.name">Nombre</span></label>
-                                                <input id="editar-nombre-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="nombre" value="{{ hito.nombre }}" aria-label="Nombre del hito">
-                                                <label class="form-label mb-1" for="editar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.responsible">Responsable</span></label>
-                                                <select id="editar-responsable-{{ hito.pk }}" class="form-select form-select-sm mb-1" name="responsable" aria-label="Responsable del hito">
-                                                    {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}" {% if responsable.pk == hito.responsable_id %}selected{% endif %}>{{ responsable.username }}</option>{% endfor %}
-                                                </select>
-                                                <label class="form-label mb-1" for="editar-cumplimiento-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>
-                                                <input id="editar-cumplimiento-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
-                                                <label class="form-label mb-1" for="editar-peso-{{ hito.pk }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>
-                                                <input id="editar-peso-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01" aria-label="Peso del hito">
-                                                <label class="form-label mb-1" for="editar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reassignment_reason">Motivo de reasignación</span></label>
-                                                <input id="editar-motivo-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="motivo" placeholder="Motivo si reasigna" aria-label="Motivo de reasignación">
-                                                <button type="submit" class="btn btn-sm btn-primary"><span data-key="tareas.actions.save">Guardar</span></button>
-                                            </form>
-                                            <form method="post" class="mb-1">
-                                                {% csrf_token %}<input type="hidden" name="accion" value="reasignar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
-                                                <label class="form-label mb-1" for="reasignar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.new_responsible">Nuevo responsable</span></label>
-                                                <select id="reasignar-responsable-{{ hito.pk }}" class="form-select form-select-sm mb-1" name="responsable" aria-label="Nuevo responsable">
-                                                    {% for responsable in responsables_validos %}<option value="{{ responsable.pk }}">{{ responsable.username }}</option>{% endfor %}
-                                                </select>
-                                                <label class="form-label mb-1" for="reasignar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reason">Motivo</span></label>
-                                                <input id="reasignar-motivo-{{ hito.pk }}" class="form-control form-control-sm mb-1" name="motivo" required placeholder="Motivo" aria-label="Motivo de reasignación">
-                                                <button type="submit" class="btn btn-sm btn-outline-primary"><span data-key="tareas.actions.reassign">Reasignar</span></button>
-                                            </form>
-                                            {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
-                                            <button type="submit" form="eliminar-{{ hito.pk }}" class="btn btn-sm btn-outline-danger"><span data-key="tareas.actions.delete">Eliminar</span></button>
+                                        <td>
+                                            {% if hito.completado %}
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#verCumplimientoHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.view_completion">Ver cumplimiento Hito</span></button>
+                                                {% if hito.puede_gestionar and not hito.anulado %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
+                                            </div>
+                                            {% elif hito.puede_gestionar %}
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.edit">Editar</span></button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reasignarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.reassign">Reasignar</span></button>
+                                                {% if hito.puede_completar %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#completarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></button>{% endif %}
+                                                {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
+                                                <button type="submit" form="eliminar-{{ hito.pk }}" class="btn btn-sm btn-outline-danger"><span data-key="tareas.actions.delete">Eliminar</span></button>
+                                            </div>
                                             {% elif hito.puede_actualizar and not hito.anulado %}
-                                            <form method="post">
-                                                {% csrf_token %}<input type="hidden" name="accion" value="cumplimiento_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
-                                                <input class="form-control form-control-sm mb-1" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01" aria-label="Cumplimiento del hito">
-                                                <button type="submit" class="btn btn-sm btn-primary"><span data-key="tareas.actions.save_compliance">Guardar cumplimiento</span></button>
-                                            </form>
+                                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#cumplimientoHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.update_progress">Actualizar avance</span></button>
+                                            {% if hito.puede_completar %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#completarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></button>{% endif %}
                                             {% endif %}
-                                            {% if hito.puede_gestionar %}
+                                            {% if hito.completado %}
+                                            {% if hito.puede_gestionar and not hito.anulado %}<form id="anular-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="anular_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>{% endif %}
+                                            {% elif hito.puede_gestionar %}
                                             <form id="anular-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="anular_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
                                             <form id="reactivar-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="reactivar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
                                             <form id="eliminar-{{ hito.pk }}" method="post" class="d-none">{% csrf_token %}<input type="hidden" name="accion" value="eliminar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
@@ -129,6 +112,92 @@
                         </div>
                     </div>
             </div>
+
+            {% for hito in hitos %}
+            {% if hito.puede_gestionar and not hito.completado %}
+            <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %} show d-block{% endif %}" id="editarHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="editarHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %} style="display: block;"{% endif %}>
+                <div class="modal-dialog modal-lg"><div class="modal-content">
+                    <form method="post">
+                        {% csrf_token %}<input type="hidden" name="accion" value="editar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                        <div class="modal-header"><h5 class="modal-title" id="editarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.edit">Editar Hito</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <div class="modal-body">
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.non_field_errors }}{% endif %}
+                            <div class="mb-2"><label for="editar-nombre-{{ hito.pk }}"><span data-key="tareas.milestones.name">Nombre</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.nombre }}{{ editar_form.nombre.errors }}{% else %}<input id="editar-nombre-{{ hito.pk }}" class="form-control" name="nombre" value="{{ hito.nombre }}" required>{% endif %}</div>
+                            <div class="mb-2"><label for="editar-cumplimiento-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.cumplimiento }}{{ editar_form.cumplimiento.errors }}{% else %}<input id="editar-cumplimiento-{{ hito.pk }}" class="form-control" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01">{% endif %}</div>
+                            <div class="mb-2"><label for="editar-peso-{{ hito.pk }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.peso }}{{ editar_form.peso.errors }}{% else %}<input id="editar-peso-{{ hito.pk }}" class="form-control" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01">{% endif %}</div>
+                        </div>
+                        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-primary"><span data-key="tareas.actions.save">Guardar</span></button></div>
+                    </form>
+                </div></div>
+            </div>
+            <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %} show d-block{% endif %}" id="reasignarHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="reasignarHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %} style="display: block;"{% endif %}>
+                <div class="modal-dialog"><div class="modal-content">
+                    <form method="post">
+                        {% csrf_token %}<input type="hidden" name="accion" value="reasignar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                        <div class="modal-header"><h5 class="modal-title" id="reasignarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.reassign">Reasignar responsable</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <div class="modal-body">
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.non_field_errors }}{% endif %}
+                            <div class="mb-2"><label for="reasignar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.new_responsible">Nuevo responsable</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.responsable }}{{ reasignar_form.responsable.errors }}{% else %}<select id="reasignar-responsable-{{ hito.pk }}" class="form-select" name="responsable">{% for responsable in responsables_validos %}<option value="{{ responsable.pk }}">{{ responsable.username }}</option>{% endfor %}</select>{% endif %}</div>
+                            <div class="mb-2"><label for="reasignar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reason">Motivo</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.motivo }}{{ reasignar_form.motivo.errors }}{% else %}<input id="reasignar-motivo-{{ hito.pk }}" class="form-control" name="motivo" required>{% endif %}</div>
+                        </div>
+                        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.reassign">Reasignar</span></button></div>
+                    </form>
+                </div></div>
+            </div>
+            {% endif %}
+            {% if hito.puede_actualizar and not hito.anulado and not hito.puede_gestionar %}
+            <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %} show d-block{% endif %}" id="cumplimientoHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="cumplimientoHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %} style="display: block;"{% endif %}>
+                <div class="modal-dialog"><div class="modal-content">
+                    <form method="post">
+                        {% csrf_token %}<input type="hidden" name="accion" value="cumplimiento_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                        <div class="modal-header"><h5 class="modal-title" id="cumplimientoHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.update_progress">Actualizar cumplimiento</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <div class="modal-body">{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %}{{ cumplimiento_form.non_field_errors }}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ cumplimiento_form.cumplimiento }}{{ cumplimiento_form.cumplimiento.errors }}{% else %}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label><input id="cumplimiento-hito-{{ hito.pk }}" class="form-control" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01">{% endif %}</div>
+                        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-primary"><span data-key="tareas.actions.save">Guardar</span></button></div>
+                    </form>
+                </div></div>
+            </div>
+            {% endif %}
+            {% if hito.puede_completar and not hito.anulado %}
+            <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %} show d-block{% endif %}" id="completarHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="completarHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %} style="display: block;"{% endif %}>
+                <div class="modal-dialog modal-lg"><div class="modal-content">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}<input type="hidden" name="accion" value="completar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+                        <div class="modal-header"><h5 class="modal-title" id="completarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <div class="modal-body">
+                            <p><span data-key="tareas.milestones.name">Hito</span>: {{ hito.nombre }}</p>
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.non_field_errors }}{% endif %}
+                            <div class="mb-2"><label for="completar-resena-{{ hito.pk }}"><span data-key="tareas.milestones.closure_review">Reseña de cierre *</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.resena_cierre }}{{ completar_form.resena_cierre.errors }}{% else %}<textarea id="completar-resena-{{ hito.pk }}" class="form-control" name="resena_cierre" rows="3" required></textarea>{% endif %}</div>
+                            <div class="mb-2"><label for="completar-formato-{{ hito.pk }}"><span data-key="tareas.evidence.file_format">Formato de evidencia *</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.formato_archivo }}{{ completar_form.formato_archivo.errors }}{% else %}<select id="completar-formato-{{ hito.pk }}" class="form-select" name="formato_archivo" required>{% for value, label in completar_form.fields.formato_archivo.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>{% endif %}</div>
+                            <div class="mb-2"><label for="completar-archivo-{{ hito.pk }}"><span data-key="tareas.evidence.file">Archivo</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.archivo }}{{ completar_form.archivo.errors }}{% else %}<input id="completar-archivo-{{ hito.pk }}" class="form-control" name="archivo" type="file">{% endif %}</div>
+                            <div class="mb-2"><label for="completar-url-{{ hito.pk }}"><span data-key="tareas.evidence.url">URL</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.url }}{{ completar_form.url.errors }}{% else %}<input id="completar-url-{{ hito.pk }}" class="form-control" name="url" type="url">{% endif %}</div>
+                            <small class="text-muted"><span data-key="tareas.evidence.file_or_url_help">Adjunte un archivo o indique una URL.</span></small>
+                        </div>
+                        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-success"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></button></div>
+                    </form>
+                </div></div>
+            </div>
+            {% endif %}
+            {% if hito.completado %}
+            <div class="modal fade" id="verCumplimientoHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="verCumplimientoHitoModalLabel-{{ hito.pk }}" aria-hidden="true">
+                <div class="modal-dialog modal-lg"><div class="modal-content">
+                    <div class="modal-header"><h5 class="modal-title" id="verCumplimientoHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.actions.view_completion">Ver cumplimiento Hito</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                    <div class="modal-body">
+                        <dl class="row mb-3">
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.name">Hito</span></dt><dd class="col-sm-8">{{ hito.nombre }}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.status">Estado</span></dt><dd class="col-sm-8"><span data-key="tareas.milestones.completed">Completado</span></dd>
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.responsible">Responsable asignado</span></dt><dd class="col-sm-8">{{ hito.responsable.username }}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.completed_by">Completado por</span></dt><dd class="col-sm-8">{{ hito.completado_por.username }}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.completed_at">Fecha de completitud</span></dt><dd class="col-sm-8">{{ hito.fecha_completado }}</dd>
+                            <dt class="col-sm-4"><span data-key="tareas.milestones.closure_review">Reseña de cierre</span></dt><dd class="col-sm-8">{{ hito.resena_cierre }}</dd>
+                        </dl>
+                        <h6><span data-key="tareas.milestones.evidence">Evidencias</span></h6>
+                        <div class="table-responsive"><table class="table table-sm"><thead><tr><th><span data-key="tareas.evidence.file_format">Formato</span></th><th><span data-key="tareas.evidence.source">Archivo o URL</span></th><th><span data-key="tareas.evidence.registered_by">Registrado por</span></th><th><span data-key="tareas.evidence.date">Fecha</span></th></tr></thead><tbody>{% for evidencia in hito.evidencias.all %}<tr><td>{{ evidencia.formato_archivo }}</td><td>{% if evidencia.archivo %}<a href="{{ evidencia.archivo.url }}" target="_blank" rel="noopener noreferrer">{{ evidencia.archivo.name }} <span data-key="tareas.actions.view_file">Ver archivo</span></a>{% else %}<a href="{{ evidencia.url }}" target="_blank" rel="noopener noreferrer"><span data-key="tareas.actions.open_link">Abrir enlace</span></a>{% endif %}</td><td>{{ evidencia.usuario.username }}</td><td>{{ evidencia.fecha }}</td></tr>{% empty %}<tr><td colspan="4"><span data-key="tareas.milestones.no_evidence">Sin evidencias</span></td></tr>{% endfor %}</tbody></table></div>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.close">Cerrar</span></button></div>
+                </div></div>
+            </div>
+            {% endif %}
+            {% endfor %}
 
             <div class="modal fade{% if hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
                 <div class="modal-dialog modal-lg">
@@ -154,7 +223,7 @@
                     </div>
                 </div>
             </div>
-            {% if hito_form.is_bound and hito_form.errors %}<div class="modal-backdrop fade show"></div>{% endif %}
+            {% if hito_form.is_bound and hito_form.errors or editar_form.is_bound and editar_form.errors or reasignar_form.is_bound and reasignar_form.errors or cumplimiento_form.is_bound and cumplimiento_form.errors or completar_form.is_bound and completar_form.errors or modal_abierto_hito_id %}<div class="modal-backdrop fade show"></div>{% endif %}
         </div>
     </div>
 </div>

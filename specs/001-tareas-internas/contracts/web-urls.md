@@ -80,7 +80,9 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | 2 | Participantes/reasignación | GET/POST | `participantes_tarea` / `reasignar_tarea` | Usuarios activos y empresa activa |
 | 2 | Jerarquía/mini-tareas | GET/POST | `jerarquia_tarea` / `minitareas_tarea` | Máximo dos niveles; mini-tareas bloquean cierre |
 | 2 | Reprogramación | POST | `reprogramar_tarea` | Justificación y auditoría obligatorias |
-| 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental |
+| 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental; `hitos_tarea` admite `accion=completar_hito` con reseña y evidencia y muestra `Ver cumplimiento Hito` en lectura para Hitos completados |
+
+La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal de solo lectura; no crea una URL ni una acción POST nueva. Solo se muestra cuando `Hito.completado=True` y la autorización de lectura vigente permite consultar la Tarea/Hito. El modal lee los campos canónicos del Hito y lista todas sus `HitoEvidencia` (`0..N`), sin mezclar `EvidenciaCierre` de Tarea ni modificar datos. Para un Hito completado, el contrato visual solo ofrece `Ver cumplimiento Hito` y `Anular` cuando el actor tenga esa facultad; no ofrece edición, reasignación, nueva completitud, actualización de avance ni eliminación física. La reactivación de un Hito completado y anulado queda fuera de contrato hasta resolver FR-F44.
 | 4 | Cotizaciones | GET/POST | `rondas_cotizacion` / `cotizaciones_ronda` | Default 3; máximo 3 versiones |
 | 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` | Tareas cerradas incluidas; confirmar repetición |
 | 5 | Enlace compartible | GET | `enlace_tarea` | Solo autenticado, lectura e ICMEAS |

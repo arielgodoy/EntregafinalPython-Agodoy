@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from tareas.forms import HitoForm
+from tareas.forms import HitoCrearForm, HitoForm
 from tareas.models import Hito, HitoHistorial, TareaParticipante
 from tareas.services.progress import (
     create_milestone,
@@ -54,9 +54,12 @@ class HitoT076Tests(TestCase):
         )
 
     def test_form_queryset_only_active_users_of_task_company(self):
-        form = HitoForm(tarea=self.tarea)
+        form = HitoCrearForm(tarea=self.tarea)
         self.assertIn(self.owner, form.fields["responsable"].queryset)
         self.assertNotIn(self.inactive, form.fields["responsable"].queryset)
+
+    def test_edit_form_excludes_responsible_and_reassignment_reason(self):
+        self.assertEqual(set(HitoForm().fields), {"nombre", "cumplimiento", "peso"})
 
     def test_responsable_is_required_and_validated_by_service(self):
         with self.assertRaises(ValidationError):
@@ -206,7 +209,7 @@ class HitoT076Tests(TestCase):
         self.assertContains(response, "Anular")
         self.assertContains(response, 'data-bs-target="#crearHitoModal"')
         self.assertContains(response, 'id="crearHitoModal"')
-        self.assertContains(response, "Motivo de reasignación")
+        self.assertContains(response, "Motivo")
         self.assertContains(response, "Nuevo responsable")
         self.assertContains(response, "Eliminar")
         self.assertLess(
@@ -218,6 +221,148 @@ class HitoT076Tests(TestCase):
         set_milestone_annulled(self.hito, self.manager, True)
         response = self.client.get(self._hitos_url())
         self.assertContains(response, "Reactivar")
+
+    def test_manager_hitos_use_unique_modals_and_compact_table_actions(self):
+        second_hito = create_milestone(
+            self.tarea,
+            "Segundo hito",
+            10,
+            3,
+            responsable=self.owner,
+            actor=self.manager,
+        )
+        self._login_with_company(self.manager)
+        response = self.client.get(self._hitos_url())
+        content = response.content.decode()
+        table_content = content[content.index("<table"):content.index("</table>")]
+
+        self.assertNotIn('name="nombre"', table_content)
+        self.assertNotIn('name="responsable"', table_content)
+        self.assertNotIn('name="cumplimiento"', table_content)
+        self.assertNotIn('name="peso"', table_content)
+        self.assertContains(response, f'id="editarHitoModal-{self.hito.pk}"')
+        self.assertContains(response, f'id="editarHitoModal-{second_hito.pk}"')
+        self.assertContains(response, f'id="reasignarHitoModal-{self.hito.pk}"')
+        self.assertContains(response, f'id="reasignarHitoModal-{second_hito.pk}"')
+        self.assertContains(response, 'name="accion" value="hito"')
+
+        edit_start = content.index(f'id="editarHitoModal-{self.hito.pk}"')
+        edit_end = content.index(f'id="reasignarHitoModal-{self.hito.pk}"')
+        edit_modal = content[edit_start:edit_end]
+        self.assertIn("editar-nombre-", edit_modal)
+        self.assertIn("editar-cumplimiento-", edit_modal)
+        self.assertIn("editar-peso-", edit_modal)
+        self.assertNotIn('name="responsable"', edit_modal)
+        self.assertNotIn("Motivo de reasignación", edit_modal)
+
+        reassign_start = edit_end
+        reassign_end = content.index('id="crearHitoModal"')
+        reassign_modal = content[reassign_start:reassign_end]
+        self.assertIn("Nuevo responsable", reassign_modal)
+        self.assertIn("Motivo", reassign_modal)
+
+    def test_invalid_edit_reopens_only_the_submitted_hito_modal(self):
+        second_hito = create_milestone(
+            self.tarea,
+            "Segundo hito",
+            10,
+            3,
+            responsable=self.owner,
+            actor=self.manager,
+        )
+        self._login_with_company(self.manager)
+        response = self.client.post(
+            self._hitos_url(),
+            data={
+                "accion": "editar_hito",
+                "hito_id": self.hito.pk,
+                "nombre": "",
+                "responsable": self.owner.pk,
+                "cumplimiento": "20",
+                "peso": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(
+            f'class="modal fade show d-block" id="editarHitoModal-{self.hito.pk}"',
+            content,
+        )
+        self.assertIn(
+            f'class="modal fade" id="editarHitoModal-{second_hito.pk}"',
+            content,
+        )
+
+    def test_manipulated_edit_post_does_not_change_responsible(self):
+        self._login_with_company(self.manager)
+        original_responsible = self.hito.responsable_id
+        response = self.client.post(
+            self._hitos_url(),
+            data={
+                "accion": "editar_hito",
+                "hito_id": self.hito.pk,
+                "responsable": self.new_owner.pk,
+            },
+        )
+
+        self.assertIn(response.status_code, {200, 302})
+        self.hito.refresh_from_db()
+        self.assertEqual(self.hito.responsable_id, original_responsible)
+        self.assertFalse(
+            self.hito.historial.filter(
+                tipo_evento=HitoHistorial.Evento.REASIGNACION,
+            ).exists()
+        )
+
+    def test_normal_edit_changes_name_weight_and_compliance(self):
+        update_milestone(
+            self.hito,
+            self.manager,
+            nombre="Nombre editado",
+            cumplimiento=30,
+            peso=4,
+        )
+
+        self.hito.refresh_from_db()
+        self.assertEqual(self.hito.nombre, "Nombre editado")
+        self.assertEqual(self.hito.peso, Decimal("4"))
+        self.assertEqual(self.hito.cumplimiento, Decimal("30"))
+
+    def test_invalid_reassignment_reopens_correct_modal(self):
+        self._login_with_company(self.manager)
+        response = self.client.post(
+            self._hitos_url(),
+            data={
+                "accion": "reasignar_hito",
+                "hito_id": self.hito.pk,
+                "responsable": self.new_owner.pk,
+                "motivo": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'class="modal fade show d-block" id="reasignarHitoModal-{self.hito.pk}"',
+        )
+
+    def test_invalid_compliance_reopens_responsible_modal(self):
+        self._login_with_company(self.owner)
+        response = self.client.post(
+            self._hitos_url(),
+            data={
+                "accion": "cumplimiento_hito",
+                "hito_id": self.hito.pk,
+                "cumplimiento": "101",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'class="modal fade show d-block" id="cumplimientoHitoModal-{self.hito.pk}"',
+        )
 
     def test_invalid_create_reopens_modal_with_errors(self):
         self._login_with_company(self.manager)

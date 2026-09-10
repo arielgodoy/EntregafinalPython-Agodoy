@@ -141,6 +141,62 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertContains(response, "Fecha de cumplimiento")
         self.assertContains(response, "—")
 
+    def test_detalle_muestra_configuracion_de_cierre_en_lectura(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        tarea = self._crear_tarea(requiere_evidencia_cierre=True)
+        self._login()
+
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
+
+        self.assertContains(response, "Configuración de cierre")
+        self.assertContains(response, "Sí")
+        self.assertNotContains(response, 'name="requiere_evidencia_cierre"')
+
+    def test_usuario_con_modificar_puede_cambiar_configuracion_sin_crear_evidencia(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea()
+        self._login()
+
+        response = self.client.post(
+            reverse("tareas:detalle_tarea", args=[tarea.pk]),
+            {"requiere_evidencia_cierre": "on"},
+        )
+
+        self.assertRedirects(response, reverse("tareas:detalle_tarea", args=[tarea.pk]))
+        tarea.refresh_from_db()
+        self.assertTrue(tarea.requiere_evidencia_cierre)
+        self.assertFalse(tarea.evidencias_cierre.exists())
+
+    def test_usuario_solo_lectura_no_puede_cambiar_configuracion(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        tarea = self._crear_tarea()
+        self._login()
+
+        response = self.client.post(
+            reverse("tareas:detalle_tarea", args=[tarea.pk]),
+            {"requiere_evidencia_cierre": "on"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        tarea.refresh_from_db()
+        self.assertFalse(tarea.requiere_evidencia_cierre)
+
+    def test_configuracion_de_cierre_respeta_empresa_activa(self):
+        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        tarea = self._crear_tarea(empresa=self.otra_empresa)
+        self._login()
+
+        response = self.client.post(
+            reverse("tareas:detalle_tarea", args=[tarea.pk]),
+            {"requiere_evidencia_cierre": "on"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        tarea.refresh_from_db()
+        self.assertFalse(tarea.requiere_evidencia_cierre)
+
     def test_detalle_muestra_fecha_asignacion_y_cumplimiento(self):
         self._permiso(self.vista_detalle, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable)

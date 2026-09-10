@@ -11,24 +11,30 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
 
+from access_control.decorators import verificar_permiso
+from access_control.services.permissions import user_has_permission_for_empresa
 from access_control.views import VerificarPermisoMixin
 
 from .forms import (
     AvanceManualForm,
     AvancePonderadoForm,
+    CompletarHitoForm,
     DocumentoForm,
     EvidenciaConfigForm,
     EvidenciaRegistroForm,
     HitoCumplimientoForm,
+    HitoCrearForm,
     HitoForm,
     HitoReasignacionForm,
     TareaForm,
 )
-from .models import Avance, DocumentoHistorial, DocumentoTarea, Hito, Tarea
+from .models import Avance, DocumentoHistorial, DocumentoTarea, Hito, HitoEvidencia, Tarea
 from .services.context import get_active_company_id
 from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
@@ -47,6 +53,7 @@ from .services.documents import (
 )
 from .services.progress import (
     create_milestone,
+    complete_milestone,
     delete_milestone_safely,
     milestone_capability,
     reassign_milestone,
@@ -104,7 +111,37 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             empresa_id=self.object.empresa_id
         )
         context["tarea_anulada_efectivamente"] = is_effectively_annulled(self.object)
+        context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas - Editar tarea",
+            accion="modificar",
+        )
+        context["evidencia_config_form"] = kwargs.get(
+            "evidencia_config_form",
+            EvidenciaConfigForm(
+                initial={
+                    "requiere_evidencia_cierre": self.object.requiere_evidencia_cierre
+                }
+            ),
+        )
         return context
+
+    @method_decorator(verificar_permiso("Tareas - Editar tarea", "modificar"))
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = EvidenciaConfigForm(request.POST)
+        if form.is_valid():
+            configure_closure_evidence(
+                tarea=self.object,
+                usuario=request.user,
+                requiere_evidencia_cierre=form.cleaned_data["requiere_evidencia_cierre"],
+            )
+            messages.success(request, "Configuración de evidencia actualizada.")
+            return redirect("tareas:detalle_tarea", pk=self.object.pk)
+        context = self.get_context_data(object=self.object)
+        context["evidencia_config_form"] = form
+        return self.render_to_response(context)
 
 
 class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
@@ -224,21 +261,34 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
 
     def get_context(self, tarea, **forms):
         avance = Avance.objects.filter(tarea=tarea).first()
-        hitos = list(tarea.hitos.select_related("responsable"))
+        hitos = list(
+            tarea.hitos.select_related("responsable", "completado_por").prefetch_related(
+                Prefetch(
+                    "evidencias",
+                    queryset=HitoEvidencia.objects.select_related("usuario").order_by("fecha", "pk"),
+                )
+            )
+        )
         for hito in hitos:
-            hito.puede_gestionar = milestone_capability(tarea, hito, self.request.user) == "manage"
-            hito.puede_actualizar = milestone_capability(tarea, hito, self.request.user) in {
+            capability = milestone_capability(tarea, hito, self.request.user)
+            hito.puede_gestionar = capability == "manage"
+            hito.puede_actualizar = capability in {
                 "progress",
                 "manage",
             }
+            hito.puede_completar = capability in {"progress", "manage"} and not hito.completado
         return {
             "tarea": tarea,
             "hitos": hitos,
-            "responsables_validos": HitoForm(tarea=tarea).fields["responsable"].queryset,
+            "responsables_validos": HitoCrearForm(tarea=tarea).fields["responsable"].queryset,
             "avance": avance,
             "avance_calculado": weighted_progress(tarea),
-            "hito_form": forms.get("hito_form", HitoForm(tarea=tarea)),
+            "hito_form": forms.get("hito_form", HitoCrearForm(tarea=tarea)),
+            "editar_form": forms.get("editar_form", HitoForm()),
             "reasignar_form": forms.get("reasignar_form", HitoReasignacionForm(tarea=tarea)),
+            "completar_form": forms.get("completar_form", CompletarHitoForm()),
+            "modal_abierto_hito_id": forms.get("modal_abierto_hito_id"),
+            "modal_abierto_accion": forms.get("modal_abierto_accion"),
             "manual_form": forms.get("manual_form", AvanceManualForm()),
             "ponderado_form": forms.get("ponderado_form", AvancePonderadoForm()),
         }
@@ -251,7 +301,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
         tarea = self.get_tarea(pk)
         accion = request.POST.get("accion")
         if accion == "hito":
-            form = HitoForm(request.POST, tarea=tarea)
+            form = HitoCrearForm(request.POST, tarea=tarea)
             if form.is_valid():
                 try:
                     create_milestone(
@@ -275,8 +325,35 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 pk=request.POST["hito_id"],
                 tarea=tarea,
             )
+        if accion == "completar_hito":
+            form = CompletarHitoForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    complete_milestone(
+                        hito,
+                        request.user,
+                        resena_cierre=form.cleaned_data["resena_cierre"],
+                        formato_archivo=form.cleaned_data["formato_archivo"],
+                        archivo=form.cleaned_data.get("archivo"),
+                        url=form.cleaned_data.get("url", ""),
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, "Hito completado correctamente.")
+                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return render(
+                request,
+                "tareas/tarea_hitos.html",
+                self.get_context(
+                    tarea,
+                    completar_form=form,
+                    modal_abierto_hito_id=hito.pk,
+                    modal_abierto_accion="completar_hito",
+                ),
+            )
         if accion == "editar_hito":
-            form = HitoForm(request.POST, instance=hito, tarea=tarea)
+            form = HitoForm(request.POST, instance=hito)
             if form.is_valid():
                 try:
                     update_milestone(
@@ -285,15 +362,22 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                         nombre=form.cleaned_data["nombre"],
                         cumplimiento=form.cleaned_data["cumplimiento"],
                         peso=form.cleaned_data["peso"],
-                        responsable=form.cleaned_data["responsable"],
-                        motivo=form.cleaned_data.get("motivo", ""),
                     )
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "Hito actualizado correctamente.")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
+            return render(
+                request,
+                "tareas/tarea_hitos.html",
+                self.get_context(
+                    tarea,
+                    editar_form=form,
+                    modal_abierto_hito_id=hito.pk,
+                    modal_abierto_accion="editar_hito",
+                ),
+            )
         if accion == "cumplimiento_hito":
             form = HitoCumplimientoForm(request.POST, instance=hito)
             if form.is_valid():
@@ -308,7 +392,16 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 else:
                     messages.success(request, "Cumplimiento actualizado correctamente.")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, cumplimiento_form=form))
+            return render(
+                request,
+                "tareas/tarea_hitos.html",
+                self.get_context(
+                    tarea,
+                    cumplimiento_form=form,
+                    modal_abierto_hito_id=hito.pk,
+                    modal_abierto_accion="cumplimiento_hito",
+                ),
+            )
         if accion == "reasignar_hito":
             form = HitoReasignacionForm(request.POST, tarea=tarea)
             if form.is_valid():
@@ -324,7 +417,16 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 else:
                     messages.success(request, "Hito reasignado correctamente.")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, reasignar_form=form))
+            return render(
+                request,
+                "tareas/tarea_hitos.html",
+                self.get_context(
+                    tarea,
+                    reasignar_form=form,
+                    modal_abierto_hito_id=hito.pk,
+                    modal_abierto_accion="reasignar_hito",
+                ),
+            )
         if accion in {"anular_hito", "reactivar_hito"}:
             try:
                 set_milestone_annulled(hito, request.user, accion == "anular_hito")
@@ -375,19 +477,14 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
 
     def get_context(self, tarea, **forms):
         documentos = tarea.documentos.all().prefetch_related("historial__usuario")
-        evidencia = getattr(tarea, "evidencia_cierre", None)
+        evidencias = tarea.evidencias_cierre.select_related("usuario").order_by("-fecha", "-pk")
         return {
             "tarea": tarea,
             "documentos": documentos,
-            "evidencia": evidencia,
+            "evidencias": evidencias,
             "document_form": forms.get("document_form", DocumentoForm()),
-            "evidencia_config_form": forms.get(
-                "evidencia_config_form", EvidenciaConfigForm(
-                    initial={"requerida": evidencia.requerida if evidencia else False}
-                )
-            ),
             "evidencia_registro_form": forms.get(
-                "evidencia_registro_form", EvidenciaRegistroForm(documentos=documentos)
+                "evidencia_registro_form", EvidenciaRegistroForm()
             ),
         }
 
@@ -405,6 +502,7 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                     tarea=tarea,
                     usuario=request.user,
                     tipo=form.cleaned_data["tipo"],
+                    formato_archivo=form.cleaned_data["formato_archivo"],
                     archivo=form.cleaned_data["archivo"],
                     url=form.cleaned_data["url"],
                     fecha_documento=form.cleaned_data["fecha_documento"],
@@ -413,26 +511,31 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                 messages.success(request, "Documento registrado correctamente.")
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, document_form=form))
-        if accion == "configurar_evidencia":
-            form = EvidenciaConfigForm(request.POST)
-            if form.is_valid():
-                configure_closure_evidence(
-                    tarea=tarea,
-                    usuario=request.user,
-                    requerida=form.cleaned_data["requerida"],
-                )
-                messages.success(request, "Configuración de evidencia actualizada.")
-                return redirect("tareas:documentos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_config_form=form))
         if accion == "registrar_evidencia":
-            documentos = tarea.documentos.all()
-            form = EvidenciaRegistroForm(request.POST, documentos=documentos)
+            form = EvidenciaRegistroForm(request.POST, request.FILES)
             if form.is_valid():
-                register_closure_evidence(
-                    tarea=tarea,
-                    documento=form.cleaned_data["documento"],
-                    usuario=request.user,
-                )
+                try:
+                    register_closure_evidence(
+                        tarea=tarea,
+                        usuario=request.user,
+                        formato_archivo=form.cleaned_data["formato_archivo"],
+                        archivo=form.cleaned_data["archivo"],
+                        url=form.cleaned_data["url"],
+                    )
+                except ValidationError as exc:
+                    if hasattr(exc, "message_dict"):
+                        for campo, mensajes in exc.message_dict.items():
+                            campo_formulario = campo if campo in form.fields else None
+                            for mensaje in mensajes:
+                                form.add_error(campo_formulario, mensaje)
+                    else:
+                        for mensaje in exc.messages:
+                            form.add_error(None, mensaje)
+                    return render(
+                        request,
+                        "tareas/tarea_documentos.html",
+                        self.get_context(tarea, evidencia_registro_form=form),
+                    )
                 messages.success(request, "Evidencia registrada correctamente.")
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_registro_form=form))

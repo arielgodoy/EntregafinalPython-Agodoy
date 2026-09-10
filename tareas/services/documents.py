@@ -20,6 +20,7 @@ def create_document(
     *,
     tarea,
     tipo,
+    formato_archivo,
     usuario,
     archivo=None,
     url="",
@@ -31,6 +32,7 @@ def create_document(
     datos = {
         "tarea": tarea,
         "tipo": tipo,
+        "formato_archivo": formato_archivo,
         "usuario": usuario,
         "archivo": archivo or "",
         "url": url or "",
@@ -51,6 +53,7 @@ def update_document(documento, usuario, **changes):
     _validate_user_in_task_company(documento.tarea, usuario)
     campos = {
         "tipo",
+        "formato_archivo",
         "archivo",
         "url",
         "fecha_documento",
@@ -70,26 +73,31 @@ def update_document(documento, usuario, **changes):
 
 
 @transaction.atomic
-def configure_closure_evidence(*, tarea, usuario, requerida):
+def configure_closure_evidence(*, tarea, usuario, requiere_evidencia_cierre):
     _validate_user_in_task_company(tarea, usuario)
-    evidencia, _created = EvidenciaCierre.objects.update_or_create(
-        tarea=tarea,
-        defaults={"requerida": bool(requerida), "usuario": usuario},
-    )
-    return evidencia
+    tarea.requiere_evidencia_cierre = bool(requiere_evidencia_cierre)
+    tarea.save(update_fields=["requiere_evidencia_cierre"])
+    return tarea
 
 
 @transaction.atomic
-def register_closure_evidence(*, tarea, documento, usuario):
+def register_closure_evidence(
+    *, tarea, usuario, formato_archivo, archivo=None, url="", documento=None
+):
     _validate_user_in_task_company(tarea, usuario)
-    if documento.tarea_id != tarea.pk:
+    if documento is not None and documento.tarea_id != tarea.pk:
         raise ValidationError("El documento no pertenece a la tarea.")
-    evidencia, _created = EvidenciaCierre.objects.update_or_create(
+    if documento is not None and not archivo and not url:
+        archivo = documento.archivo or None
+        url = documento.url
+    evidencia = EvidenciaCierre(
         tarea=tarea,
-        defaults={
-            "documento": documento,
-            "requerida": True,
-            "usuario": usuario,
-        },
+        documento=documento,
+        formato_archivo=formato_archivo,
+        archivo=archivo or "",
+        url=url or "",
+        usuario=usuario,
     )
+    evidencia.full_clean()
+    evidencia.save()
     return evidencia

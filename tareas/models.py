@@ -1,6 +1,8 @@
 """Persistent Phase 1/2 domain for internal tasks."""
 
 import re
+from os.path import splitext
+from urllib.parse import urlparse
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -8,6 +10,23 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from access_control.models import Empresa
+
+
+class FormatoArchivo(models.TextChoices):
+    PDF = "PDF", "PDF"
+    JPG = "JPG", "JPG"
+    JPEG = "JPEG", "JPEG"
+    PNG = "PNG", "PNG"
+    DOC = "DOC", "DOC"
+    DOCX = "DOCX", "DOCX"
+    XLS = "XLS", "XLS"
+    XLSX = "XLSX", "XLSX"
+
+
+def formato_coincide_extension(formato, extension):
+    if formato in {FormatoArchivo.JPG, FormatoArchivo.JPEG}:
+        return extension in {"jpg", "jpeg"}
+    return extension == formato.lower()
 
 
 class Tarea(models.Model):
@@ -45,6 +64,7 @@ class Tarea(models.Model):
     anulada = models.BooleanField(default=False)
     fechas_pendientes_confirmacion = models.BooleanField(default=False)
     cierre_completado = models.BooleanField(default=False)
+    requiere_evidencia_cierre = models.BooleanField(default=False)
     estado = models.CharField(
         max_length=32,
         choices=Estado.choices,
@@ -246,6 +266,23 @@ class Tarea(models.Model):
             usuario=usuario or self.creada_por,
         )
 
+    class FormatoArchivo(models.TextChoices):
+        PDF = "PDF", "PDF"
+        JPG = "JPG", "JPG"
+        JPEG = "JPEG", "JPEG"
+        PNG = "PNG", "PNG"
+        DOC = "DOC", "DOC"
+        DOCX = "DOCX", "DOCX"
+        XLS = "XLS", "XLS"
+        XLSX = "XLSX", "XLSX"
+
+
+def formato_coincide_extension(formato, extension):
+    if formato in {Tarea.FormatoArchivo.JPG, Tarea.FormatoArchivo.JPEG}:
+        return extension in {"jpg", "jpeg"}
+    return extension == formato.lower()
+
+
 
 class Avance(models.Model):
     class Modo(models.TextChoices):
@@ -288,6 +325,16 @@ class Hito(models.Model):
         related_name="hitos_responsable",
     )
     anulado = models.BooleanField(default=False)
+    completado = models.BooleanField(default=False)
+    completado_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="hitos_completados",
+    )
+    fecha_completado = models.DateTimeField(null=True, blank=True)
+    resena_cierre = models.TextField(blank=True, default="")
     cumplimiento = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -338,6 +385,7 @@ class HitoHistorial(models.Model):
         ANULACION = "ANULACION", "Anulación"
         REACTIVACION = "REACTIVACION", "Reactivación"
         ELIMINACION_FISICA = "ELIMINACION_FISICA", "Eliminación física"
+        COMPLETADO = "COMPLETADO", "Completado"
 
     hito = models.ForeignKey(Hito, on_delete=models.CASCADE, related_name="historial")
     tipo_evento = models.CharField(max_length=32, choices=Evento.choices)
@@ -361,6 +409,50 @@ class HitoHistorial(models.Model):
                 name="tareas_hh_hito_fecha_idx",
             )
         ]
+
+
+class HitoEvidencia(models.Model):
+    FormatoArchivo = FormatoArchivo
+
+    hito = models.ForeignKey(
+        Hito,
+        on_delete=models.CASCADE,
+        related_name="evidencias",
+    )
+    formato_archivo = models.CharField(max_length=4, choices=FormatoArchivo.choices)
+    archivo = models.FileField(
+        upload_to="tareas/hitos/evidencias/",
+        blank=True,
+        default="",
+    )
+    url = models.URLField(blank=True, default="")
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="evidencias_hitos_registradas",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    def clean(self):
+        super().clean()
+        tiene_archivo = bool(self.archivo)
+        tiene_url = bool(self.url)
+        errores = {}
+        if tiene_archivo == tiene_url:
+            errores["archivo"] = "La evidencia debe indicar exactamente un archivo o una URL."
+        else:
+            fuente = self.archivo.name if tiene_archivo else urlparse(self.url).path
+            extension = splitext(fuente)[1].lower().lstrip(".")
+            if tiene_archivo and not extension:
+                errores["formato_archivo"] = "El archivo debe tener una extensión reconocible."
+            elif extension and not formato_coincide_extension(self.formato_archivo, extension):
+                errores["formato_archivo"] = "El formato declarado no coincide con la extensión de la evidencia."
+        if errores:
+            raise ValidationError(errores)
+
+    class Meta:
+        ordering = ["-fecha", "-pk"]
+        indexes = [models.Index(fields=["hito", "fecha"], name="tareas_he_hito_fecha_idx")]
 
 
 class MiniTarea(models.Model):
@@ -399,12 +491,15 @@ class DocumentoTarea(models.Model):
         CERTIFICADO = "CERTIFICADO", "Certificado"
         OTRO = "OTRO", "Otro"
 
+    FormatoArchivo = FormatoArchivo
+
     tarea = models.ForeignKey(
         Tarea,
         on_delete=models.PROTECT,
         related_name="documentos",
     )
     tipo = models.CharField(max_length=20, choices=Tipo.choices)
+    formato_archivo = models.CharField(max_length=4, choices=FormatoArchivo.choices)
     archivo = models.FileField(
         upload_to="tareas/documentos/",
         blank=True,
@@ -424,10 +519,21 @@ class DocumentoTarea(models.Model):
         super().clean()
         tiene_archivo = bool(self.archivo)
         tiene_url = bool(self.url)
+        errores = {}
         if tiene_archivo == tiene_url:
-            raise ValidationError(
-                "El documento debe indicar exactamente un archivo o una URL."
-            )
+            errores["archivo"] = "El documento debe indicar exactamente un archivo o una URL."
+        if tiene_archivo:
+            extension = splitext(self.archivo.name)[1].lower().lstrip(".")
+            if not extension:
+                errores["formato_archivo"] = "El archivo debe tener una extensión reconocible."
+            elif not formato_coincide_extension(self.formato_archivo, extension):
+                errores["formato_archivo"] = "El formato declarado no coincide con la extensión del archivo."
+        elif tiene_url:
+            extension = splitext(urlparse(self.url).path)[1].lower().lstrip(".")
+            if extension and not formato_coincide_extension(self.formato_archivo, extension):
+                errores["formato_archivo"] = "El formato declarado no coincide con la extensión de la URL."
+        if errores:
+            raise ValidationError(errores)
 
     class Meta:
         indexes = [
@@ -456,10 +562,10 @@ class DocumentoHistorial(models.Model):
 
 
 class EvidenciaCierre(models.Model):
-    tarea = models.OneToOneField(
+    tarea = models.ForeignKey(
         Tarea,
         on_delete=models.PROTECT,
-        related_name="evidencia_cierre",
+        related_name="evidencias_cierre",
     )
     documento = models.ForeignKey(
         DocumentoTarea,
@@ -468,7 +574,18 @@ class EvidenciaCierre(models.Model):
         blank=True,
         related_name="evidencias_cierre",
     )
-    requerida = models.BooleanField(default=False)
+    formato_archivo = models.CharField(
+        max_length=4,
+        choices=FormatoArchivo.choices,
+        blank=True,
+        default="",
+    )
+    archivo = models.FileField(
+        upload_to="tareas/evidencias/",
+        blank=True,
+        default="",
+    )
+    url = models.URLField(blank=True, default="")
     usuario = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
@@ -476,8 +593,34 @@ class EvidenciaCierre(models.Model):
     )
     fecha = models.DateTimeField(default=timezone.now)
 
+    def clean(self):
+        super().clean()
+        tiene_archivo = bool(self.archivo)
+        tiene_url = bool(self.url)
+        errores = {}
+        if tiene_archivo and tiene_url:
+            errores["archivo"] = "La evidencia debe indicar exactamente un archivo o una URL."
+        elif tiene_archivo or tiene_url:
+            if not self.formato_archivo:
+                errores["formato_archivo"] = "La evidencia requiere un formato de archivo."
+            else:
+                fuente = self.archivo.name if tiene_archivo else urlparse(self.url).path
+                extension = splitext(fuente)[1].lower().lstrip(".")
+                if extension and not formato_coincide_extension(self.formato_archivo, extension):
+                    errores["formato_archivo"] = "El formato declarado no coincide con la extensión de la evidencia."
+        elif self.formato_archivo:
+            errores["archivo"] = "La evidencia debe indicar exactamente un archivo o una URL."
+        if errores:
+            raise ValidationError(errores)
+
     class Meta:
-        indexes = [models.Index(fields=["tarea", "requerida"])]
+        ordering = ["-fecha", "-pk"]
+        indexes = [
+            models.Index(
+                fields=["tarea", "fecha"],
+                name="tareas_evid_tarea_fecha_idx",
+            )
+        ]
 
 
 # Compatibility access for existing MVP callers; ACTIVA is the persisted choice.
