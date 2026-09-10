@@ -291,11 +291,18 @@
                     </div>
                 </li>{% endif %}
 
-                <!-- Menú APIs (SIEMPRE VISIBLE) -->
-                {% if "api_home" in request.sidebar_visible_items %}<li class="nav-item">
-                    <a class="nav-link menu-link" href="{% url 'api_home' %}">
+                <!-- Menú APIs -->
+                {% if "apis" in request.sidebar_visible_items %}<li class="nav-item">
+                    <a class="nav-link menu-link" href="#sidebarApis" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarApis">
                         <i class="ri-code-s-slash-line"></i> <span data-key="menu.apis">APIs</span>
                     </a>
+                    <div class="collapse menu-dropdown" id="sidebarApis">
+                        <ul class="nav nav-sm flex-column">
+                            {% if "api_home" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'api_home' %}" class="nav-link" data-key="menu.apis.documentation_test">Documentación y Prueba</a>
+                            </li>{% endif %}
+                        </ul>
+                    </div>
                 </li>{% endif %}
 
                 <!-- Menú Settings (SIEMPRE VISIBLE) -->

@@ -31,6 +31,10 @@ class VicmeasSidebarTests(TestCase):
             nombre="Control Operacional - Dashboard",
             defaults={"route_name": "control_operacional:dashboard"},
         )
+        self.api_home, _ = Vista.objects.get_or_create(
+            nombre="APIs - Inicio",
+            defaults={"route_name": "api_home"},
+        )
 
     def _activate(self, empresa):
         self.client.force_login(self.user)
@@ -78,6 +82,50 @@ class VicmeasSidebarTests(TestCase):
         self.assertIn("gestion_dte", visible)
         self.assertIn("gestion_dte_cesiones", visible)
         self.assertNotIn("gestion_dte_index", visible)
+
+    def test_api_is_a_group_with_one_child_and_existing_view(self):
+        template = Path(__file__).resolve().parents[2] / "templates" / "partials" / "sidebar.html"
+        template_content = template.read_text(encoding="utf-8")
+
+        self.assertEqual(SIDEBAR_GROUPS["apis"], ("api_home",))
+        self.assertNotIn("api_home", SIDEBAR_GROUPS)
+        self.assertEqual(SIDEBAR_VIEW_NAMES["api_home"], self.api_home.nombre)
+        self.assertEqual(Vista.objects.filter(nombre="APIs - Inicio").count(), 1)
+        self.assertEqual(template_content.count("{% url 'api_home' %}"), 1)
+
+    def test_api_v_true_shows_parent_and_documentation_child(self):
+        self._permission(self.empresa_a, self.api_home, ver=True)
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertIn("api_home", visible)
+        self.assertIn("apis", visible)
+
+        self._activate(self.empresa_a)
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+        self.assertContains(response, 'data-key="menu.apis.documentation_test"')
+        self.assertContains(response, "Documentación y Prueba")
+        self.assertContains(response, f'href="{reverse("api_home")}"')
+        self.assertEqual(response.content.count("Documentación y Prueba".encode("utf-8")), 1)
+
+    def test_api_v_false_hides_parent_and_documentation_child(self):
+        self._permission(self.empresa_a, self.api_home, ver=False)
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertNotIn("api_home", visible)
+        self.assertNotIn("apis", visible)
+
+        self._activate(self.empresa_a)
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+        self.assertNotContains(response, "Documentación y Prueba")
+
+    def test_superuser_sees_api_parent_and_child(self):
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertIn("api_home", visible)
+        self.assertIn("apis", visible)
 
     def test_v_false_i_true_hides_sidebar_but_allows_direct_access(self):
         self._permission(self.empresa_a, self.dte_cesiones, ingresar=True)

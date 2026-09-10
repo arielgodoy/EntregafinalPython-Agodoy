@@ -74,6 +74,7 @@ SIDEBAR_GROUPS = {
     "notifications": ("notifications_list", "notifications_alerts", "notifications_force", "notifications_custom"),
     "audit": ("audit_library", "audit_gestion_dte"),
     "access": ("access_invite", "access_invitations", "access_users", "access_companies", "access_views", "access_permissions", "access_filtered_permissions", "access_view_permissions"),
+    "apis": ("api_home",),
     "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql"),
 }
 
