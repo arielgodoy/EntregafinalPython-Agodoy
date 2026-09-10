@@ -21,7 +21,7 @@ def get_access_utility_vista():
     return Vista.objects.filter(nombre=ACCESS_UTILITY_VISTA_NAME).first()
 
 
-def get_scope_vistas(scope):
+def get_scope_vistas(scope, *, require_all=True):
     global_names = {
         SIDEBAR_VIEW_NAMES[item_key]
         for item_key in SIDEBAR_GLOBAL_ITEMS
@@ -51,9 +51,22 @@ def get_scope_vistas(scope):
     for vista in Vista.objects.filter(nombre__in=expected_names).order_by("id"):
         vistas_by_name.setdefault(vista.nombre, vista)
     missing_names = [name for name in expected_names if name not in vistas_by_name]
-    if missing_names:
+    if missing_names and require_all:
         raise ValidationError("Faltan Vistas catalogadas: " + ", ".join(missing_names))
-    return [vistas_by_name[name] for name in expected_names]
+    return [vistas_by_name[name] for name in expected_names if name in vistas_by_name]
+
+
+def get_hideable_sidebar_vistas():
+    """Resolve the unique, non-global leaf views controlled by the sidebar."""
+    return get_scope_vistas("all", require_all=False)
+
+
+def get_hideable_sidebar_vista(vista):
+    allowed_vistas = get_hideable_sidebar_vistas()
+    allowed_by_id = {allowed_vista.id: allowed_vista for allowed_vista in allowed_vistas}
+    if vista.id not in allowed_by_id:
+        raise ValidationError("La Vista seleccionada no es una opción navegable del sidebar.")
+    return allowed_by_id[vista.id]
 
 
 def get_access_utility_user_options(empresas):
@@ -190,4 +203,53 @@ def apply_additive_permissions(*, usuario, empresa, vistas, selected_fields):
         "unchanged": unchanged,
         "deleted": 0,
         "selected_fields": selected_fields,
+    }
+
+
+def validate_hide_view_authorization(*, executor, empresa, vista):
+    if not has_explicit_permission(
+        user=executor,
+        empresa=empresa,
+        vista=vista,
+        accion="modificar",
+    ):
+        raise PermissionError("No tienes modificar en el Utilitario de Acceso para la empresa objetivo.")
+
+
+def build_hide_view_preview(*, empresa, vista):
+    affected_permissions = list(
+        Permiso.objects.filter(
+            empresa=empresa,
+            vista=vista,
+            ver=True,
+        ).select_related("usuario").order_by("usuario__username", "usuario_id")
+    )
+    return {
+        "empresa": empresa,
+        "vista": vista,
+        "affected_permissions": affected_permissions,
+        "affected_users": [permiso.usuario for permiso in affected_permissions],
+        "affected_count": len(affected_permissions),
+        "processed": 1,
+    }
+
+
+def hide_view_from_sidebar(*, empresa, vista):
+    with transaction.atomic():
+        affected_permissions = Permiso.objects.select_for_update().filter(
+            empresa=empresa,
+            vista=vista,
+            ver=True,
+        )
+        updated = affected_permissions.count()
+        if updated:
+            affected_permissions.update(ver=False)
+
+    return {
+        "processed": 1,
+        "updated": updated,
+        "v_disabled": updated,
+        "created": 0,
+        "deleted": 0,
+        "icmeas_modified": 0,
     }

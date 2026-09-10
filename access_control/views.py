@@ -30,6 +30,7 @@ from .forms import (
     CompanyConfigForm,
     AccessRequestGrantForm,
     AccessUtilityForm,
+    AccessUtilityHideViewForm,
 )
 from django.http import JsonResponse
 
@@ -76,7 +77,11 @@ from access_control.services.access_utility import (
     get_access_utility_user_options,
     get_access_utility_vista,
     get_scope_vistas,
+    get_hideable_sidebar_vista,
+    build_hide_view_preview,
+    hide_view_from_sidebar,
     has_explicit_permission,
+    validate_hide_view_authorization,
     validate_operation_authorization,
 )
 logger = logging.getLogger(__name__)
@@ -248,6 +253,7 @@ class AccessUtilityView(LoginRequiredMixin, View):
         empresas = Empresa.objects.order_by("codigo")
         context = {
             "form": form,
+            "hide_form": extra.pop("hide_form", AccessUtilityHideViewForm(prefix="hide")),
             "empresas": empresas,
             "user_options": get_access_utility_user_options(empresas),
             "vicmeas_fields": VICMEAS_FIELDS,
@@ -270,10 +276,74 @@ class AccessUtilityView(LoginRequiredMixin, View):
             accion="ingresar",
         ):
             return self._forbidden(request, "No tienes permiso para ingresar al Utilitario de Acceso.")
-        return render(request, self.template_name, self._base_context(AccessUtilityForm()))
+        return render(
+            request,
+            self.template_name,
+            self._base_context(AccessUtilityForm(), hide_form=AccessUtilityHideViewForm(prefix="hide")),
+        )
+
+    def _post_hide_view(self, request, action):
+        hide_form = AccessUtilityHideViewForm(request.POST, prefix="hide")
+        assignment_form = AccessUtilityForm()
+        if not hide_form.is_valid():
+            return render(
+                request,
+                self.template_name,
+                self._base_context(assignment_form, hide_form=hide_form),
+                status=400,
+            )
+
+        utility_vista = get_access_utility_vista()
+        if utility_vista is None:
+            return JsonResponse({"error": "La Vista canónica del utilitario no está catalogada."}, status=503)
+
+        empresa = hide_form.cleaned_data["empresa"]
+        try:
+            vista = get_hideable_sidebar_vista(hide_form.cleaned_data["vista"])
+            validate_hide_view_authorization(
+                executor=request.user,
+                empresa=empresa,
+                vista=utility_vista,
+            )
+        except PermissionError as error:
+            return self._forbidden(request, str(error))
+        except ValidationError as error:
+            hide_form.add_error("vista", str(error))
+            return render(
+                request,
+                self.template_name,
+                self._base_context(assignment_form, hide_form=hide_form),
+                status=400,
+            )
+
+        preview = build_hide_view_preview(empresa=empresa, vista=vista)
+        if action == "hide_view_preview":
+            return render(
+                request,
+                self.template_name,
+                self._base_context(
+                    assignment_form,
+                    hide_form=hide_form,
+                    hide_preview=preview,
+                ),
+            )
+
+        result = hide_view_from_sidebar(empresa=empresa, vista=vista)
+        return render(
+            request,
+            self.template_name,
+            self._base_context(
+                assignment_form,
+                hide_form=AccessUtilityHideViewForm(prefix="hide"),
+                hide_result=result,
+                hide_result_vista=vista,
+            ),
+        )
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
+        if action in {"hide_view_preview", "hide_view_confirm"}:
+            return self._post_hide_view(request, action)
         form = AccessUtilityForm(request.POST)
         if not form.is_valid():
             return render(request, self.template_name, self._base_context(form), status=400)

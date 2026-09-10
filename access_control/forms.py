@@ -1,10 +1,10 @@
 from django import forms
 from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
 from acounts.models import SystemConfig, EmailAccount, CompanyConfig
 from .models import Permiso, Empresa, Vista
 from django.contrib.auth.models import User
 from access_control.services.permissions import VICMEAS_FIELDS, get_sidebar_group_options, get_valid_users_for_empresa
+from access_control.services.access_utility import get_hideable_sidebar_vistas
 
 
 class AccessUtilityForm(forms.Form):
@@ -65,6 +65,31 @@ class AccessUtilityForm(forms.Form):
             if inactive_user is not None:
                 self.add_error("usuario", "El usuario está inactivo y no puede recibir permisos.")
         return cleaned_data
+
+
+class AccessUtilityHideViewForm(forms.Form):
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.order_by("codigo"),
+        required=True,
+        label="Empresa",
+        error_messages={"required": "Este campo es obligatorio."},
+    )
+    vista = forms.ModelChoiceField(
+        queryset=Vista.objects.none(),
+        required=True,
+        label="Vista",
+        error_messages={"required": "Este campo es obligatorio."},
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["empresa"].widget.attrs["class"] = "form-select"
+        self.fields["vista"].widget.attrs["class"] = "form-select"
+        vistas = get_hideable_sidebar_vistas()
+        self.catalog_error = None
+        self.fields["vista"].queryset = Vista.objects.filter(
+            pk__in=[vista.pk for vista in vistas]
+        ).order_by("nombre")
 
 class PermisoForm(forms.ModelForm):
     class Meta:

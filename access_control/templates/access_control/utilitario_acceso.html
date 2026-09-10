@@ -21,6 +21,9 @@
                             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#accessUtilityModal">
                                 <i class="ri-shield-user-line me-1"></i> Asignar permisos masivos
                             </button>
+                            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#hideViewModal">
+                                <i class="ri-eye-off-line me-1"></i> Ocultar vista del menú
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -34,6 +37,53 @@
                 <p class="mb-1">Permisos actualizados: {{ result.updated }}</p>
                 <p class="mb-1">Sin cambios: {{ result.unchanged }}</p>
                 <p class="mb-0">Permisos eliminados: {{ result.deleted }}</p>
+            </div>
+            {% endif %}
+
+            {% if hide_result %}
+            <div class="alert alert-success" role="alert">
+                <h2 class="h6">Ocultamiento completado</h2>
+                <p class="mb-1">Vista procesada: {{ hide_result.processed }}</p>
+                <p class="mb-1">Permisos actualizados: {{ hide_result.updated }}</p>
+                <p class="mb-1">V desactivados: {{ hide_result.v_disabled }}</p>
+                <p class="mb-1">Permisos creados: {{ hide_result.created }}</p>
+                <p class="mb-1">Permisos eliminados: {{ hide_result.deleted }}</p>
+                <p class="mb-0">ICMEAS modificados: {{ hide_result.icmeas_modified }}</p>
+            </div>
+            {% endif %}
+
+            {% if hide_preview %}
+            <div class="card border-warning" id="hideViewPreview">
+                <div class="card-body">
+                    <h2 class="h5">Preview de ocultamiento</h2>
+                    <dl class="row mb-3">
+                        <dt class="col-sm-3">Empresa</dt>
+                        <dd class="col-sm-9">{{ hide_preview.empresa }}</dd>
+                        <dt class="col-sm-3">Vista</dt>
+                        <dd class="col-sm-9">{{ hide_preview.vista.nombre }}</dd>
+                        <dt class="col-sm-3">Permisos con V=True</dt>
+                        <dd class="col-sm-9">{{ hide_preview.affected_count }}</dd>
+                        <dt class="col-sm-3">Permisos a modificar</dt>
+                        <dd class="col-sm-9">{{ hide_preview.affected_count }}</dd>
+                    </dl>
+                    {% if hide_preview.affected_count %}
+                    <p class="mb-2">Usuarios con V=True: {{ hide_preview.affected_users|join:", " }}</p>
+                    {% else %}
+                    <p class="alert alert-warning mb-2">La vista ya está oculta para todos los usuarios de esta empresa.</p>
+                    {% endif %}
+                    <p class="alert alert-info mb-2">Esta operación quitará exclusivamente el permiso V. I/C/M/E/A/S permanecerán intactos.</p>
+                    <p class="alert alert-info mb-2">Los usuarios que conserven I=True podrán seguir accediendo mediante URL directa.</p>
+                    <p class="alert alert-warning mb-0">Los superusuarios continuarán viendo esta opción debido al bypass visual del sidebar.</p>
+                    <form method="post" class="mt-3">
+                        {% csrf_token %}
+                        <input type="hidden" name="hide-empresa" value="{{ hide_form.empresa.value }}">
+                        <input type="hidden" name="hide-vista" value="{{ hide_form.vista.value }}">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#hideViewModal">Editar selección</button>
+                            <button type="submit" class="btn btn-warning" name="action" value="hide_view_confirm">Confirmar ocultamiento</button>
+                        </div>
+                    </form>
+                </div>
             </div>
             {% endif %}
 
@@ -134,6 +184,40 @@
                                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
                                 <button type="submit" class="btn btn-outline-primary" name="action" value="preview">Previsualizar</button>
                                 {% if preview %}<button type="submit" class="btn btn-primary" name="action" value="confirm">Confirmar asignación</button>{% endif %}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="hideViewModal" tabindex="-1" aria-labelledby="hideViewModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="hideViewModalLabel">Ocultar vista del menú</h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                        </div>
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="modal-body">
+                                {{ hide_form.non_field_errors }}
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="id_hide-empresa" class="form-label">Empresa</label>
+                                        {{ hide_form.empresa }}
+                                        {{ hide_form.empresa.errors }}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="id_hide-vista" class="form-label">Vista</label>
+                                        {{ hide_form.vista }}
+                                        {{ hide_form.vista.errors }}
+                                    </div>
+                                </div>
+                                <p class="text-muted mt-3 mb-0">Solo se quitará V (Ver). Los permisos I/C/M/E/A/S permanecerán sin cambios.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-outline-warning" name="action" value="hide_view_preview">Previsualizar</button>
                             </div>
                         </form>
                     </div>

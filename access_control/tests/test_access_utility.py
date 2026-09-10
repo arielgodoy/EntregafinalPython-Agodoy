@@ -9,12 +9,14 @@ from access_control.models import Empresa, Permiso, PerfilAcceso, UsuarioPerfilE
 from access_control.services.access_utility import (
     ACCESS_UTILITY_VISTA_NAME,
     apply_additive_permissions,
+    get_hideable_sidebar_vistas,
     get_scope_vistas,
 )
 from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
     SIDEBAR_VIEW_NAMES,
+    VICMEAS_FIELDS,
     get_sidebar_visible_items,
 )
 
@@ -231,10 +233,19 @@ class AccessUtilityTests(TestCase):
     def test_library_confirm_updates_seven_sidebar_views_and_preserves_icmeas(self):
         library_vistas = get_scope_vistas("library")
         self.assertEqual(len(library_vistas), 7)
+        preserved_vista = next(
+            vista
+            for vista in library_vistas
+            if not Permiso.objects.filter(
+                usuario=self.target,
+                empresa=self.empresa_objetivo,
+                vista=vista,
+            ).exists()
+        )
         preserved = Permiso.objects.create(
             usuario=self.target,
             empresa=self.empresa_objetivo,
-            vista=library_vistas[0],
+            vista=preserved_vista,
             ingresar=True,
             modificar=True,
         )
@@ -425,3 +436,287 @@ class AccessUtilityTests(TestCase):
         self.assertIn(self.target, users)
         self.assertIn(assigned, users)
         self.assertNotIn(self.inactive_target, users)
+
+
+class HideViewUtilityTests(TestCase):
+    def setUp(self):
+        self.actor = User.objects.create_user(username="hide-actor", password="pass")
+        self.target = User.objects.create_user(username="hide-target", password="pass")
+        self.other_target = User.objects.create_user(username="hide-other", password="pass")
+        self.empresa_objetivo = Empresa.objects.create(codigo="00", descripcion="Objetivo")
+        self.empresa_otra = Empresa.objects.create(codigo="01", descripcion="Otra")
+        self.utilitario, _ = Vista.objects.get_or_create(
+            nombre=ACCESS_UTILITY_VISTA_NAME,
+            defaults={"route_name": "access_control:utilitario_acceso"},
+        )
+        self.sidebar_vistas = {
+            nombre: Vista.objects.get_or_create(nombre=nombre)[0]
+            for nombre in set(SIDEBAR_VIEW_NAMES.values())
+            if nombre != ACCESS_UTILITY_VISTA_NAME
+        }
+        self.vista_objetivo = self.sidebar_vistas["Gestión DTE - Control de Cesiones"]
+        self.vista_otra = self.sidebar_vistas["Gestión DTE - Dashboard DTE-SII-RPETC"]
+        self.vista_global = self.sidebar_vistas[SIDEBAR_VIEW_NAMES["account_email"]]
+        self.vista_interna = Vista.objects.create(nombre="Biblioteca - Eliminar Propiedad")
+        Permiso.objects.create(
+            usuario=self.actor,
+            empresa=self.empresa_objetivo,
+            vista=self.utilitario,
+            ingresar=True,
+            modificar=True,
+        )
+        self.client.force_login(self.actor)
+        session = self.client.session
+        session["empresa_id"] = self.empresa_objetivo.id
+        session.save()
+
+    def _url(self):
+        return reverse("access_control:utilitario_acceso")
+
+    def _post_hide(self, action="hide_view_confirm", empresa=None, vista=None):
+        return self.client.post(
+            self._url(),
+            {
+                "hide-empresa": (empresa or self.empresa_objetivo).id,
+                "hide-vista": (vista or self.vista_objetivo).id,
+                "action": action,
+            },
+        )
+
+    def test_button_and_modal_are_visible_without_user_selector(self):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ocultar vista del menú")
+        self.assertContains(response, 'id="hideViewModal"')
+        self.assertContains(response, "id_hide-empresa")
+        self.assertContains(response, "id_hide-vista")
+        self.assertNotContains(response, 'name="hide-usuario"')
+
+    def test_get_context_contains_catalogued_hide_view_choices(self):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        hide_form = response.context["hide_form"]
+        self.assertGreater(hide_form.fields["vista"].queryset.count(), 0)
+        self.assertIn(
+            "APIs - Inicio",
+            set(hide_form.fields["vista"].queryset.values_list("nombre", flat=True)),
+        )
+
+    def test_hide_form_requires_empresa_and_vista(self):
+        response = self.client.post(self._url(), {"action": "hide_view_preview"})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Este campo es obligatorio", status_code=400)
+
+    def test_selector_uses_unique_sidebar_leaf_mapping(self):
+        vistas = get_hideable_sidebar_vistas()
+        ids = [vista.id for vista in vistas]
+        names = {vista.nombre for vista in vistas}
+        expected = {
+            SIDEBAR_VIEW_NAMES[item_key]
+            for group in SIDEBAR_GROUPS.values()
+            for item_key in group
+            if item_key not in SIDEBAR_GLOBAL_ITEMS
+            and SIDEBAR_VIEW_NAMES[item_key]
+            not in {
+                SIDEBAR_VIEW_NAMES[global_item]
+                for global_item in SIDEBAR_GLOBAL_ITEMS
+                if global_item in SIDEBAR_VIEW_NAMES
+            }
+        }
+        self.assertEqual(names, expected)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertNotIn(self.vista_global.id, ids)
+        self.assertNotIn("Control de Acceso", names)
+        self.assertNotIn("APIs", names)
+        self.assertNotIn(self.vista_interna.id, ids)
+
+    def test_selector_keeps_catalogued_choices_when_three_mapping_views_are_missing(self):
+        missing_names = {
+            "Tareas - Listado",
+            "Tareas - Crear tarea",
+            "Configuración - Conexiones MySQL",
+        }
+        Vista.objects.filter(nombre__in=missing_names).delete()
+
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        hide_form = response.context["hide_form"]
+        choices = set(hide_form.fields["vista"].queryset.values_list("nombre", flat=True))
+
+        self.assertGreater(len(choices), 0)
+        self.assertIn("APIs - Inicio", choices)
+        self.assertTrue(missing_names.isdisjoint(choices))
+
+    def test_preview_is_read_only_and_counts_only_v_true(self):
+        permiso = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+            ingresar=True,
+            crear=True,
+            modificar=True,
+            eliminar=True,
+            autorizar=True,
+            supervisor=True,
+        )
+        Permiso.objects.create(
+            usuario=self.other_target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=False,
+            ingresar=True,
+        )
+        before = {
+            field: getattr(permiso, field)
+            for field in VICMEAS_FIELDS
+        }
+        response = self._post_hide(action="hide_view_preview")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Permisos con V=True")
+        self.assertContains(response, "Permisos a modificar")
+        self.assertContains(response, "Usuarios con V=True")
+        self.assertContains(response, "1")
+        self.assertContains(response, "URL directa")
+        permiso.refresh_from_db()
+        self.assertEqual(before, {field: getattr(permiso, field) for field in VICMEAS_FIELDS})
+
+    def test_preview_mentions_superuser_bypass(self):
+        response = self._post_hide(action="hide_view_preview")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "superusuarios continuarán viendo")
+
+    def test_hide_confirmation_requires_modificar_in_target_company(self):
+        permission = Permiso.objects.get(
+            usuario=self.actor,
+            empresa=self.empresa_objetivo,
+            vista=self.utilitario,
+        )
+        permission.modificar = False
+        permission.save(update_fields=["modificar"])
+        response = self._post_hide()
+        self.assertEqual(response.status_code, 403)
+
+    def test_confirm_changes_only_v_for_one_view_and_company(self):
+        permiso = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+            ingresar=True,
+            crear=True,
+            modificar=True,
+            eliminar=True,
+            autorizar=True,
+            supervisor=True,
+        )
+        other_company = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_otra,
+            vista=self.vista_objetivo,
+            ver=True,
+            ingresar=True,
+        )
+        other_view = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_otra,
+            ver=True,
+            ingresar=True,
+        )
+        before = {field: getattr(permiso, field) for field in VICMEAS_FIELDS if field != "ver"}
+        response = self._post_hide()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ocultamiento completado")
+        self.assertContains(response, "Permisos actualizados: 1")
+        permiso.refresh_from_db()
+        self.assertFalse(permiso.ver)
+        self.assertEqual(before, {field: getattr(permiso, field) for field in VICMEAS_FIELDS if field != "ver"})
+        other_company.refresh_from_db()
+        other_view.refresh_from_db()
+        self.assertTrue(other_company.ver)
+        self.assertTrue(other_view.ver)
+
+    def test_confirm_does_not_create_or_delete_permission_rows(self):
+        permiso = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+        )
+        before_count = Permiso.objects.count()
+        response = self._post_hide()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Permiso.objects.count(), before_count)
+        self.assertTrue(Permiso.objects.filter(pk=permiso.pk).exists())
+        self.assertContains(response, "Permisos creados: 0")
+        self.assertContains(response, "Permisos eliminados: 0")
+
+    def test_confirm_is_idempotent_and_zero_preview_is_explicit(self):
+        Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+        )
+        self.assertEqual(self._post_hide().status_code, 200)
+        preview = self._post_hide(action="hide_view_preview")
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, "La vista ya está oculta para todos los usuarios")
+        second = self._post_hide()
+        self.assertEqual(second.status_code, 200)
+        self.assertContains(second, "Permisos actualizados: 0")
+
+    def test_confirm_recalculates_affected_permissions_after_preview(self):
+        Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+        )
+        preview = self._post_hide(action="hide_view_preview")
+        self.assertEqual(preview.status_code, 200)
+        Permiso.objects.create(
+            usuario=self.other_target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+            ver=True,
+        )
+        response = self._post_hide()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Permisos actualizados: 2")
+
+    def test_payload_cannot_inject_non_sidebar_view(self):
+        response = self._post_hide(vista=self.vista_interna)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "opción válida", status_code=400)
+
+    def test_global_view_cannot_be_selected(self):
+        response = self._post_hide(vista=self.vista_global)
+        self.assertEqual(response.status_code, 400)
+
+    def test_superuser_keeps_visual_sidebar_bypass(self):
+        self.actor.is_superuser = True
+        self.actor.save(update_fields=["is_superuser"])
+        visible = get_sidebar_visible_items(self.actor, self.empresa_objetivo.id)
+        self.assertIn("access_utility", visible)
+        self.assertIn("gestion_dte_cesiones", visible)
+
+    def test_first_mass_assignment_utility_still_works(self):
+        Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=self.vista_objetivo,
+        )
+        response = self.client.post(
+            self._url(),
+            {
+                "usuario": self.target.id,
+                "empresa": self.empresa_objetivo.id,
+                "alcance": "apis",
+                "ver": "on",
+                "action": "confirm",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Asignación completada")
