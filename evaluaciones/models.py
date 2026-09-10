@@ -1,5 +1,15 @@
+from zoneinfo import ZoneInfo
+
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from datetime import datetime
+
+
+def current_month():
+    local_timezone = ZoneInfo(settings.SYSTEM_LOCAL_TIME_ZONE)
+    return timezone.localdate(timezone=local_timezone).month
+
 
 class Persona(models.Model):
     person_id = models.IntegerField(unique=True)
@@ -45,7 +55,7 @@ class Persona(models.Model):
     afc = models.CharField(max_length=20)
     retired = models.BooleanField(default=False)
 
-    mes = models.PositiveSmallIntegerField(default=datetime.now().month)
+    mes = models.PositiveSmallIntegerField(default=current_month)
     anio = models.PositiveSmallIntegerField(default=datetime.now().year)
 
     class Meta:
