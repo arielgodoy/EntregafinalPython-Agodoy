@@ -12,9 +12,18 @@ la anulación es una acción protegida y auditada.
 > adicional de esos archivos requiere autorización expresa.
 
 Todas las rutas viven bajo el include `tareas/` con namespace `tareas`. Todas requieren
-sesión autenticada + empresa activa + permiso ICMEAS; ante falta de permiso responden
-**403** con `access_control/403_forbidden.html` (permite solicitar acceso). Ante falta de
-empresa activa, redirigen al selector de empresa (comportamiento del decorador vigente).
+sesión autenticada + empresa activa + autorización ICMEAS según la operación; ante falta
+de autorización responden **403** con `access_control/403_forbidden.html` (permite
+solicitar acceso). La visibilidad de los items del sidebar se evalúa por separado con
+`Permiso.ver` para la empresa activa. V no participa en la autorización de estas rutas.
+Ante falta de empresa activa, redirigen al selector de empresa (comportamiento del
+decorador vigente).
+
+El sidebar de Tareas mantiene mapping explícito `tasks -> Tareas` y
+`tasks_list/tasks_create ->` sus Vistas respectivas. El padre aparece si algún hijo es
+visible; no tiene V propio. El superuser ve el sidebar completo por bypass visual, sin
+alterar las autorizaciones ICMEAS de las rutas. Los elementos GLOBAL quedan fuera de
+este contrato salvo clasificación explícita.
 
 ## Rutas
 

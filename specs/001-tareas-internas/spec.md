@@ -28,9 +28,28 @@
 ## Regla arquitectónica (vigente)
 
 - Toda la lógica funcional nueva vive dentro de `tareas/` (app autocontenida; COPILOT/ARQUITECTURA_APPS.md).
-- `tareas` REUTILIZA, no duplica: ICMEAS/access_control, sesión/usuario autenticado, seguridad, multiempresa, `notificaciones`, email (`acounts`/email_service).
+- `tareas` REUTILIZA, no duplica: VICMEAS/access_control, sesión/usuario autenticado, seguridad, multiempresa, `notificaciones`, email (`acounts`/email_service).
 - No se modifican otras apps ni archivos globales salvo integración técnica mínima con autorización expresa.
 - Detención: si una necesidad no puede resolverse dentro de `tareas/`, se DETIENE y reporta (archivo, motivo, impacto, alternativa).
+
+### Seguridad funcional y visibilidad de navegación
+
+- `VICMEAS` se entiende como `V` (visibilidad de sidebar) más `ICMEAS`
+	(autorización funcional). No reemplaza ni renombra `ICMEAS`.
+- `Permiso.ver` controla exclusivamente si el item de Tareas aparece en el sidebar
+	para la empresa activa. `ingresar`, `crear`, `modificar`, `eliminar`, `autorizar` y
+	`supervisor` continúan controlando las operaciones backend correspondientes.
+- `V` e `I` son independientes: `V=True/I=False` deja visible el menú pero permite
+	que el backend responda 403; `V=False/I=True` oculta el menú pero no bloquea el
+	ingreso directo por URL. No se documenta que una bandera implique la otra.
+- La visibilidad es multiempresa y depende de usuario, empresa activa, Vista y
+	`ver=True`. Los padres del sidebar no tienen permiso `V` propio: aparecen solo si
+	al menos un hijo es visible. El superuser ve todo el sidebar por bypass visual,
+	sin obtener por ello un bypass automático de autorización backend.
+- El sidebar de Tareas usa mapping explícito item → Vista; cualquier item navegable
+	nuevo debe tener mapping o clasificación `GLOBAL`. Los elementos `GLOBAL` no son
+	un bypass general. `V` no controla búsqueda, notificaciones, enlaces directos,
+	breadcrumbs ni la vista inicial; esta última continúa dependiendo de `ingresar=True`.
 
 ---
 
@@ -367,7 +386,11 @@ BLOQUEADA POR P2**.
 ## P. Seguridad, Multiempresa y Enlaces
 
 - **FR-P01**: Toda operación MUST respetar empresa activa en sesión y aislamiento multiempresa (se mantiene FR-003 previo).
-- **FR-P02**: Acceso controlado por ICMEAS (vista visible en menú, autorización al acceder, 403 con solicitud de acceso) — se mantiene FR-011 previo.
+- **FR-P02**: La visibilidad de las opciones de Tareas en el sidebar se controla por
+	`Permiso.ver` para la empresa activa. La autorización al acceder y operar continúa
+	usando ICMEAS según la acción (`ingresar`, `crear`, `modificar`, `eliminar`,
+	`autorizar` o `supervisor`), con 403 y solicitud de acceso cuando corresponda;
+	`V` no sustituye autorización funcional y V/I son independientes.
 - **FR-P03**: Enlaces compartibles: enlace parametrizado a tarea/hito, solo para usuario autenticado del sistema, acceso en lectura cuando corresponda, registro de notificación/acceso, respetando ICMEAS y seguridad existente.
 - **FR-P04**: Visibilidad según rol/participación del usuario.
 - **FR-P05**: Sin usuarios externos por ahora (ver R).
@@ -411,7 +434,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - Publicación registra fecha, irreversible a borrador → **FR-C03**.
 - Edición por formulario sin estado → **FR-C03** (estado no editable por formulario).
 - Listar borrador/publicada → **FR-C01**.
-- ICMEAS + menú + 403 → **FR-P02**.
+- VICMEAS: `Permiso.ver` para menú, ICMEAS para autorización y 403 → **FR-P02**.
 - Eliminación fuera de alcance → **FR-R06**.
 
 ## Success Criteria

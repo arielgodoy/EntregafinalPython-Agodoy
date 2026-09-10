@@ -13,7 +13,8 @@ description: "Task list for the Tareas Internas master feature"
 
 **Scope rules**:
 
-- Toda lógica futura pertenece a `tareas/`; se reutilizan ICMEAS, sesión, multiempresa, notificaciones y email existentes.
+- Toda lógica futura pertenece a `tareas/`; se reutilizan VICMEAS para visibilidad del sidebar, ICMEAS para autorización funcional, sesión, multiempresa, notificaciones y email existentes.
+- VICMEAS ya está implementado en la infraestructura base. No crear una fase ni una task para implementarlo; las tasks de `tareas` solo deben consumir el mapping explícito de sus Vistas y preservar la independencia V/I.
 - El alta inicial de `tareas` en `AppDocs/app_classification.py`, `AppDocs/settings.py` y `AppDocs/urls.py` ya está resuelta; no se generan tareas pendientes para repetirla.
 - P1 Local permanece `LEGACY API PENDIENTE`: no se crean tareas de implementación, filtros, modelos, IDs, endpoints ni sincronización.
 - P2 Proveedor permanece bloqueado: `ProveedorReferencia` es únicamente un placeholder de diseño y no genera tarea de implementación.
@@ -43,9 +44,9 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T006 [US1] Crear únicamente el scaffolding `tareas/services/__init__.py` para habilitar el paquete de servicios; no añadir lógica de negocio ni modificar otras apps.
 - [x] T007 [US1] Definir el servicio de empresa activa y autorización en `tareas/services/context.py`, y refactorizar únicamente si es necesario la consulta común en `tareas/views.py`, conservando `listar_tareas`, `detalle_tarea`, `crear_tarea`, `editar_tarea` y `publicar_tarea`.
 - [x] T008 [US1] Preservar el contrato de `TareaForm` en `tareas/forms.py`: responsable opcional en borrador, prioridad vigente (FR-B01, FR-B02) y exclusión de empresa/estado/creador.
-- [x] T009 [US1] Mantener las plantillas MVP en `tareas/templates/tareas/tarea_lista.html`, `tareas/templates/tareas/tarea_form.html` y `tareas/templates/tareas/tarea_detalle.html`, incluyendo layout vigente, `data-key` y las exclusiones FR-R01, FR-R02, FR-R03 y FR-R04.
+- [x] T009 [US1] Mantener las plantillas MVP en `tareas/templates/tareas/tarea_lista.html`, `tareas/templates/tareas/tarea_form.html` y `tareas/templates/tareas/tarea_detalle.html`, incluyendo layout vigente, `data-key` y las exclusiones FR-R01, FR-R02, FR-R03 y FR-R04; el sidebar se consume mediante el mapping VICMEAS existente y no se autoriza con `ver`.
 - [x] T010 [US1] Ampliar la regresión de modelos en `tareas/tests/test_models.py` para confirmar responsable activo, publicación irreversible, prioridad y fecha de publicación.
-- [x] T011 [US1] Ampliar la regresión de vistas en `tareas/tests/test_views.py` para confirmar empresa activa, 403 ICMEAS, 404 cross-company y compatibilidad de URLs.
+- [x] T011 [US1] Ampliar la regresión de vistas en `tareas/tests/test_views.py` para confirmar empresa activa, 403 ICMEAS, 404 cross-company y compatibilidad de URLs; la validación de menú debe conservar la independencia `V/I` y el aislamiento multiempresa.
 - [x] T012 [US1] Añadir pruebas de formularios MVP en `tareas/tests/test_forms.py` para título requerido, responsable opcional y valores de prioridad.
 - [x] T013 [US1] Validar manualmente los escenarios E1–E7 de `specs/001-tareas-internas/quickstart.md` antes de habilitar fases de dominio.
 

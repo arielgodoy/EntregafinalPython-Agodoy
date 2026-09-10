@@ -251,6 +251,22 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 Las notificaciones se refieren a la infraestructura existente de `notificaciones` y email de
 `acounts`; no se duplica su modelo.
 
+## Seguridad de navegación y autorización
+
+- `ver` no es un campo de `Tarea` ni una autorización de negocio; pertenece a
+  `access_control.Permiso` y `PerfilAccesoDetalle` como parte de VICMEAS.
+- Para Tareas, `Permiso.ver` controla exclusivamente la visibilidad del item y sus
+  hijos en el sidebar para la empresa activa. La autorización backend continúa usando
+  ICMEAS: `ingresar` para listar/detallar, `crear` para crear y `modificar` para editar,
+  publicar o las acciones funcionales correspondientes; `eliminar`, `autorizar` y
+  `supervisor` conservan sus significados funcionales.
+- V e I son independientes. Un usuario puede ver el menú y recibir 403 al acceder,
+  o tener ingreso autorizado por URL aunque el item esté oculto. El superuser tiene
+  bypass visual del sidebar, no bypass automático de ICMEAS.
+- La visibilidad se evalúa por usuario, empresa activa, Vista y `ver=True`; los padres
+  se muestran solo cuando al menos un hijo es visible. El sidebar usa mapping explícito
+  item → Vista; los items GLOBAL son excepciones clasificadas y no un bypass general.
+
 ## Reglas de dominio transversales
 
 - Toda entidad de negocio se filtra por empresa activa; los parámetros nunca eligen empresa.

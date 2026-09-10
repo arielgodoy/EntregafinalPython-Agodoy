@@ -17,11 +17,12 @@ se describen escenarios de verificación end-to-end.
    ```powershell
    python manage.py migrate
    ```
-3. El mecanismo de registro de vistas ICMEAS/menú para la app `tareas` se verifica durante
-   la implementación; cualquier seed o cambio futuro en SYSTEM_APPS requiere autorización
-   expresa previa. No ejecutar comandos de seed sin esa verificación y autorización.
-4. Un usuario con empresa activa en sesión y permiso ICMEAS sobre las vistas `Tareas - *`
-   (o un usuario sin permiso para verificar el 403, según escenario).
+3. El sidebar consume la infraestructura VICMEAS existente: `Permiso.ver` controla solo
+   visibilidad por empresa activa y el mapping explícito de items a Vistas. No se agrega
+   una implementación de VICMEAS en `tareas`; cualquier seed o cambio futuro en
+   SYSTEM_APPS requiere autorización expresa previa.
+4. Un usuario con empresa activa en sesión y permisos ICMEAS sobre las vistas `Tareas - *`
+   para las acciones que probará, y `Permiso.ver` cuando deba verificar visibilidad.
 
 ## Validación automatizada por fase
 
@@ -70,10 +71,18 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 2. **Esperado**: el listado no muestra las tareas de la empresa anterior; el acceso directo
    por URL a una tarea de otra empresa responde 404.
 
-### E7. ICMEAS / 403 (FR-011)
+### E7. VICMEAS e ICMEAS independientes (FR-011)
 
-1. Con un usuario sin `Permiso.ingresar` en `Tareas - Listado`: la entrada de menú es visible,
-   pero al acceder responde **403** con la página que permite solicitar acceso.
+1. Con `Permiso.ver=True` y `Permiso.ingresar=True` en `Tareas - Listado`: el item aparece
+   y el acceso funciona.
+2. Con `Permiso.ver=True` y `Permiso.ingresar=False`: el item sigue visible, pero el
+   backend responde **403** con la página que permite solicitar acceso.
+3. Con `Permiso.ver=False` y `Permiso.ingresar=True`: el item no aparece, pero el acceso
+   directo por URL funciona.
+4. Con ambas banderas en `False`: el item no aparece y el acceso está prohibido.
+5. Repetir la comprobación en dos empresas: `ver` en una empresa no hace visible el item
+   en la otra. El superuser ve el sidebar completo por bypass visual, sin inferir bypass
+   backend. Los padres aparecen solo si un hijo es visible.
 
 ## Validaciones del dominio por fases
 

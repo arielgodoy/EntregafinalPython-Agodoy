@@ -24,7 +24,7 @@ ni se inventan tablas, IDs, sincronización o `rut_contable`.
 
 **Language/Version**: Python 3.11 (entorno local vigente) / Django 5.1.3
 
-**Primary Dependencies**: Django 5.1.3 (CBV, ORM, forms), `access_control`/ICMEAS,
+**Primary Dependencies**: Django 5.1.3 (CBV, ORM, forms), `access_control`/VICMEAS,
 usuarios y sesión existentes, `notificaciones`, email de `acounts`, layout vigente y
 JavaScript vanilla propio de `tareas` cuando sea necesario. Sin dependencias nuevas.
 
@@ -41,8 +41,9 @@ en `tareas/tests/` y escenarios manuales de `quickstart.md`.
 estado, fechas, correlativo y relaciones; KPI y similitud consultarán solo la empresa activa
 y usarán paginación cuando corresponda.
 
-**Constraints**: lógica nueva dentro de `tareas/`; ICMEAS y `session['empresa_id']` son
-obligatorios; `static/js/app.js` es inmutable; no se crean maestros legacy; no se elimina
+**Constraints**: lógica nueva dentro de `tareas/`; `session['empresa_id']` es obligatorio,
+`Permiso.ver` controla solo visibilidad del sidebar y ICMEAS autorización funcional;
+`static/js/app.js` es inmutable; no se crean maestros legacy; no se elimina
 físicamente una tarea; cambios fuera de `tareas/` requieren autorización expresa.
 
 **Registration status**: El alta inicial de `tareas` en `AppDocs/app_classification.py`,
@@ -61,7 +62,7 @@ Local y Proveedor requieren contrato legacy antes de cerrar sus fases.
 | II. Contexto mínimo | Se consultaron `COPILOT/INDICE.md`, `ESTADO_ACTUAL.md`, `ARQUITECTURA_APPS.md` y `REGLAS_CODIGO_VENDOR.md`; no se usa histórico. | PASS |
 | III. Apps protegidas | La lógica queda en `tareas/`; el registro inicial ya está resuelto. Cambios futuros adicionales en archivos protegidos requieren autorización. | PASS |
 | IV. Vendor | No se modifica `static/js/app.js`; cualquier JS nuevo vive en `tareas/static/tareas/`. | PASS |
-| V. Seguridad y multiempresa | Toda vista/acción usa ICMEAS, empresa activa de sesión y validación de pertenencia. | PASS |
+| V. Seguridad y multiempresa | El sidebar consume `V` por empresa activa; toda vista/acción usa ICMEAS, empresa activa de sesión y validación de pertenencia. | PASS |
 | VI. Cambios mínimos | Fases aditivas, sin refactor transversal ni migración monolítica. | PASS |
 | VII. Tests | Cada fase agrega pruebas focalizadas y regresión completa antes de cierre. | PASS |
 | VIII. Qué antes que cómo | La spec fija comportamiento; este plan fija límites, fases y diseño técnico. | PASS |
@@ -101,6 +102,9 @@ existentes. No se modifica `control_de_proyectos`, `access_control`, `notificaci
 - Mantener nombres de URLs y vistas existentes.
 - Añadir pruebas de compatibilidad para correlativo, responsable, empresa activa,
     publicación irreversible e ICMEAS.
+- Consumir la infraestructura VICMEAS ya existente para el sidebar: mapping explícito
+    de los items de Tareas a sus Vistas y padres visibles si tienen un hijo visible.
+    No implementar ni planificar VICMEAS dentro de `tareas`.
 
 ### Phase 1 — Identidad, correlativos y ciclo de vida
 

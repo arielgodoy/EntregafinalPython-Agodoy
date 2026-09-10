@@ -35,3 +35,6 @@
 - Validación inicial 2026-09-07: todos los ítems pasan. La spec menciona ICMEAS y multiempresa
   como restricciones de contexto (requisitos de negocio del sistema vigente), no como detalles
   de implementación técnica.
+- Actualización VICMEAS: la visibilidad del sidebar queda separada de la autorización
+  ICMEAS; V/I son independientes, con empresa activa, superuser visual y padres derivados
+  de hijos documentados en los artefactos SDD. No se amplía el alcance funcional de 001.

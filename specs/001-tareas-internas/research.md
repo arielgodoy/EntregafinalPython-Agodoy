@@ -16,12 +16,22 @@ legacy, no por una decisión técnica pendiente dentro de la app.
   y comportamiento.
 - **Alternatives considered**: fusionar modelos o mover el dominio a proyectos; rechazadas.
 
-### D2. Seguridad y empresa activa
+### D2. Seguridad, visibilidad y empresa activa
 
-- **Decision**: ICMEAS, `LoginRequiredMixin` cuando corresponda y
-  `request.session['empresa_id']` en toda vista/acción; validar cada queryset y objeto.
-- **Rationale**: es la frontera vigente y evita exposición cross-company.
-- **Alternatives considered**: permisos Django estándar o empresa recibida por POST; rechazadas.
+- **Decision**: consumir VICMEAS ya implementado: `Permiso.ver` controla exclusivamente
+  la visibilidad del sidebar por usuario, Vista y `request.session['empresa_id']`;
+  ICMEAS, `LoginRequiredMixin` cuando corresponda y la misma empresa activa protegen
+  toda vista/acción. Validar cada queryset y objeto.
+- **Rationale**: V/I son independientes y separan descubribilidad de autorización,
+  evitando exposición cross-company sin convertir V en seguridad backend.
+- **Alternatives considered**: permisos Django estándar, usar `ver` para autorizar
+  acciones, hacer depender el menú de `ingresar`, o recibir la empresa por POST;
+  rechazadas.
+
+La decisión V independiente de I está cerrada y no se reabre en fases de `tareas`.
+Los padres del sidebar se derivan de hijos visibles, el superuser tiene bypass visual
+del sidebar únicamente, y el mapping item → Vista o clasificación GLOBAL pertenece a
+la infraestructura base. La vista inicial sigue dependiendo de `ingresar=True`.
 
 ### D3. Persistencia incremental
 
