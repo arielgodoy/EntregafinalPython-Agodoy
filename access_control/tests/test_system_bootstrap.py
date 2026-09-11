@@ -8,10 +8,15 @@ from django.test import TestCase
 
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.permissions import SIDEBAR_GROUPS, SIDEBAR_VIEW_NAMES, VICMEAS_FIELDS
-from access_control.services.system_bootstrap import BootstrapInconsistency, initialize_system_for_user
+from access_control.services.system_bootstrap import (
+    BootstrapInconsistency,
+    initialize_system_for_user,
+)
 
 
 class SystemBootstrapTests(TestCase):
+    topbar_view_name = "Notificaciones - Topbar"
+
     def test_empty_installation_creates_base_catalog_user_and_complete_permissions(self):
         initialize_system_for_user(username="administrador", password="Strong-pass-123")
 
@@ -25,6 +30,131 @@ class SystemBootstrapTests(TestCase):
         self.assertEqual(permisos.count(), len(expected_names))
         for permiso in permisos:
             self.assertTrue(all(getattr(permiso, field) for field in VICMEAS_FIELDS))
+        topbar = Vista.objects.get(nombre=self.topbar_view_name)
+        self.assertEqual(topbar.route_name, "notificaciones:topbar")
+        self.assertTrue(
+            Permiso.objects.filter(
+                usuario=user,
+                empresa__codigo="00",
+                vista=topbar,
+                ingresar=True,
+            ).exists()
+        )
+
+    def test_topbar_is_required_system_and_legacy_route_stays_out_of_ambiguous(self):
+        topbar = Vista.objects.create(nombre=self.topbar_view_name)
+        ambiguous = Vista.objects.create(nombre="Sistema sin ruta")
+        application = Vista.objects.create(
+            nombre="Biblioteca negocio",
+            route_name="biblioteca:listar_propiedades",
+        )
+
+        summary = initialize_system_for_user(username="admin", password="Strong-pass-123")
+
+        self.assertIsNone(topbar.refresh_from_db())
+        self.assertIsNone(topbar.route_name)
+        self.assertIn(self.topbar_view_name, summary.bootstrap_view_names)
+        self.assertNotIn(self.topbar_view_name, summary.ambiguous_view_names)
+        self.assertIn(ambiguous.nombre, summary.ambiguous_view_names)
+        self.assertIn(application.nombre, summary.application_view_names)
+
+    def test_existing_user_without_topbar_permission_receives_only_missing_permission(self):
+        user = User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="old-password",
+        )
+        initialize_system_for_user(username="admin")
+        topbar = Vista.objects.get(nombre=self.topbar_view_name)
+        Permiso.objects.filter(usuario=user, vista=topbar).delete()
+        permission_count = Permiso.objects.filter(usuario=user).count()
+
+        summary = initialize_system_for_user(username="admin")
+
+        user.refresh_from_db()
+        permiso = Permiso.objects.get(
+            usuario=user,
+            empresa__codigo="00",
+            vista=topbar,
+        )
+        self.assertTrue(all(getattr(permiso, field) for field in VICMEAS_FIELDS))
+        self.assertEqual(summary.permissions_created, 1)
+        self.assertEqual(Permiso.objects.filter(usuario=user).count(), permission_count + 1)
+        self.assertTrue(user.check_password("old-password"))
+
+    def test_existing_complete_topbar_permission_is_unchanged(self):
+        initialize_system_for_user(username="admin", password="Strong-pass-123")
+        user = User.objects.get(username="admin")
+        before_count = Permiso.objects.filter(usuario=user).count()
+
+        summary = initialize_system_for_user(username="admin")
+
+        self.assertEqual(summary.permissions_created, 0)
+        self.assertEqual(summary.permissions_updated, 0)
+        self.assertEqual(summary.permissions_unchanged, summary.permissions_processed)
+        self.assertEqual(Permiso.objects.filter(usuario=user).count(), before_count)
+
+    def test_dry_run_reports_missing_topbar_permission_without_writing(self):
+        initialize_system_for_user(username="admin", password="Strong-pass-123")
+        user = User.objects.get(username="admin")
+        topbar = Vista.objects.get(nombre=self.topbar_view_name)
+        Permiso.objects.filter(usuario=user, vista=topbar).delete()
+        counts_before = (
+            Empresa.objects.count(),
+            Vista.objects.count(),
+            User.objects.count(),
+            Permiso.objects.count(),
+        )
+
+        summary = initialize_system_for_user(username="admin", dry_run=True)
+
+        self.assertEqual(summary.permissions_created, 1)
+        self.assertEqual(
+            (
+                Empresa.objects.count(),
+                Vista.objects.count(),
+                User.objects.count(),
+                Permiso.objects.count(),
+            ),
+            counts_before,
+        )
+        self.assertFalse(Permiso.objects.filter(usuario=user, vista=topbar).exists())
+
+    def test_topbar_bootstrap_does_not_modify_other_company_or_user(self):
+        other_user = User.objects.create_superuser(
+            username="other",
+            email="other@example.com",
+            password="other-password",
+        )
+        other_company = Empresa.objects.create(codigo="01", descripcion="Otra")
+        topbar = Vista.objects.create(nombre=self.topbar_view_name)
+        other_permission = Permiso.objects.create(
+            usuario=other_user,
+            empresa=other_company,
+            vista=topbar,
+            ver=False,
+            ingresar=False,
+        )
+
+        initialize_system_for_user(username="admin", password="Strong-pass-123")
+
+        other_permission.refresh_from_db()
+        self.assertFalse(other_permission.ver)
+        self.assertFalse(other_permission.ingresar)
+        self.assertEqual(
+            Permiso.objects.filter(usuario=other_user, empresa=other_company).count(),
+            1,
+        )
+
+    def test_second_execution_is_idempotent_for_topbar(self):
+        initialize_system_for_user(username="admin", password="Strong-pass-123")
+        first_count = Vista.objects.filter(nombre=self.topbar_view_name).count()
+
+        summary = initialize_system_for_user(username="admin")
+
+        self.assertEqual(Vista.objects.filter(nombre=self.topbar_view_name).count(), first_count)
+        self.assertEqual(summary.permissions_created, 0)
+        self.assertEqual(summary.permissions_updated, 0)
 
     def test_repeated_and_multiple_users_reuse_company_and_views(self):
         initialize_system_for_user(username="administrador", password="Strong-pass-123")

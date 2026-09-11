@@ -38,3 +38,10 @@ Relaciona `usuario`, `empresa` y `vista` con estas banderas booleanas:
 
 Los alcances jerárquicos se traducen a hojas catalogadas. Los contenedores del sidebar
 y las vistas globales no se tratan como hojas ocultables.
+
+## Bootstrap SYSTEM
+
+`Notificaciones - Topbar` es una Vista interna obligatoria del shell/base funcional.
+Su permiso se asocia al usuario y a `Empresa 00` como parte del bootstrap, aunque la
+fila existente conserve `route_name` nulo o legacy; esta excepción no reclasifica otras
+vistas ambiguas.

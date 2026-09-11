@@ -55,6 +55,15 @@ la empresa seleccionada y sin modificar las acciones ICMEAS ni crear o eliminar 
 Asignar `autorizar` o `supervisor` MUST requerir autorización `supervisor` del
 ejecutor y confirmación explícita.
 
+### FR-008 Bootstrap de vistas SYSTEM
+
+El bootstrap MUST conservar las nueve vistas mínimas de Control de Acceso, incluir
+normalmente las vistas SYSTEM clasificables por namespace y permitir excepciones
+explícitas, mínimas y documentadas para vistas SYSTEM internas imprescindibles del
+shell/base funcional cuando su `route_name` sea nulo o legacy. `Notificaciones -
+Topbar` es una excepción AS-BUILT; las demás vistas ambiguas MUST permanecer omitidas
+hasta contar con evidencia y clasificación segura.
+
 ## Criterios de aceptación
 
 - Un usuario con `ver=True` e `ingresar=False` puede ver el item, pero recibe 403 al
@@ -68,6 +77,8 @@ ejecutor y confirmación explícita.
   no seleccionadas.
 - La previsualización no escribe en la base de datos.
 - Las operaciones sensibles sin `supervisor` o sin confirmación son rechazadas.
+- El bootstrap incluye `Notificaciones - Topbar` y completa su permiso al crear o
+  reutilizar un usuario técnico, sin incorporar automáticamente otras vistas ambiguas.
 
 ## Fuera de alcance
 

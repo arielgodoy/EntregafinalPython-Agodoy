@@ -12,6 +12,14 @@ selecciona vistas SYSTEM adicionales, excluye vistas APPLICATION y reporta vista
 ambiguas. El usuario existente debe ser superusuario y staff; de lo contrario la
 operación se rechaza. Las contraseñas no se imprimen.
 
+Cuando se ejecuta sobre un superuser/staff existente, reutiliza el usuario, `Empresa 00`
+y las vistas existentes, y completa únicamente permisos VICMEAS faltantes. No solicita
+password, no elimina ni degrada permisos y no duplica registros.
+
+Ejemplo conceptual: si el usuario ya existe y se incorpora una nueva Vista SYSTEM
+obligatoria, la siguiente ejecución reutiliza el catálogo y completa solo el permiso
+faltante para esa vista.
+
 ## B. Dry-run
 
 ```text
@@ -26,4 +34,7 @@ decisiones previstas, incluyendo vistas seleccionadas, excluidas y ambiguas.
 - Empresa base duplicada: `BootstrapInconsistency` convertido a `CommandError`.
 - Usuario existente no superusuario o sin staff: operación rechazada.
 - Vistas sin namespace o ruta clasificable: reportadas como ambiguas y omitidas.
+- `Notificaciones - Topbar` se incorpora como excepción SYSTEM explícita porque es una
+	dependencia interna del shell/base, incluso si su ruta existente es nula o legacy.
+- Las demás vistas ambiguas no se incorporan sin clasificación segura.
 - No existe contrato REST para este flujo.

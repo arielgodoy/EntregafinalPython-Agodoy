@@ -8,6 +8,8 @@
 - [x] Se documenta el aislamiento por empresa activa.
 - [x] Se documenta el alcance aditivo del utilitario.
 - [x] Se documentan las acciones sensibles.
+- [x] Se documenta la excepción mínima de `Notificaciones - Topbar` como Vista SYSTEM
+	obligatoria del bootstrap sin generalizar vistas ambiguas.
 
 ## Trazabilidad
 

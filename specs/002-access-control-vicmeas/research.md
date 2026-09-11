@@ -31,11 +31,29 @@ Las operaciones reciben una empresa objetivo, pero la autorización del ejecutor
 mutaciones se validan con permisos de esa empresa. Ninguna operación debe cruzar el
 alcance lógico de otra empresa.
 
+## D6. Topbar es una dependencia SYSTEM obligatoria
+
+`/notificaciones/topbar/` resuelve a `notificaciones:topbar` y es atendido por
+`NotificacionesTopbarView`, que usa `VerificarPermisoMixin` y exige `ingresar` para
+`Vista.nombre = "Notificaciones - Topbar"`. `notificaciones` pertenece a
+`SYSTEM_SUPPORT_APPS`, por lo que es una dependencia legítima del entorno SYSTEM.
+
+La Vista existente tenía `route_name = NULL` o un valor legacy no clasificable; el
+bootstrap la enviaba a `ambiguous/omitted`, no creaba el permiso y el endpoint devolvía
+403. La corrección agrega una excepción SYSTEM explícita y mínima, conserva el registro
+legacy y mantiene omitidas las demás ambiguas.
+
+La evidencia operacional fue 403 antes de reejecutar el bootstrap sobre el mismo usuario
+y 200 después, repetido en ejecuciones posteriores. Esto valida la idempotencia y la
+actualización aditiva del usuario existente.
+
 ## Decisiones no negociables
 
 - No usar permisos Django estándar.
 - No tocar `access_control` en esta entrega documental.
 - No modificar `specs/001-tareas-internas`.
+- `Notificaciones - Topbar` es la única excepción SYSTEM explícita documentada para el
+	bootstrap; no se generaliza a las demás vistas ambiguas.
 
 ## Follow-ups no bloqueantes
 

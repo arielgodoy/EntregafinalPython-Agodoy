@@ -13,8 +13,15 @@
 | bootstrap | `access_control/services/system_bootstrap.py` clasifica vistas SYSTEM/APPLICATION y crea base de acceso | `access_control/tests/test_system_bootstrap.py` |
 | dry-run | `inicializar_sistema.py --dry-run` delega a `initialize_system_for_user(dry_run=True)` sin persistir | `access_control/tests/test_system_bootstrap.py` |
 | SYSTEM vs APPLICATION | `_classified_route_app`, `SYSTEM_APP_NAMES` y `APPLICATION_APP_NAMES` | `access_control/tests/test_system_bootstrap.py` |
+| Topbar SYSTEM obligatorio | `BOOTSTRAP_SYSTEM_VIEW_DEFINITIONS` incorpora `Notificaciones - Topbar` como dependencia del shell/base, preservando `route_name` nulo o legacy | `access_control/tests/test_system_bootstrap.py` |
+| Reejecución de usuario existente | `ensure_initial_permissions` completa el permiso faltante de forma aditiva e idempotente | `access_control/tests/test_system_bootstrap.py` |
 
 ## Alcance de la evidencia
 
 La matriz describe el estado actual verificado por lectura de código y pruebas existentes.
-No autoriza cambios productivos ni sustituye la revisión de seguridad del código CORE.
+Documenta la corrección productiva acotada de Topbar y no sustituye la revisión de
+seguridad del código CORE.
+
+La evidencia operacional adicional fue: Topbar respondió 403 antes de reejecutar el
+bootstrap sobre el mismo usuario y 200 después, de forma repetida. Las demás vistas
+ambiguas continúan omitidas.

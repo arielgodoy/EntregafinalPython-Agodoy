@@ -15,6 +15,9 @@ BASE_COMPANY_DESCRIPTION = "empresa base"
 BASE_VIEW_KEYS = tuple(SIDEBAR_GROUPS["access"])
 SYSTEM_APP_NAMES = frozenset(app.rsplit(".", 1)[-1] for app in SYSTEM_APPS)
 APPLICATION_APP_NAMES = frozenset(app.rsplit(".", 1)[-1] for app in APPLICATION_APPS)
+BOOTSTRAP_SYSTEM_VIEW_DEFINITIONS = (
+    ("Notificaciones - Topbar", "notificaciones:topbar"),
+)
 
 
 class BootstrapInconsistency(Exception):
@@ -64,6 +67,11 @@ def _base_view_definitions():
     )
 
 
+def _bootstrap_system_view_definitions():
+    """Return system shell views required even when legacy routes are unclassified."""
+    return BOOTSTRAP_SYSTEM_VIEW_DEFINITIONS
+
+
 def _route_namespace(route_name):
     route_name = (route_name or "").strip()
     return route_name.split(":", 1)[0] if ":" in route_name else None
@@ -97,6 +105,7 @@ def _classified_route_app(route_name):
 def get_bootstrap_system_vistas(*, summary=None, required_vistas=()):
     """Select existing system views; only the access catalog may be created."""
     access_names = {name for name, _ in _base_view_definitions()}
+    bootstrap_system_names = {name for name, _ in _bootstrap_system_view_definitions()}
     access_vistas = []
     for name in access_names:
         vista = Vista.objects.filter(nombre=name).order_by("id").first()
@@ -106,9 +115,17 @@ def get_bootstrap_system_vistas(*, summary=None, required_vistas=()):
             access_vistas.append(vista)
 
     system_vistas = []
+    for name, _ in _bootstrap_system_view_definitions():
+        vista = Vista.objects.filter(nombre=name).order_by("id").first()
+        if vista is None:
+            vista = next((item for item in required_vistas if item.nombre == name), None)
+        if vista is not None:
+            system_vistas.append(vista)
+
     application_names = []
     ambiguous_names = []
-    for vista in Vista.objects.exclude(nombre__in=access_names).order_by("id"):
+    excluded_names = access_names | bootstrap_system_names
+    for vista in Vista.objects.exclude(nombre__in=excluded_names).order_by("id"):
         app_name = _classified_route_app(vista.route_name)
         if app_name in SYSTEM_APP_NAMES:
             system_vistas.append(vista)
@@ -147,7 +164,8 @@ def ensure_base_company(*, dry_run=False, summary=None):
 
 def ensure_system_vistas(*, dry_run=False, summary=None):
     vistas = []
-    for nombre, route_name in _base_view_definitions():
+    definitions = _base_view_definitions() + _bootstrap_system_view_definitions()
+    for nombre, route_name in definitions:
         vista = Vista.objects.filter(nombre=nombre).order_by("id").first()
         if vista is None:
             vista = Vista(nombre=nombre, route_name=route_name)
@@ -155,7 +173,7 @@ def ensure_system_vistas(*, dry_run=False, summary=None):
                 vista.save()
             if summary:
                 summary.views_created += 1
-        else:
+        elif nombre not in {name for name, _ in _bootstrap_system_view_definitions()}:
             if route_name and vista.route_name != route_name and not dry_run:
                 vista.route_name = route_name
                 vista.save(update_fields=["route_name"])

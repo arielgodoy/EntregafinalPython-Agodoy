@@ -33,6 +33,11 @@
 - [x] T015 Registrar contratos de `inicializar_sistema`, dry-run, asignación masiva y
 	ocultamiento de vistas sin inventar REST API.
 - [x] T016 Registrar la matriz requisito/código/test en `as-built.md`.
+- [x] T021 Incorporar `Notificaciones - Topbar` como Vista SYSTEM obligatoria del
+	bootstrap mediante excepción explícita y mínima.
+- [x] T022 Cubrir usuario nuevo, usuario existente, permiso completo, dry-run,
+	aislamiento, exclusión de APPLICATION/ambiguas e idempotencia en
+	`test_system_bootstrap.py`.
 
 ## Follow-ups no bloqueantes
 
@@ -53,5 +58,5 @@
 | FR-005/FR-006 | D4 | tests de `test_access_utility` |
 | FR-007 | D4 | tests de acciones sensibles |
 
-Los tasks T001-T016 corresponden al cierre y estado ya construido; T017-T020 son deuda
+Los tasks T001-T016 y T021-T022 corresponden al cierre y estado ya construido; T017-T020 son deuda
 futura y no bloquean la feature documentada.
