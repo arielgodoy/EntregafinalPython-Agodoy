@@ -807,6 +807,8 @@
 "menu.gestion_dte.cesiones": "Assignment Control",
 "gestion_dte.rpetc.sync.title": "Synchronize RPETC",
 "gestion_dte.rpetc.sync.help": "Query debtor assignments from the SII. It may take a few seconds and supports a maximum period of one month.",
+"gestion_dte.rpetc.sync.accounting": "Record assignment in accounting",
+"gestion_dte.rpetc.sync.accounting_help": "When active, detected assignments are recorded as CED events in Accounting.",
 "gestion_dte.rpetc.sync.from": "From",
 "gestion_dte.rpetc.sync.to": "To",
 "gestion_dte.rpetc.sync.submit": "Synchronize assignments",

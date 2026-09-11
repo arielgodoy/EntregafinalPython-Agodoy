@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,9 +8,11 @@ from django.test import SimpleTestCase
 
 from gestiondte.services.rpetc_contabilidad import (
     ContabilidadLegacyError,
+    LEGACY_RCV_SCHEMA,
     normalizar_folio_legacy,
     normalizar_rut_legacy,
     obtener_estados_contables_cesiones,
+    registrar_cesiones_contabilidad,
 )
 from gestiondte.views import _rpetc_pagos_pendientes_ids
 
@@ -63,9 +66,86 @@ class FakeCesion:
         self.cesionario_dv = "9"
         self.monto_total = Decimal("1764799")
         self.monto_cesion = Decimal("1764799")
+        self.fecha_cesion = datetime(2026, 7, 2, 12, 30)
+        self.cesionario_razon_social = "Cesionario SpA"
 
 
 class RPETCLegacyServiceTest(SimpleTestCase):
+    def test_schema_rcv_es_central_y_no_depende_de_empresa(self):
+        self.assertEqual(LEGACY_RCV_SCHEMA, "eltit_conta")
+
+    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
+    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    def test_registra_evento_ced_idempotente_y_parametrizado(self, connect, config):
+        config.return_value = SimpleNamespace(
+            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
+        )
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.side_effect = [None, (datetime(2026, 7, 2).date(), datetime(2026, 7, 2, 12, 30).time(), "DTE Cedido - Cesionario SpA")]
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+        connect.return_value = connection
+
+        cesion = FakeCesion()
+        first = registrar_cesiones_contabilidad("09", [cesion])
+        second = registrar_cesiones_contabilidad("09", [cesion])
+
+        self.assertEqual(first["eventos_creados"], 1)
+        self.assertEqual(second["eventos_sin_cambios"], 1)
+        self.assertEqual(cursor.execute.call_args_list[0].args[1], ("09", "0763761428", "33", "2587", "CED"))
+        insert_call = cursor.execute.call_args_list[1]
+        self.assertIn("INSERT INTO `eltit_conta`.`facturasdecompras_eventos_rcv`", insert_call.args[0])
+        self.assertEqual(insert_call.args[1][1:4], ("33", "2587", "CED"))
+        self.assertNotIn("09", insert_call.args[0])
+        self.assertEqual(connect.call_args.kwargs["database"], "eltit_conta")
+        connection.commit.assert_called()
+        self.assertTrue(connection.close.called)
+
+    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
+    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    def test_evento_ced_actualiza_fecha_hora_y_glosa_sin_duplicar(self, connect, config):
+        config.return_value = SimpleNamespace(
+            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
+        )
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = (datetime(2026, 7, 1).date(), datetime(2026, 7, 1, 8).time(), "Glosa anterior")
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+        connect.return_value = connection
+
+        result = registrar_cesiones_contabilidad("09", [FakeCesion()])
+
+        self.assertEqual(result["eventos_actualizados"], 1)
+        update_call = cursor.execute.call_args_list[1]
+        self.assertIn("UPDATE `eltit_conta`.`facturasdecompras_eventos_rcv`", update_call.args[0])
+        self.assertEqual(update_call.args[1][:3], (datetime(2026, 7, 2).date(), datetime(2026, 7, 2, 12, 30).time(), "DTE Cedido - Cesionario SpA"))
+
+    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
+    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    def test_empresa_10_usa_misma_tabla_y_discriminador_distinto(self, connect, config):
+        config.return_value = SimpleNamespace(
+            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
+        )
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = None
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+        connect.return_value = connection
+
+        registrar_cesiones_contabilidad("10", [FakeCesion()])
+
+        select_call = cursor.execute.call_args_list[0]
+        insert_call = cursor.execute.call_args_list[1]
+        self.assertIn("`eltit_conta`.`facturasdecompras_eventos_rcv`", select_call.args[0])
+        self.assertIn("`eltit_conta`.`facturasdecompras_eventos_rcv`", insert_call.args[0])
+        self.assertNotIn("eltit_conta09", select_call.args[0] + insert_call.args[0])
+        self.assertNotIn("eltit_conta10", select_call.args[0] + insert_call.args[0])
+        self.assertEqual(select_call.args[1][0], "10")
+        self.assertEqual(insert_call.args[1][-1], "10")
+
     def test_rpetc_pagos_pendientes_usa_interseccion_y_no_or(self):
         states = {
             1: {'pagada_factoring': {'estado': 'NO_PAGADA'}, 'pagada_proveedor': {'estado': 'PAGADA_PROVEEDOR'}},

@@ -1,11 +1,13 @@
-"""Lecturas batch de estados contables para cesiones RPETC."""
+"""Lecturas y registro contable legacy para cesiones RPETC."""
 from __future__ import annotations
 
 import re
 import logging
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Iterable
 
+from django.utils import timezone
 from settings.models import SettingsMySQLConnection
 
 
@@ -29,7 +31,12 @@ _SELECT_FIELDS = (
 
 
 class ContabilidadLegacyError(RuntimeError):
-    """Error controlado de lectura del ERP legacy."""
+    """Error controlado de acceso al ERP legacy."""
+
+
+EVENTO_CESION = "CED"
+LEGACY_RCV_SCHEMA = "eltit_conta"
+LEGACY_RCV_TABLE = f"`{LEGACY_RCV_SCHEMA}`.`facturasdecompras_eventos_rcv`"
 
 
 def _validar_codigo_empresa(codigo: Any) -> str:
@@ -62,6 +69,144 @@ def normalizar_folio_legacy(folio: Any, tipo_legacy: str) -> str | None:
     if tipo_legacy in {"FC", "DB"}:
         return value.zfill(10)
     return None
+
+
+def _normalizar_tipo_sii(tipo_doc: Any) -> str:
+    tipo = str(tipo_doc or "").strip()
+    if not tipo or not tipo.isdigit() or len(tipo) > 10:
+        raise ContabilidadLegacyError("Tipo de documento SII inválido para evento contable.")
+    return tipo
+
+
+def _normalizar_numero_doc(folio: Any) -> str:
+    numero = str(folio or "").strip()
+    if not numero or len(numero) > 10 or not numero.isdigit():
+        raise ContabilidadLegacyError("Folio inválido para evento contable.")
+    return numero
+
+
+def _fecha_hora_evento(fecha_cesion: Any) -> tuple[date, time]:
+    if not isinstance(fecha_cesion, datetime):
+        raise ContabilidadLegacyError("La cesión no tiene fecha y hora válidas.")
+    if timezone.is_naive(fecha_cesion):
+        fecha_cesion = timezone.make_aware(fecha_cesion, timezone.get_current_timezone())
+    fecha_local = timezone.localtime(fecha_cesion)
+    return fecha_local.date(), fecha_local.time().replace(microsecond=0)
+
+
+def _glosa_cesion(cesion: Any) -> str:
+    cesionario = getattr(cesion, "cesionario_razon_social", None)
+    if not cesionario:
+        cesionario = normalizar_rut_legacy(
+            getattr(cesion, "cesionario_rut", None),
+            getattr(cesion, "cesionario_dv", None),
+        ) or ""
+    return f"DTE Cedido - {cesionario}"[:100]
+
+
+def _evento_cesion_values(empresa_codigo: Any, cesion: Any) -> tuple[dict[str, Any], tuple[Any, ...]]:
+    codigo = _validar_codigo_empresa(empresa_codigo)
+    rut_proveedor = normalizar_rut_legacy(
+        getattr(cesion, "cedente_rut", None),
+        getattr(cesion, "cedente_dv", None),
+    )
+    if not rut_proveedor:
+        raise ContabilidadLegacyError("La cesión no tiene RUT proveedor válido.")
+    fecha_evento, hora_evento = _fecha_hora_evento(getattr(cesion, "fecha_cesion", None))
+    values = {
+        "rut_proveedor": rut_proveedor,
+        "tipo_doc": _normalizar_tipo_sii(getattr(cesion, "tipo_doc", None)),
+        "numero_doc": _normalizar_numero_doc(getattr(cesion, "folio_doc", None)),
+        "tipo_evento": EVENTO_CESION,
+        "fecha_evento": fecha_evento,
+        "hora_evento": hora_evento,
+        "glosa_evento": _glosa_cesion(cesion),
+        "empresa_verificacion": codigo,
+    }
+    identity = (
+        values["empresa_verificacion"],
+        values["rut_proveedor"],
+        values["tipo_doc"],
+        values["numero_doc"],
+        values["tipo_evento"],
+    )
+    return values, identity
+
+
+def registrar_cesiones_contabilidad(empresa_codigo: Any, cesiones: Iterable[Any]) -> dict[str, int]:
+    """Registra eventos CED sin duplicar cesiones previamente registradas."""
+    cesiones = list(cesiones)
+    result = {
+        "eventos_creados": 0,
+        "eventos_actualizados": 0,
+        "eventos_sin_cambios": 0,
+        "errores_contables": 0,
+    }
+    if not cesiones:
+        return result
+    config = _config_legacy()
+    connection = None
+    try:
+        connection = pymysql.connect(
+            host=config.host,
+            port=int(config.port or 3306),
+            user=config.user,
+            password=config.password,
+            database=LEGACY_RCV_SCHEMA,
+            charset=(config.charset or "latin1"),
+            connect_timeout=5,
+            read_timeout=15,
+            write_timeout=10,
+        )
+        with connection.cursor() as cursor:
+            for cesion in cesiones:
+                try:
+                    values, identity = _evento_cesion_values(empresa_codigo, cesion)
+                    cursor.execute(
+                        "SELECT fecha_evento, hora_evento, glosa_evento "
+                        f"FROM {LEGACY_RCV_TABLE} "
+                        "WHERE empresa_verificacion=%s AND rut_proveedor=%s "
+                        "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s LIMIT 1",
+                        identity,
+                    )
+                    existing = cursor.fetchone()
+                    if existing is None:
+                        cursor.execute(
+                            f"INSERT INTO {LEGACY_RCV_TABLE} "
+                            "(rut_proveedor, tipo_doc, numero_doc, tipo_evento, fecha_evento, "
+                            "hora_evento, glosa_evento, empresa_verificacion) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            (
+                                values["rut_proveedor"], values["tipo_doc"], values["numero_doc"],
+                                values["tipo_evento"], values["fecha_evento"], values["hora_evento"],
+                                values["glosa_evento"], values["empresa_verificacion"],
+                            ),
+                        )
+                        result["eventos_creados"] += 1
+                    elif tuple(existing) == (
+                        values["fecha_evento"], values["hora_evento"], values["glosa_evento"],
+                    ):
+                        result["eventos_sin_cambios"] += 1
+                    else:
+                        cursor.execute(
+                            f"UPDATE {LEGACY_RCV_TABLE} SET fecha_evento=%s, hora_evento=%s, "
+                            "glosa_evento=%s WHERE empresa_verificacion=%s AND rut_proveedor=%s "
+                            "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s",
+                            (
+                                values["fecha_evento"], values["hora_evento"], values["glosa_evento"],
+                                *identity,
+                            ),
+                        )
+                        result["eventos_actualizados"] += 1
+                except ContabilidadLegacyError:
+                    result["errores_contables"] += 1
+        connection.commit()
+    except Exception as exc:
+        raise ContabilidadLegacyError("No fue posible registrar eventos contables RPETC.") from exc
+    finally:
+        if connection is not None:
+            connection.close()
+    return result
 
 
 def _config_legacy() -> SettingsMySQLConnection:

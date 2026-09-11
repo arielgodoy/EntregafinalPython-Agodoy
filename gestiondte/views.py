@@ -951,6 +951,7 @@ def sincronizar_cesiones_rpetc(request):
         RPETCTaskFailedError, RPETCTaskTimeoutError, RPETCUnauthorizedError,
     )
     from .services.rpetc_importer import RPETCImportError
+    from .services.rpetc_contabilidad import ContabilidadLegacyError, registrar_cesiones_contabilidad
     from .services.lectura_automatica import (
         LecturaAutomaticaError,
         periodos_mensuales_rpetc,
@@ -1035,6 +1036,19 @@ def sincronizar_cesiones_rpetc(request):
         )
         resultado = sincronizado['resultado']
         stats = sincronizado['stats']
+        contabilidad = {
+            'eventos_creados': 0,
+            'eventos_actualizados': 0,
+            'eventos_sin_cambios': 0,
+            'errores_contables': 0,
+        }
+        if form.cleaned_data.get('grabar_en_contabilidad', False) and stats.get('tarea'):
+            cesiones = CesionRPETC.objects.filter(tareas__tarea=stats['tarea']).distinct()
+            try:
+                contabilidad = registrar_cesiones_contabilidad(empresa_activa.codigo, cesiones)
+            except ContabilidadLegacyError:
+                contabilidad['errores_contables'] = cesiones.count()
+        stats.update(contabilidad)
         audit_log(
             request,
             'UPDATE',

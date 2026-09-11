@@ -33,6 +33,10 @@ Resumen corto y normativo para consultas a bases MySQL legacy desde `gestiondte`
 5) Empresa contable
 - La llave lógica entre Django y el sistema legacy es `codigoempresa` (ej.: "09").
 - Tabla principal actualmente consultada: `eltit_conta.maestroempresas`.
+- Para eventos RCV de cesiones RPETC, `eltit_conta.facturasdecompras_eventos_rcv` es
+  una tabla central: nunca se construye `eltit_contaXX.facturasdecompras_eventos_rcv`.
+- `empresa_verificacion` es el discriminador multiempresa dentro de esa tabla central y
+  debe recibir el código de empresa validado desde el backend.
 
 6) Permisos
 - Todas las vistas que consumen estos servicios deben seguir usando ICMEAS mediante `access_control.decorators.verificar_permiso`.

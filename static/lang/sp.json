@@ -756,6 +756,8 @@
 "menu.gestion_dte.cesiones": "Control de Cesiones",
 "gestion_dte.rpetc.sync.title": "Sincronizar RPETC",
 "gestion_dte.rpetc.sync.help": "Consulta las cesiones del deudor en el SII. Puede tardar algunos segundos y permite un rango máximo de un mes.",
+"gestion_dte.rpetc.sync.accounting": "Grabar cesión en contabilidad",
+"gestion_dte.rpetc.sync.accounting_help": "Si está activo, las cesiones detectadas se registrarán como evento CED en Contabilidad.",
 "gestion_dte.rpetc.sync.from": "Desde",
 "gestion_dte.rpetc.sync.to": "Hasta",
 "gestion_dte.rpetc.sync.submit": "Sincronizar cesiones",

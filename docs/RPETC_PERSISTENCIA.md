@@ -61,4 +61,12 @@ Errores estructurales criticos abortan la transaccion, incluyendo:
 - monto no valido;
 - periodo de tarea no valido.
 
+## Registro contable legacy
+
+Cuando el usuario marca el checkbox de contabilizacion, los eventos `CED` se escriben
+siempre en la tabla central `eltit_conta.facturasdecompras_eventos_rcv`. La empresa no
+se discrimina mediante un schema `eltit_contaXX`: se guarda en `empresa_verificacion`,
+obtenida desde la empresa activa del backend. La identidad de idempotencia es
+`tipo_doc`, `numero_doc`, `rut_proveedor`, `tipo_evento` y `empresa_verificacion`.
+
 Las columnas extra del parser no se persisten en el modelo normalizado.

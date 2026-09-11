@@ -15,6 +15,7 @@ from gestiondte.models import (
 )
 from auditoria.models import AuditoriaGestionDTEEvent
 from gestiondte.views import _rpetc_request_filters
+from gestiondte.services.rpetc_contabilidad import ContabilidadLegacyError
 from settings.models import UserPreferences
 
 
@@ -60,6 +61,62 @@ class SincronizarRPETCViewTest(TestCase):
             'cantidad_registros': 1,
         }
 
+    def _resultado_sincronizacion_con_cesion(self):
+        tarea = TareaRPETC.objects.create(
+            empresa=self.empresa, id_tarea='task-contable', tipo_consulta='DEUDOR',
+            rut_consultado='77575300', dv_consultado='5', fecha_desde=date(2026, 7, 1),
+            fecha_hasta=date(2026, 7, 31), formato='TXT', estado='TERMINADO',
+        )
+        cesion = CesionRPETC.objects.create(
+            id_cesion='100', estado_cesion='Vigente', cedente_rut='76376142', cedente_dv='8',
+            cesionario_rut='76682670', cesionario_dv='9', cesionario_razon_social='Cesionario SpA',
+            deudor_rut='77575300', deudor_dv='5', tipo_doc='33', folio_doc='2587',
+            fecha_cesion=datetime(2026, 7, 2, 12, 30, tzinfo=timezone.utc), monto_cesion=Decimal('100'),
+        )
+        TareaCesionRPETC.objects.create(tarea=tarea, cesion=cesion, rol_consulta='DEUDOR')
+        return {
+            'resultado': {'tarea_inicial': self.initial},
+            'stats': {
+                'tarea': tarea, 'registros_recibidos': 1, 'cesiones_creadas': 0,
+                'cesiones_actualizadas': 0, 'cesiones_sin_cambios': 1,
+                'vinculos_creados': 0, 'transiciones_estado': 0, 'errores': [],
+            },
+        }
+
+    @patch('gestiondte.services.lectura_automatica.sincronizar_empresa_rpetc')
+    @patch('gestiondte.services.rpetc_contabilidad.registrar_cesiones_contabilidad')
+    def test_checkbox_falso_no_escribe_y_verdadero_usa_empresa_activa(self, registrar, sincronizar):
+        sincronizar.return_value = self._resultado_sincronizacion_con_cesion()
+        url = reverse('gestion_dte:sincronizar_cesiones_rpetc')
+
+        response_false = self.client.post(url, {'fecha_desde': '2026-07-01', 'fecha_hasta': '2026-07-31'})
+        registrar.assert_not_called()
+        self.assertEqual(response_false.status_code, 200)
+
+        response_true = self.client.post(url, {
+            'fecha_desde': '2026-07-01', 'fecha_hasta': '2026-07-31',
+            'grabar_en_contabilidad': 'on',
+        })
+        registrar.assert_called_once()
+        self.assertEqual(registrar.call_args.args[0], '09')
+        self.assertEqual(list(registrar.call_args.args[1]).__len__(), 1)
+        self.assertEqual(response_true.status_code, 200)
+
+    @patch('gestiondte.services.lectura_automatica.sincronizar_empresa_rpetc')
+    @patch('gestiondte.services.rpetc_contabilidad.registrar_cesiones_contabilidad')
+    def test_fallo_legacy_no_convierte_sync_rpetc_en_error(self, registrar, sincronizar):
+        sincronizar.return_value = self._resultado_sincronizacion_con_cesion()
+        registrar.side_effect = ContabilidadLegacyError('legacy no disponible')
+
+        response = self.client.post(reverse('gestion_dte:sincronizar_cesiones_rpetc'), {
+            'fecha_desde': '2026-07-01', 'fecha_hasta': '2026-07-31',
+            'grabar_en_contabilidad': 'on',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sincronización completada')
+        self.assertNotContains(response, 'No fue posible completar la sincronización RPETC.')
+
     def test_control_cesiones_usa_inicio_del_ano_actual_en_contexto_y_ajax(self):
         for today in (date(2027, 3, 15), date(2028, 1, 2)):
             with self.subTest(today=today), patch('gestiondte.views._fecha_sistema_request', return_value=today):
@@ -87,6 +144,11 @@ class SincronizarRPETCViewTest(TestCase):
                 self.assertEqual(response.context['filtros']['fecha_hasta'], system_date)
                 self.assertContains(response, f'value="{system_date.year}-01-01"')
                 self.assertContains(response, f'value="{system_date.isoformat()}"')
+
+    def test_modal_renderiza_checkbox_contable_desmarcado_por_defecto(self):
+        response = self.client.get(reverse('gestion_dte:cesiones'))
+        self.assertContains(response, 'name="grabar_en_contabilidad"')
+        self.assertNotContains(response, 'name="grabar_en_contabilidad" checked')
 
     def test_control_cesiones_defaults_conservan_fechas_explicitas(self):
         with patch('gestiondte.views._fecha_sistema_request', return_value=date(2025, 12, 31)):

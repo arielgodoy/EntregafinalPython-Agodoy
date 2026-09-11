@@ -57,6 +57,11 @@ class CertificadoUploadForm(forms.ModelForm):
 
 
 class SincronizarCesionesRPETCForm(forms.Form):
+    grabar_en_contabilidad = forms.BooleanField(
+        required=False,
+        initial=False,
+        label='Grabar cesión en contabilidad',
+    )
     fecha_desde = forms.DateField(
         label='Desde',
         widget=forms.DateInput(attrs={'type': 'date'}),
