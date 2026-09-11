@@ -14,6 +14,9 @@ Sync Impact Report
   COPILOT/ARQUITECTURA_APPS.md). Es adición de guía que expande un principio existente,
   sin redefiniciones incompatibles; el detalle operativo permanece en ARQUITECTURA_APPS.md
   (no se duplica).
+- Enmienda 2026-09-07 (v1.2.0, MINOR): se formaliza en el Principio V la separación
+  entre visibilidad VICMEAS y autorización ICMEAS, incluyendo el uso de `ver`, la
+  evaluación uniforme de `is_superuser` y la prohibición de usar `ver` como autorización.
 -->
 
 # AppDocs Constitution
@@ -70,12 +73,21 @@ modificarlo, el agente MUST detenerse y proponer una alternativa externa según
 `COPILOT/REGLAS_CODIGO_VENDOR.md`.
 Rationale: modificar vendor rompe componentes y mezcla código propio con código base.
 
-### V. Multiempresa y permisos ICMEAS (NON-NEGOTIABLE)
+### V. Multiempresa y permisos VICMEAS/ICMEAS (NON-NEGOTIABLE)
 
 Se MUST mantener la arquitectura multiempresa existente (empresa activa en sesión) y
-el sistema de permisos ICMEAS (`VerificarPermisoMixin` / `@verificar_permiso` con
-`vista_nombre` y `permiso_requerido`). NO se usan permisos por defecto de Django ni
-se omiten las validaciones de pertenencia a la empresa activa.
+el sistema de permisos VICMEAS/ICMEAS. VICMEAS se compone de `V` (`ver`) más las
+acciones ICMEAS: `I` (`ingresar`), `C` (`crear`), `M` (`modificar`), `E` (`eliminar`),
+`A` (`autorizar`) y `S` (`supervisor`). `V` controla exclusivamente la visibilidad
+del item navegable en el sidebar para la empresa activa; las acciones ICMEAS controlan
+la autorización efectiva de cada vista y operación mediante `VerificarPermisoMixin` /
+`@verificar_permiso` con `vista_nombre` y `permiso_requerido`. `is_superuser` no concede
+bypass visual del sidebar ni autorización backend por sí mismo; el backend continúa
+evaluando sus reglas ICMEAS explícitas, incluida la semántica existente de `supervisor`.
+Está prohibido usar `V` como sustituto de `I` o de cualquier otra acción ICMEAS, y `V`
+no participa en la decisión de autorización backend. NO se usan permisos por defecto de
+Django, las decisiones de permiso no dependen de textos traducidos ni se omiten las
+validaciones de pertenencia a la empresa activa.
 Rationale: son los mecanismos de seguridad y aislamiento vigentes del sistema.
 
 ### VI. Cambios mínimos y focalizados
@@ -129,4 +141,4 @@ especificado.
   MINOR: nuevo principio o sección; PATCH: aclaraciones sin cambio semántico) y
   actualización del Sync Impact Report al inicio de este archivo.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-07
+**Version**: 1.2.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-07

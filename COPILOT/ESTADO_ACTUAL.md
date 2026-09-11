@@ -2,7 +2,7 @@
 
 ## Estado
 
-- Última actualización: 2026-09-03.
+- Última actualización: 2026-09-11.
 - Rama actual: `main`.
 - HEAD verificado: `8155a2a`.
 - Django 5.1.3 comprobado.
@@ -15,6 +15,10 @@
 - La aplicación usa Django con una separación entre componentes de sistema y aplicaciones de negocio.
 - La empresa activa se conserva en la sesión Django y participa en permisos, navegación y datos multiempresa.
 - El acceso normal se controla mediante ICMEAS (`Vista`, `Permiso`, empresa y capacidades como `ingresar`/`modificar`).
+- VICMEAS añade `Permiso.ver` como dimensión independiente de visibilidad del sidebar; `is_superuser` no concede bypass visual ni autorización backend por sí mismo.
+- El sidebar admite árboles recursivos de profundidad arbitraria y conserva mappings legacy fuera del árbol canónico.
+- El Utilitario de Acceso permite asignación masiva aditiva y ocultamiento de vistas por empresa.
+- `inicializar_sistema` realiza el bootstrap inicial de empresa, vistas y permisos, con modo `--dry-run`.
 - `acounts`, `access_control`, `settings`, `api`, `auditoria` y `database_manager` están clasificados como `CORE_SYSTEM_APPS`.
 - `dashboard`, `chat`, `core_search` y `notificaciones` son `SYSTEM_SUPPORT_APPS`.
 - `biblioteca`, `gestiondte`, `evaluaciones`, `control_de_proyectos` y `control_operacional` son `APPLICATION_APPS`.
@@ -88,6 +92,8 @@ Comprobadas en código/configuración actual:
 - gestión de proyectos, tareas, profesionales, dependencias, avance y documentos requeridos/asociados;
 - gestión DTE y biblioteca documental.
 
+La especificación as-built de este bloque está en `specs/002-access-control-vicmeas/`.
+
 La existencia de una funcionalidad aquí no implica que todos sus flujos estén libres de pendientes o que exista validación de producción para cada entorno.
 
 ## Control de proyectos
@@ -130,6 +136,9 @@ Estas deudas siguen registradas para planificación; este documento no las resue
 - Desacoplar la dependencia `api -> biblioteca` cuando exista un límite de integración adecuado.
 - Sustituir gradualmente el ciclo entre `control_de_proyectos` y `control_operacional` por una frontera de integración/eventos.
 - Mantener `ThemePreferences` legacy sin convertirlo en fuente de verdad ni eliminarlo sin una tarea específica.
+- Normalizar gradualmente `Vista.route_name` NULL, vistas legacy ambiguas y mappings de menús legacy; son deuda no bloqueante.
+- Completar i18n de templates internos y retirar labels fallback temporales; es deuda no bloqueante.
+- No hay una prueba flaky vigente identificada en la revisión de cierre VICMEAS; cualquier caso futuro debe registrarse como deuda aislada.
 
 ### Funcionales
 
