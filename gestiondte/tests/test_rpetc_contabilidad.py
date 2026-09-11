@@ -9,6 +9,7 @@ from django.test import SimpleTestCase
 from gestiondte.services.rpetc_contabilidad import (
     ContabilidadLegacyError,
     LEGACY_RCV_SCHEMA,
+    _normalizar_tipo_sii,
     normalizar_folio_legacy,
     normalizar_rut_legacy,
     obtener_estados_contables_cesiones,
@@ -73,6 +74,12 @@ class FakeCesion:
 class RPETCLegacyServiceTest(SimpleTestCase):
     def test_schema_rcv_es_central_y_no_depende_de_empresa(self):
         self.assertEqual(LEGACY_RCV_SCHEMA, "eltit_conta")
+
+    def test_tipo_sii_respeta_limite_varchar_3_sin_truncar(self):
+        self.assertEqual(_normalizar_tipo_sii("33"), "33")
+        self.assertEqual(_normalizar_tipo_sii("123"), "123")
+        with self.assertRaises(ContabilidadLegacyError):
+            _normalizar_tipo_sii("1234")
 
     @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
     @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")

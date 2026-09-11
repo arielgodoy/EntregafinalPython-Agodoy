@@ -73,7 +73,7 @@ def normalizar_folio_legacy(folio: Any, tipo_legacy: str) -> str | None:
 
 def _normalizar_tipo_sii(tipo_doc: Any) -> str:
     tipo = str(tipo_doc or "").strip()
-    if not tipo or not tipo.isdigit() or len(tipo) > 10:
+    if not tipo or not tipo.isdigit() or len(tipo) > 3:
         raise ContabilidadLegacyError("Tipo de documento SII inválido para evento contable.")
     return tipo
 

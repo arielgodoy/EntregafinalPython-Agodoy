@@ -69,4 +69,8 @@ se discrimina mediante un schema `eltit_contaXX`: se guarda en `empresa_verifica
 obtenida desde la empresa activa del backend. La identidad de idempotencia es
 `tipo_doc`, `numero_doc`, `rut_proveedor`, `tipo_evento` y `empresa_verificacion`.
 
+`tipo_doc` corresponde al codigo SII y su destino legacy es `VARCHAR(3)`. Se aceptan
+como maximo tres caracteres; los valores mayores se rechazan y nunca se truncan de
+forma silenciosa.
+
 Las columnas extra del parser no se persisten en el modelo normalizado.

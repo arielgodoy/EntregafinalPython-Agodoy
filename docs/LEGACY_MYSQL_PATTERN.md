@@ -37,6 +37,8 @@ Resumen corto y normativo para consultas a bases MySQL legacy desde `gestiondte`
   una tabla central: nunca se construye `eltit_contaXX.facturasdecompras_eventos_rcv`.
 - `empresa_verificacion` es el discriminador multiempresa dentro de esa tabla central y
   debe recibir el código de empresa validado desde el backend.
+- En eventos RCV, `tipo_doc` es el código SII destinado a `VARCHAR(3)`: admite como
+  máximo tres caracteres y los valores mayores se rechazan, sin truncamiento silencioso.
 
 6) Permisos
 - Todas las vistas que consumen estos servicios deben seguir usando ICMEAS mediante `access_control.decorators.verificar_permiso`.
