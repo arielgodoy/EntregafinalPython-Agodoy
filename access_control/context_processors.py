@@ -2,7 +2,7 @@
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.access_requests import is_user_mail_enabled
 from access_control.services.empresa_activa import get_empresas_usuario
-from access_control.services.permissions import get_sidebar_visible_items
+from access_control.services.permissions import get_sidebar_access_tree, get_sidebar_visible_items
 
 
 def global_context(request):
@@ -27,11 +27,17 @@ def global_context(request):
         getattr(request, "user", None),
         request.session.get("empresa_id"),
     )
+    current_route_name = getattr(getattr(request, "resolver_match", None), "view_name", None)
+    sidebar_access_tree = get_sidebar_access_tree(
+        request.sidebar_visible_items,
+        current_route_name=current_route_name,
+    )
 
     return {
         'empresa_seleccionada': empresa_seleccionada,
         'mail_enabled': mail_enabled,
         'sidebar_visible_items': request.sidebar_visible_items,
+        'sidebar_access_tree': sidebar_access_tree,
     }
 def empresas_disponibles(request):
     if request.user.is_authenticated:

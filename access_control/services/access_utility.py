@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -10,6 +11,8 @@ from access_control.services.permissions import (
     SIDEBAR_GROUPS,
     SIDEBAR_VIEW_NAMES,
     VICMEAS_FIELDS,
+    get_descendant_sidebar_keys,
+    get_sidebar_node,
 )
 
 
@@ -17,11 +20,18 @@ ACCESS_UTILITY_VISTA_NAME = "Control de Acceso - Utilitario de Acceso"
 SENSITIVE_FIELDS = frozenset(("autorizar", "supervisor"))
 
 
+@dataclass(frozen=True)
+class ScopeResolution:
+    requested_leaf_names: tuple
+    vistas: tuple
+    missing_names: tuple
+
+
 def get_access_utility_vista():
     return Vista.objects.filter(nombre=ACCESS_UTILITY_VISTA_NAME).first()
 
 
-def get_scope_vistas(scope, *, require_all=True):
+def _get_scope_item_keys(scope):
     global_names = {
         SIDEBAR_VIEW_NAMES[item_key]
         for item_key in SIDEBAR_GLOBAL_ITEMS
@@ -35,6 +45,12 @@ def get_scope_vistas(scope, *, require_all=True):
             if item_key not in SIDEBAR_GLOBAL_ITEMS
             and SIDEBAR_VIEW_NAMES[item_key] not in global_names
         ]
+    elif get_sidebar_node(scope) is not None:
+        item_keys = [
+            item_key
+            for item_key in get_descendant_sidebar_keys(scope)
+            if item_key not in SIDEBAR_GLOBAL_ITEMS
+        ]
     elif scope in SIDEBAR_GROUPS:
         item_keys = [
             item_key
@@ -45,7 +61,38 @@ def get_scope_vistas(scope, *, require_all=True):
     else:
         raise ValidationError("El alcance seleccionado no es válido.")
 
-    item_keys = list(dict.fromkeys(item_keys))
+    return list(dict.fromkeys(item_keys))
+
+
+def resolve_scope_vistas(scope):
+    item_keys = _get_scope_item_keys(scope)
+    requested_names = tuple(SIDEBAR_VIEW_NAMES[item_key] for item_key in item_keys)
+    vistas_by_name = {}
+    for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
+        vistas_by_name.setdefault(vista.nombre, vista)
+    missing_names = tuple(name for name in requested_names if name not in vistas_by_name)
+    return ScopeResolution(
+        requested_leaf_names=requested_names,
+        vistas=tuple(vistas_by_name[name] for name in requested_names if name in vistas_by_name),
+        missing_names=missing_names,
+    )
+
+
+def get_scope_vistas(scope, *, require_all=True):
+    resolution = resolve_scope_vistas(scope)
+    if resolution.missing_names and require_all:
+        raise ValidationError("Faltan Vistas catalogadas: " + ", ".join(resolution.missing_names))
+    return list(resolution.vistas)
+
+
+def get_hideable_sidebar_vistas():
+    """Resolve the unique, non-global leaf views controlled by the sidebar."""
+    return get_scope_vistas("all", require_all=False)
+
+
+def get_descendant_vistas(node_key, *, require_all=False):
+    """Resolve a hierarchical sidebar node to its ordered leaf Vistas."""
+    item_keys = get_descendant_sidebar_keys(node_key)
     expected_names = [SIDEBAR_VIEW_NAMES[item_key] for item_key in item_keys]
     vistas_by_name = {}
     for vista in Vista.objects.filter(nombre__in=expected_names).order_by("id"):
@@ -54,11 +101,6 @@ def get_scope_vistas(scope, *, require_all=True):
     if missing_names and require_all:
         raise ValidationError("Faltan Vistas catalogadas: " + ", ".join(missing_names))
     return [vistas_by_name[name] for name in expected_names if name in vistas_by_name]
-
-
-def get_hideable_sidebar_vistas():
-    """Resolve the unique, non-global leaf views controlled by the sidebar."""
-    return get_scope_vistas("all", require_all=False)
 
 
 def get_hideable_sidebar_vista(vista):
@@ -124,7 +166,7 @@ def validate_operation_authorization(*, executor, empresa, vista, selected_field
         raise PermissionError("Se requiere supervisor para asignar permisos sensibles.")
 
 
-def build_preview(*, usuario, empresa, vistas, selected_fields):
+def build_preview(*, usuario, empresa, vistas, selected_fields, scope_resolution=None):
     existing = {
         permiso.vista_id: permiso
         for permiso in Permiso.objects.filter(
@@ -154,6 +196,8 @@ def build_preview(*, usuario, empresa, vistas, selected_fields):
         "updated": updated,
         "unchanged": unchanged,
         "processed": len(vistas),
+        "requested": len(scope_resolution.requested_leaf_names) if scope_resolution else len(vistas),
+        "missing_names": scope_resolution.missing_names if scope_resolution else (),
     }
 
 

@@ -256,43 +256,10 @@
                     </div>
                 </li>{% endif %}
                 
-                <!-- Menú Control de Acceso (SIEMPRE VISIBLE) -->
-                {% if "access" in request.sidebar_visible_items %}<li class="nav-item">
-                    <a class="nav-link menu-link" href="#sidebarControlAcceso" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarControlAcceso">
-                        <i class="ri-lock-line"></i> <span data-key="menu.access_control">Control de Acceso</span>
-                    </a>
-                    <div class="collapse menu-dropdown" id="sidebarControlAcceso">
-                        <ul class="nav nav-sm flex-column">
-                            {% if "access_invite" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:usuario_invitar' %}" class="nav-link"><span data-key="menu.access_control.invite_user">Invitar Usuario</span></a>
-                            </li>{% endif %}
-                            {% if "access_invitations" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:invitaciones_lista' %}" class="nav-link"><span data-key="menu.access_control.invitations">Gestión de Invitaciones</span></a>
-                            </li>{% endif %}
-                            {% if "access_users" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:usuarios_lista' %}" class="nav-link"><span data-key="menu.access_control.user_management">Gestión de Usuarios</span></a>
-                            </li>{% endif %}
-                            {% if "access_companies" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:empresas_lista' %}" class="nav-link"><span data-key="menu.access_control.company_management">Gestión de Empresas</span></a>
-                            </li>{% endif %}
-                            {% if "access_views" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:vistas_lista' %}" class="nav-link"><span data-key="menu.access_control.view_management">Gestión de Vistas</span></a>
-                            </li>{% endif %}
-                            {% if "access_permissions" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:permisos_lista' %}" class="nav-link"><span data-key="menu.access_control.permission_management">Gestión de Permisos</span></a>
-                            </li>{% endif %}
-                            {% if "access_filtered_permissions" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:permisos_filtrados' %}" class="nav-link"><span data-key="menu.access_control.filter_permissions">Filtrar Permisos</span></a>
-                            </li>{% endif %}
-                            {% if "access_view_permissions" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:permisos_por_vista' %}" class="nav-link">Permisos por Vista</a>
-                            </li>{% endif %}
-                            {% if "access_utility" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'access_control:utilitario_acceso' %}" class="nav-link" data-key="menu.access_control.access_utility">Utilitario de Acceso</a>
-                            </li>{% endif %}
-                        </ul>
-                    </div>
-                </li>{% endif %}
+                <!-- Menú Control de Acceso -->
+                {% for node in sidebar_access_tree %}
+                    {% include "partials/sidebar_node.html" with node=node %}
+                {% endfor %}
 
                 <!-- Menú APIs -->
                 {% if "apis" in request.sidebar_visible_items %}<li class="nav-item">

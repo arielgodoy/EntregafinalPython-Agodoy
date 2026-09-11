@@ -77,6 +77,7 @@ from access_control.services.access_utility import (
     get_access_utility_user_options,
     get_access_utility_vista,
     get_scope_vistas,
+    resolve_scope_vistas,
     get_hideable_sidebar_vista,
     build_hide_view_preview,
     hide_view_from_sidebar,
@@ -374,16 +375,24 @@ class AccessUtilityView(LoginRequiredMixin, View):
             return self._forbidden(request, str(error))
 
         try:
-            vistas = get_scope_vistas(form.cleaned_data["alcance"])
-        except Exception as error:
+            scope_resolution = resolve_scope_vistas(form.cleaned_data["alcance"])
+        except ValidationError as error:
             form.add_error("alcance", str(error))
+            return render(request, self.template_name, self._base_context(form), status=400)
+
+        if not scope_resolution.vistas:
+            form.add_error(
+                "alcance",
+                "El alcance seleccionado no contiene Vistas catalogadas aplicables.",
+            )
             return render(request, self.template_name, self._base_context(form), status=400)
 
         preview = build_preview(
             usuario=usuario,
             empresa=empresa,
-            vistas=vistas,
+            vistas=scope_resolution.vistas,
             selected_fields=selected_fields,
+            scope_resolution=scope_resolution,
         )
         if action == "preview":
             return render(
@@ -401,8 +410,12 @@ class AccessUtilityView(LoginRequiredMixin, View):
         result = apply_additive_permissions(
             usuario=usuario,
             empresa=empresa,
-            vistas=vistas,
+            vistas=scope_resolution.vistas,
             selected_fields=selected_fields,
+        )
+        result.update(
+            requested=len(scope_resolution.requested_leaf_names),
+            missing_names=scope_resolution.missing_names,
         )
         return render(
             request,

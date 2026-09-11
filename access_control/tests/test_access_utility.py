@@ -11,6 +11,7 @@ from access_control.services.access_utility import (
     apply_additive_permissions,
     get_hideable_sidebar_vistas,
     get_scope_vistas,
+    resolve_scope_vistas,
 )
 from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
@@ -117,6 +118,18 @@ class AccessUtilityTests(TestCase):
         self.assertIn("access_utility", visible)
         self.assertIn("access", visible)
 
+    def test_hierarchical_access_scopes_resolve_expected_leaf_counts(self):
+        self.assertEqual(len(get_scope_vistas("control_acceso")), 9)
+        self.assertEqual(len(get_scope_vistas("usuarios")), 3)
+        self.assertEqual(len(get_scope_vistas("permisos")), 5)
+
+    def test_hierarchical_scopes_exclude_containers_from_hideable_views(self):
+        names = {vista.nombre for vista in get_hideable_sidebar_vistas()}
+
+        self.assertNotIn("Control de Acceso", names)
+        self.assertNotIn("Usuarios", names)
+        self.assertNotIn("Permisos", names)
+
     def test_v_false_hides_utility_and_parent(self):
         visible = get_sidebar_visible_items(self.actor, self.empresa_activa.id)
         self.assertNotIn("access_utility", visible)
@@ -181,7 +194,7 @@ class AccessUtilityTests(TestCase):
         response = self._post(action="preview", alcance="apis", ver=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Permiso.objects.count(), before)
-        self.assertContains(response, "Vistas afectadas")
+        self.assertContains(response, "Vistas aplicables")
         self.assertContains(response, "1")
 
     def test_preview_renders_visible_confirmation_form(self):
@@ -205,21 +218,82 @@ class AccessUtilityTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, "acción válida", status_code=400)
 
-    def test_all_scope_with_missing_catalog_returns_clear_400(self):
+    def test_assignment_scope_with_missing_catalog_warns_and_continues(self):
         Vista.objects.filter(
             nombre__in=["Tareas - Listado", "Configuración - Conexiones MySQL"]
         ).delete()
         before = Permiso.objects.count()
         response = self._post(action="preview", alcance="all", ver=True)
-        self.assertEqual(response.status_code, 400)
-        self.assertContains(response, "Faltan Vistas catalogadas", status_code=400)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Tareas - Listado")
+        self.assertContains(response, "Vistas aplicables")
         self.assertEqual(Permiso.objects.count(), before)
+
+    def test_control_scope_with_one_missing_catalog_processes_remaining_views(self):
+        Vista.objects.filter(nombre="Control de Acceso - Invitaciones").delete()
+
+        resolution = resolve_scope_vistas("control_acceso")
+        self.assertEqual(len(resolution.requested_leaf_names), 9)
+        self.assertEqual(len(resolution.vistas), 8)
+        self.assertEqual(resolution.missing_names, ("Control de Acceso - Invitaciones",))
+
+        response = self._post(action="confirm", alcance="control_acceso", ver=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hojas solicitadas")
+        self.assertEqual(response.context["result"]["requested"], 9)
+        self.assertEqual(response.context["result"]["processed"], 8)
+        self.assertContains(response, "Vistas procesadas: 8")
+        self.assertContains(response, "Control de Acceso - Invitaciones")
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.target,
+                empresa=self.empresa_objetivo,
+                vista__nombre="Control de Acceso - Invitaciones",
+            ).exists()
+        )
+        self.assertEqual(
+            Permiso.objects.filter(
+                usuario=self.target,
+                empresa=self.empresa_objetivo,
+                vista__nombre__in=resolution.requested_leaf_names,
+            ).count(),
+            8,
+        )
+
+    def test_scope_with_zero_cataloged_views_is_blocked(self):
+        Vista.objects.filter(
+            nombre__in=[
+                "Control de Acceso - Invitar Usuario",
+                "Control de Acceso - Invitaciones",
+                "Control de Acceso - Maestro Usuarios",
+            ]
+        ).delete()
+
+        response = self._post(action="preview", alcance="usuarios", ver=True)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "no contiene Vistas catalogadas aplicables", status_code=400)
+
+    def test_users_and_permissions_scopes_report_partial_catalog(self):
+        Vista.objects.filter(nombre="Control de Acceso - Invitaciones").delete()
+        Vista.objects.filter(nombre="Control de Acceso - Maestro Vistas").delete()
+
+        users = resolve_scope_vistas("usuarios")
+        permissions = resolve_scope_vistas("permisos")
+
+        self.assertEqual(len(users.requested_leaf_names), 3)
+        self.assertEqual(len(users.vistas), 2)
+        self.assertEqual(len(users.missing_names), 1)
+        self.assertEqual(len(permissions.requested_leaf_names), 5)
+        self.assertEqual(len(permissions.vistas), 4)
+        self.assertEqual(len(permissions.missing_names), 1)
 
     def test_gestion_dte_preview_does_not_write(self):
         before = Permiso.objects.count()
         response = self._post(action="preview", alcance="gestion_dte", ver=True)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Vistas afectadas")
+        self.assertContains(response, "Vistas aplicables")
         self.assertEqual(Permiso.objects.count(), before)
 
     def test_gestion_dte_confirm_writes_selected_flag(self):
@@ -695,12 +769,12 @@ class HideViewUtilityTests(TestCase):
         response = self._post_hide(vista=self.vista_global)
         self.assertEqual(response.status_code, 400)
 
-    def test_superuser_keeps_visual_sidebar_bypass(self):
+    def test_superuser_sidebar_visibility_still_uses_vicmeas(self):
         self.actor.is_superuser = True
         self.actor.save(update_fields=["is_superuser"])
         visible = get_sidebar_visible_items(self.actor, self.empresa_objetivo.id)
-        self.assertIn("access_utility", visible)
-        self.assertIn("gestion_dte_cesiones", visible)
+        self.assertNotIn("access_utility", visible)
+        self.assertNotIn("gestion_dte_cesiones", visible)
 
     def test_first_mass_assignment_utility_still_works(self):
         Permiso.objects.create(
