@@ -15,10 +15,12 @@ completo de la SPEC MAESTRA sin mezclarlo con `control_de_proyectos.Tarea`.
 La ampliación será incremental dentro de `tareas/`: identidad y ciclo de vida,
 asignación/jerarquía/fechas, avance/documentos, cotizaciones, colaboración/similitud/
 enlaces y dashboards. Cada fase tendrá migraciones aditivas, backfill explícito, pruebas
-focalizadas y validación independiente. No se modifica `tasks.md` en esta etapa.
+y focalizadas y validación independiente. Las tasks se actualizan como artefacto de ejecución
+cuando una decisión SDD aprobada cambia el alcance.
 
-P1 Local y P2 Proveedor permanecen `LEGACY API PENDIENTE`. No se crean maestros duplicados,
-ni se inventan tablas, IDs, sincronización o `rut_contable`.
+P1 Local permanece `LEGACY API PENDIENTE`. Proveedor tendrá posteriormente una
+`APPLICATION_APP` global local Django; P2 se reserva para su integración, validación,
+identificador, conciliación y sincronización con ERP legacy.
 
 ## Technical Context
 
@@ -50,7 +52,8 @@ físicamente una tarea; cambios fuera de `tareas/` requieren autorización expre
 `AppDocs/settings.py` y `AppDocs/urls.py` ya fue autorizada, ejecutada, testeada y
 versionada. Cualquier modificación futura adicional de esos archivos requiere autorización
 expresa. Cualquier otro archivo externo a `tareas/` queda bloqueado por la regla de detención.
-Local y Proveedor requieren contrato legacy antes de cerrar sus fases.
+Local requiere contrato legacy antes de cerrar su fase. Proveedor puede operar localmente;
+solo su integración ERP requiere contrato P2.
 
 ## Constitution Check
 
@@ -162,20 +165,16 @@ documentos, evidencias, hitos, mini-tareas ni otras entidades de fases posterior
     informativas e historial; no automatizar vencimientos documentales.
 - Probar precisión, orden por creación, mini-tareas pendientes y reglas de cierre.
 
-### Phase 4 — Cotizaciones, rondas y proveedor referenciado
+### Phase 4 — Cotizaciones, rondas y maestro local de proveedores
 
-- Implementar el concepto de ronda, histórico, mínimo configurable por ronda (default 3),
-    fechas, observaciones y documentos asociados que no requieran identidad de proveedor.
-- Documentar la regla de máximo 3 versiones por proveedor/ronda, pero no validarla ni contar
-    proveedores distintos mientras P2 siga bloqueado.
-- Implementar la regla general de cierre bajo el mínimo solo hasta el punto que no requiera
-    identidad real; conservar histórico por ronda.
-- `ProveedorReferencia` queda como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2**:
-    no definir campos, `rut_contable`, ID externo, tabla legacy, endpoint ni sincronización;
-    no generar tarea de implementación. Las cotizaciones se planifican solo hasta necesitar
-    identidad real del proveedor, punto en el que quedan bloqueadas. Proveedor es una entidad
-    conceptual futura; sus datos maestros, evaluación, promedio e identidad externa no son
-    diseño actual de modelo ni contrato.
+- Implementar y conservar el contrato PRE-P2 de rondas, histórico, mínimo configurable,
+    fechas, observaciones, documentos y cierre general.
+- Crear posteriormente la `APPLICATION_APP proveedores` con maestro global Django y RUT
+    opcional normalizado, único global e inactivación lógica.
+- Evolucionar `Cotizacion.proveedor` como FK nullable, exigirlo solo para nuevas cotizaciones,
+    validar tres versiones por `(ronda, proveedor)` y contar proveedores distintos vigentes.
+- Mantener P2 exclusivamente para lookup, validación, identificador, conciliación,
+    sincronización y actualización desde ERP legacy.
 
 Phase 2 persiste `Tarea.fechas_pendientes_confirmacion` como booleano (default `False`),
 lo activa al reactivar una tarea con fechas afectadas y lo desactiva al confirmar/reacomodar.
@@ -198,7 +197,7 @@ No se agregan fechas nuevas ni se depende solo de información derivada.
 - Implementar exactamente ocho KPI: total por estado, atrasadas, próximas a vencer, sin
     movimiento, esperando aprobación, carga abierta por responsable, cumplimiento y tiempo
     promedio de cierre. Repetirlos únicamente en General, Empresa, Departamento, Usuario y
-    Tarea. Local queda deferred por P1 y Proveedor deferred por P2.
+    Tarea. Local queda deferred por P1; Proveedor podrá incorporarse desde su maestro local.
 - Añadir índices y consultas paginadas por empresa; probar consistencia por nivel.
 - Completar `data-key`, ICMEAS, seguridad de enlaces, auditoría, regresión MVP y diff check.
 
@@ -243,7 +242,7 @@ ninguna migración de otra app.
 | `AppDocs/settings.py` | Alta inicial en `INSTALLED_APPS` | RESUELTO: autorizado, ejecutado, testeado y versionado; cambios futuros requieren autorización |
 | `AppDocs/urls.py` | Include inicial de URLs | RESUELTO: autorizado, ejecutado, testeado y versionado; cambios futuros requieren autorización |
 | `/api/v1/maestros/locales/` | Elegibilidad Local incompleta | BLOQUEADO: P1 legacy |
-| Maestro/API Proveedor | Contrato no definido | BLOQUEADO: P2 legacy |
+| Maestro/API Proveedor | Maestro local aprobado; integración ERP pendiente | LOCAL PLANIFICADO / P2 legacy |
 | Otras apps, templates globales, vendor | No son necesarios | PROHIBIDO sin nueva autorización |
 
 ## Complexity Tracking
@@ -254,6 +253,6 @@ límites explícitos; no se autoriza resolverla con un modelo monolítico o camb
 ## Post-Design Constitution Check
 
 PASS: el diseño mantiene `tareas/` como frontera funcional, conserva Fase 1, reutiliza
-interfaces existentes, mantiene P1/P2 bloqueados, reconoce el alta inicial ya resuelta,
+interfaces existentes, mantiene P1 bloqueado y limita P2 a integración ERP, reconoce el alta inicial ya resuelta,
 no propone cambios futuros en archivos protegidos sin autorización y deja `tasks.md` para
 la siguiente etapa.

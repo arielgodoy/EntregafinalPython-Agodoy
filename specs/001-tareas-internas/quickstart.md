@@ -119,8 +119,8 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 ### E11. Cotizaciones (Phase 4)
 
 - Crear dos rondas y comprobar histórico independiente.
-- Verificar mínimo predeterminado 3, máximo 3 versiones por proveedor/ronda y bloqueo del cierre.
-- Confirmar que no se crea maestro ni sincronización de Proveedor mientras P2 esté bloqueado.
+- Verificar mínimo predeterminado 3, máximo 3 versiones por `(ronda, proveedor)` y bloqueo del cierre cuando la evolución local esté implementada.
+- Confirmar que el maestro local Django permite operar sin ERP; la integración, conciliación y sincronización legacy permanecen bloqueadas por P2.
 
 ### E12. Colaboración, similitud y enlaces (Phase 5)
 
@@ -138,7 +138,7 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 ## Límites y bloqueos
 
 - No hay eliminación física; se usa anulación auditada.
-- P1 Local y P2 Proveedor permanecen `LEGACY API PENDIENTE`.
+- P1 Local permanece `LEGACY API PENDIENTE`. P2 Proveedor bloquea únicamente la integración/validación/conciliación con ERP legacy; el maestro Django local no queda bloqueado.
 - No hay usuarios externos, plantilla de hitos ni vencimiento automático de documentos.
 - El alta inicial ya está resuelta; cualquier modificación futura de `AppDocs/*` requiere
    autorización expresa.

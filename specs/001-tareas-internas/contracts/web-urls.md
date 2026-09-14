@@ -97,8 +97,45 @@ La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal 
 | 5 | Enlace compartible | GET | `enlace_tarea` | Solo autenticado, lectura e ICMEAS |
 | 6 | Dashboard/KPI | GET | `dashboard_tareas` | Ocho KPI por dimensión permitida |
 
-Local y Proveedor no tienen rutas propias ni endpoints inventados: sus referencias solo se
-habilitan cuando P1/P2 tengan contrato autorizado.
+### P2 — Integración ERP del proveedor local
+
+La implementación PRE-P2 permite crear `RondaCotizacion`, configurar su mínimo,
+conservar histórico de rondas, crear `Cotizacion` internas y sus versiones históricas,
+usar los estados `RECIBIDA`, `SELECCIONADA` y `DESCARTADA`, asociar `DocumentoCotizacion`,
+contar cotizaciones vigentes, validar el mínimo interno, cerrar una ronda cumplida,
+abrir una ronda sucesora y bloquear el cierre de una Tarea cuando la última ronda no
+cumple su mínimo. Este conteo significa cantidad de cotizaciones internas vigentes, no
+cantidad de proveedores distintos.
+
+El proveedor operativo será el maestro global local de la futura `APPLICATION_APP
+proveedores`; no dependerá del ERP para crear, modificar con permisos, asociar a
+cotizaciones, contar proveedores distintos ni seleccionar una cotización dentro de Django.
+La evolución futura será `Cotizacion.proveedor -> proveedores.Proveedor`, nullable durante
+la transición para conservar cotizaciones PRE-P2 con `proveedor=NULL`; las nuevas
+cotizaciones exigirán proveedor después de esa evolución, sin backfill inventado.
+
+P2 bloquea únicamente lookup ERP, validación contra el maestro legacy, identificador
+legacy, conciliación, sincronización y actualización desde ERP. No bloquea el maestro
+local ni el uso de proveedores dentro de Django.
+
+`Cotizacion.estado = SELECCIONADA` representa la cotización elegida dentro de Django. No
+crea todavía una entidad `Adjudicacion` ni implica selección en ERP.
+
+El maestro local `Proveedor` tendrá inicialmente `id`, `rut`, `nombre`, `direccion`,
+`comuna`, `ciudad`, `fono1`, `fono2`, `fax`, `contacto`, `email1`, `email2`, `activo`,
+`created_at` y `updated_at`. Puede existir sin RUT; cuando exista, se normaliza y es único
+globalmente incluso si el proveedor está inactivo. La baja es lógica. `convenio`, `visitas`,
+`ProveedorEmpresa`, identificador legacy y sincronización ERP quedan fuera del alcance
+inicial.
+
+La regla futura es máximo 3 versiones por `(ronda, proveedor)`, validado en servicio
+transaccional; no es un máximo por ronda completa. El conteo futuro será de proveedores
+Django distintos con al menos una cotización `vigente=True` en la ronda, sin sumar rondas.
+Los estados `RECIBIDA`, `SELECCIONADA` y `DESCARTADA` no excluyen por sí solos.
+
+Local no tiene rutas propias ni endpoints inventados hasta resolver P1. Las rutas del
+maestro local de Proveedor se definirán dentro de la futura app `proveedores` con ICMEAS;
+las rutas de integración ERP permanecen bloqueadas por P2.
 
 ## Claves i18n nuevas (a reportar para alta en `static/lang/sp.json` / `en.json`)
 

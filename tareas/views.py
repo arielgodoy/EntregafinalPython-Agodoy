@@ -94,6 +94,62 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         return super().get_queryset().order_by("-fecha_creacion")
 
 
+class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    template_name = "tareas/mis_tareas.html"
+    vista_nombre = "Tareas - Dashboard personal"
+    permiso_requerido = "ingresar"
+
+    def get_context_data(self):
+        empresa_id = _get_empresa_id(self.request)
+        prioridades = (
+            Tarea.Prioridad.CRITICA,
+            Tarea.Prioridad.URGENTE,
+            Tarea.Prioridad.NORMAL,
+            Tarea.Prioridad.SIMPLE,
+        )
+        tareas = list(
+            self.get_queryset()
+            .filter(responsable=self.request.user)
+            .order_by("prioridad", "fecha_tope", "pk")
+        )
+        hitos = list(
+            Hito.objects.filter(
+                tarea__empresa_id=empresa_id,
+                responsable=self.request.user,
+                anulado=False,
+            )
+            .select_related(
+                "tarea",
+                "tarea__empresa",
+                "tarea__responsable",
+                "responsable",
+                "completado_por",
+            )
+            .order_by("tarea__prioridad", "tarea__pk", "fecha_creacion", "pk")
+        )
+        tareas_por_prioridad = {prioridad: [] for prioridad in prioridades}
+        hitos_por_prioridad = {prioridad: [] for prioridad in prioridades}
+        for tarea in tareas:
+            tareas_por_prioridad[tarea.prioridad].append(tarea)
+        for hito in hitos:
+            hitos_por_prioridad[hito.tarea.prioridad].append(hito)
+
+        return {
+            "priority_groups": [
+                {
+                    "value": prioridad,
+                    "label": Tarea.Prioridad(prioridad).label,
+                    "tareas": tareas_por_prioridad[prioridad],
+                    "hitos": hitos_por_prioridad[prioridad],
+                }
+                for prioridad in prioridades
+            ],
+        }
+
+    def get(self, request):
+        return render(request, self.template_name, self.get_context_data())
+
+
 class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, DetailView):
     model = Tarea
     template_name = "tareas/tarea_detalle.html"

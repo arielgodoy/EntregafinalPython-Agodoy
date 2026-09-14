@@ -229,15 +229,52 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 - Regla de cierre: con `requiere_evidencia_cierre=False`, la Tarea puede cerrarse sin EvidenciaCierre salvo otra regla contractual; con `True`, debe existir al menos una evidencia válida antes de aprobar/cerrar. La integración efectiva con el flujo de cierre queda para la task de cierre correspondiente.
 - Migración histórica `0017_tarea_evidencia_configuracion`: trasladar `EvidenciaCierre.requerida` a la configuración de la Tarea y conservar cada registro histórico como evidencia asociada. Un registro existente con archivo o URL real permanece como evidencia; no se borran evidencias ni se pierden datos. Los registros ambiguos o sin fuente real requieren decisión explícita antes de completar el backfill.
 
-### Cotizaciones y referencias externas
+### Cotizaciones y maestro local de proveedores
 
 - `RondaCotizacion`: tarea, número, mínimo configurable (default 3), fechas y estado.
-- `Cotizacion`: ronda, referencia de proveedor pendiente, versión, monto, vigente y estado;
-  la identidad real del proveedor queda bloqueada por P2.
-- `Adjudicacion`: ronda, cotización seleccionada, usuario, fecha y observación.
-- `ProveedorReferencia`: **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2**.
-  No define campos, `rut_contable`, ID externo, tabla legacy, endpoint ni sincronización;
-  tampoco genera una tarea de implementación mientras P2 siga bloqueado.
+- `Cotizacion`: relación obligatoria con `RondaCotizacion`, relación futura nullable con
+  `proveedores.Proveedor` durante la transición, `version` entera positiva,
+  `monto` decimal no negativo, `vigente`, `estado`, `fecha_cotizacion` y
+  `observaciones` opcionales. Los estados canónicos internos son `RECIBIDA`,
+  `SELECCIONADA` y `DESCARTADA`; `SELECCIONADA` no identifica ni adjudica un proveedor real.
+- `DocumentoCotizacion`: relación `0..N` con `Cotizacion`, con `formato_archivo`,
+  `archivo`, `url`, `usuario` y `fecha`. `archivo` y `url` son excluyentes. Reutiliza
+  el catálogo canónico `PDF`, `JPG`, `JPEG`, `PNG`, `DOC`, `DOCX`, `XLS`, `XLSX`.
+- Cardinalidades: `Tarea 1..N RondaCotizacion`, `RondaCotizacion 1..N Cotizacion` y
+  `Cotizacion 1..0..N DocumentoCotizacion`. `Cotizacion` no duplica tarea ni empresa;
+  ambas se derivan de `cotizacion.ronda.tarea`.
+- Las cotizaciones son históricas: `vigente` distingue la versión actual cuando corresponda,
+  pero no equivale a `SELECCIONADA` y recibir otra versión no elimina las anteriores.
+- La regla futura es máximo 3 versiones por `(ronda, proveedor)`, validado en servicio
+  transaccional; no es un máximo por ronda completa.
+- Señal contractual de requisito: la Tarea requiere cotizaciones si existe al menos una
+  `RondaCotizacion` asociada; no se agrega `Tarea.requiere_cotizaciones` ni otro booleano.
+- Conteo PRE-P2: el mínimo de una ronda usa únicamente sus `Cotizacion` con `vigente=True`.
+  Los estados `RECIBIDA`, `SELECCIONADA` y `DESCARTADA` no filtran por sí solos el conteo;
+  `vigente=False` identifica versiones históricas que no computan.
+- El cierre controla la última `RondaCotizacion` de la Tarea por `numero`, sin acumular
+  cotizaciones entre rondas. Cada ronda satisface su propio `minimo_cotizaciones`; las
+  rondas anteriores permanecen históricas. Una ronda sucesora hereda el mínimo de la
+  anterior, mientras que la primera usa default 3 si no se especifica.
+- Evolución local: el mínimo contará proveedores Django distintos con al menos una
+  `Cotizacion.vigente=True` en la ronda; no se sumarán proveedores entre rondas. Los estados
+  `RECIBIDA`, `SELECCIONADA` y `DESCARTADA` no excluyen por sí solos.
+- `Cotizacion.proveedor` será nullable para conservar histórico PRE-P2 con `NULL`; las
+  nuevas cotizaciones exigirán proveedor después de implementar la evolución. No habrá
+  backfill inventado.
+- `SELECCIONADA` representa elección interna Django. No se crea todavía `Adjudicacion`.
+- `Proveedor`: maestro global local de la futura `APPLICATION_APP proveedores`, con `id`,
+  `rut`, `nombre`, `direccion`, `comuna`, `ciudad`, `fono1`, `fono2`, `fax`, `contacto`,
+  `email1`, `email2`, `activo`, `created_at` y `updated_at`.
+- Un proveedor puede existir sin RUT; cuando exista, se normaliza y es único globalmente,
+  incluso inactivo. La baja es lógica mediante `activo=False`, no existe eliminación física
+  en T084 y no se permite reutilizar el RUT. Reactivar establece `activo=True` y requiere
+  permiso `modificar`.
+- `convenio`, `visitas`, `ProveedorEmpresa`, identificador legacy y sincronización ERP quedan
+  fuera del modelo inicial. `ProveedorEmpresa` se reserva para condiciones por Empresa;
+  `visitas` queda DEFERRED por semántica legacy no definida.
+- `ProveedorReferencia` es un nombre histórico del diseño anterior y queda supersedido por
+  el maestro local; no se implementa como modelo.
 
 ### Colaboración y analítica
 
@@ -246,7 +283,7 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 - `EvaluacionSimilitud`: tareas, porcentaje, umbral aplicado, confirmación y fecha; incluye cerradas.
 - `UmbralSimilitudEmpresa`: empresa, default 80%, usuario/fecha y vigencia para nuevas evaluaciones.
 - `EnlaceTarea` y `EventoAccesoEnlace`: identificador, tarea/hito, vigencia, usuario, empresa,
-  resultado y auditoría; el acceso exige autenticación, empresa activa e ICMEAS.
+  resultado y auditoría; el acceso exige autenticación, empresa activa y VICMEAS.
 
 Las notificaciones se refieren a la infraestructura existente de `notificaciones` y email de
 `acounts`; no se duplica su modelo.
@@ -257,12 +294,12 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
   `access_control.Permiso` y `PerfilAccesoDetalle` como parte de VICMEAS.
 - Para Tareas, `Permiso.ver` controla exclusivamente la visibilidad del item y sus
   hijos en el sidebar para la empresa activa. La autorización backend continúa usando
-  ICMEAS: `ingresar` para listar/detallar, `crear` para crear y `modificar` para editar,
+  VICMEAS: `ingresar` para listar/detallar, `crear` para crear y `modificar` para editar,
   publicar o las acciones funcionales correspondientes; `eliminar`, `autorizar` y
   `supervisor` conservan sus significados funcionales.
 - V e I son independientes. Un usuario puede ver el menú y recibir 403 al acceder,
   o tener ingreso autorizado por URL aunque el item esté oculto. El superuser tiene
-  bypass visual del sidebar, no bypass automático de ICMEAS.
+  bypass visual del sidebar, no bypass automático de VICMEAS.
 - La visibilidad se evalúa por usuario, empresa activa, Vista y `ver=True`; los padres
   se muestran solo cuando al menos un hijo es visible. El sidebar usa mapping explícito
   item → Vista; los items GLOBAL son excepciones clasificadas y no un bypass general.
@@ -291,7 +328,8 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 - No hay usuarios externos ni enlaces públicos.
 - No hay plantilla de hitos ni vencimiento automático de documentos.
 - Local permanece `LEGACY API PENDIENTE`; no se modelan tabla, ID o elegibilidad cerrada.
-- Proveedor permanece `LEGACY API PENDIENTE`; no se modelan maestro, tabla, API o `rut_contable`.
+- El maestro local de Proveedor queda planificado en `APPLICATION_APP proveedores`; solo su
+  integración, validación, identificador y sincronización ERP permanecen `LEGACY API PENDIENTE`.
 - Equipos/activos se modelan solo como concepto interno, sin integración legacy inventada.
 
 ## Migración por fases

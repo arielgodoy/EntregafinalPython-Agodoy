@@ -17,7 +17,7 @@ description: "Task list for the Tareas Internas master feature"
 - VICMEAS ya está implementado en la infraestructura base. No crear una fase ni una task para implementarlo; las tasks de `tareas` solo deben consumir el mapping explícito de sus Vistas y preservar la independencia V/I.
 - El alta inicial de `tareas` en `AppDocs/app_classification.py`, `AppDocs/settings.py` y `AppDocs/urls.py` ya está resuelta; no se generan tareas pendientes para repetirla.
 - P1 Local permanece `LEGACY API PENDIENTE`: no se crean tareas de implementación, filtros, modelos, IDs, endpoints ni sincronización.
-- P2 Proveedor permanece bloqueado: `ProveedorReferencia` es únicamente un placeholder de diseño y no genera tarea de implementación.
+- P2 Proveedor limita únicamente la integración ERP; el maestro local Django se planifica en nuevas tasks posteriores al checkpoint histórico T048.
 - Cotizaciones se implementan solo hasta el punto previo a necesitar identidad real del proveedor; desde ese punto quedan bloqueadas.
 - Cualquier modificación futura adicional fuera de `tareas/`, incluidos cambios en `AppDocs/*`, requiere autorización expresa y una tarea autorizada específica.
 - `static/js/app.js` es vendor inmutable. No se modifica.
@@ -101,34 +101,50 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T036 [US4] Implementar `Hito` con peso relativo, orden por fecha de creación y cálculo `sum(cumplimiento * peso) / sum(pesos)` en `tareas/services/progress.py`.
 - [x] T037 [US4] Implementar redistribución al agregar hitos sin alterar cumplimientos anteriores en `tareas/services/progress.py`.
 - [x] T038 [US4] Implementar tipos de documento, archivo/URL, fechas informativas, historial y evidencia configurable en `tareas/models.py` y `tareas/services/documents.py`.
-- [ ] T039 [US4] Integrar evidencia, mini-tareas, descendientes y cotizaciones disponibles como validaciones de cierre en `tareas/services/closure.py`, sin resolver identidad de proveedor.
+- [x] T039 [US4] Integrar evidencia, mini-tareas, descendientes y cotizaciones disponibles como validaciones de cierre en `tareas/services/closure.py`, sin resolver identidad de proveedor.
 - [x] T040 [US4] Añadir vistas, formularios y templates de hitos, avance, documentos y evidencia en `tareas/forms.py`, `tareas/views.py` y `tareas/templates/tareas/`.
-- [ ] T041 [US4] Añadir tests de fórmula, redistribución, orden, archivos/URLs, historial, evidencia y bloqueos de cierre en `tareas/tests/test_progress.py` y `tareas/tests/test_documents.py`.
-- [ ] T042 [US4] Preparar migraciones aditivas de avance, hitos, documentos y evidencia en `tareas/migrations/`, sin crear migraciones durante esta generación.
-- [ ] T043 [US4] Validar escenarios E10 de `specs/001-tareas-internas/quickstart.md`.
-- [ ] T078 [US4] Implementar evidencia de cierre directa e independiente de `DocumentoTarea`, con `formato_archivo` físico compartido (`PDF`, `JPG`, `JPEG`, `PNG`, `DOC`, `DOCX`, `XLS`, `XLSX`), archivo o URL en XOR, coherencia contra extensión real y regla de equivalencia JPG/JPEG. Conservar la FK opcional histórica, copiar sus datos de forma determinista en migración aditiva y actualizar formulario, servicio, vista, template y tests. No marcar hasta completar implementación, migración y validación.
+- [x] T041 [US4] Añadir tests de fórmula, redistribución, orden, archivos/URLs, historial, evidencia y bloqueos de cierre en `tareas/tests/test_progress.py` y `tareas/tests/test_documents.py`.
+- [x] T042 [US4] Preparar migraciones aditivas de avance, hitos, documentos y evidencia en `tareas/migrations/`, sin crear migraciones durante esta generación.
+- [x] T043 [US4] Validar escenarios E10 de `specs/001-tareas-internas/quickstart.md`.
+- [x] T078 [US4] Implementar evidencia de cierre directa e independiente de `DocumentoTarea`, con `formato_archivo` físico compartido (`PDF`, `JPG`, `JPEG`, `PNG`, `DOC`, `DOCX`, `XLS`, `XLSX`), archivo o URL en XOR, coherencia contra extensión real y regla de equivalencia JPG/JPEG. Conservar la FK opcional histórica, copiar sus datos de forma determinista en migración aditiva y actualizar formulario, servicio, vista, template y tests. No marcar hasta completar implementación, migración y validación.
 - [x] T079 [US4] Rediseñar contractualmente la evidencia de cierre: mover `requerida` a una configuración booleana directa de `Tarea` (`requiere_evidencia_cierre`), convertir la relación de `EvidenciaCierre` a `0..N` mediante `ForeignKey`, conservar cada registro histórico sin pérdida y mantener `documento` solo como FK legacy no utilizable para nuevas altas. Implementar la migración histórica, el listado de múltiples evidencias, la configuración separada de la Tarea, el modal de alta que cree una evidencia por envío, los tests de cardinalidad/validación/atomicidad y la integración futura de la regla de cierre: sin evidencias cuando la configuración es falsa y al menos una evidencia válida cuando es verdadera.
 - [x] T076 [US4] Implementar responsable obligatorio de `Hito` en schema, servicio y UI, validando usuario activo, Empresa de la Tarea y aislamiento multiempresa; implementar edición de nombre/cumplimiento/peso, con reasignación separada auditada y motivo obligatorio; historial específico de Hito; anulación lógica y reactivación; eliminación física solo sin actividad histórica; recálculo de Avance y exclusión de anulados; aplicar la matriz FR-F20…FR-F25 sin crear perfiles nuevos; migración segura que inspeccione históricos sin responsable, se detenga y solicite decisión sin backfill automático. Añadir tests de: cumplimiento propio del responsable del Hito; bloqueo de nombre/peso/reasignación/anulación/eliminación para ese responsable; gestión completa por responsable principal, creador, supervisor y autorizador; solo lectura para invitado/observador; precedencia de roles; aislamiento multiempresa; auditoría de cambios autorizados, incluido cumplimiento; y ausencia de cambios parciales en intentos no autorizados (FR-F08…FR-F25).
 - [x] T080 [US4] Implementar completitud formal de Hitos con reseña y evidencia: añadir el estado/flag inequívoco y auditoría de completitud (`completado`, `completado_por`, `fecha_completado`, `resena_cierre` o estructura canónica equivalente); crear `HitoEvidencia` con relación `Hito 1--0..N`, formato físico, archivo/URL XOR, catálogo y validación de extensión; implementar servicio atómico `Completar Hito` con permisos para responsable del Hito, responsable principal, creador y supervisor/autorizador dentro de alcance; preservar responsable asignado; registrar `COMPLETADO` en `HitoHistorial`; bloquear Hitos anulados; distinguir 100% manual de completitud formal; recalcular avance ponderado; añadir modal, validaciones, primera evidencia obligatoria, evidencias adicionales compatibles y tests de permisos, atomicidad, historial, estado y avance. Reutilizar la operación canónica desde la vista de Hitos y la futura vista T077 sin implementar T077.
 - [x] T081 [US4] Agregar consulta del cumplimiento formal de Hitos: mostrar condicionalmente `Ver cumplimiento Hito` para Hitos completados; crear modal de solo lectura reutilizable con nombre, estado, responsable, `completado_por`, fecha, reseña y listado `0..N` de `HitoEvidencia` con enlaces usables; reutilizar autorización de lectura, aislamiento de Empresa y la misma consulta canónica para la futura vista T077; añadir tests de visibilidad por estado/rol, datos mostrados, evidencias múltiples, enlaces, aislamiento, ausencia de mutaciones y ocultamiento de acciones operativas incompatibles en Hitos completados. Para un Hito completado la UI solo muestra `Ver cumplimiento Hito` y `Anular` cuando corresponda por permisos; no muestra editar, reasignar, completar, actualizar avance ni eliminar. La reactivación de Hitos completados anulados queda bloqueada por FR-F44.
 
-## Phase 5: Quotations and blocked external provider boundary [US5]
+## Phase 5: Quotations and local provider evolution [US5]
 
-**Goal**: Implementar rondas e histórico de cotizaciones hasta el límite exacto donde se requiere identidad real de proveedor.
+**Goal**: Implementar rondas e histórico PRE-P2 y evolucionar hacia el maestro local de proveedores sin depender del ERP legacy.
 
-**Independent test criteria**: Se pueden crear rondas, aplicar mínimo 3 por defecto, conservar la regla documentada de máximo 3 versiones por proveedor/ronda y bloquear cierre según la dependencia disponible; la validación efectiva por proveedor queda `DEFERRED — BLOQUEADA POR P2 LEGACY`, sin IDs temporales ni proveedores ficticios.
+**Independent test criteria**: Se pueden crear rondas, aplicar mínimo 3 por defecto y bloquear cierres; la evolución local validará máximo 3 por `(ronda, proveedor)`, contará proveedores Django distintos y mantendrá P2 únicamente para integración ERP.
 
-**FR coverage**: FR-I01 `[PARCIAL — IMPLEMENTABLE AHORA hasta ronda/mínimo]`, FR-I02 `[PARCIAL — regla documentada; validación DEFERRED POR P2]`, FR-I03 `[IMPLEMENTABLE AHORA]`, FR-I04 `[IMPLEMENTABLE AHORA]`, FR-I05 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-I06 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-I07 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-I08 `[PARCIAL — cierre general ahora; conteo por proveedor DEFERRED POR P2]`, FR-J01 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-J02 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-J03 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-J04 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-J05 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`, FR-Q03 `[PARCIAL — regla general de cierre implementable; contar proveedores distintos DEFERRED POR P2]`, FR-Q05 `[DEFERRED — BLOQUEADO POR P2 LEGACY]`.
+**FR coverage**: FR-I01 `[PARCIAL — PRE-P2]`, FR-I02 `[PLANIFICADA — proveedor local]`, FR-I03 `[IMPLEMENTABLE AHORA]`, FR-I04 `[IMPLEMENTABLE AHORA]`, FR-I05 `[PLANIFICADA — proveedor local]`, FR-I06 `[PLANIFICADA — proveedor local]`, FR-I07 `[PLANIFICADA — proveedor local]`, FR-I08 `[PARCIAL — evolución local]`, FR-J01 `[PLANIFICADA — maestro local]`, FR-J02 `[FUTURA]`, FR-J03 `[FUTURA]`, FR-J04 `[FUTURA]`, FR-J05 `[DEFERRED — P2 legacy]`, FR-Q03 `[PARCIAL — evolución local]`, FR-Q05 `[FUTURA]`.
 
-- [ ] T044 [US5] Implementar `RondaCotizacion` con histórico, mínimo configurable por ronda y default 3 en `tareas/models.py` y `tareas/services/quotations.py`.
-- [ ] T045 [US5] Implementar la estructura interna de `Cotizacion` sin identidad externa, junto con estados de ronda, fechas, observaciones y documentos asociados que no requieran proveedor real en `tareas/services/quotations.py`; documentar la regla de máximo 3 versiones por proveedor sin validarla.
-- [ ] T046 [US5] Implementar la regla general de cierre por mínimo de cotizaciones y apertura de nuevas rondas en `tareas/services/closure.py` y `tareas/services/quotations.py`, deteniéndose antes de contar proveedores distintos o evaluar identidad real.
-- [ ] T047 [US5] Detener la implementación de cotizaciones en `tareas/services/quotations.py` exactamente antes de requerir identidad real de proveedor; documentar el punto de bloqueo P2 en `specs/001-tareas-internas/contracts/web-urls.md`.
-- [ ] T048 [US5] Mantener `ProveedorReferencia` únicamente como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2** en `specs/001-tareas-internas/data-model.md`; no crear modelo, campos, ID, endpoint, tabla, sincronización ni tarea adicional.
+- [x] T044 [US5] Implementar `RondaCotizacion` con histórico, mínimo configurable por ronda y default 3 en `tareas/models.py` y `tareas/services/quotations.py`.
+- [x] T045 [US5] Implementar la estructura interna de `Cotizacion` sin identidad externa, junto con estados de ronda, fechas, observaciones y documentos asociados que no requieran proveedor real en `tareas/services/quotations.py`; documentar la regla de máximo 3 versiones por proveedor sin validarla.
+- [x] T046 [US5] Implementar la regla general de cierre por mínimo de cotizaciones y apertura de nuevas rondas en `tareas/services/closure.py` y `tareas/services/quotations.py`, deteniéndose antes de contar proveedores distintos o evaluar identidad real.
+- [x] T047 [US5] Detener la implementación de cotizaciones en `tareas/services/quotations.py` exactamente antes de requerir identidad real de proveedor; documentar el punto de bloqueo P2 en `specs/001-tareas-internas/contracts/web-urls.md`.
+- [x] T048 [US5] Mantener `ProveedorReferencia` únicamente como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2** en `specs/001-tareas-internas/data-model.md`; no crear modelo, campos, ID, endpoint, tabla, sincronización ni tarea adicional.
 - [ ] T049 [US5] No implementar maestro, filtros de elegibilidad, endpoint ni sincronización de Local; conservar P1 como `LEGACY API PENDIENTE` (FR-A07, FR-R05) en la documentación de fase.
 - [ ] T050 [US5] Añadir tests de rondas, mínimos, estados, fechas, observaciones, documentos asociados, histórico y bloqueo P2 en `tareas/tests/test_quotations.py`; no probar identidad, conteo o máximo efectivo por proveedor.
 - [ ] T051 [US5] Preparar migraciones aditivas únicamente para la parte interna de cotizaciones en `tareas/migrations/`, sin modelar identidad legacy de proveedor y sin ejecutar migraciones durante esta generación.
 - [ ] T052 [US5] Validar escenarios E11 de `specs/001-tareas-internas/quickstart.md` y registrar el bloqueo antes de identidad real de proveedor.
+
+> **Decisión posterior a T047/T048**: T047 y T048 permanecen `[x]` como checkpoints
+> históricos válidos del diseño PRE-P2. La estrategia de identidad dependiente del legacy
+> queda supersedida por el maestro global local Django; las siguientes tasks evolucionan el
+> contrato sin reabrir las tasks cerradas ni modificar retroactivamente su implementación.
+
+- [x] T082 [US5] Diseñar y registrar la nueva `APPLICATION_APP` transversal `proveedores`, autocontenida y separada de `tareas`, incluyendo únicamente el registro técnico mínimo autorizado en `AppDocs/*`.
+- [x] T083 [US5] Implementar el modelo global Django `Proveedor` con los campos aprobados, RUT opcional normalizado y único global, `activo=True`, inactivación lógica, timestamps y auditoría mínima.
+- [x] T084 [US5] Implementar Vista VICMEAS `Proveedores - Maestro` (`proveedores:listado`), seed idempotente local y CRUD del maestro global de proveedores: `ver` para menú, `ingresar` para listado/detalle, `crear` para alta, `modificar` para edición/reactivación y `eliminar` únicamente para inactivación lógica; sin eliminación física, sin `autorizar`/`supervisor`, sin crear `ProveedorEmpresa`, `visitas` ni integración ERP. La navegación usará un grupo existente si hay ubicación canónica; no se inventará `Maestros`.
+- [x] T085 [US5] Añadir la relación nullable `Cotizacion.proveedor -> proveedores.Proveedor`, preservando cotizaciones PRE-P2 con `proveedor=NULL` y sin backfill inventado.
+- [x] T086 [US5] Exigir proveedor para nuevas `Cotizacion` desde el servicio/formulario después de disponer de la relación nullable, manteniendo compatibilidad de registros históricos.
+- [x] T087 [US5] Implementar el máximo de 3 versiones por `(ronda, proveedor)` mediante validación transaccional de servicio, sin imponer máximo por ronda completa.
+- [x] T088 [US5] Evolucionar el mínimo de `RondaCotizacion` para contar proveedores Django distintos con al menos una `Cotizacion.vigente=True`, sin sumar proveedores entre rondas.
+- [ ] T089 [US5] Actualizar y ampliar tests de cotizaciones/proveedores para identidad local, nulabilidad histórica, RUT, inactivación, versionado, conteo distinto y selección interna sin `Adjudicacion`.
+- [ ] T090 [US5] Actualizar y validar E11 para el maestro local Django, la relación de cotización, el conteo distinto y el bloqueo exclusivo de integración ERP por P2.
+- [ ] T091 [US5] Mantener la integración ERP/legacy como bloque P2 separado: lookup, validación, identificador legacy, conciliación, sincronización y actualización desde ERP.
 
 ## Phase 6: Collaboration, similarity, links and dashboards [US6]
 
@@ -146,7 +162,7 @@ description: "Task list for the Tareas Internas master feature"
 - [ ] T058 [US6] Implementar `EnlaceTarea` y auditoría de acceso en `tareas/services/links.py`, exigiendo autenticación, empresa activa, lectura e ICMEAS; no permitir usuarios externos.
 - [ ] T059 [US6] Implementar dashboard usuario y jefatura/general en `tareas/services/kpi.py` y `tareas/views.py` con exactamente ocho KPI en las dimensiones ACTIVAS General, Empresa, Departamento, Usuario y Tarea; Local queda DEFERRED por P1 y Proveedor DEFERRED por P2.
 - [ ] T060 [US6] Implementar templates propios de reuniones, similitud, enlaces y dashboards en `tareas/templates/tareas/`, con DataTables/modal según contrato y `data-key`.
-- [ ] T077 [US6] Implementar dashboard personal de tareas y hitos asignados: incluir Tareas con `responsable == usuario` y Hitos activos (`responsable == usuario` y `anulado == False`) aunque difieran del responsable de la Tarea; agrupar ambos por `Tarea.prioridad` usando exactamente `SIMPLE`, `NORMAL`, `URGENTE`, `CRITICA`, sin crear `clasificacion` ni prioridad propia en Hito; mostrar contexto suficiente y navegar desde cada Tarea a su detalle y desde cada Hito a la pantalla existente `/tareas/<tarea_pk>/hitos/`, sin crear detalle individual de Hito (FR-L08, FR-L09, FR-L10, FR-L11). La futura vista personal debe ofrecer al responsable del Hito `Actualizar avance` y `Completar Hito`, sin conceder reasignación, y reutilizar también la consulta canónica `Ver cumplimiento Hito` definida en T081.
+- [x] T077 [US6] Implementar dashboard personal de tareas y hitos asignados: incluir Tareas con `responsable == usuario` y Hitos activos (`responsable == usuario` y `anulado == False`) aunque difieran del responsable de la Tarea; agrupar ambos por `Tarea.prioridad` usando exactamente `SIMPLE`, `NORMAL`, `URGENTE`, `CRITICA`, sin crear `clasificacion` ni prioridad propia en Hito; mostrar contexto suficiente y navegar desde cada Tarea a su detalle y desde cada Hito a la pantalla existente `/tareas/<tarea_pk>/hitos/`, sin crear detalle individual de Hito (FR-L08, FR-L09, FR-L10, FR-L11). La futura vista personal debe ofrecer al responsable del Hito `Actualizar avance` y `Completar Hito`, sin conceder reasignación, y reutilizar también la consulta canónica `Ver cumplimiento Hito` definida en T081.
 - [ ] T061 [US6] Añadir tests con mocks de notificaciones/email, reuniones, similitud 80%/por empresa, enlaces cross-company y ocho KPI por dimensión en `tareas/tests/test_collaboration.py`, `tareas/tests/test_similarity.py` y `tareas/tests/test_kpi.py`.
 - [ ] T062 [US6] Preparar migraciones aditivas de colaboración, similitud, enlaces y configuración de umbral en `tareas/migrations/`, sin tocar proveedores/locales ni ejecutar migraciones durante esta generación.
 - [ ] T063 [US6] Validar escenarios E12–E13 de `specs/001-tareas-internas/quickstart.md`, manteniendo Local/Proveedor bloqueados en drill-down.
@@ -183,9 +199,9 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 | SC-003 | T011-T013 / E6 | Pendiente de ejecución |
 | SC-004 | T010-T013 / E1-E4 | Pendiente de ejecución |
 | SC-005 | T008-T013 / E2 | Pendiente de ejecución |
-| SC-006 | T017-T024, T031, T039, T046 / E8-E11 | Pendiente de ejecución; P2 limita validaciones por proveedor |
+| SC-006 | T017-T024, T031, T039, T046 / E8-E11 | Pendiente de ejecución; P2 limita únicamente la integración ERP del proveedor |
 | SC-007 | T053-T055, T061 / E12 | Pendiente de ejecución |
-| SC-008 | T059-T063 / E13 | Pendiente de ejecución; Local/Proveedor deferred |
+| SC-008 | T059-T063 / E13 | Pendiente de ejecución; Local deferred y Proveedor local planificado |
 | SC-009 | T056-T057, T061 / E12 | Pendiente de ejecución |
 | SC-010 | T014-T015, T022 / E8 | Pendiente de ejecución |
 
@@ -202,7 +218,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 | G. Fechas, atrasos y reprogramación | US3 | Phase 3 |
 | H. Documentos y evidencias | US4 | Phase 4 |
 | I. Cotizaciones | US5 | Phase 5; límite P2 |
-| J. Proveedores | US5 | Phase 5; todo deferred por P2 |
+| J. Proveedores | US5 | Phase 5; maestro local y P2 de integración ERP |
 | K. Notificaciones y email | US6 | Phase 6 |
 | L. Dashboards y KPI | US6 | Phase 6; dimensiones activas/deferred explícitas |
 | M. Reuniones de revisión | US6 | Phase 6 |
@@ -247,8 +263,8 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 ## Blocked tasks and authorization boundaries
 
 - No hay tareas de implementación para P1 Local.
-- No hay tareas de implementación para P2, `ProveedorReferencia` o identidad externa de proveedor.
-- T047–T052 son el límite bloqueado de cotizaciones frente a P2.
+- No hay tareas de implementación para identidad externa o integración ERP de Proveedor fuera de T091; el maestro local se aborda en T082-T090.
+- T047–T052 conservan el cierre PRE-P2 histórico; T082–T091 contienen la evolución local y separan la integración ERP futura P2.
 - Cualquier modificación futura adicional en `AppDocs/app_classification.py`, `AppDocs/settings.py` o `AppDocs/urls.py` requiere autorización expresa; su alta inicial ya está resuelta y no es tarea pendiente.
 - Cualquier modificación futura de otras apps, templates globales, diccionarios i18n globales o infraestructura requiere autorización expresa y detención previa.
 
@@ -257,7 +273,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 1. Ejecutar Phase 0 y conservar la regresión MVP.
 2. Implementar Phase 1 y validar correlativos/estados/auditoría antes de seguir.
 3. Entregar Phase 2–4 como incrementos independientes de dominio.
-4. Implementar cotizaciones solo hasta T047; no cruzar el límite P2.
+4. Implementar cotizaciones PRE-P2 hasta T047 y evolucionarlas mediante T082–T091 sin hacer depender Django del ERP.
 5. Implementar colaboración, similitud, enlaces y KPI con mocks y aislamiento por empresa.
 6. Ejecutar Polish y regresión completa únicamente después de implementar fases autorizadas.
 

@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from tareas.services.closure import ensure_no_pending_mini_tasks
+from tareas.services.closure import validate_closure_requirements
 from tareas.models import Tarea, TareaCierre, TareaTransicion
 
 
@@ -78,11 +78,7 @@ def complete_task(tarea, usuario):
 
 def approve_closure(tarea, usuario, comentario=""):
     _raise_si_anulada(tarea)
-    from tareas.services.hierarchy import has_open_operational_descendants
-
-    ensure_no_pending_mini_tasks(tarea)
-    if has_open_operational_descendants(tarea):
-        raise ValidationError("No se puede cerrar una tarea con descendientes operativos pendientes.")
+    validate_closure_requirements(tarea)
     with transaction.atomic():
         transition = transition_task(
             tarea,

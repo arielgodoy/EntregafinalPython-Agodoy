@@ -67,6 +67,9 @@
                             {% if "library_list_documents" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'biblioteca:listado_documentos' %}" class="nav-link" data-key="menu.library.list_documents">Listado General de Documentos</a>
                             </li>{% endif %}
+                            {% if "suppliers_master" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'proveedores:listado' %}" class="nav-link" data-key="menu.library.suppliers_master">Proveedores</a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}
@@ -166,6 +169,9 @@
                             </li>{% endif %}
                             {% if "tasks_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:crear_tarea' %}" class="nav-link" data-key="menu.tareas.create">Crear Tarea</a>
+                            </li>{% endif %}
+                            {% if "tasks_dashboard" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'tareas:mis_tareas' %}" class="nav-link" data-key="menu.tareas.dashboard">Mis tareas y hitos</a>
                             </li>{% endif %}
                         </ul>
                     </div>

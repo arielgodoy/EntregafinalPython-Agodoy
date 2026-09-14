@@ -1,0 +1,105 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Mis tareas y hitos{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Mis tareas y hitos" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="fw-bold"><span data-key="tareas.personal.title">Mis tareas y hitos</span></h4>
+            </div>
+
+            <section class="mb-4" aria-labelledby="mis-tareas-titulo">
+                <h5 id="mis-tareas-titulo"><span data-key="tareas.personal.tasks.title">Mis tareas</span></h5>
+                {% for group in priority_groups %}
+                    {% if group.tareas %}
+                    <div class="card mb-3">
+                        <div class="card-header"><span data-key="tareas.personal.priority.{{ group.value|lower }}">{{ group.label }}</span></div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th><span data-key="tareas.fields.correlativo">Correlativo</span></th>
+                                        <th><span data-key="tareas.fields.titulo">Título</span></th>
+                                        <th><span data-key="tareas.fields.prioridad">Prioridad</span></th>
+                                        <th><span data-key="tareas.fields.estado">Estado</span></th>
+                                        <th><span data-key="tareas.fields.responsable">Responsable</span></th>
+                                        <th><span data-key="tareas.fields.fecha_tope">Fecha tope</span></th>
+                                        <th><span data-key="tareas.personal.actions">Acción</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {% for tarea in group.tareas %}
+                                    <tr>
+                                        <td>{{ tarea.correlativo|default:"-" }}</td>
+                                        <td>{{ tarea.titulo }}</td>
+                                        <td><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></td>
+                                        <td><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></td>
+                                        <td>{{ tarea.responsable.username }}</td>
+                                        <td>{{ tarea.fecha_tope|default:"-" }}</td>
+                                        <td><a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.view_task">Ver tarea</span></a></td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+                <div class="alert alert-info{% for group in priority_groups %}{% if group.tareas %} d-none{% endif %}{% endfor %}">
+                    <span data-key="tareas.personal.empty_tasks">No tienes tareas asignadas en esta empresa.</span>
+                </div>
+            </section>
+
+            <section aria-labelledby="mis-hitos-titulo">
+                <h5 id="mis-hitos-titulo"><span data-key="tareas.personal.milestones.title">Mis hitos</span></h5>
+                {% for group in priority_groups %}
+                    {% if group.hitos %}
+                    <div class="card mb-3">
+                        <div class="card-header"><span data-key="tareas.personal.priority.{{ group.value|lower }}">{{ group.label }}</span></div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th><span data-key="tareas.milestones.name">Nombre Hito</span></th>
+                                        <th><span data-key="tareas.fields.correlativo">Correlativo Tarea</span></th>
+                                        <th><span data-key="tareas.fields.titulo">Título Tarea</span></th>
+                                        <th><span data-key="tareas.fields.prioridad">Prioridad</span></th>
+                                        <th><span data-key="tareas.milestones.compliance">Cumplimiento</span></th>
+                                        <th><span data-key="tareas.milestones.weight">Peso</span></th>
+                                        <th><span data-key="tareas.milestones.status">Estado</span></th>
+                                        <th><span data-key="tareas.personal.actions">Acción</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                {% for hito in group.hitos %}
+                                    <tr>
+                                        <td>{{ hito.nombre }}</td>
+                                        <td>{{ hito.tarea.correlativo|default:"-" }}</td>
+                                        <td>{{ hito.tarea.titulo }}</td>
+                                        <td><span data-key="tareas.priority.{{ hito.tarea.prioridad|lower }}">{{ hito.tarea.get_prioridad_display }}</span></td>
+                                        <td>{{ hito.cumplimiento }}%</td>
+                                        <td>{{ hito.peso }}</td>
+                                        <td>{% if hito.completado %}<span data-key="tareas.milestones.completed">Completado</span>{% else %}<span data-key="tareas.milestones.pending">Pendiente</span>{% endif %}</td>
+                                        <td><a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.{% if hito.completado %}view_completion{% else %}manage_milestone{% endif %}">{% if hito.completado %}Ver cumplimiento{% else %}Gestionar Hito{% endif %}</span></a></td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+                <div class="alert alert-info{% for group in priority_groups %}{% if group.hitos %} d-none{% endif %}{% endfor %}">
+                    <span data-key="tareas.personal.empty_milestones">No tienes hitos asignados en esta empresa.</span>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock content %}

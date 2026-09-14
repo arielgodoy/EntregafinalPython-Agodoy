@@ -222,6 +222,32 @@ Esta política no modifica ni debilita ninguna otra regla existente de este índ
   - Arquitectura vigente de preferencias visuales por usuario.
   - Cargar para tareas relacionadas con theme, customizer, dark/light, sidebar, layout, preloader o persistencia visual.
 
+### Títulos HTML / browser title
+
+Cualquier `{% block title %}` que termine renderizado dentro de `<title>...</title>` debe contener únicamente texto plano. No usar dentro de ese bloque etiquetas HTML, `<span>`, `data-key`, `safe`, markup ni componentes visuales.
+
+Los mecanismos i18n basados en `data-key` pueden mantenerse en encabezados visibles de la página (`h1`, `h2`, `h4`, etc.), pero no dentro del título del navegador. Esta regla aplica a nuevas vistas, nuevos templates, refactors de templates y revisiones visuales; no cambia la implementación actual de i18n.
+
+Ejemplo correcto:
+
+```django
+{% block title %}Mis tareas y hitos{% endblock %}
+
+<h1>
+      <span data-key="tareas.personal.title">Mis tareas y hitos</span>
+</h1>
+```
+
+Anti-patrón:
+
+```django
+{% block title %}
+<span data-key="...">Mis tareas y hitos</span>
+{% endblock %}
+```
+
+El template base puede insertar ese bloque directamente dentro de `<title>`, haciendo que el navegador muestre markup literal.
+
 ## Mantenimiento de documentación al cerrar desarrollos
 
 Cuando una funcionalidad, refactor, fix o cambio relevante quede terminado y validado,

@@ -135,6 +135,7 @@ SIDEBAR_VIEW_NAMES = {
     "library_list_properties": "Biblioteca - Listar Propiedades",
     "library_list_document_types": "Biblioteca - Listar Tipos Documentos",
     "library_list_documents": "Biblioteca - Listar Documentos",
+    "suppliers_master": "Proveedores - Maestro",
     "gestion_dte_index": "Gestión DTE - Dashboard DTE-SII-RPETC",
     "gestion_dte_cesiones": "Gestión DTE - Control de Cesiones",
     "gestion_dte_lectura": "Gestión DTE - Lectura Automática de Cesiones",
@@ -150,6 +151,7 @@ SIDEBAR_VIEW_NAMES = {
     "operational_alerts": "Control Operacional - Alertas",
     "tasks_list": "Tareas - Listado",
     "tasks_create": "Tareas - Crear tarea",
+    "tasks_dashboard": "Tareas - Dashboard personal",
     "account_profile": "Accounts - Editar Perfil",
     "account_email": "Configuración - Cuentas de Correo",
     "chat_inbox": "Chat - Bandeja de entrada",
@@ -169,12 +171,12 @@ SIDEBAR_VIEW_NAMES = {
 }
 
 SIDEBAR_GROUPS = {
-    "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
+    "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents", "suppliers_master"),
     "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados"),
     "evaluaciones": ("evaluaciones_import",),
     "projects": ("projects_list", "projects_create", "projects_clients", "projects_create_client", "projects_professionals", "projects_create_professional"),
     "operational": ("operational_dashboard", "operational_alerts"),
-    "tasks": ("tasks_list", "tasks_create"),
+    "tasks": ("tasks_list", "tasks_create", "tasks_dashboard"),
     "account": ("account_profile", "account_email"),
     "chat": ("chat_inbox", "chat_center"),
     "notifications": ("notifications_list", "notifications_alerts", "notifications_force", "notifications_custom"),

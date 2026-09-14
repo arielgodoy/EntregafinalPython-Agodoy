@@ -8,6 +8,7 @@ from tareas.services.progress import (
     create_milestone,
     set_manual_progress,
     set_weighted_progress_mode,
+    update_milestone,
     weighted_progress,
 )
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
@@ -92,6 +93,19 @@ class WeightedProgressTests(TestCase):
         self.tarea.avance.refresh_from_db()
         self.assertEqual(anterior.cumplimiento, Decimal("100.00"))
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("90.00"))
+
+    def test_editing_milestone_weight_or_compliance_recalculates_progress(self):
+        set_weighted_progress_mode(self.tarea)
+        primero = self._create("Primero", 0, 1)
+        segundo = self._create("Segundo", 100, 3)
+
+        update_milestone(primero, self.usuario, cumplimiento=50)
+        self.tarea.avance.refresh_from_db()
+        self.assertEqual(self.tarea.avance.porcentaje, Decimal("87.50"))
+
+        update_milestone(segundo, self.usuario, peso=1)
+        self.tarea.avance.refresh_from_db()
+        self.assertEqual(self.tarea.avance.porcentaje, Decimal("75.00"))
 
     def test_successive_milestones_preserve_previous_identity_and_completion(self):
         set_weighted_progress_mode(self.tarea)

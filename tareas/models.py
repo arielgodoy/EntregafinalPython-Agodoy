@@ -1,6 +1,7 @@
 """Persistent Phase 1/2 domain for internal tasks."""
 
 import re
+from decimal import Decimal
 from os.path import splitext
 from urllib.parse import urlparse
 
@@ -917,3 +918,146 @@ class TareaRelacion(models.Model):
             models.Index(fields=["padre"]),
             models.Index(fields=["hija"]),
         ]
+
+
+class RondaCotizacion(models.Model):
+    class Estado(models.TextChoices):
+        ABIERTA = "ABIERTA", "ABIERTA"
+        CERRADA = "CERRADA", "CERRADA"
+
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.CASCADE,
+        related_name="rondas_cotizacion",
+    )
+    numero = models.PositiveIntegerField()
+    minimo_cotizaciones = models.PositiveIntegerField(default=3)
+    estado = models.CharField(
+        max_length=8,
+        choices=Estado.choices,
+        default=Estado.ABIERTA,
+    )
+    fecha_apertura = models.DateTimeField(default=timezone.now)
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["tarea_id", "numero"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tarea", "numero"],
+                name="tareas_ronda_tarea_numero_unico",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(numero__gte=1),
+                name="tareas_ronda_numero_positivo",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(minimo_cotizaciones__gte=1),
+                name="tareas_ronda_minimo_positivo",
+            ),
+        ]
+        indexes = [models.Index(fields=["tarea", "estado"])]
+
+    def clean(self):
+        super().clean()
+        if self.numero < 1:
+            raise ValidationError({"numero": "El número de ronda debe ser mayor que cero."})
+        if self.minimo_cotizaciones < 1:
+            raise ValidationError(
+                {"minimo_cotizaciones": "El mínimo de cotizaciones debe ser mayor que cero."}
+            )
+
+
+class Cotizacion(models.Model):
+    class Estado(models.TextChoices):
+        RECIBIDA = "RECIBIDA", "RECIBIDA"
+        SELECCIONADA = "SELECCIONADA", "SELECCIONADA"
+        DESCARTADA = "DESCARTADA", "DESCARTADA"
+
+    ronda = models.ForeignKey(
+        RondaCotizacion,
+        on_delete=models.PROTECT,
+        related_name="cotizaciones",
+    )
+    proveedor = models.ForeignKey(
+        "proveedores.Proveedor",
+        on_delete=models.PROTECT,
+        related_name="cotizaciones",
+        null=True,
+        blank=True,
+    )
+    version = models.PositiveIntegerField()
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    vigente = models.BooleanField(default=True)
+    estado = models.CharField(
+        max_length=13,
+        choices=Estado.choices,
+        default=Estado.RECIBIDA,
+    )
+    fecha_cotizacion = models.DateField()
+    observaciones = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["ronda_id", "version", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(version__gte=1),
+                name="tareas_cotizacion_version_positiva",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(monto__gte=Decimal("0")),
+                name="tareas_cotizacion_monto_no_negativo",
+            ),
+        ]
+        indexes = [models.Index(fields=["ronda", "estado"])]
+
+    def clean(self):
+        super().clean()
+        if self.version < 1:
+            raise ValidationError({"version": "La versión debe ser mayor que cero."})
+        if self.monto < 0:
+            raise ValidationError({"monto": "El monto no puede ser negativo."})
+
+
+class DocumentoCotizacion(models.Model):
+    FormatoArchivo = FormatoArchivo
+
+    cotizacion = models.ForeignKey(
+        Cotizacion,
+        on_delete=models.CASCADE,
+        related_name="documentos",
+    )
+    formato_archivo = models.CharField(max_length=4, choices=FormatoArchivo.choices)
+    archivo = models.FileField(
+        upload_to="tareas/cotizaciones/",
+        blank=True,
+        default="",
+    )
+    url = models.URLField(blank=True, default="")
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="documentos_cotizaciones",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    def clean(self):
+        super().clean()
+        tiene_archivo = bool(self.archivo)
+        tiene_url = bool(self.url)
+        errores = {}
+        if tiene_archivo == tiene_url:
+            errores["archivo"] = "El documento debe indicar exactamente un archivo o una URL."
+        else:
+            fuente = self.archivo.name if tiene_archivo else urlparse(self.url).path
+            extension = splitext(fuente)[1].lower().lstrip(".")
+            if tiene_archivo and not extension:
+                errores["formato_archivo"] = "El archivo debe tener una extensión reconocible."
+            elif extension and not formato_coincide_extension(self.formato_archivo, extension):
+                errores["formato_archivo"] = "El formato declarado no coincide con la extensión del documento."
+        if errores:
+            raise ValidationError(errores)
+
+    class Meta:
+        ordering = ["-fecha", "-pk"]
+        indexes = [models.Index(fields=["cotizacion", "fecha"])]

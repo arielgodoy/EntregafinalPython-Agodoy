@@ -125,6 +125,7 @@ INSTALLED_APPS = [
     'auditoria',
     'database_manager',
     'tareas',
+    'proveedores',
 ]
 
 # Channels (ASGI) - habilitado de forma optativa para chat

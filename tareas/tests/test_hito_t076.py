@@ -108,6 +108,39 @@ class HitoT076Tests(TestCase):
         self.assertEqual(event.usuario, self.manager)
         self.assertEqual(event.motivo, "Cambio de alcance")
 
+    def test_hito_changes_keep_audited_events_and_actor(self):
+        update_milestone(
+            self.hito,
+            self.manager,
+            nombre="Nombre auditado",
+            cumplimiento=30,
+            peso=4,
+        )
+        reassign_milestone(self.hito, self.manager, self.new_owner, "Motivo auditado")
+        set_milestone_annulled(self.hito, self.manager, True)
+        set_milestone_annulled(self.hito, self.manager, False)
+
+        eventos = list(self.hito.historial.values_list("tipo_evento", flat=True))
+        self.assertEqual(
+            eventos,
+            [
+                HitoHistorial.Evento.CREACION,
+                HitoHistorial.Evento.CAMBIO_NOMBRE,
+                HitoHistorial.Evento.CAMBIO_CUMPLIMIENTO,
+                HitoHistorial.Evento.CAMBIO_PESO,
+                HitoHistorial.Evento.REASIGNACION,
+                HitoHistorial.Evento.ANULACION,
+                HitoHistorial.Evento.REACTIVACION,
+            ],
+        )
+        for evento in self.hito.historial.all():
+            self.assertEqual(evento.usuario, self.manager)
+            self.assertIsNotNone(evento.fecha)
+        self.assertEqual(
+            self.hito.historial.get(tipo_evento=HitoHistorial.Evento.REASIGNACION).motivo,
+            "Motivo auditado",
+        )
+
     def test_task_creator_can_manage_without_being_task_or_milestone_responsible(self):
         creator = create_user("t076_creator")
         assign_permission(creator, self.empresa, "Tareas - Hitos", ingresar=True)

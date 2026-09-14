@@ -2,9 +2,9 @@
 
 **Date**: 2026-09-07 | **Feature**: [spec.md](spec.md)
 
-Las decisiones se mantienen dentro de `tareas/` y reutilizan interfaces existentes. No
-quedan `NEEDS CLARIFICATION` para P4, P6 o P8. P1 y P2 siguen bloqueados por contrato
-legacy, no por una decisión técnica pendiente dentro de la app.
+Las decisiones de la feature reutilizan interfaces existentes. No quedan `NEEDS
+CLARIFICATION` para P4, P6 o P8. P1 permanece bloqueado por contrato legacy; P2 ya no
+bloquea la operación local de proveedores y queda reservado para integración ERP.
 
 ## Decisions
 
@@ -74,12 +74,15 @@ la infraestructura base. La vista inicial sigue dependiendo de `ingresar=True`.
 - **Rationale**: decisión P4.
 - **Alternatives considered**: pesos fijos que suman 100 o pesos iguales; rechazadas.
 
-### D8. Local y Proveedor legacy
+### D8. Local y maestro local de Proveedor
 
-- **Decision**: no crear maestros duplicados. Local solo se consumirá con contrato autorizado;
-  Proveedor queda como referencia/adaptador pendiente, sin tabla, ID, API ni `rut_contable`.
-- **Rationale**: FR-A07/J05/L06 y las restricciones explícitas.
-- **Alternatives considered**: copiar datos o inferir claves; rechazadas.
+- **Decision**: Local solo se consumirá con contrato autorizado; Proveedor tendrá un maestro
+  global Django en la futura `APPLICATION_APP proveedores`. La relación por Empresa,
+  convenio, visitas e identidad legacy quedan fuera del primer modelo.
+- **Rationale**: la identidad local permite operar sin ERP; P2 se reserva para lookup,
+  validación, identificador, conciliación y sincronización legacy.
+- **Alternatives considered**: depender del legacy para toda operación o duplicar maestros;
+  rechazadas.
 
 ### D9. Cotizaciones
 
@@ -88,12 +91,17 @@ la infraestructura base. La vista inicial sigue dependiendo de `ingresar=True`.
 - **Rationale**: P3 y FR-I01/I08.
 - **Alternatives considered**: mínimo global o versiones ilimitadas; rechazadas.
 
+La evolución aprobada añade `Cotizacion.proveedor` nullable para preservar histórico PRE-P2,
+exige proveedor en nuevas cotizaciones, valida máximo 3 por `(ronda, proveedor)` y cuenta
+proveedores Django distintos vigentes sin sumar rondas.
+
 ### D10. KPI y consultas
 
 - **Decision**: ocho KPI repetidos en dimensiones permitidas: total por estado, atrasadas,
   próximas a vencer, sin movimiento, esperando aprobación, carga abierta por responsable,
   cumplimiento y tiempo promedio de cierre.
-- **Rationale**: P6 evita divergencias; Local/Proveedor no se habilitan sin legacy.
+- **Rationale**: P6 evita divergencias; Local sigue dependiendo de P1 y Proveedor podrá
+  habilitarse desde su maestro local sin depender de legacy.
 - **Alternatives considered**: KPI distintos por dimensión o métricas adicionales; rechazadas.
 
 ### D11. Similitud y enlaces
@@ -115,7 +123,8 @@ la infraestructura base. La vista inicial sigue dependiendo de `ingresar=True`.
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
-- P2: maestro/API/identidad de Proveedor, `LEGACY API PENDIENTE`.
+- P2: integración del maestro local de Proveedor con ERP: lookup, validación, identificador
+  legacy, conciliación, sincronización y actualización.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
   ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
   autorización expresa.

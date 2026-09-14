@@ -8,7 +8,7 @@
 
 **Input**: Dominio completo de `tareas` como app de gestión de tareas del sistema. Integra decisiones confirmadas de la iteración inicial y las decisiones de diseño funcional tomadas fuera del repositorio (22 grupos), sin perder comportamiento.
 
-> **Alcance**: SPEC MAESTRA del dominio completo. La implementación se descompone en fases; la Fase 1 (borrador/publicada, ya implementada) sigue válida e integrada. LOCAL y PROVEEDOR legacy quedan como **`LEGACY API PENDIENTE`** (bloqueo explícito), sin cerrar contrato.
+> **Alcance**: SPEC MAESTRA del dominio completo. La implementación se descompone en fases; la Fase 1 (borrador/publicada, ya implementada) sigue válida e integrada. LOCAL legacy queda como **`LEGACY API PENDIENTE`**. PROVEEDOR tendrá un maestro local Django transversal; su integración/validación con ERP legacy queda diferida a P2.
 
 ## Clarifications
 
@@ -16,7 +16,7 @@
 
 - Q: ¿Publicar con responsable desactivado/eliminado? → A: Bloquear la publicación e informar; el usuario debe asignar un responsable válido antes de publicar.
 - Q: ¿Operaciones sobre una tarea ya publicada? → A: Edición libre de campos (manteniendo responsable válido); la tarea publicada no puede volver a borrador.
-- Q: ¿Qué valores predeterminados deben aplicarse al mínimo de cotizaciones por ronda y al máximo de versiones permitidas por proveedor? → A: Mínimo 3 cotizaciones y máximo 3 versiones por proveedor.
+- Q: ¿Qué valores predeterminados deben aplicarse al mínimo de cotizaciones por ronda y al máximo de versiones permitidas por proveedor? → A: Mínimo 3 cotizaciones y máximo 3 versiones por proveedor dentro de cada ronda.
 - Q: ¿Qué regla debe controlar las transiciones entre los estados de una tarea publicada? → A: Flujo explícito con transiciones autorizadas; el cierre requiere aprobación y la anulación/reactivación son acciones separadas.
 - Q: ¿Qué debe ocurrir con los descendientes y las fechas cuando se anula y luego se reactiva una tarea padre? → A: Anular padre, hijos y nietos en cascada; reactivar toda la estructura exactamente como estaba, sin recalcular fechas automáticamente, dejando las fechas afectadas pendientes de reacomodo o confirmación y notificando a los participantes afectados.
 - Q: ¿Cómo debe calcularse exactamente el avance ponderado cuando los hitos tienen pesos distintos y se agrega un nuevo hito? → A: Los pesos son relativos y se normalizan automáticamente; el avance es la suma de (cumplimiento × peso) dividida por la suma de pesos, redistribuyéndose proporcionalmente al agregar hitos.
@@ -34,8 +34,10 @@
 
 ### Seguridad funcional y visibilidad de navegación
 
-- `VICMEAS` se entiende como `V` (visibilidad de sidebar) más `ICMEAS`
-	(autorización funcional). No reemplaza ni renombra `ICMEAS`.
+- `VICMEAS` es la nomenclatura canónica única del sistema de visibilidad y autorización.
+- `Permiso.ver` controla exclusivamente si el item de Tareas aparece en el sidebar
+	para la empresa activa. `ingresar`, `crear`, `modificar`, `eliminar`, `autorizar` y
+	`supervisor` controlan autorización funcional según la acción.
 - `Permiso.ver` controla exclusivamente si el item de Tareas aparece en el sidebar
 	para la empresa activa. `ingresar`, `crear`, `modificar`, `eliminar`, `autorizar` y
 	`supervisor` continúan controlando las operaciones backend correspondientes.
@@ -132,7 +134,7 @@ posteriores de reprogramación.
 - **FR-D06**: Cuando corresponda, MUST haber un jefe por departamento.
 - **FR-D07**: Roles soportados: creador, responsable líder, supervisor, autorizador, participante, invitado/observador.
 - **FR-D08**: MUST existir reasignación de responsable con registro (quién, cuándo).
-- **FR-D09**: Permisos por rol integrados con ICMEAS (sin sistema paralelo).
+- **FR-D09**: Permisos por rol integrados con VICMEAS (sin sistema paralelo).
 - **FR-D10**: Confirmación de lectura para participantes/invitados cuando corresponda.
 
 **Key Entities — D**: Asignación de rol, Reasignación, Confirmación de lectura.
@@ -242,49 +244,91 @@ posteriores de reprogramación.
 
 ## I. Cotizaciones
 
-- **FR-I01** `[PARCIAL — IMPLEMENTABLE AHORA hasta el mínimo por ronda]`: Una tarea MUST poder requerir o no cotización; si la requiere, MUST existir un mínimo configurable por tarea, con valor predeterminado de 3 cotizaciones por ronda.
-- **FR-I02** `[PARCIAL — regla documentable ahora; validación efectiva DEFERRED POR P2]`: MUST soportar un máximo de 3 versiones por proveedor en cada ronda.
+- **FR-I01** `[PARCIAL — mínimo PRE-P2 implementado; evolución local planificada]`: Una tarea MUST poder requerir o no cotización; si la requiere, MUST existir un mínimo configurable por tarea, con valor predeterminado de 3 cotizaciones por ronda.
+- **FR-I02** `[PLANIFICADA — requiere proveedor local]`: MUST soportar un máximo de 3 versiones por `(ronda, proveedor)`, validado transaccionalmente por servicio.
 - **FR-I03** `[IMPLEMENTABLE AHORA]`: Las cotizaciones MUST organizarse por rondas; MUST existir histórico por ronda y MUST poder abrirse una nueva ronda.
 - **FR-I04** `[IMPLEMENTABLE AHORA]`: El mínimo de cotizaciones MUST poder cambiar en una nueva ronda.
-- **FR-I05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir una última cotización válida por proveedor.
-- **FR-I06** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Estados de cotización por proveedor: "Participó cotizando" y "Proveedor seleccionado".
-- **FR-I07** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: El proveedor adjudicado MUST ser visible.
-- **FR-I08** `[PARCIAL — regla general implementable; conteo por proveedor DEFERRED POR P2]`: El cierre MUST bloquearse si no se cumple el mínimo de cotizaciones cuando aplique.
+- **FR-I05** `[PLANIFICADA — requiere proveedor local]`: MUST existir una última cotización válida por proveedor.
+- **FR-I06** `[PLANIFICADA — requiere proveedor local]`: Los estados internos deben permitir identificar la participación y la selección de una cotización/proveedor dentro de Django.
+- **FR-I07** `[PLANIFICADA — requiere proveedor local]`: El proveedor seleccionado dentro de Django MUST ser visible.
+- **FR-I08** `[PARCIAL — PRE-P2 por cotizaciones; evolución local planificada]`: El cierre MUST bloquearse si no se cumple el mínimo configurable de proveedores Django distintos cuando aplique.
 
 **Key Entities — I**: Cotización (proveedor, ronda, versión, vigente, monto, estado), Adjudicación.
+
+### Contrato interno de Cotización para T045
+
+La `Cotizacion` PRE-P2 se implementa sin identidad de proveedor. Sus estados canónicos mínimos son `RECIBIDA` (registrada y disponible para evaluación), `SELECCIONADA` (elegida dentro de Django) y `DESCARTADA` (no seleccionada o descartada). `SELECCIONADA` representa una elección interna de Django; no crea todavía una entidad `Adjudicacion`.
+
+Además de su `ronda`, la cotización debe conservar `version` como entero positivo, `monto` como valor decimal no negativo, `vigente` como indicador histórico independiente del estado, `fecha_cotizacion` como fecha indicada en la cotización o documento recibido y `observaciones` como texto opcional para notas internas. No se agregan fechas de estado ni timestamps funcionales adicionales en T045.
+
+Una cotización puede tener cero o más `DocumentoCotizacion`. Cada documento debe contener formato físico, archivo o URL, usuario y fecha; archivo y URL son excluyentes y se reutiliza el catálogo canónico `PDF`, `JPG`, `JPEG`, `PNG`, `DOC`, `DOCX`, `XLS`, `XLSX`. No se duplica tarea, empresa ni identidad de proveedor.
+
+Las cotizaciones son históricas: recibir otra versión no elimina ni sobrescribe las anteriores; `vigente` permite distinguir la versión actual cuando corresponda. La futura relación `Cotizacion.proveedor` hacia el maestro local será nullable durante la transición para preservar cotizaciones PRE-P2 con `proveedor=NULL`; no se hará backfill inventado. Las nuevas cotizaciones creadas después de esa evolución deberán exigir proveedor.
+
+### Regla contractual de cierre por cotizaciones para T046
+
+Una Tarea queda sujeta al requisito de cotizaciones cuando tiene al menos una `RondaCotizacion` asociada. La existencia de la ronda es la señal explícita de inicio del proceso: evita duplicar un booleano en `Tarea`, no obliga cotizaciones a todas las tareas y mantiene la decisión dentro del dominio de cotizaciones.
+
+En el estado PRE-P2, el mínimo de una ronda se calcula como la cantidad de `Cotizacion` internas asociadas a esa ronda con `vigente=True`. Tras incorporar el maestro local, evolucionará a la cantidad de proveedores Django distintos con al menos una cotización `vigente=True` en esa ronda. Los estados `RECIBIDA`, `SELECCIONADA` y `DESCARTADA` no excluyen por sí solos del conteo; `vigente=False` no computa.
+
+El cierre controla la última ronda de la Tarea por `numero`. Si esa ronda está `ABIERTA`, se evalúa su propio `minimo_cotizaciones`; no se suman cotizaciones de rondas anteriores. Las rondas anteriores permanecen históricas y cada ronda conserva su mínimo independiente. Una ronda no puede pasar a `CERRADA` si no satisface su mínimo interno PRE-P2, y cerrarla no selecciona una cotización ni adjudica un proveedor.
+
+Cuando se abre una nueva ronda como continuación de otra, hereda `minimo_cotizaciones` de la ronda anterior. La primera ronda que no recibe una configuración explícita usa el default contractual de 3. Crear una nueva ronda conserva la anterior y asigna el siguiente `numero`.
+
+El conteo no suma proveedores entre rondas. P2 no bloqueará esta evolución local; solo bloqueará la validación, conciliación y sincronización con ERP legacy.
 
 ---
 
 ## J. Proveedores
 
-- **FR-J01** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir un maestro de proveedores en Django.
-- **FR-J02** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Evaluación manual 1–5 del proveedor: malo / deficiente / regular / normal / sobresaliente.
-- **FR-J03** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Califica el responsable líder.
-- **FR-J04** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: MUST existir promedio global del proveedor.
-- **FR-J05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Vínculo con legacy mediante `rut_contable` → **`LEGACY API PENDIENTE`**: NO se define integración real (tabla/IDs/sincronización/contrato) sin revisar primero el legacy con el usuario.
+- **FR-J01** `[PLANIFICADA — MAESTRO LOCAL DJANGO]`: MUST existir un maestro global de proveedores en una nueva `APPLICATION_APP` transversal `proveedores`.
+- **FR-J02** `[FUTURA — CONTRATO LOCAL PENDIENTE]`: Evaluación manual 1–5 del proveedor: malo / deficiente / regular / normal / sobresaliente.
+- **FR-J03** `[FUTURA — CONTRATO LOCAL PENDIENTE]`: El responsable líder podrá calificar al proveedor cuando ese flujo se autorice.
+- **FR-J04** `[FUTURA — CONTRATO LOCAL PENDIENTE]`: Podrá existir promedio global del proveedor.
+- **FR-J05** `[DEFERRED — P2 LEGACY]`: Vínculo con legacy mediante identificador externo, lookup, validación, conciliación y sincronización; no es requisito para operar con el maestro Django.
 
-**Key Entities — J**: Proveedor como **ENTIDAD CONCEPTUAL FUTURA**. Los datos maestros,
-`rut_contable`, evaluación 1–5, promedio global e identidad externa son necesidades
-funcionales futuras, no diseño actual de modelo, campos ni contrato.
+**Key Entities — J**: `Proveedor` como maestro global local de Django. El contrato inicial
+incluye `id`, `rut`, `nombre`, `direccion`, `comuna`, `ciudad`, `fono1`, `fono2`, `fax`,
+`contacto`, `email1`, `email2`, `activo`, `created_at` y `updated_at`. No incluye todavía
+`convenio`, `visitas`, `ProveedorEmpresa`, identificador legacy ni sincronización ERP.
+
+### Contrato T084: maestro y VICMEAS
+
+- La Vista VICMEAS canónica del maestro es `Proveedores - Maestro`.
+- El `route_name` canónico del listado principal es `proveedores:listado`.
+- La etiqueta visible del menú es `Proveedores`; su visibilidad depende de `Permiso.ver`.
+- T084 usa `ingresar` para listado/detalle, `crear` para alta, `modificar` para edición y
+	reactivación, y `eliminar` exclusivamente para inactivación lógica (`activo=False`).
+- T084 no usa `autorizar` ni `supervisor`.
+- No existe eliminación física en T084. Inactivar conserva el registro, el RUT y la
+	historia; la inactivación no libera la unicidad del RUT. Reactivar establece
+	`activo=True` y requiere `modificar`, nunca `eliminar`.
+- El registro de la Vista se realizará mediante un seed idempotente dentro de
+	`proveedores`, preferentemente un management command propio; no se modifica el seed
+	global de otras apps.
+- `Proveedor` es global: el maestro y sus listados no se filtran por empresa ni agregan
+	`empresa_id`. La empresa activa participa únicamente en la resolución de autorización
+	VICMEAS según el mecanismo existente.
+- La integración del menú usará el grupo existente más coherente si existe uno definido.
+	No se inventa un grupo nuevo `Maestros`; si no hay ubicación canónica, esa decisión se
+	resolverá durante la implementación sin bloquear el backend ni el CRUD.
 
 ### Estado de implementación del bloque J
 
-Todo el bloque J queda `DEFERRED — BLOQUEADO POR P2 LEGACY`. No se define actualmente
-maestro, tabla, campos, ID externo, endpoint, sincronización, evaluación ni promedio.
-`ProveedorReferencia` permanece únicamente como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN
-BLOQUEADA POR P2**.
+El maestro local J queda planificado independientemente de P2. Un proveedor puede existir
+sin RUT; cuando exista, el RUT se normaliza y es único globalmente incluso si el proveedor
+queda inactivo. La inactivación es lógica y no permite reutilizar el RUT. `visitas` queda
+DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futura relación
+`ProveedorEmpresa`.
 
 ### Estado de implementación frente a P2
 
-- Antes de resolver P2 solo son implementables las rondas, su histórico, mínimo configurable,
-	fechas, observaciones, documentos asociados y reglas generales de cierre que declaren la
-	dependencia pendiente.
-- La regla de máximo 3 versiones por proveedor se documenta ahora, pero no se valida
-	efectivamente sin identidad real.
-- Quedan bloqueados por P2: identificar proveedores, contar proveedores distintos, imponer el
-	máximo por proveedor, determinar la última válida, adjudicar, asignar estados por proveedor,
-	evaluar proveedores, calcular promedio global y cualquier relación/FK lógica con proveedor.
-- `ProveedorReferencia` permanece como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2**.
+- T044-T048 conservan su implementación y documentación histórica PRE-P2.
+- El maestro local, la relación nullable `Cotizacion.proveedor`, el conteo distinto y el
+	máximo por `(ronda, proveedor)` se implementarán mediante nuevas tasks, sin backfill inventado.
+- P2 bloquea únicamente lookup ERP, validación legacy, identificador externo, conciliación,
+	sincronización y actualización desde ERP.
+- La selección `SELECCIONADA` sigue siendo interna de Django; `Adjudicacion` queda diferida.
 
 ---
 
@@ -303,10 +347,10 @@ BLOQUEADA POR P2**.
 
 - **FR-L01**: Dashboard Usuario: urgentes/por vencer arriba; acordeones por clasificación; tareas donde participa como Invitado; leído/no leído manual; vista Equipo para jefaturas; acumulación de trabajo.
 - **FR-L02**: Dashboard Jefatura/General MUST mostrar exactamente estos ocho KPI: total de tareas por estado, tareas atrasadas, tareas próximas a vencer, tareas sin movimiento, tareas esperando aprobación, carga abierta por responsable, porcentaje de cumplimiento y tiempo promedio de cierre.
-- **FR-L03**: Dimensiones activas con drill-down: General → Empresa → Departamento → Usuario → Tarea. Local queda DEFERRED por P1 y Proveedor queda DEFERRED por P2.
+- **FR-L03**: Dimensiones activas con drill-down: General → Empresa → Departamento → Usuario → Tarea. Local queda DEFERRED por P1; Proveedor podrá incorporarse desde el maestro local cuando exista contrato de lectura.
 - **FR-L04**: Los mismos ocho KPI por cada dimensión activa: General, Empresa, Departamento, Usuario y Tarea. No se habilitan dimensiones adicionales.
 - **FR-L05**: Presentación con DataTables, modal "Ver info de la tarea" y opción de abrir la tarea completa.
-- **FR-L06**: Las dimensiones Local y Proveedor dependen de `LEGACY API PENDIENTE` (A y J).
+- **FR-L06**: La dimensión Local depende de P1; Proveedor dependerá del maestro Django local y no del ERP para su operación básica.
 - **FR-L07**: Los ocho KPI de FR-L02 MUST repetirse en cada dimensión permitida del drill-down; no se definirán KPI adicionales por dimensión.
 - **FR-L08**: El dashboard personal MUST mostrar las tareas donde el usuario es responsable directo y los hitos donde el usuario es responsable directo, aunque no sea responsable de la tarea padre.
 - **FR-L09**: Los hitos del dashboard personal MUST agruparse para presentación según `Tarea.prioridad` de la tarea padre. La prioridad canónica usa exactamente `SIMPLE`, `NORMAL`, `URGENTE` y `CRITICA`, con jerarquía `CRITICA > URGENTE > NORMAL > SIMPLE`; no se crea una dimensión `clasificacion`, el hito no tiene clasificación propia y no se agrega un campo `prioridad` al hito.
@@ -318,7 +362,7 @@ BLOQUEADA POR P2**.
 ### Estado de dimensiones KPI
 
 - **ACTIVAS AHORA**: General, Empresa, Departamento, Usuario, Tarea.
-- **DEFERRED**: Local — bloqueada por P1; Proveedor — bloqueada por P2.
+- **DEFERRED**: Local — bloqueada por P1; integración ERP de Proveedor — bloqueada por P2. El maestro local de Proveedor queda planificado.
 - Catálogo cerrado: total de tareas por estado; atrasadas; próximas a vencer; sin movimiento;
 	esperando aprobación; carga abierta por responsable; porcentaje de cumplimiento; tiempo
 	promedio de cierre.
@@ -386,12 +430,13 @@ BLOQUEADA POR P2**.
 ## P. Seguridad, Multiempresa y Enlaces
 
 - **FR-P01**: Toda operación MUST respetar empresa activa en sesión y aislamiento multiempresa (se mantiene FR-003 previo).
+
 - **FR-P02**: La visibilidad de las opciones de Tareas en el sidebar se controla por
 	`Permiso.ver` para la empresa activa. La autorización al acceder y operar continúa
-	usando ICMEAS según la acción (`ingresar`, `crear`, `modificar`, `eliminar`,
+	usando VICMEAS según la acción (`ingresar`, `crear`, `modificar`, `eliminar`,
 	`autorizar` o `supervisor`), con 403 y solicitud de acceso cuando corresponda;
 	`V` no sustituye autorización funcional y V/I son independientes.
-- **FR-P03**: Enlaces compartibles: enlace parametrizado a tarea/hito, solo para usuario autenticado del sistema, acceso en lectura cuando corresponda, registro de notificación/acceso, respetando ICMEAS y seguridad existente.
+- **FR-P03**: Enlaces compartibles: enlace parametrizado a tarea/hito, solo para usuario autenticado del sistema, acceso en lectura cuando corresponda, registro de notificación/acceso, respetando VICMEAS y seguridad existente.
 - **FR-P04**: Visibilidad según rol/participación del usuario.
 - **FR-P05**: Sin usuarios externos por ahora (ver R).
 
@@ -403,9 +448,9 @@ BLOQUEADA POR P2**.
 
 - **FR-Q01**: Si `Tarea.requiere_evidencia_cierre = False`, la Tarea puede cerrarse sin evidencias, salvo otra regla contractual. Si `Tarea.requiere_evidencia_cierre = True`, el cierre MUST exigir al menos una EvidenciaCierre válida asociada a la Tarea; no basta con la configuración ni con un registro sin archivo/URL válido.
 - **FR-Q02**: El cierre MUST estar bloqueado por mini-tareas pendientes y por descendientes sin cerrar.
-- **FR-Q03** `[PARCIAL — IMPLEMENTABLE AHORA hasta la regla general de cierre; validaciones que requieran contar proveedores distintos o identidad real DEFERRED POR P2]`: Si la tarea requiere cotización, el cierre MUST exigir el mínimo configurable.
+- **FR-Q03** `[PARCIAL — PRE-P2 implementado; evolución local planificada]`: Si la tarea requiere cotización, el cierre MUST exigir el mínimo configurable y, tras la evolución local, el mínimo de proveedores Django distintos.
 - **FR-Q04**: El cierre MUST requerir aprobación del creador o perfil autorizado.
-- **FR-Q05** `[DEFERRED — BLOQUEADO POR P2 LEGACY]`: Al cerrar una tarea con proveedor, el responsable líder MUST calificar al proveedor (1–5, ver J). No se implementarán evaluación ni promedio de proveedor hasta resolver P2.
+- **FR-Q05** `[FUTURA — CONTRATO LOCAL PENDIENTE]`: Al cerrar una tarea con proveedor, el responsable líder podrá calificar al proveedor (1–5, ver J) cuando ese flujo sea autorizado; no depende de resolver P2 legacy.
 - **FR-Q06**: MUST registrarse quién cerró/canceló y cuándo.
 
 **Key Entities — Q**: Regla de cierre, Evidencia, Cierre/Cancelación (por, fecha).
@@ -418,7 +463,7 @@ BLOQUEADA POR P2**.
 - **FR-R02**: Sin plantilla de hitos por ahora.
 - **FR-R03**: Sin vencimiento automático de documentos (vencimiento informativo solamente).
 - **FR-R04**: Sin prioridad "baja" (solo Simple/Normal/Urgente/Crítica).
-- **FR-R05**: Integración real con legacy de LOCALES y PROVEEDORES fuera de alcance hasta revisión (`LEGACY API PENDIENTE`).
+- **FR-R05**: Integración real con legacy de LOCALES queda fuera de alcance por P1; la integración ERP de PROVEEDORES queda fuera de alcance por P2, sin bloquear el maestro local.
 - **FR-R06**: Sin eliminación física de tareas (la anulación usa el flag `anulada`, ver E; no se borran registros ni se cambian estados).
 
 ---
@@ -434,7 +479,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - Publicación registra fecha, irreversible a borrador → **FR-C03**.
 - Edición por formulario sin estado → **FR-C03** (estado no editable por formulario).
 - Listar borrador/publicada → **FR-C01**.
-- VICMEAS: `Permiso.ver` para menú, ICMEAS para autorización y 403 → **FR-P02**.
+- VICMEAS: `Permiso.ver` para menú y los flags funcionales para autorización y 403 → **FR-P02**.
 - Eliminación fuera de alcance → **FR-R06**.
 
 ## Success Criteria
@@ -452,18 +497,18 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 
 ## Assumptions
 
-- Se reutilizan usuarios, empresa activa, ICMEAS, notificaciones y email existentes; sin sistemas paralelos.
+- Se reutilizan usuarios, empresa activa, VICMEAS, notificaciones y email existentes; sin sistemas paralelos.
 - Prioridad: SIMPLE/NORMAL/URGENTE/CRITICA, default NORMAL (sin "baja").
 - Fechas: UTC almacenamiento, presentación en zona local configurada.
 - App `tareas` autocontenida; integración externa mínima requiere autorización expresa.
-- Implementación por fases; Fase 1 (borrador/publicada, aislamiento, ICMEAS) ya implementada y válida.
+- Implementación por fases; Fase 1 (borrador/publicada, aislamiento, VICMEAS) ya implementada y válida.
 
 ---
 
 ## BLOQUEOS LEGACY (explícitos, no supuestos)
 
 - **LOCAL (A/G/L)**: **`LEGACY API PENDIENTE`**. No se define modelo, tabla, endpoint, ID ni sincronización. Se necesita leer del legacy: estructura/tabla de locales, clave de vínculo, disponibilidad por empresa. DETENIDO hasta autorización y revisión del legacy con el usuario.
-- **PROVEEDOR (I/J/L)**: **`LEGACY API PENDIENTE`**. No se define tabla, API, `rut_contable`, sincronización ni contrato definitivo. Se necesita leer del legacy: maestro de proveedores, significado/unicidad de `rut_contable`, sincronización. DETENIDO hasta autorización y revisión del legacy con el usuario.
+- **PROVEEDOR (I/J/L)**: maestro global local Django planificado en `APPLICATION_APP proveedores`. La integración ERP/legacy, identificador externo, lookup, conciliación y sincronización quedan como P2 futuro.
 - **EQUIPOS/ACTIVOS (O)**: NO se inventa integración legacy de equipos/máquinas; solo se modela el concepto (código global, local, departamento) dentro de `tareas` sin vínculo legacy.
 
 ---
@@ -471,7 +516,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 ## PUNTOS NO RESUELTOS / PENDIENTES
 
 - **P1 (LEGACY)**: Contrato de Local (A) — campos, IDs, sincronización. `LEGACY API PENDIENTE`.
-- **P2 (LEGACY)**: Contrato de Proveedor (J) — `rut_contable`, datos maestros, sincronización. `LEGACY API PENDIENTE`.
+- **P2 (LEGACY)**: integración/validación/conciliación del maestro local de Proveedor contra ERP legacy: lookup, identificador externo, sincronización y actualización desde ERP.
 - **P3**: Resuelto: mínimo predeterminado de 3 cotizaciones por ronda y máximo de 3 versiones por proveedor.
 - **P4**: Resuelto: los pesos de hitos son relativos y se normalizan automáticamente; el avance es la suma de (cumplimiento × peso) dividida por la suma de pesos, y agregar hitos redistribuye proporcionalmente el avance sin alterar cumplimientos anteriores.
 - **P5**: Resuelto: las transiciones siguen un flujo explícito y auditado; el cierre requiere aprobación, el rechazo vuelve a gestión conservando el 100%, y anulación/reactivación son acciones separadas y autorizadas.
@@ -492,7 +537,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 | G | Fechas, Atrasos y Reprogramación | FR-G01…G05 | P2 | Definido |
 | H | Documentos y Evidencias | FR-H01…H06 | P2 | Definido |
 | I | Cotizaciones | FR-I01…I08 | P3 | Definido |
-| J | Proveedores | FR-J01…J05 | P3 | Definido (LEGACY PENDIENTE) |
+| J | Proveedores | FR-J01…J05 | P3 | Definido (maestro local; integración legacy P2) |
 | K | Notificaciones y Email | FR-K01…K04 | P2 | Definido |
 | L | Dashboards y KPI | FR-L01…L07 | P3 | Definido |
 | M | Reuniones de Revisión | FR-M01…M07 | P3 | Definido |

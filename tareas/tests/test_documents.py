@@ -267,7 +267,9 @@ class DocumentTests(TestCase):
             (DocumentoTarea.FormatoArchivo.PDF, "evidencia.pdf"),
             (DocumentoTarea.FormatoArchivo.JPG, "foto.jpg"),
             (DocumentoTarea.FormatoArchivo.JPEG, "foto.jpeg"),
+            (DocumentoTarea.FormatoArchivo.DOC, "informe.doc"),
             (DocumentoTarea.FormatoArchivo.DOCX, "informe.docx"),
+            (DocumentoTarea.FormatoArchivo.XLS, "planilla.xls"),
             (DocumentoTarea.FormatoArchivo.XLSX, "planilla.xlsx"),
         ]:
             documento = create_document(
@@ -287,6 +289,22 @@ class DocumentTests(TestCase):
                 formato_archivo=DocumentoTarea.FormatoArchivo.PDF,
                 usuario=self.usuario,
                 archivo="tareas/documentos/foto.jpg",
+            )
+        with self.assertRaises(ValidationError):
+            create_document(
+                tarea=self.tarea,
+                tipo=DocumentoTarea.Tipo.INFORME,
+                formato_archivo=DocumentoTarea.FormatoArchivo.DOC,
+                usuario=self.usuario,
+                archivo="tareas/documentos/informe.docx",
+            )
+        with self.assertRaises(ValidationError):
+            create_document(
+                tarea=self.tarea,
+                tipo=DocumentoTarea.Tipo.INFORME,
+                formato_archivo=DocumentoTarea.FormatoArchivo.XLS,
+                usuario=self.usuario,
+                archivo="tareas/documentos/planilla.xlsx",
             )
 
     def test_url_format_is_checked_only_when_extension_is_known(self):

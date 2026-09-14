@@ -80,6 +80,14 @@ class VicmeasSidebarTests(TestCase):
             nombre="APIs - Inicio",
             defaults={"route_name": "api_home"},
         )
+        self.tasks_dashboard, _ = Vista.objects.get_or_create(
+            nombre="Tareas - Dashboard personal",
+            defaults={"route_name": "tareas:mis_tareas"},
+        )
+        self.suppliers_master, _ = Vista.objects.get_or_create(
+            nombre="Proveedores - Maestro",
+            defaults={"route_name": "proveedores:listado"},
+        )
 
     def _activate(self, empresa):
         self.client.force_login(self.user)
@@ -466,6 +474,45 @@ class VicmeasSidebarTests(TestCase):
 
         self.assertNotIn("gestion_dte_index", visible)
         self.assertNotIn("gestion_dte", visible)
+
+    def test_tasks_dashboard_v_controls_sidebar_visibility(self):
+        self._permission(self.empresa_a, self.tasks_dashboard, ver=True)
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertIn("tasks_dashboard", visible)
+        self.assertIn("tasks", visible)
+
+    def test_tasks_dashboard_without_v_is_hidden(self):
+        self._permission(self.empresa_a, self.tasks_dashboard, ver=False)
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertNotIn("tasks_dashboard", visible)
+
+    def test_suppliers_master_v_controls_sidebar_visibility(self):
+        self._permission(self.empresa_a, self.suppliers_master, ver=True)
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertIn("suppliers_master", visible)
+        self.assertIn("library", visible)
+
+        self._activate(self.empresa_a)
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+        self.assertContains(response, "Proveedores")
+        self.assertContains(response, 'href="/proveedores/listado/"')
+
+    def test_suppliers_master_without_v_is_hidden_from_sidebar(self):
+        self._permission(self.empresa_a, self.suppliers_master, ver=False)
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertNotIn("suppliers_master", visible)
+
+        self._activate(self.empresa_a)
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+        self.assertNotContains(response, "Proveedores")
 
     def test_superuser_without_permission_hides_vicmeas_leaf(self):
         self.user.is_superuser = True

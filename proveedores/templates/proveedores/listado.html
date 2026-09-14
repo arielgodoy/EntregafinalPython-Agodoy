@@ -1,0 +1,72 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Proveedores{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Proveedores" pagetitle="Proveedores" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 data-key="proveedores.listado.title">Proveedores</h1>
+                <a class="btn btn-primary" href="{% url 'proveedores:crear' %}" data-key="proveedores.actions.create">Nuevo proveedor</a>
+            </div>
+            <div class="card">
+                <div class="card-body table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th data-key="proveedores.fields.rut">RUT</th>
+                                <th data-key="proveedores.fields.nombre">Nombre</th>
+                                <th data-key="proveedores.fields.ciudad">Ciudad</th>
+                                <th data-key="proveedores.fields.contacto">Contacto</th>
+                                <th data-key="proveedores.fields.email1">Email principal</th>
+                                <th data-key="proveedores.fields.activo">Estado</th>
+                                <th data-key="proveedores.fields.acciones">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for proveedor in proveedores %}
+                            <tr>
+                                <td>{{ proveedor.rut|default:"-" }}</td>
+                                <td>{{ proveedor.nombre }}</td>
+                                <td>{{ proveedor.ciudad|default:"-" }}</td>
+                                <td>{{ proveedor.contacto|default:"-" }}</td>
+                                <td>{{ proveedor.email1|default:"-" }}</td>
+                                <td>
+                                    {% if proveedor.activo %}
+                                    <span class="badge bg-success" data-key="proveedores.status.active">Activo</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" data-key="proveedores.status.inactive">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'proveedores:detalle' proveedor.pk %}" data-key="proveedores.actions.detail">Ver</a>
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'proveedores:editar' proveedor.pk %}" data-key="proveedores.actions.edit">Editar</a>
+                                    {% if proveedor.activo %}
+                                    <form method="post" action="{% url 'proveedores:inactivar' proveedor.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" data-key="proveedores.actions.inactivate">Inactivar</button>
+                                    </form>
+                                    {% else %}
+                                    <form method="post" action="{% url 'proveedores:reactivar' proveedor.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button class="btn btn-sm btn-outline-success" type="submit" data-key="proveedores.actions.reactivate">Reactivar</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" data-key="proveedores.listado.empty">No hay proveedores registrados.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

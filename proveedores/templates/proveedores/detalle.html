@@ -1,0 +1,31 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Detalle proveedor{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Proveedor" pagetitle="Proveedores" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body">
+                    <h1 data-key="proveedores.detalle.title">{{ proveedor.nombre }}</h1>
+                    <dl class="row">
+                        <dt class="col-sm-3" data-key="proveedores.fields.rut">RUT</dt><dd class="col-sm-9">{{ proveedor.rut|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.direccion">Dirección</dt><dd class="col-sm-9">{{ proveedor.direccion|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.comuna">Comuna</dt><dd class="col-sm-9">{{ proveedor.comuna|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.ciudad">Ciudad</dt><dd class="col-sm-9">{{ proveedor.ciudad|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.contacto">Contacto</dt><dd class="col-sm-9">{{ proveedor.contacto|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.email1">Email principal</dt><dd class="col-sm-9">{{ proveedor.email1|default:"-" }}</dd>
+                        <dt class="col-sm-3" data-key="proveedores.fields.activo">Estado</dt><dd class="col-sm-9">{% if proveedor.activo %}Activo{% else %}Inactivo{% endif %}</dd>
+                    </dl>
+                    <a class="btn btn-secondary" href="{% url 'proveedores:listado' %}" data-key="proveedores.actions.back">Volver</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
