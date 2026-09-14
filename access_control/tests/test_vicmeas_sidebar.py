@@ -1,6 +1,7 @@
 import json
 import re
 from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -13,6 +14,7 @@ from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
     SIDEBAR_VIEW_NAMES,
+    VICMEAS_FIELDS,
     filter_sidebar_tree,
     get_descendant_sidebar_keys,
     get_sidebar_access_tree,
@@ -92,6 +94,143 @@ class VicmeasSidebarTests(TestCase):
             vista=vista,
             ver=ver,
             ingresar=ingresar,
+        )
+
+    def test_sidebar_materializes_missing_permission_with_all_flags_denied(self):
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_a,
+                vista=self.dte_dashboard,
+            ).exists()
+        )
+
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista=self.dte_dashboard,
+        )
+        self.assertFalse(any(getattr(permiso, field) for field in VICMEAS_FIELDS))
+
+    def test_sidebar_does_not_modify_existing_permission(self):
+        permiso = Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista=self.dte_dashboard,
+            ver=True,
+            ingresar=True,
+            modificar=True,
+        )
+
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        permiso.refresh_from_db()
+        self.assertEqual(
+            {
+                field: getattr(permiso, field)
+                for field in VICMEAS_FIELDS
+            },
+            {
+                "ver": True,
+                "ingresar": True,
+                "crear": False,
+                "modificar": True,
+                "eliminar": False,
+                "autorizar": False,
+                "supervisor": False,
+            },
+        )
+
+    def test_sidebar_materialization_is_idempotent(self):
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertEqual(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_a,
+                vista=self.dte_dashboard,
+            ).count(),
+            1,
+        )
+
+    def test_sidebar_materializes_only_active_company(self):
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertTrue(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_a,
+                vista=self.dte_dashboard,
+            ).exists()
+        )
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_b,
+                vista=self.dte_dashboard,
+            ).exists()
+        )
+
+    def test_sidebar_does_not_materialize_for_anonymous_user(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        get_sidebar_visible_items(AnonymousUser(), self.empresa_a.id)
+
+        self.assertFalse(Permiso.objects.filter(empresa=self.empresa_a).exists())
+
+    def test_sidebar_does_not_materialize_without_active_company(self):
+        get_sidebar_visible_items(self.user, None)
+
+        self.assertFalse(Permiso.objects.filter(usuario=self.user).exists())
+
+    def test_sidebar_does_not_materialize_structural_containers(self):
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_a,
+                vista__nombre="Control de Acceso",
+            ).exists()
+        )
+        self.assertFalse(Vista.objects.filter(nombre="Control de Acceso").exists())
+
+    def test_sidebar_ignores_missing_catalog_view(self):
+        missing_name = "Sidebar - Vista No Catalogada"
+        with patch.dict(
+            SIDEBAR_VIEW_NAMES,
+            {"missing_sidebar_view": missing_name},
+            clear=False,
+        ):
+            get_sidebar_visible_items(self.user, self.empresa_a.id)
+
+        self.assertFalse(Vista.objects.filter(nombre=missing_name).exists())
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.user,
+                empresa=self.empresa_a,
+                vista__nombre=missing_name,
+            ).exists()
+        )
+
+    def test_empty_materialized_permission_remains_hidden_until_ver_is_granted(self):
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("gestion_dte_index", visible)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista=self.dte_dashboard,
+        )
+        permiso.ver = True
+        permiso.save(update_fields=["ver"])
+
+        self.assertIn(
+            "gestion_dte_index",
+            get_sidebar_visible_items(self.user, self.empresa_a.id),
         )
 
     def test_sidebar_items_have_mapping_or_explicit_classification(self):
@@ -298,11 +437,11 @@ class VicmeasSidebarTests(TestCase):
         self.assertEqual(len(list(self._walk_containers(tree))), 11)
         self.assertTrue(all(node["open"] for node in self._walk_containers(tree)))
 
-    def test_superuser_uses_one_permission_query_and_no_bypass(self):
+    def test_superuser_materializes_permissions_without_bypass(self):
         self.user.is_superuser = True
         self.user.save(update_fields=["is_superuser"])
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(5):
             visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertNotIn("access", visible)
@@ -414,10 +553,10 @@ class VicmeasSidebarTests(TestCase):
         self.assertEqual(filtered[0]["children"][0]["children"][0]["key"], "three")
         self.assertEqual(source[0]["children"][0]["children"][0].get("open"), None)
 
-    def test_sidebar_uses_one_query_for_visible_permissions(self):
+    def test_sidebar_uses_grouped_permission_queries_for_visible_permissions(self):
         self._permission(self.empresa_a, self.dte_dashboard, ver=True)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(5):
             visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertIn("gestion_dte_index", visible)

@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 
-from access_control.models import Permiso, UsuarioPerfilEmpresa, Vista
+from access_control.models import Empresa, Permiso, UsuarioPerfilEmpresa, Vista
 
 
 ICMEAS_FIELDS = (
@@ -267,9 +267,49 @@ def get_descendant_sidebar_keys(node_key):
     return tuple(leaf["key"] for leaf in _menu_leaves((node,)))
 
 
+def ensure_sidebar_permissions(user, empresa_id):
+    if not getattr(user, "is_authenticated", False) or not empresa_id:
+        return 0
+
+    if not Empresa.objects.filter(pk=empresa_id).exists():
+        return 0
+
+    vista_names = set(SIDEBAR_VIEW_NAMES.values())
+    vistas = list(Vista.objects.filter(nombre__in=vista_names).only("id"))
+    vista_ids = {vista.id for vista in vistas}
+    if not vista_ids:
+        return 0
+
+    existing_ids = set(
+        Permiso.objects.filter(
+            usuario=user,
+            empresa_id=empresa_id,
+            vista_id__in=vista_ids,
+        ).values_list("vista_id", flat=True)
+    )
+    missing_ids = vista_ids - existing_ids
+    if not missing_ids:
+        return 0
+
+    Permiso.objects.bulk_create(
+        [
+            Permiso(
+                usuario=user,
+                empresa_id=empresa_id,
+                vista_id=vista_id,
+            )
+            for vista_id in missing_ids
+        ],
+        ignore_conflicts=True,
+    )
+    return len(missing_ids)
+
+
 def get_sidebar_visible_items(user, empresa_id):
     if not getattr(user, "is_authenticated", False) or not empresa_id:
         return set(SIDEBAR_GLOBAL_ITEMS) if getattr(user, "is_authenticated", False) else set()
+
+    ensure_sidebar_permissions(user, empresa_id)
 
     visible_names = set(
         Permiso.objects.filter(
