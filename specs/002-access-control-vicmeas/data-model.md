@@ -9,8 +9,11 @@ Define el alcance lógico de los permisos. La empresa activa se identifica media
 
 ### `Vista`
 
-Representa una pantalla o punto de navegación catalogado. Las vistas del sidebar se
-resuelven mediante el mapa canónico de `SIDEBAR_VIEW_NAMES`.
+Representa una funcionalidad protegida catalogada. No equivale necesariamente a una
+URL, View Django o punto de navegación individual. Varias Views/endpoints internos
+pueden compartir una Vista Madre mediante el mismo `vista_nombre`. Las vistas
+navegables del sidebar se resuelven mediante el mapa canónico de
+`SIDEBAR_VIEW_NAMES`.
 
 ### `Permiso`
 
@@ -33,6 +36,16 @@ Relaciona `usuario`, `empresa` y `vista` con estas banderas booleanas:
 - Una bandera ICMEAS no implica `ver=True`.
 - Cambiar `ver` no modifica las otras seis banderas.
 - La lectura y mutación se limita a la empresa autorizada.
+- Los endpoints internos de una Vista Madre comparten su fila `Permiso`; el permiso
+  requerido de cada endpoint se declara en su metadata protegida.
+
+## Catálogo de endpoints
+
+`discover_protected_views()` puede devolver varias definiciones para un mismo
+`vista_nombre`. `ensure_protected_views_catalog()` las deduplica como una sola Vista
+Madre y no concede permisos ni altera flags existentes. `ensure_user_view_permissions`
+materializa una sola fila `Permiso` por usuario, empresa y Vista Madre, con flags
+nuevos en `False`.
 
 ## Alcances de navegación
 

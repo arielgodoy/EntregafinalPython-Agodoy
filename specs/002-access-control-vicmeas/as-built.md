@@ -15,6 +15,9 @@
 | SYSTEM vs APPLICATION | `_classified_route_app`, `SYSTEM_APP_NAMES` y `APPLICATION_APP_NAMES` | `access_control/tests/test_system_bootstrap.py` |
 | Topbar SYSTEM obligatorio | `BOOTSTRAP_SYSTEM_VIEW_DEFINITIONS` incorpora `Notificaciones - Topbar` como dependencia del shell/base, preservando `route_name` nulo o legacy | `access_control/tests/test_system_bootstrap.py` |
 | Reejecución de usuario existente | `ensure_initial_permissions` completa el permiso faltante de forma aditiva e idempotente | `access_control/tests/test_system_bootstrap.py` |
+| Vista Madre compartida | `vista_nombre` agrupa endpoints internos y el catálogo deduplica por funcionalidad | `access_control/services/view_catalog.py`, `access_control/tests/test_view_catalog.py` |
+| Navegación separada de acciones | Sólo la Vista Madre navegable usa `V`; las acciones internas no generan menú independiente | `access_control/services/permissions.py`, `access_control/tests/test_vicmeas_sidebar.py` |
+| Convención de maestros | `Maestros - <Entidad>`; ejemplo validado `Archivos Maestros -> Proveedores` | `proveedores/views.py`, `templates/partials/sidebar.html`, `proveedores/tests/test_views.py` |
 
 ## Alcance de la evidencia
 
@@ -25,3 +28,11 @@ seguridad del código CORE.
 La evidencia operacional adicional fue: Topbar respondió 403 antes de reejecutar el
 bootstrap sobre el mismo usuario y 200 después, de forma repetida. Las demás vistas
 ambiguas continúan omitidas.
+
+## Ejemplo funcional validado
+
+`Maestros - Proveedores` es una Vista Madre compartida por sus endpoints de listado,
+detalle, creación, edición, inactivación y reactivación. Cada endpoint declara su
+`permiso_requerido`, mientras la navegación sólo expone `Archivos Maestros ->
+Proveedores` mediante `V`. El registro legacy `Proveedores - Maestro` puede
+permanecer en la base hasta una limpieza explícita y controlada.
