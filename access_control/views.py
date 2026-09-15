@@ -359,8 +359,53 @@ class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
             ),
         )
 
+    def _sync_view_catalog(self, request):
+        from access_control.services.view_catalog import ensure_protected_views_catalog
+
+        empresa = self._get_active_empresa(request)
+        if empresa is None:
+            return redirect("access_control:seleccionar_empresa")
+
+        utility_vista = get_access_utility_vista()
+        if utility_vista is None:
+            return JsonResponse({"error": "La Vista canónica del utilitario no está catalogada."}, status=503)
+
+        try:
+            validate_operation_authorization(
+                executor=request.user,
+                empresa=empresa,
+                vista=utility_vista,
+                selected_fields=("supervisor",),
+            )
+        except PermissionError as error:
+            return self._forbidden(request, str(error))
+
+        with transaction.atomic():
+            catalog_summary = ensure_protected_views_catalog()
+            permissions_created = ensure_user_view_permissions(
+                request.user,
+                empresa.id,
+            )
+
+        return render(
+            request,
+            self.template_name,
+            self._base_context(
+                AccessUtilityForm(),
+                hide_form=AccessUtilityHideViewForm(prefix="hide"),
+                sync_result={
+                    "created": catalog_summary.created,
+                    "existing": catalog_summary.existing,
+                    "route_names_updated": catalog_summary.route_names_updated,
+                    "permissions_created": permissions_created,
+                },
+            ),
+        )
+
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
+        if action == "sync_view_catalog":
+            return self._sync_view_catalog(request)
         if action in {"hide_view_preview", "hide_view_confirm"}:
             return self._post_hide_view(request, action)
         form = AccessUtilityForm(request.POST)

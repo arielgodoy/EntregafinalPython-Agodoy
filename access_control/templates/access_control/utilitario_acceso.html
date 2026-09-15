@@ -29,6 +29,33 @@
                 </div>
             </div>
 
+            <div class="card border-warning mb-4">
+                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div>
+                        <h2 class="h5 mb-1"><span data-key="access_utility.catalog_sync.title">Sincronización VICMEAS</span></h2>
+                        <p class="text-muted mb-1"><span data-key="access_utility.catalog_sync.description">Detecta las Views protegidas activas y crea únicamente las Vista faltantes del catálogo.</span></p>
+                        <p class="text-muted mb-0"><span data-key="access_utility.catalog_sync.warning">No concede acceso ni modifica permisos existentes. Después crea sólo permisos vacíos para el usuario actual en la empresa activa.</span></p>
+                    </div>
+                    <form method="post" onsubmit="return confirm('¿Sincronizar el catálogo VICMEAS y materializar permisos vacíos para la empresa activa?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="sync_view_catalog">
+                        <button type="submit" class="btn btn-outline-warning">
+                            <i class="ri-refresh-line me-1"></i><span data-key="access_utility.catalog_sync.button">Sincronizar catálogo VICMEAS</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {% if sync_result %}
+            <div class="alert alert-success" role="alert">
+                <h2 class="h6"><span data-key="access_utility.catalog_sync.completed">Catálogo VICMEAS sincronizado</span></h2>
+                <p class="mb-1"><span data-key="access_utility.catalog_sync.created">Vistas creadas</span>: {{ sync_result.created }}</p>
+                <p class="mb-1"><span data-key="access_utility.catalog_sync.existing">Vistas existentes</span>: {{ sync_result.existing }}</p>
+                <p class="mb-1"><span data-key="access_utility.catalog_sync.routes_updated">route_name actualizados</span>: {{ sync_result.route_names_updated }}</p>
+                <p class="mb-0"><span data-key="access_utility.catalog_sync.permissions_created">Permisos vacíos creados</span>: {{ sync_result.permissions_created }}</p>
+            </div>
+            {% endif %}
+
             {% if result %}
             <div class="alert alert-success" role="alert">
                 <h2 class="h6">Asignación completada</h2>

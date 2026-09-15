@@ -98,6 +98,17 @@ class AccessUtilityTests(TestCase):
     def _permission(self, usuario, empresa, vista):
         return Permiso.objects.filter(usuario=usuario, empresa=empresa, vista=vista).first()
 
+    def _sync_post(self):
+        return self.client.post(
+            self._url(),
+            {"action": "sync_view_catalog"},
+        )
+
+    def _authorize_catalog_sync(self):
+        self.actor_target_permission.modificar = True
+        self.actor_target_permission.supervisor = True
+        self.actor_target_permission.save(update_fields=["modificar", "supervisor"])
+
     def test_seed_creates_canonical_view_idempotently(self):
         Vista.objects.filter(nombre=ACCESS_UTILITY_VISTA_NAME).delete()
         call_command("seed_vistas")
@@ -197,6 +208,116 @@ class AccessUtilityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "UTILITARIO DE ACCESO")
         self.assertContains(response, "Asignar permisos masivos")
+
+    @patch("access_control.services.view_catalog.ensure_protected_views_catalog")
+    def test_get_does_not_sync_view_catalog(self, sync_catalog):
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        sync_catalog.assert_not_called()
+
+    def test_catalog_sync_requires_modificar(self):
+        before_views = Vista.objects.count()
+        before_permissions = Permiso.objects.count()
+
+        response = self._sync_post()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Vista.objects.count(), before_views)
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+
+    def test_catalog_sync_requires_supervisor(self):
+        self.actor_target_permission.modificar = True
+        self.actor_target_permission.save(update_fields=["modificar"])
+        before_views = Vista.objects.count()
+        before_permissions = Permiso.objects.count()
+
+        response = self._sync_post()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Vista.objects.count(), before_views)
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+
+    def test_catalog_sync_materializes_only_active_company_and_preserves_permissions(self):
+        self._authorize_catalog_sync()
+        missing_name = "Biblioteca - Listar Propiedades"
+        Vista.objects.filter(nombre=missing_name).delete()
+        before_other_company = Permiso.objects.filter(
+            usuario=self.actor,
+            empresa=self.empresa_objetivo,
+        ).count()
+
+        response = self._sync_post()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Vista.objects.filter(nombre=missing_name).exists())
+        self.assertContains(response, "Catálogo VICMEAS sincronizado")
+        self.assertGreater(response.context["sync_result"]["created"], 0)
+        self.assertGreater(response.context["sync_result"]["permissions_created"], 0)
+        self.assertEqual(
+            Permiso.objects.filter(
+                usuario=self.actor,
+                empresa=self.empresa_objetivo,
+            ).count(),
+            before_other_company,
+        )
+
+        for permiso in Permiso.objects.filter(
+            usuario=self.actor,
+            empresa=self.empresa_activa,
+        ).exclude(vista=self.utilitario):
+            self.assertFalse(any(getattr(permiso, field) for field in VICMEAS_FIELDS))
+
+        self.actor_target_permission.refresh_from_db()
+        self.assertTrue(self.actor_target_permission.ingresar)
+        self.assertTrue(self.actor_target_permission.modificar)
+        self.assertTrue(self.actor_target_permission.supervisor)
+        self.assertFalse(
+            Vista.objects.filter(
+                nombre__in=["Control de Acceso", "Usuarios", "Permisos"],
+            ).exists()
+        )
+
+    def test_catalog_sync_is_idempotent_and_does_not_reset_flags(self):
+        self._authorize_catalog_sync()
+
+        first = self._sync_post()
+        self.assertEqual(first.status_code, 200)
+        view_count = Vista.objects.count()
+        permission_count = Permiso.objects.filter(
+            usuario=self.actor,
+            empresa=self.empresa_activa,
+        ).count()
+
+        second = self._sync_post()
+
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(Vista.objects.count(), view_count)
+        self.assertEqual(
+            Permiso.objects.filter(
+                usuario=self.actor,
+                empresa=self.empresa_activa,
+            ).count(),
+            permission_count,
+        )
+        self.assertEqual(second.context["sync_result"]["created"], 0)
+        self.assertEqual(second.context["sync_result"]["permissions_created"], 0)
+        self.actor_target_permission.refresh_from_db()
+        self.assertTrue(self.actor_target_permission.ingresar)
+        self.assertTrue(self.actor_target_permission.modificar)
+        self.assertTrue(self.actor_target_permission.supervisor)
+
+    def test_catalog_sync_without_active_company_does_not_write(self):
+        session = self.client.session
+        session.pop("empresa_id", None)
+        session.save()
+        before_views = Vista.objects.count()
+        before_permissions = Permiso.objects.count()
+
+        response = self._sync_post()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Vista.objects.count(), before_views)
+        self.assertEqual(Permiso.objects.count(), before_permissions)
 
     def test_normal_page_materializes_sidebar_permissions(self):
         before = Permiso.objects.count()
