@@ -9,9 +9,43 @@ from access_control.services.view_catalog import (
     discover_protected_views,
     ensure_protected_views_catalog,
 )
+from proveedores.views import (
+    CrearProveedorView,
+    DetalleProveedorView,
+    EditarProveedorView,
+    InactivarProveedorView,
+    ListadoProveedoresView,
+    ReactivarProveedorView,
+)
 
 
 class ProtectedViewCatalogTests(TestCase):
+    def test_proveedores_crud_shares_master_view_and_action_permissions(self):
+        expected = {
+            ListadoProveedoresView: "ingresar",
+            DetalleProveedorView: "ingresar",
+            CrearProveedorView: "crear",
+            EditarProveedorView: "modificar",
+            InactivarProveedorView: "eliminar",
+            ReactivarProveedorView: "modificar",
+        }
+
+        for view_class, permission in expected.items():
+            self.assertEqual(view_class.vista_nombre, "Maestros - Proveedores")
+            self.assertEqual(view_class.permiso_requerido, permission)
+
+        definitions = [
+            definition
+            for definition in discover_protected_views()
+            if definition.namespace == "proveedores"
+        ]
+        self.assertEqual(len(definitions), 1)
+        self.assertEqual({definition.vista_nombre for definition in definitions}, {"Maestros - Proveedores"})
+        self.assertEqual(
+            Vista.objects.filter(nombre="Maestros - Proveedores").count(),
+            0,
+        )
+
     def test_decorator_preserves_name_and_metadata(self):
         def sample_view(request):
             return None

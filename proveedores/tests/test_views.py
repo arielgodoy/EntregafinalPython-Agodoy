@@ -11,7 +11,7 @@ from proveedores.forms import ProveedorForm
 from proveedores.models import Proveedor
 
 
-VISTA = "Proveedores - Maestro"
+VISTA = "Maestros - Proveedores"
 
 
 class ProveedorCrudTests(TestCase):

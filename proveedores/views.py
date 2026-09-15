@@ -9,7 +9,7 @@ from .forms import ProveedorForm
 from .models import Proveedor
 
 
-VISTA_PROVEEDORES = "Proveedores - Maestro"
+VISTA_PROVEEDORES = "Maestros - Proveedores"
 
 
 class ListadoProveedoresView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
@@ -67,10 +67,12 @@ class CambiarEstadoProveedorView(VerificarPermisoMixin, LoginRequiredMixin, View
 
 
 class InactivarProveedorView(CambiarEstadoProveedorView):
+	permiso_requerido = "eliminar"
 	permiso_estado = "eliminar"
 	estado_objetivo = False
 
 
 class ReactivarProveedorView(CambiarEstadoProveedorView):
+	permiso_requerido = "modificar"
 	permiso_estado = "modificar"
 	estado_objetivo = True

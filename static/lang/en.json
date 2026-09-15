@@ -756,6 +756,8 @@
 "menu.library.list_properties": "List of Properties",
 "menu.library.list_document_types": "List of Document Types",
 "menu.library.list_documents": "General Document List",
+"menu.master_files": "Master Files",
+"menu.master_files.suppliers": "Suppliers",
 "menu.library.manage_dte": "DTE Management",
 "menu.gestion_dte": "DTE Management",
 "menu.gestion_dte.index": "DTE Dashboard",

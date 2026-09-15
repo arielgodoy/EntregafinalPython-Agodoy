@@ -8,7 +8,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         vista, created = Vista.objects.update_or_create(
-            nombre="Proveedores - Maestro",
+            nombre="Maestros - Proveedores",
             defaults={
                 "descripcion": "Maestro global de proveedores",
                 "route_name": "proveedores:listado",

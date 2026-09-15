@@ -135,7 +135,7 @@ SIDEBAR_VIEW_NAMES = {
     "library_list_properties": "Biblioteca - Listar Propiedades",
     "library_list_document_types": "Biblioteca - Listar Tipos Documentos",
     "library_list_documents": "Biblioteca - Listar Documentos",
-    "suppliers_master": "Proveedores - Maestro",
+    "suppliers_master": "Maestros - Proveedores",
     "gestion_dte_index": "Gestión DTE - Dashboard DTE-SII-RPETC",
     "gestion_dte_cesiones": "Gestión DTE - Control de Cesiones",
     "gestion_dte_lectura": "Gestión DTE - Lectura Automática de Cesiones",
@@ -171,7 +171,8 @@ SIDEBAR_VIEW_NAMES = {
 }
 
 SIDEBAR_GROUPS = {
-    "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents", "suppliers_master"),
+    "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
+    "master_files": ("suppliers_master",),
     "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados"),
     "evaluaciones": ("evaluaciones_import",),
     "projects": ("projects_list", "projects_create", "projects_clients", "projects_create_client", "projects_professionals", "projects_create_professional"),
@@ -188,6 +189,7 @@ SIDEBAR_GROUPS = {
 
 SIDEBAR_GROUP_LABELS = {
     "library": "Biblioteca Digital",
+    "master_files": "Archivos Maestros",
     "gestion_dte": "Gestión DTE",
     "evaluaciones": "Evaluaciones",
     "projects": "Gestión de Proyectos",

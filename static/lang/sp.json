@@ -717,6 +717,8 @@
 "menu.library.list_properties": "Listado de Propiedades",
 "menu.library.list_document_types": "Listado de Tipos de Documentos",
 "menu.library.list_documents": "Listado General de Documentos",
+"menu.master_files": "Archivos Maestros",
+"menu.master_files.suppliers": "Proveedores",
 "menu.library.manage_dte": "Gestión DTE",
 "menu.gestion_dte": "Gestión DTE",
 "menu.gestion_dte.index": "Dashboard DTE-SII-RPETC",

@@ -85,7 +85,7 @@ class VicmeasSidebarTests(TestCase):
             defaults={"route_name": "tareas:mis_tareas"},
         )
         self.suppliers_master, _ = Vista.objects.get_or_create(
-            nombre="Proveedores - Maestro",
+            nombre="Maestros - Proveedores",
             defaults={"route_name": "proveedores:listado"},
         )
 
@@ -496,7 +496,8 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertIn("suppliers_master", visible)
-        self.assertIn("library", visible)
+        self.assertIn("master_files", visible)
+        self.assertNotIn("library", visible)
 
         self._activate(self.empresa_a)
         response = self.client.get(reverse("dashboard:dashboard_general"))
@@ -509,6 +510,7 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertNotIn("suppliers_master", visible)
+        self.assertNotIn("master_files", visible)
 
         self._activate(self.empresa_a)
         response = self.client.get(reverse("dashboard:dashboard_general"))
