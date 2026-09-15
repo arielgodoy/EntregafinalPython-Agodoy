@@ -33,13 +33,13 @@ class TestChatMenuPermissions(TestCase):
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista_notificaciones,
-            defaults={"ingresar": True},
+            defaults={"ver": True, "ingresar": True},
         )
         Permiso.objects.update_or_create(
             usuario=self.user,
             empresa=self.empresa,
             vista=self.vista,
-            defaults={"ingresar": True},
+            defaults={"ver": True, "ingresar": True},
         )
         self._login_with_empresa()
         response = self.client.get(reverse("notificaciones:mis_notificaciones"))

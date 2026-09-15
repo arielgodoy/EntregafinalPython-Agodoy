@@ -36,13 +36,9 @@ class ConversacionForm(forms.ModelForm):
         else:
             qs = User.objects.filter(is_active=True)
 
-        # 2) Excluir al usuario actual (para que no puedas seleccionarte)
-        if user:
-            qs = qs.exclude(id=user.id)
-
         self.fields['participantes'].queryset = qs
 
-        # 3) IMPORTANTE: NO preseleccionar al usuario actual
+        # 2) No preseleccionar al usuario actual
         #    (si quieres, puedes dejar vacío o preseleccionar a nadie)
         self.fields['participantes'].initial = []
 

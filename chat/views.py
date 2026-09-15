@@ -372,14 +372,7 @@ class CrearConversacionView(VerificarPermisoMixin, LoginRequiredMixin, FormView)
         except ValueError as e:
             # LOG TEMPORAL (BORRAR DESPUÉS)
             logger.info("CHAT_CREATE_VALIDATION_ERROR error=%s", str(e))
-
-            form = self.get_form()
-            # Si el form tiene el field 'participantes', mejor error al campo
-            if 'participantes' in getattr(form, "fields", {}):
-                form.add_error('participantes', 'Debes seleccionar participantes válidos para la empresa activa.')
-            else:
-                form.add_error(None, 'No se pudo crear la conversación. Revisa participantes.')
-            return self.form_invalid(form)
+            return HttpResponseForbidden()
 
         return super().post(request, *args, **kwargs)
 
