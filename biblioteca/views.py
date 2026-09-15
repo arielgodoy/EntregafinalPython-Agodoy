@@ -28,6 +28,7 @@ from .models import Documento, Propiedad, Propietario, TipoDocumento
 VISTA_PROPIEDADES = "Biblioteca - Propiedades"
 VISTA_PROPIETARIOS = "Biblioteca - Propietarios"
 VISTA_TIPOS_DOCUMENTO = "Biblioteca - Tipos de Documento"
+VISTA_DOCUMENTOS = "Biblioteca - Documentos"
 
 # OFFICIAL IMPORTS
 from access_control.decorators import verificar_permiso
@@ -653,7 +654,7 @@ class CrearDocumentoView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixin, 
     model = Documento
     fields = ["tipo_documento", "nombre_documento", "archivo", "fecha_documento", "fecha_vencimiento"]
     template_name = "crear_documento.html"
-    vista_nombre = "Biblioteca - Crear Documento"
+    vista_nombre = VISTA_DOCUMENTOS
     permiso_requerido = "modificar"
     audit_action = "CREATE"
     audit_app_label = "biblioteca"
@@ -681,7 +682,7 @@ class ListadoDocumentosView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixi
     model = Documento
     template_name = "listado_documentos.html"
     context_object_name = "documentos"
-    vista_nombre = "Biblioteca - Listar Documentos"
+    vista_nombre = VISTA_DOCUMENTOS
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -699,11 +700,11 @@ class ListadoDocumentosView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixi
 # SHARE (email link)
 @require_POST
 @login_required
-@verificar_permiso("Biblioteca - Enviar Enlace Documento", "ingresar")
+@verificar_permiso(VISTA_DOCUMENTOS, "ingresar")
 def enviar_enlace_documento(request, documento_id):
     from auditoria.helpers import audit_log
 
-    vista_nombre = "Biblioteca - Enviar Enlace Documento"
+    vista_nombre = VISTA_DOCUMENTOS
 
     try:
         email_destino = request.POST.get("correo")
@@ -769,7 +770,7 @@ def enviar_enlace_documento(request, documento_id):
 class EliminarDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Documento
     template_name = "eliminar_documento.html"
-    vista_nombre = "Biblioteca - Eliminar Documento"
+    vista_nombre = VISTA_DOCUMENTOS
     permiso_requerido = "eliminar"
 
     def form_valid(self, form):

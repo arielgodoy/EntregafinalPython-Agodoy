@@ -134,7 +134,7 @@ SIDEBAR_VIEW_NAMES = {
     "library_list_owners": "Biblioteca - Propietarios",
     "library_list_properties": "Biblioteca - Propiedades",
     "library_list_document_types": "Biblioteca - Tipos de Documento",
-    "library_list_documents": "Biblioteca - Listar Documentos",
+    "library_list_documents": "Biblioteca - Documentos",
     "suppliers_master": "Maestros - Proveedores",
     "gestion_dte_index": "Gestión DTE - Dashboard DTE-SII-RPETC",
     "gestion_dte_cesiones": "Gestión DTE - Control de Cesiones",

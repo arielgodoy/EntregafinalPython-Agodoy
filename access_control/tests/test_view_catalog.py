@@ -65,10 +65,7 @@ class ProtectedViewCatalogTests(TestCase):
             definitions["Control de Acceso - Utilitario de Acceso"].route_name,
             "access_control:utilitario_acceso",
         )
-        self.assertEqual(
-            definitions["Biblioteca - Enviar Enlace Documento"].view_type,
-            "FBV",
-        )
+        self.assertEqual(definitions["Biblioteca - Documentos"].view_type, "CBV")
 
     def test_audit_reports_active_mixin_without_metadata(self):
         _, issues = audit_protected_views()
@@ -106,10 +103,7 @@ class ProtectedViewCatalogTests(TestCase):
         self.assertEqual(Vista.objects.filter(nombre="Vista desconectada").count(), 1)
         self.assertGreater(first.created, 0)
         self.assertEqual(second.created, 0)
-        self.assertEqual(
-            Vista.objects.filter(nombre="Biblioteca - Enviar Enlace Documento").count(),
-            1,
-        )
+        self.assertEqual(Vista.objects.filter(nombre="Biblioteca - Documentos").count(), 1)
 
     def test_catalog_does_not_create_permissions_and_sidebar_materializes_empty_rows(self):
         ensure_protected_views_catalog()
