@@ -56,6 +56,8 @@ class AccessUtilityTests(TestCase):
             empresa=self.empresa_activa,
             vista=self.utilitario,
             ingresar=True,
+            modificar=True,
+            supervisor=True,
         )
         self.actor_target_permission_b = Permiso.objects.create(
             usuario=self.actor,
@@ -150,8 +152,9 @@ class AccessUtilityTests(TestCase):
         self.actor.is_superuser = True
         self.actor.save(update_fields=["is_superuser"])
         self.actor_target_permission.ingresar = False
+        self.actor_target_permission.supervisor = False
         self.actor_target_permission_b.modificar = False
-        self.actor_target_permission.save(update_fields=["ingresar"])
+        self.actor_target_permission.save(update_fields=["ingresar", "supervisor"])
         self.actor_target_permission_b.save(update_fields=["modificar"])
 
         response = self.client.get(self._url())
@@ -216,6 +219,8 @@ class AccessUtilityTests(TestCase):
         sync_catalog.assert_not_called()
 
     def test_catalog_sync_requires_modificar(self):
+        self.actor_target_permission.modificar = False
+        self.actor_target_permission.save(update_fields=["modificar"])
         before_views = Vista.objects.count()
         before_permissions = Permiso.objects.count()
 
@@ -227,7 +232,8 @@ class AccessUtilityTests(TestCase):
 
     def test_catalog_sync_requires_supervisor(self):
         self.actor_target_permission.modificar = True
-        self.actor_target_permission.save(update_fields=["modificar"])
+        self.actor_target_permission.supervisor = False
+        self.actor_target_permission.save(update_fields=["modificar", "supervisor"])
         before_views = Vista.objects.count()
         before_permissions = Permiso.objects.count()
 
@@ -239,7 +245,7 @@ class AccessUtilityTests(TestCase):
 
     def test_catalog_sync_materializes_only_active_company_and_preserves_permissions(self):
         self._authorize_catalog_sync()
-        missing_name = "Biblioteca - Listar Propiedades"
+        missing_name = SIDEBAR_VIEW_NAMES["library_add_property"]
         Vista.objects.filter(nombre=missing_name).delete()
         before_other_company = Permiso.objects.filter(
             usuario=self.actor,
@@ -325,12 +331,22 @@ class AccessUtilityTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertGreater(Permiso.objects.count(), before)
 
-    def test_post_without_modificar_in_target_company_returns_403(self):
+    def test_post_without_operator_permission_in_target_company_is_allowed(self):
         self.actor_target_permission_b.delete()
-        before = Permiso.objects.count()
+        response = self._post(ver=True)
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_cross_company_requires_supervisor_in_active_company(self):
+        self.actor_target_permission.supervisor = False
+        self.actor_target_permission.save(update_fields=["supervisor"])
         response = self._post(ver=True)
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(Permiso.objects.count(), before)
+
+    def test_post_same_company_requires_m_without_supervisor(self):
+        self.actor_target_permission.supervisor = False
+        self.actor_target_permission.save(update_fields=["supervisor"])
+        response = self._post(usuario=self.actor, empresa=self.empresa_activa, ver=True)
+        self.assertEqual(response.status_code, 200)
 
     def test_required_fields_and_at_least_one_flag(self):
         response = self.client.post(self._url(), {"action": "preview"})
@@ -461,9 +477,17 @@ class AccessUtilityTests(TestCase):
             self.assertIsNotNone(permiso)
             self.assertTrue(permiso.ver)
 
-    def test_library_confirm_updates_seven_sidebar_views_and_preserves_icmeas(self):
+    def test_library_confirm_updates_sidebar_views_and_preserves_icmeas(self):
         library_vistas = get_scope_vistas("library")
-        self.assertEqual(len(library_vistas), 8)
+        expected_library_names = [
+            SIDEBAR_VIEW_NAMES[item_key]
+            for item_key in SIDEBAR_GROUPS["library"]
+        ]
+        expected_library_names = list(dict.fromkeys(expected_library_names))
+        self.assertEqual(
+            [vista.nombre for vista in library_vistas],
+            expected_library_names,
+        )
         preserved_vista = next(
             vista
             for vista in library_vistas
@@ -599,10 +623,12 @@ class AccessUtilityTests(TestCase):
         self.assertTrue(other.ingresar)
 
     def test_a_requires_supervisor_and_confirmation(self):
+        self.actor_target_permission.supervisor = False
+        self.actor_target_permission.save(update_fields=["supervisor"])
         response = self._post(autorizar=True)
         self.assertEqual(response.status_code, 403)
-        self.actor_target_permission_b.supervisor = True
-        self.actor_target_permission_b.save(update_fields=["supervisor"])
+        self.actor_target_permission.supervisor = True
+        self.actor_target_permission.save(update_fields=["supervisor"])
         response = self._post(autorizar=True)
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, "permisos sensibles", status_code=400)
@@ -611,16 +637,23 @@ class AccessUtilityTests(TestCase):
         self.assertTrue(self._permission(self.target, self.empresa_objetivo, self.api_vista).autorizar)
 
     def test_s_requires_supervisor(self):
+        self.actor_target_permission.supervisor = False
+        self.actor_target_permission.save(update_fields=["supervisor"])
         response = self._post(supervisor=True)
         self.assertEqual(response.status_code, 403)
-        self.actor_target_permission_b.supervisor = True
-        self.actor_target_permission_b.save(update_fields=["supervisor"])
+        self.actor_target_permission.supervisor = True
+        self.actor_target_permission.save(update_fields=["supervisor"])
         response = self._post(supervisor=True, confirm_sensitive=True)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(self._permission(self.target, self.empresa_objetivo, self.api_vista).supervisor)
 
     def test_transaction_rolls_back_all_created_permissions_on_error(self):
-        vistas = self.gestion_dte_vistas[:2]
+        vistas = list(self.sidebar_vistas.values())[:2]
+        Permiso.objects.filter(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista__in=vistas,
+        ).delete()
         original_create = Permiso.objects.create
         calls = {"count": 0}
 

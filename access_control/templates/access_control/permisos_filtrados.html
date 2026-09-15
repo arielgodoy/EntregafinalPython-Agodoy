@@ -272,7 +272,7 @@ Gestión de Permisos Filtrados
         const value = this.checked;
         const checkboxElement = this;
 
-        fetch("{% url 'access_control:toggle_permiso' %}", {
+        fetch("{% url 'access_control:toggle_permiso_filtrado' %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',

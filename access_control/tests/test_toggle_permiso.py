@@ -69,6 +69,73 @@ class TogglePermisoTests(TestCase):
         target_permission.refresh_from_db()
         self.assertFalse(target_permission.supervisor)
 
+    def test_can_modify_permission_from_another_company_with_active_m_and_s(self):
+        self._grant_admin(supervisor=True)
+        target_permission = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_b,
+            vista=self.vista_target,
+            supervisor=False,
+        )
+
+        response = self._post(target_permission, field="supervisor")
+
+        self.assertEqual(response.status_code, 200)
+        target_permission.refresh_from_db()
+        self.assertTrue(target_permission.supervisor)
+        self.assertFalse(Permiso.objects.filter(usuario=self.actor, empresa=self.empresa_b).exists())
+
+    def test_supervisor_in_another_admin_view_does_not_authorize_cross_company(self):
+        other_admin_view = Vista.objects.create(nombre="Control de Acceso - Permisos Filtrados")
+        self._grant_admin(modificar=False)
+        Permiso.objects.create(
+            usuario=self.actor,
+            empresa=self.empresa_a,
+            vista=other_admin_view,
+            modificar=True,
+            supervisor=True,
+        )
+        target_permission = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_b,
+            vista=self.vista_target,
+            supervisor=False,
+        )
+
+        response = self._post(target_permission, field="supervisor")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_filtered_endpoint_uses_filtered_permissions_view(self):
+        filtered_view = Vista.objects.create(nombre="Control de Acceso - Permisos Filtrados")
+        Permiso.objects.create(
+            usuario=self.actor,
+            empresa=self.empresa_a,
+            vista=filtered_view,
+            modificar=True,
+            supervisor=True,
+        )
+        target_permission = Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_b,
+            vista=self.vista_target,
+            modificar=False,
+        )
+
+        response = self.client.post(
+            reverse("access_control:toggle_permiso_filtrado"),
+            {
+                "permiso_id": target_permission.id,
+                "permiso_field": "modificar",
+                "value": "true",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        target_permission.refresh_from_db()
+        self.assertTrue(target_permission.modificar)
+
     def test_can_modify_active_company_permission_and_preserves_other_flags(self):
         self._grant_admin()
         target_permission = Permiso.objects.create(

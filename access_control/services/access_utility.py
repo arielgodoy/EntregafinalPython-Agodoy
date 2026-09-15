@@ -71,9 +71,10 @@ def resolve_scope_vistas(scope):
     for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
         vistas_by_name.setdefault(vista.nombre, vista)
     missing_names = tuple(name for name in requested_names if name not in vistas_by_name)
+    resolved_names = tuple(dict.fromkeys(requested_names))
     return ScopeResolution(
         requested_leaf_names=requested_names,
-        vistas=tuple(vistas_by_name[name] for name in requested_names if name in vistas_by_name),
+        vistas=tuple(vistas_by_name[name] for name in resolved_names if name in vistas_by_name),
         missing_names=missing_names,
     )
 
@@ -87,7 +88,11 @@ def get_scope_vistas(scope, *, require_all=True):
 
 def get_hideable_sidebar_vistas():
     """Resolve the unique, non-global leaf views controlled by the sidebar."""
-    return get_scope_vistas("all", require_all=False)
+    vistas = get_scope_vistas("all", require_all=False)
+    unique_vistas = {}
+    for vista in vistas:
+        unique_vistas.setdefault(vista.id, vista)
+    return list(unique_vistas.values())
 
 
 def get_descendant_vistas(node_key, *, require_all=False):
@@ -164,6 +169,30 @@ def validate_operation_authorization(*, executor, empresa, vista, selected_field
         accion="supervisor",
     ):
         raise PermissionError("Se requiere supervisor para asignar permisos sensibles.")
+
+
+def validate_cross_company_authorization(
+    *, executor, active_empresa, target_empresa, vista, selected_fields=()
+):
+    if not has_explicit_permission(
+        user=executor,
+        empresa=active_empresa,
+        vista=vista,
+        accion="modificar",
+    ):
+        raise PermissionError("No tienes modificar en la herramienta administrativa.")
+
+    requires_supervisor = (
+        active_empresa.pk != target_empresa.pk
+        or SENSITIVE_FIELDS.intersection(selected_fields)
+    )
+    if requires_supervisor and not has_explicit_permission(
+        user=executor,
+        empresa=active_empresa,
+        vista=vista,
+        accion="supervisor",
+    ):
+        raise PermissionError("Se requiere supervisor para operar otra empresa.")
 
 
 def build_preview(*, usuario, empresa, vistas, selected_fields, scope_resolution=None):

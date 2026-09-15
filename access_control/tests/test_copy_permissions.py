@@ -6,7 +6,7 @@ from access_control.models import Empresa, Permiso, Vista
 
 
 class CopyPermisosViewTests(TestCase):
-    vista_nombre = "Control de Acceso - Copiar permisos"
+    vista_nombre = "Control de Acceso - Permisos Filtrados"
     vista_maestro = "Control de Acceso - Maestro Permisos"
 
     def setUp(self):
@@ -23,6 +23,7 @@ class CopyPermisosViewTests(TestCase):
             usuario=self.operator,
             empresa=self.empresa_origen,
             vista=self.vista_control,
+            modificar=True,
             supervisor=True,
         )
         Permiso.objects.create(
@@ -100,8 +101,8 @@ class CopyPermisosViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["success"])
 
-    def test_destino_inicializado_sin_autorizacion_es_denegado(self):
-        """CASO B no autorizado: destino ya inicializada y ejecutor sin supervisor alli -> 403."""
+    def test_destino_inicializado_sin_autorizacion_local_sigue_permitido(self):
+        """CASO D: M+S activa permite operar sin permiso del operador en destino."""
         Permiso.objects.create(
             usuario=self.origen_usuario,
             empresa=self.empresa_destino,
@@ -111,12 +112,31 @@ class CopyPermisosViewTests(TestCase):
 
         response = self._copy()
 
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
             Permiso.objects.filter(
                 usuario=self.destino_usuario,
                 empresa=self.empresa_destino,
                 vista=self.vista_copiada,
+            ).exists()
+        )
+
+    def test_copia_cross_company_autoriza_en_empresa_activa_sin_crear_operador_en_destino(self):
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.operator,
+                empresa=self.empresa_destino,
+            ).exists()
+        )
+
+        response = self._copy()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.operator,
+                empresa=self.empresa_destino,
             ).exists()
         )
 
@@ -139,7 +159,12 @@ class CopyPermisosViewTests(TestCase):
         )
 
     def test_copia_en_misma_empresa_requiere_un_solo_supervisor(self):
-        """CASO C: origen == destino exige una unica autorizacion en esa empresa."""
+        """CASO A: origen == destino requiere M, pero no S."""
+        Permiso.objects.filter(
+            usuario=self.operator,
+            empresa=self.empresa_origen,
+            vista=self.vista_control,
+        ).update(supervisor=False)
         response = self._copy(destino_empresa=self.empresa_origen.id)
 
         self.assertEqual(response.status_code, 200)
@@ -150,6 +175,25 @@ class CopyPermisosViewTests(TestCase):
                 vista=self.vista_copiada,
             ).exists()
         )
+
+    def test_supervisor_en_otra_vista_no_autoriza_copia(self):
+        Permiso.objects.filter(
+            usuario=self.operator,
+            empresa=self.empresa_origen,
+            vista=self.vista_control,
+        ).update(modificar=False, supervisor=False)
+        Vista.objects.create(nombre="Control de Acceso - Permisos por Vista")
+        Permiso.objects.create(
+            usuario=self.operator,
+            empresa=self.empresa_origen,
+            vista=Vista.objects.get(nombre="Control de Acceso - Permisos por Vista"),
+            modificar=True,
+            supervisor=True,
+        )
+
+        response = self._copy()
+
+        self.assertEqual(response.status_code, 403)
 
     def test_usuario_destino_invalido_retorna_404_sin_alterar_copia(self):
         response = self._copy(destino_usuario=999999)

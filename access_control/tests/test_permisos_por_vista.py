@@ -143,11 +143,44 @@ class PermisosPorVistaTests(TestCase):
     def test_toggle_otra_empresa_es_permitido_con_autorizacion_en_empresa_activa(self):
         self._create_valid_profile_user()
         UsuarioPerfilEmpresa.objects.create(usuario=self.usuario_perfil, empresa=self.empresa_b, perfil=self.perfil)
+        Permiso.objects.filter(
+            usuario=self.admin,
+            empresa=self.empresa_a,
+            vista=self.vista_admin,
+        ).update(supervisor=True)
 
         response = self._toggle(empresa_id=self.empresa_b.id)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Permiso.objects.get(usuario=self.usuario_perfil, empresa=self.empresa_b, vista=self.vista_x).modificar)
+
+    def test_toggle_otra_empresa_no_requiere_permiso_del_operador_en_destino(self):
+        self._create_valid_profile_user()
+        UsuarioPerfilEmpresa.objects.create(usuario=self.usuario_perfil, empresa=self.empresa_b, perfil=self.perfil)
+        Permiso.objects.filter(
+            usuario=self.admin,
+            empresa=self.empresa_a,
+            vista=self.vista_admin,
+        ).update(supervisor=True)
+
+        response = self._toggle(empresa_id=self.empresa_b.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Permiso.objects.filter(usuario=self.admin, empresa=self.empresa_b).exists())
+
+    def test_toggle_otra_empresa_con_m_solo_es_denegado(self):
+        self._create_valid_profile_user()
+        UsuarioPerfilEmpresa.objects.create(usuario=self.usuario_perfil, empresa=self.empresa_b, perfil=self.perfil)
+
+        response = self._toggle(empresa_id=self.empresa_b.id)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_toggle_misma_empresa_requiere_m_sin_supervisor(self):
+        self._create_valid_profile_user()
+        response = self._toggle(empresa_id=self.empresa_a.id)
+
+        self.assertEqual(response.status_code, 200)
 
     def test_toggle_rechaza_datos_manipulados_y_sin_permiso_administrativo(self):
         self._create_valid_profile_user()

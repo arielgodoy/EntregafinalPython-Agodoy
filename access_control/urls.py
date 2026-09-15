@@ -9,7 +9,7 @@ from .views import EmpresaListaView,EmpresaCrearView,EmpresaEditarView,EmpresaEl
 from .views import PermisoListaView,PermisoCrearView,PermisoEditarView,PermisoEliminarView
 from .views import VistaListaView,VistaCrearView,VistaEditarView,VistaEliminarView
 from .views import InvitacionesListView, InvitacionEliminarView
-from .views import toggle_permiso, toggle_permiso_por_vista, PermisosFiltradosView, PermisosPorVistaView, CopyPermisosView, seleccionar_empresa, actualizar_vista_inicial
+from .views import toggle_permiso, toggle_permiso_filtrado, toggle_permiso_por_vista, PermisosFiltradosView, PermisosPorVistaView, CopyPermisosView, seleccionar_empresa, actualizar_vista_inicial
 from .views import SolicitarAccesoView, AccessUtilityView
 
 
@@ -29,6 +29,7 @@ urlpatterns = [
 
     
     path('toggle-permiso/', views.toggle_permiso, name='toggle_permiso'),
+    path('toggle-permiso-filtrado/', views.toggle_permiso_filtrado, name='toggle_permiso_filtrado'),
     path('toggle-permiso-por-vista/', views.toggle_permiso_por_vista, name='toggle_permiso_por_vista'),
     path('solicitar-acceso/', SolicitarAccesoView.as_view(), name='solicitar_acceso'),
     path('solicitudes/<int:pk>/otorgar/', views.grant_access_request, name='grant_access_request'),

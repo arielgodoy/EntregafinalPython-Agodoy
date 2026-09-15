@@ -5,6 +5,7 @@ from django.contrib.auth.models import User as Usuario
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.mail import send_mail
+from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 
 from django.contrib.auth.forms import UserChangeForm
@@ -69,7 +70,6 @@ from access_control.services.permissions import (
     VICMEAS_FIELDS,
     ensure_user_view_permissions,
     get_valid_users_for_empresa,
-    user_has_permission_for_empresa,
 )
 from access_control.services.access_utility import (
     ACCESS_UTILITY_VISTA_NAME,
@@ -83,7 +83,7 @@ from access_control.services.access_utility import (
     build_hide_view_preview,
     hide_view_from_sidebar,
     has_explicit_permission,
-    validate_hide_view_authorization,
+    validate_cross_company_authorization,
     validate_operation_authorization,
 )
 logger = logging.getLogger(__name__)
@@ -228,6 +228,10 @@ class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Control de Acceso - Permisos por Vista"
     permiso_requerido = "modificar"
 
+    def dispatch(self, request, *args, **kwargs):
+        request._skip_sidebar_permission_materialization = True
+        return super().dispatch(request, *args, **kwargs)
+
     def get(self, request, *args, **kwargs):
         form = PermisoPorVistaFiltroForm(request.GET or None)
         context = {"form": form, "fields": VICMEAS_FIELDS, "permission_rows": None}
@@ -235,8 +239,6 @@ class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
             empresa = form.cleaned_data["empresa"]
             vista = form.cleaned_data["vista"]
             valid_users = list(get_valid_users_for_empresa(empresa))
-            for user in valid_users:
-                ensure_user_view_permissions(user, empresa.id)
             permisos = {
                 permiso.usuario_id: permiso
                 for permiso in Permiso.objects.filter(empresa=empresa, vista=vista).select_related("usuario")
@@ -252,6 +254,7 @@ class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "access_control/utilitario_acceso.html"
     vista_nombre = ACCESS_UTILITY_VISTA_NAME
     permiso_requerido = "ingresar"
+    verificar_vicmeas_en_dispatch = False
 
     def dispatch(self, request, *args, **kwargs):
         request._skip_sidebar_permission_materialization = True
@@ -285,9 +288,19 @@ class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
         empresa = self._get_active_empresa(request)
         if empresa is None:
             return redirect("access_control:seleccionar_empresa")
-        vista = get_access_utility_vista()
-        if vista is None:
-            return JsonResponse({"error": "La Vista canónica del utilitario no está catalogada."}, status=503)
+        vista, _ = Vista.objects.get_or_create(
+            nombre=ACCESS_UTILITY_VISTA_NAME,
+            defaults={"route_name": "access_control:utilitario_acceso"},
+        )
+        Permiso.objects.get_or_create(
+            usuario=request.user,
+            empresa=empresa,
+            vista=vista,
+            defaults={
+                field_name: False
+                for field_name in VICMEAS_FIELDS
+            },
+        )
         if not has_explicit_permission(
             user=request.user,
             empresa=empresa,
@@ -319,10 +332,12 @@ class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
         empresa = hide_form.cleaned_data["empresa"]
         try:
             vista = get_hideable_sidebar_vista(hide_form.cleaned_data["vista"])
-            validate_hide_view_authorization(
+            active_empresa = self._get_active_empresa(request)
+            validate_cross_company_authorization(
                 executor=request.user,
-                empresa=empresa,
                 vista=utility_vista,
+                active_empresa=active_empresa,
+                target_empresa=empresa,
             )
         except PermissionError as error:
             return self._forbidden(request, str(error))
@@ -428,10 +443,12 @@ class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
             if form.cleaned_data.get(field_name)
         )
         try:
-            validate_operation_authorization(
+            active_empresa = self._get_active_empresa(request)
+            validate_cross_company_authorization(
                 executor=request.user,
-                empresa=empresa,
                 vista=vista,
+                active_empresa=active_empresa,
+                target_empresa=empresa,
                 selected_fields=selected_fields,
             )
         except PermissionError as error:
@@ -517,6 +534,22 @@ def toggle_permiso_por_vista(request):
     except Vista.DoesNotExist:
         return JsonResponse({"success": False, "error": "Vista no encontrada."}, status=404)
 
+    empresa_activa = Empresa.objects.filter(pk=request.session.get("empresa_id")).first()
+    vista_administrativa = Vista.objects.filter(
+        nombre="Control de Acceso - Permisos por Vista"
+    ).first()
+    if empresa_activa is None or vista_administrativa is None:
+        return JsonResponse({"success": False, "error": "Autorización administrativa no disponible."}, status=503)
+    try:
+        validate_cross_company_authorization(
+            executor=request.user,
+            active_empresa=empresa_activa,
+            target_empresa=empresa,
+            vista=vista_administrativa,
+        )
+    except PermissionError as error:
+        return JsonResponse({"success": False, "error": str(error)}, status=403)
+
     if not get_valid_users_for_empresa(empresa).filter(pk=usuario.pk).exists():
         return JsonResponse({"success": False, "error": "El usuario no pertenece a la empresa."}, status=400)
 
@@ -533,10 +566,7 @@ def toggle_permiso_por_vista(request):
 
 
 
-@login_required
-@verificar_permiso("Control de Acceso - Maestro Permisos", "modificar")
-@require_POST
-def toggle_permiso(request):
+def _toggle_permiso(request, vista_administrativa_nombre):
     """
     Modifica un permiso granular (ingresar/crear/modificar/eliminar/autorizar/supervisor).
     ENDPOINT CRÍTICO: No usa @verificar_permiso (es esencial para configuración de permisos).
@@ -575,11 +605,19 @@ def toggle_permiso(request):
     
     try:
         permiso = Permiso.objects.get(id=int(permiso_id))
-        if str(permiso.empresa_id) != str(request.session.get("empresa_id")):
-            return JsonResponse(
-                {"success": False, "error": _("No tienes permiso para modificar permisos de otra empresa.")},
-                status=403,
+        empresa_activa = Empresa.objects.filter(pk=request.session.get("empresa_id")).first()
+        vista_administrativa = Vista.objects.filter(nombre=vista_administrativa_nombre).first()
+        if empresa_activa is None or vista_administrativa is None:
+            return JsonResponse({"success": False, "error": "Autorización administrativa no disponible."}, status=503)
+        try:
+            validate_cross_company_authorization(
+                executor=request.user,
+                active_empresa=empresa_activa,
+                target_empresa=permiso.empresa,
+                vista=vista_administrativa,
             )
+        except PermissionError as error:
+            return JsonResponse({"success": False, "error": str(error)}, status=403)
         setattr(permiso, permiso_field, value)
         permiso.save()
         return JsonResponse({"success": True, "new_value": value})
@@ -594,6 +632,20 @@ def toggle_permiso(request):
             {"success": False, "error": str(e)},
             status=500
         )
+
+
+@login_required
+@verificar_permiso("Control de Acceso - Maestro Permisos", "modificar")
+@require_POST
+def toggle_permiso(request):
+    return _toggle_permiso(request, "Control de Acceso - Maestro Permisos")
+
+
+@login_required
+@verificar_permiso("Control de Acceso - Permisos Filtrados", "modificar")
+@require_POST
+def toggle_permiso_filtrado(request):
+    return _toggle_permiso(request, "Control de Acceso - Permisos Filtrados")
 
 
 # def permisos_filtrados_view(request):
@@ -613,8 +665,8 @@ def toggle_permiso(request):
 #     }
 #     return render(request, 'access_control/permisos_filtrados.html', context)
 class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Control de Acceso - Copiar permisos"
-    permiso_requerido = "supervisor"
+    vista_nombre = "Control de Acceso - Permisos Filtrados"
+    permiso_requerido = "modificar"
 
     def post(self, request, *args, **kwargs):
         origen_usuario_id = request.POST.get("origen_usuario")
@@ -626,47 +678,37 @@ class CopyPermisosView(VerificarPermisoMixin, LoginRequiredMixin, View):
             origen_empresa = Empresa.objects.get(id=origen_empresa_id)
             destino_usuario = Usuario.objects.get(id=destino_usuario_id)
             destino_empresa = Empresa.objects.get(id=destino_empresa_id)
-
-            if not user_has_permission_for_empresa(
-                user=request.user,
-                empresa=origen_empresa,
-                vista_nombre=self.vista_nombre,
-                accion=self.permiso_requerido,
-            ):
-                return self.handle_no_permission(
-                    request,
-                    "No tienes permiso supervisor para operar esta empresa.",
+            empresa_activa = Empresa.objects.filter(pk=request.session.get("empresa_id")).first()
+            vista_administrativa = Vista.objects.filter(nombre=self.vista_nombre).first()
+            if empresa_activa is None or vista_administrativa is None:
+                return JsonResponse({"success": False, "error": "Autorización administrativa no disponible."}, status=503)
+            try:
+                validate_cross_company_authorization(
+                    executor=request.user,
+                    active_empresa=empresa_activa,
+                    target_empresa=destino_empresa,
+                    vista=vista_administrativa,
                 )
+            except PermissionError as error:
+                return self.handle_no_permission(request, str(error))
 
-            if destino_empresa != origen_empresa:
-                destino_inicializada = Permiso.objects.filter(empresa=destino_empresa).exists()
-                if destino_inicializada and not user_has_permission_for_empresa(
-                    user=request.user,
-                    empresa=destino_empresa,
-                    vista_nombre=self.vista_nombre,
-                    accion=self.permiso_requerido,
-                ):
-                    return self.handle_no_permission(
-                        request,
-                        "No tienes permiso supervisor para operar esta empresa.",
+            with transaction.atomic():
+                permisos_actuales = Permiso.objects.filter(usuario=origen_usuario, empresa=origen_empresa)
+                for permiso in permisos_actuales:
+                    Permiso.objects.update_or_create(
+                        usuario=destino_usuario,
+                        empresa=destino_empresa,
+                        vista=permiso.vista,
+                        defaults={
+                            'ver': permiso.ver,
+                            'ingresar': permiso.ingresar,
+                            'crear': permiso.crear,
+                            'modificar': permiso.modificar,
+                            'eliminar': permiso.eliminar,
+                            'autorizar': permiso.autorizar,
+                            'supervisor': permiso.supervisor,
+                        }
                     )
-
-            permisos_actuales = Permiso.objects.filter(usuario=origen_usuario, empresa=origen_empresa)
-            for permiso in permisos_actuales:
-                Permiso.objects.update_or_create(
-                    usuario=destino_usuario,
-                    empresa=destino_empresa,
-                    vista=permiso.vista,
-                    defaults={
-                        'ver': permiso.ver,
-                        'ingresar': permiso.ingresar,
-                        'crear': permiso.crear,
-                        'modificar': permiso.modificar,
-                        'eliminar': permiso.eliminar,
-                        'autorizar': permiso.autorizar,
-                        'supervisor': permiso.supervisor,
-                    }
-                )
             return JsonResponse({"success": True, "message": "Permisos copiados correctamente."})
         except Usuario.DoesNotExist:
             return JsonResponse({"success": False, "error": _("Usuario no encontrado.")}, status=404)
