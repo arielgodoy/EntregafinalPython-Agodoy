@@ -130,10 +130,10 @@ _ACCESS_VIEW_NAMES = {
 SIDEBAR_VIEW_NAMES = {
     "library_add_owner": "Biblioteca - Propietarios",
     "library_add_property": "Biblioteca - Propiedades",
-    "library_add_document_type": "Biblioteca - Crear Tipo Documento",
+    "library_add_document_type": "Biblioteca - Tipos de Documento",
     "library_list_owners": "Biblioteca - Propietarios",
     "library_list_properties": "Biblioteca - Propiedades",
-    "library_list_document_types": "Biblioteca - Listar Tipos Documentos",
+    "library_list_document_types": "Biblioteca - Tipos de Documento",
     "library_list_documents": "Biblioteca - Listar Documentos",
     "suppliers_master": "Maestros - Proveedores",
     "gestion_dte_index": "Gestión DTE - Dashboard DTE-SII-RPETC",

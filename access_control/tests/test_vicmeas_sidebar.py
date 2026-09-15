@@ -306,6 +306,39 @@ class VicmeasSidebarTests(TestCase):
         self.assertNotIn("library_add_property", visible)
         self.assertNotIn("library_list_properties", visible)
 
+    def test_document_type_sidebar_entries_share_mother_view_and_use_ver(self):
+        ensure_protected_views_catalog()
+        self.assertEqual(
+            SIDEBAR_VIEW_NAMES["library_add_document_type"],
+            "Biblioteca - Tipos de Documento",
+        )
+        self.assertEqual(
+            SIDEBAR_VIEW_NAMES["library_list_document_types"],
+            "Biblioteca - Tipos de Documento",
+        )
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("library_add_document_type", visible)
+        self.assertNotIn("library_list_document_types", visible)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista__nombre="Biblioteca - Tipos de Documento",
+        )
+        permiso.ver = True
+        permiso.save(update_fields=["ver"])
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertIn("library_add_document_type", visible)
+        self.assertIn("library_list_document_types", visible)
+
+        permiso.ver = False
+        permiso.save(update_fields=["ver"])
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("library_add_document_type", visible)
+        self.assertNotIn("library_list_document_types", visible)
+
     def test_sidebar_items_have_mapping_or_explicit_classification(self):
         template = Path(__file__).resolve().parents[2] / "templates" / "partials" / "sidebar.html"
         template_keys = set(re.findall(r'"([a-z_]+)" in request\.sidebar_visible_items', template.read_text(encoding="utf-8")))

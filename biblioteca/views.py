@@ -27,6 +27,7 @@ from .models import Documento, Propiedad, Propietario, TipoDocumento
 
 VISTA_PROPIEDADES = "Biblioteca - Propiedades"
 VISTA_PROPIETARIOS = "Biblioteca - Propietarios"
+VISTA_TIPOS_DOCUMENTO = "Biblioteca - Tipos de Documento"
 
 # OFFICIAL IMPORTS
 from access_control.decorators import verificar_permiso
@@ -516,7 +517,7 @@ class CrearTipoDocumentoView(AuditMixin, VerificarPermisoMixin, LoginRequiredMix
     form_class = TipoDocumentoForm
     template_name = "crear_tipo_documento.html"
     success_url = reverse_lazy("biblioteca:listar_tipos_documentos")
-    vista_nombre = "Biblioteca - Crear Tipo Documento"
+    vista_nombre = VISTA_TIPOS_DOCUMENTO
     permiso_requerido = "crear"
     audit_action = "CREATE"
     audit_app_label = "biblioteca"
@@ -527,7 +528,7 @@ class ListarTiposDocumentosView(AuditMixin, VerificarPermisoMixin, LoginRequired
     model = TipoDocumento
     template_name = "listar_tipos_documentos.html"
     context_object_name = "tipos_documentos"
-    vista_nombre = "Biblioteca - Listar Tipos Documentos"
+    vista_nombre = VISTA_TIPOS_DOCUMENTO
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -537,7 +538,7 @@ class ListarTiposDocumentosView(AuditMixin, VerificarPermisoMixin, LoginRequired
 class ModificarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "modificar_tipo_documento.html"
     success_url = reverse_lazy("biblioteca:listar_tipos_documentos")
-    vista_nombre = "Biblioteca - Modificar Tipo Documento"
+    vista_nombre = VISTA_TIPOS_DOCUMENTO
     permiso_requerido = "modificar"
 
     def get(self, request, pk):
@@ -583,7 +584,7 @@ class ModificarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View
 class EliminarTipoDocumentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "eliminar_tipo_documento.html"
     success_url = reverse_lazy("biblioteca:listar_tipos_documentos")
-    vista_nombre = "Biblioteca - Eliminar Tipo Documento"
+    vista_nombre = VISTA_TIPOS_DOCUMENTO
     permiso_requerido = "eliminar"
 
     def get(self, request, pk):
