@@ -29,6 +29,7 @@ VISTA_PROPIEDADES = "Biblioteca - Propiedades"
 VISTA_PROPIETARIOS = "Biblioteca - Propietarios"
 VISTA_TIPOS_DOCUMENTO = "Biblioteca - Tipos de Documento"
 VISTA_DOCUMENTOS = "Biblioteca - Documentos"
+VISTA_RESPALDO = "Biblioteca - Respaldo Biblioteca"
 
 # OFFICIAL IMPORTS
 from access_control.decorators import verificar_permiso
@@ -94,7 +95,7 @@ class ModalesEjemploView(LoginRequiredMixin, TemplateView):
 
 ### respaldo biblioteca completa ###
 @login_required
-@verificar_permiso("Biblioteca - Respaldo Biblioteca", "ingresar")
+@verificar_permiso(VISTA_RESPALDO, "ingresar")
 def respaldo_biblioteca_zip(request):
     from auditoria.helpers import audit_log
 
@@ -121,7 +122,7 @@ def respaldo_biblioteca_zip(request):
         action="DOWNLOAD",
         app_label="biblioteca",
         obj=None,
-        vista_nombre="Biblioteca - Respaldo Biblioteca",
+        vista_nombre=VISTA_RESPALDO,
         status_code=getattr(response, "status_code", None),
         meta={
             "download_type": "backup_zip",
