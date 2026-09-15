@@ -135,7 +135,7 @@ def respaldo_biblioteca_zip(request):
 
 ### respaldo por rol ###
 @login_required
-@verificar_permiso("Biblioteca - Descargar Propiedad", "ingresar")
+@verificar_permiso(VISTA_PROPIEDADES, "ingresar")
 def descargar_documentos_propiedad_zip(request, propiedad_id):
     from auditoria.helpers import audit_log
 
@@ -164,7 +164,7 @@ def descargar_documentos_propiedad_zip(request, propiedad_id):
         action="DOWNLOAD",
         app_label="biblioteca",
         obj=propiedad,
-        vista_nombre="Biblioteca - Descargar Propiedad",
+        vista_nombre=VISTA_PROPIEDADES,
         status_code=getattr(response, "status_code", None),
         meta={
             "download_type": "propiedad_zip",

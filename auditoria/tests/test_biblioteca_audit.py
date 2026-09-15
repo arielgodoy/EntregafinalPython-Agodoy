@@ -4,7 +4,12 @@ from django.http import HttpResponse
 from auditoria.models import AuditoriaBibliotecaEvent
 from access_control.models import Empresa, Vista, Permiso
 from biblioteca.models import Documento, Propiedad, Propietario, TipoDocumento
-from biblioteca.views import respaldo_biblioteca_zip, descargar_documentos_propiedad_zip
+from biblioteca.views import (
+    VISTA_DOCUMENTOS,
+    VISTA_PROPIEDADES,
+    respaldo_biblioteca_zip,
+    descargar_documentos_propiedad_zip,
+)
 import os
 import tempfile
 from django.conf import settings
@@ -48,8 +53,8 @@ class BibliotecaAuditTests(TestCase):
     def _create_permissions(self):
         """Crear vistas y permisos necesarios para tests."""
         vista_respaldo = Vista.objects.create(nombre='Biblioteca - Respaldo Biblioteca')
-        vista_descargar = Vista.objects.create(nombre='Biblioteca - Descargar Propiedad')
-        vista_eliminar = Vista.objects.create(nombre='Biblioteca - Eliminar Documento')
+        vista_descargar = Vista.objects.create(nombre=VISTA_PROPIEDADES)
+        vista_eliminar = Vista.objects.create(nombre=VISTA_DOCUMENTOS)
         
         Permiso.objects.create(
             usuario=self.user,
