@@ -67,6 +67,7 @@ from access_control.services.empresa_activa import (
 from access_control.services.permissions import (
     ICMEAS_FIELDS,
     VICMEAS_FIELDS,
+    ensure_user_view_permissions,
     get_valid_users_for_empresa,
     user_has_permission_for_empresa,
 )
@@ -90,11 +91,17 @@ logger = logging.getLogger(__name__)
 class VerificarPermisoMixin:
     vista_nombre = None
     permiso_requerido = None
+    crear_permiso_faltante = True
+    verificar_vicmeas_en_dispatch = True
 
     def dispatch(self, request, *args, **kwargs):
-        if self.vista_nombre and self.permiso_requerido:
+        if self.verificar_vicmeas_en_dispatch and self.vista_nombre and self.permiso_requerido:
             try:
-                decorador = verificar_permiso(self.vista_nombre, self.permiso_requerido)
+                decorador = verificar_permiso(
+                    self.vista_nombre,
+                    self.permiso_requerido,
+                    crear_permiso_faltante=self.crear_permiso_faltante,
+                )
                 vista_decorada = decorador(super().dispatch)
                 return vista_decorada(request, *args, **kwargs)
             except PermisoDenegadoJson as e:
@@ -115,6 +122,7 @@ class VerificarPermisoMixin:
 
         vista_nombre = getattr(self, "vista_nombre", "Desconocida")
         contexto = build_access_request_context(request, vista_nombre, mensaje)
+        request._skip_sidebar_permission_materialization = True
         return render(request, "access_control/403_forbidden.html", contexto, status=403)
 
 
@@ -226,19 +234,28 @@ class PermisosPorVistaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         if form.is_valid():
             empresa = form.cleaned_data["empresa"]
             vista = form.cleaned_data["vista"]
+            valid_users = list(get_valid_users_for_empresa(empresa))
+            for user in valid_users:
+                ensure_user_view_permissions(user, empresa.id)
             permisos = {
                 permiso.usuario_id: permiso
                 for permiso in Permiso.objects.filter(empresa=empresa, vista=vista).select_related("usuario")
             }
             context["permission_rows"] = [
                 {"usuario": usuario, "permiso": permisos.get(usuario.id)}
-                for usuario in get_valid_users_for_empresa(empresa)
+                for usuario in valid_users
             ]
         return render(request, self.template_name, context)
 
 
-class AccessUtilityView(LoginRequiredMixin, View):
+class AccessUtilityView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "access_control/utilitario_acceso.html"
+    vista_nombre = ACCESS_UTILITY_VISTA_NAME
+    permiso_requerido = "ingresar"
+
+    def dispatch(self, request, *args, **kwargs):
+        request._skip_sidebar_permission_materialization = True
+        return super().dispatch(request, *args, **kwargs)
 
     def _get_active_empresa(self, request):
         empresa_id = request.session.get("empresa_id")
@@ -248,6 +265,7 @@ class AccessUtilityView(LoginRequiredMixin, View):
 
     def _forbidden(self, request, message):
         context = build_access_request_context(request, ACCESS_UTILITY_VISTA_NAME, message)
+        request._skip_sidebar_permission_materialization = True
         return render(request, "access_control/403_forbidden.html", context, status=403)
 
     def _base_context(self, form, **extra):

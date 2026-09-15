@@ -1,5 +1,6 @@
 from django.http import HttpResponseForbidden,JsonResponse
 from django.shortcuts import redirect, render
+from functools import wraps
 import logging
 from .models import Vista, Permiso, Empresa
 
@@ -56,8 +57,15 @@ def _build_access_request_context(request, vista_nombre, mensaje):
     return contexto
 
 
-def verificar_permiso(vista_nombre, permiso_requerido):
+def verificar_permiso(vista_nombre, permiso_requerido, *, crear_permiso_faltante=True):
     def decorator(view_func):
+        try:
+            view_func.vista_nombre = vista_nombre
+            view_func.permiso_requerido = permiso_requerido
+        except AttributeError:
+            pass
+
+        @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
             try:
                 empresa_id = request.session.get("empresa_id")
@@ -121,7 +129,7 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                             permiso.ver = True
                             update_fields.add('ver')
                         permiso.save(update_fields=list(update_fields))
-                elif not permiso:
+                elif not permiso and crear_permiso_faltante:
                     # Crear permiso sin acceso para otras vistas
                     logger = logging.getLogger(__name__)
                     logger.warning(
@@ -144,10 +152,10 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                         supervisor=False
                     )
 
-                if permiso.supervisor:
+                if permiso and permiso.supervisor:
                     return view_func(request, *args, **kwargs)
 
-                if not getattr(permiso, permiso_requerido, False):
+                if not permiso or not getattr(permiso, permiso_requerido, False):
                     raise PermisoDenegadoJson(f"No tienes permiso para '{permiso_requerido}' en {vista_nombre}.")
 
                 return view_func(request, *args, **kwargs)
@@ -165,7 +173,10 @@ def verificar_permiso(vista_nombre, permiso_requerido):
                     return JsonResponse({"success": False, "error": str(e)}, status=403)
                 
                 contexto = _build_access_request_context(request, vista_nombre, str(e))
+                request._skip_sidebar_permission_materialization = True
                 return render(request, "access_control/403_forbidden.html", contexto, status=403)
-        
+
+            _wrapped_view.vista_nombre = vista_nombre
+            _wrapped_view.permiso_requerido = permiso_requerido
         return _wrapped_view
     return decorator

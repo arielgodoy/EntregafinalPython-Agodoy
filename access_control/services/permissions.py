@@ -270,13 +270,26 @@ def get_descendant_sidebar_keys(node_key):
 
 
 def ensure_sidebar_permissions(user, empresa_id):
+    return ensure_user_view_permissions(user, empresa_id, view_names=SIDEBAR_VIEW_NAMES.values())
+
+
+def ensure_user_view_permissions(user, empresa_id, *, view_names=None):
+    """Materialize empty VICMEAS rows for one user and one company."""
     if not getattr(user, "is_authenticated", False) or not empresa_id:
         return 0
 
     if not Empresa.objects.filter(pk=empresa_id).exists():
         return 0
 
-    vista_names = set(SIDEBAR_VIEW_NAMES.values())
+    if view_names is None:
+        from access_control.services.view_catalog import discover_protected_views
+
+        vista_names = {
+            definition.vista_nombre
+            for definition in discover_protected_views()
+        }
+    else:
+        vista_names = set(view_names)
     vistas = list(Vista.objects.filter(nombre__in=vista_names).only("id"))
     vista_ids = {vista.id for vista in vistas}
     if not vista_ids:
@@ -307,11 +320,12 @@ def ensure_sidebar_permissions(user, empresa_id):
     return len(missing_ids)
 
 
-def get_sidebar_visible_items(user, empresa_id):
+def get_sidebar_visible_items(user, empresa_id, *, materialize_permissions=True):
     if not getattr(user, "is_authenticated", False) or not empresa_id:
         return set(SIDEBAR_GLOBAL_ITEMS) if getattr(user, "is_authenticated", False) else set()
 
-    ensure_sidebar_permissions(user, empresa_id)
+    if materialize_permissions:
+        ensure_sidebar_permissions(user, empresa_id)
 
     visible_names = set(
         Permiso.objects.filter(

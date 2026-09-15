@@ -2,7 +2,11 @@
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.access_requests import is_user_mail_enabled
 from access_control.services.empresa_activa import get_empresas_usuario
-from access_control.services.permissions import get_sidebar_access_tree, get_sidebar_visible_items
+from access_control.services.permissions import (
+    ensure_user_view_permissions,
+    get_sidebar_access_tree,
+    get_sidebar_visible_items,
+)
 
 
 def global_context(request):
@@ -23,9 +27,26 @@ def global_context(request):
         # No queremos que un fallo en el context processor rompa el render
         mail_enabled = False
 
+    should_materialize_permissions = not getattr(
+        request,
+        "_skip_sidebar_permission_materialization",
+        False,
+    )
+    if should_materialize_permissions and not getattr(
+        request,
+        "_user_view_permissions_ensured",
+        False,
+    ):
+        ensure_user_view_permissions(
+            getattr(request, "user", None),
+            request.session.get("empresa_id"),
+        )
+        request._user_view_permissions_ensured = True
+
     request.sidebar_visible_items = get_sidebar_visible_items(
         getattr(request, "user", None),
         request.session.get("empresa_id"),
+        materialize_permissions=False,
     )
     current_route_name = getattr(getattr(request, "resolver_match", None), "view_name", None)
     sidebar_access_tree = get_sidebar_access_tree(

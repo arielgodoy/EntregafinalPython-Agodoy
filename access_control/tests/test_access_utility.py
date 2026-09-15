@@ -148,25 +148,61 @@ class AccessUtilityTests(TestCase):
         response = self._post(ver=True)
         self.assertEqual(response.status_code, 403)
 
-    def test_get_without_ingresar_returns_403_without_creating_empty_permission(self):
+    def test_get_without_ingresar_creates_empty_permission_then_returns_403(self):
         self.actor_target_permission.delete()
-        before = Permiso.objects.count()
+
         response = self.client.get(self._url())
+
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(Permiso.objects.count(), before)
-        self.assertFalse(
-            Permiso.objects.filter(
-                usuario=self.actor,
-                empresa=self.empresa_activa,
-                vista=self.utilitario,
-            ).exists()
+        permiso = Permiso.objects.get(
+            usuario=self.actor,
+            empresa=self.empresa_activa,
+            vista__nombre=ACCESS_UTILITY_VISTA_NAME,
         )
+        for field_name in VICMEAS_FIELDS:
+            self.assertFalse(getattr(permiso, field_name))
+        self.assertContains(response, 'id="access-request-form"', status_code=403)
+        self.assertContains(response, 'name="csrfmiddlewaretoken"', status_code=403)
+
+    def test_get_without_catalogued_view_creates_view_and_empty_permission_then_returns_403(self):
+        self.utilitario.delete()
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 403)
+        vista = Vista.objects.get(nombre=ACCESS_UTILITY_VISTA_NAME)
+        permiso = Permiso.objects.get(
+            usuario=self.actor,
+            empresa=self.empresa_activa,
+            vista=vista,
+        )
+        for field_name in VICMEAS_FIELDS:
+            self.assertFalse(getattr(permiso, field_name))
+
+    def test_utility_403_creates_only_current_view_permission(self):
+        self.actor_target_permission.delete()
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 403)
+        permissions = Permiso.objects.filter(
+            usuario=self.actor,
+            empresa=self.empresa_activa,
+        )
+        self.assertEqual(permissions.count(), 1)
+        self.assertEqual(permissions.get().vista.nombre, ACCESS_UTILITY_VISTA_NAME)
 
     def test_get_with_ingresar_returns_dashboard(self):
         response = self.client.get(self._url())
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "UTILITARIO DE ACCESO")
         self.assertContains(response, "Asignar permisos masivos")
+
+    def test_normal_page_materializes_sidebar_permissions(self):
+        before = Permiso.objects.count()
+        response = self.client.get(reverse("access_control:permisos_lista"))
+        self.assertEqual(response.status_code, 403)
+        self.assertGreater(Permiso.objects.count(), before)
 
     def test_post_without_modificar_in_target_company_returns_403(self):
         self.actor_target_permission_b.delete()
@@ -306,7 +342,7 @@ class AccessUtilityTests(TestCase):
 
     def test_library_confirm_updates_seven_sidebar_views_and_preserves_icmeas(self):
         library_vistas = get_scope_vistas("library")
-        self.assertEqual(len(library_vistas), 7)
+        self.assertEqual(len(library_vistas), 8)
         preserved_vista = next(
             vista
             for vista in library_vistas
