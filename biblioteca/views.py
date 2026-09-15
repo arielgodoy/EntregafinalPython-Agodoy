@@ -25,6 +25,7 @@ import logging
 from .forms import PropiedadForm, PropietarioForm, TipoDocumentoForm
 from .models import Documento, Propiedad, Propietario, TipoDocumento
 
+VISTA_PROPIEDADES = "Biblioteca - Propiedades"
 VISTA_PROPIETARIOS = "Biblioteca - Propietarios"
 
 # OFFICIAL IMPORTS
@@ -182,7 +183,7 @@ class CrearPropiedadView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixin, 
     model = Propiedad
     form_class = PropiedadForm
     template_name = "crear_propiedad.html"
-    vista_nombre = "Biblioteca - Crear Propiedad"
+    vista_nombre = VISTA_PROPIEDADES
     permiso_requerido = "crear"
     audit_action = "CREATE"
     audit_app_label = "biblioteca"
@@ -249,7 +250,7 @@ class DetallePropiedadView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixin
     model = Propiedad
     template_name = "detalle_propiedad.html"
     context_object_name = "propiedad"
-    vista_nombre = "Biblioteca - Detalle Propiedad"
+    vista_nombre = VISTA_PROPIEDADES
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -260,7 +261,7 @@ class ListarPropiedadesView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixi
     model = Propiedad
     template_name = "listado_propiedades.html"
     context_object_name = "propiedades"
-    vista_nombre = "Biblioteca - Listar Propiedades"
+    vista_nombre = VISTA_PROPIEDADES
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -272,7 +273,7 @@ class ModificarPropiedadView(AuditMixin, VerificarPermisoMixin, LoginRequiredMix
     form_class = PropiedadForm
     template_name = "modificar_propiedad.html"
     success_url = reverse_lazy("biblioteca:listar_propiedades")
-    vista_nombre = "Biblioteca - Modificar Propiedad"
+    vista_nombre = VISTA_PROPIEDADES
     permiso_requerido = "modificar"
     audit_action = "UPDATE"
     audit_app_label = "biblioteca"
@@ -315,7 +316,7 @@ class EliminarPropiedadView(VerificarPermisoMixin, LoginRequiredMixin, DeleteVie
     model = Propiedad
     template_name = "eliminar_propiedad.html"
     success_url = reverse_lazy("biblioteca:listar_propiedades")
-    vista_nombre = "Biblioteca - Eliminar Propiedad"
+    vista_nombre = VISTA_PROPIEDADES
     permiso_requerido = "eliminar"
     def post(self, request, *args, **kwargs):
         """Manejar eliminación vía AJAX de forma robusta. Si no es AJAX, delegar al flujo tradicional."""

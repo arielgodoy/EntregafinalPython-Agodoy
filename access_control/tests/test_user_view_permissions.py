@@ -42,7 +42,7 @@ class UserViewPermissionsTests(TestCase):
             self.assertFalse(any(getattr(permission, field) for field in VICMEAS_FIELDS))
 
     def test_preserves_existing_flags_and_isolates_company(self):
-        vista = Vista.objects.get(nombre="Biblioteca - Modificar Propiedad")
+        vista = Vista.objects.get(nombre="Biblioteca - Propiedades")
         permission = Permiso.objects.create(
             usuario=self.user,
             empresa=self.empresa_a,
@@ -66,7 +66,7 @@ class UserViewPermissionsTests(TestCase):
         ensure_user_view_permissions(self.user, self.empresa_a.id)
         self.assertEqual(SIDEBAR_VIEW_NAMES["library_add_owner"], "Biblioteca - Propietarios")
         self.assertEqual(SIDEBAR_VIEW_NAMES["library_list_owners"], "Biblioteca - Propietarios")
-        non_navigable = Vista.objects.get(nombre="Biblioteca - Modificar Propiedad")
+        non_navigable = Vista.objects.get(nombre="Biblioteca - Propiedades")
         non_navigable_permission = Permiso.objects.get(
             usuario=self.user,
             empresa=self.empresa_a,
