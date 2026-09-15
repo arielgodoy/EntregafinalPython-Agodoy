@@ -64,6 +64,8 @@ class UserViewPermissionsTests(TestCase):
 
     def test_sidebar_uses_ver_only_and_excludes_non_navigable_views(self):
         ensure_user_view_permissions(self.user, self.empresa_a.id)
+        self.assertEqual(SIDEBAR_VIEW_NAMES["library_add_owner"], "Biblioteca - Propietarios")
+        self.assertEqual(SIDEBAR_VIEW_NAMES["library_list_owners"], "Biblioteca - Propietarios")
         non_navigable = Vista.objects.get(nombre="Biblioteca - Modificar Propiedad")
         non_navigable_permission = Permiso.objects.get(
             usuario=self.user,

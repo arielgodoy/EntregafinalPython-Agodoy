@@ -20,6 +20,7 @@ from access_control.services.permissions import (
     get_sidebar_access_tree,
     get_sidebar_visible_items,
 )
+from access_control.services.view_catalog import ensure_protected_views_catalog
 
 
 class VicmeasSidebarTests(TestCase):
@@ -240,6 +241,37 @@ class VicmeasSidebarTests(TestCase):
             "gestion_dte_index",
             get_sidebar_visible_items(self.user, self.empresa_a.id),
         )
+
+    def test_owner_sidebar_entries_share_mother_view_and_use_ver(self):
+        ensure_protected_views_catalog()
+        self.assertEqual(SIDEBAR_VIEW_NAMES["library_add_owner"], "Biblioteca - Propietarios")
+        self.assertEqual(SIDEBAR_VIEW_NAMES["library_list_owners"], "Biblioteca - Propietarios")
+        self.assertEqual(
+            SIDEBAR_VIEW_NAMES["library_add_owner"],
+            SIDEBAR_VIEW_NAMES["library_list_owners"],
+        )
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("library_add_owner", visible)
+        self.assertNotIn("library_list_owners", visible)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista__nombre="Biblioteca - Propietarios",
+        )
+        permiso.ver = True
+        permiso.save(update_fields=["ver"])
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertIn("library_add_owner", visible)
+        self.assertIn("library_list_owners", visible)
+
+        permiso.ver = False
+        permiso.save(update_fields=["ver"])
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("library_add_owner", visible)
+        self.assertNotIn("library_list_owners", visible)
 
     def test_sidebar_items_have_mapping_or_explicit_classification(self):
         template = Path(__file__).resolve().parents[2] / "templates" / "partials" / "sidebar.html"

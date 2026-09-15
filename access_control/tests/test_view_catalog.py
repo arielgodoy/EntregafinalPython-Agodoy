@@ -1,5 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from access_control.models import Empresa, Permiso, Vista
 from access_control.decorators import verificar_permiso
@@ -73,6 +75,26 @@ class ProtectedViewCatalogTests(TestCase):
 
         self.assertTrue(
             any(issue.issue == "missing_vicmeas_metadata" for issue in issues)
+        )
+
+    def test_audit_reports_invalid_permission(self):
+        def sample_view(request):
+            return None
+
+        sample_view.vista_nombre = "Catalog Test"
+        sample_view.permiso_requerido = "invalid"
+        pattern = SimpleNamespace(callback=sample_view)
+
+        with patch(
+            "access_control.services.view_catalog._iter_url_patterns",
+            return_value=[(pattern, "test:invalid")],
+        ):
+            definitions, issues = audit_protected_views()
+
+        self.assertEqual(definitions, ())
+        self.assertEqual(
+            [(issue.issue, issue.route_name, issue.vista_nombre) for issue in issues],
+            [("invalid_permission", "test:invalid", "Catalog Test")],
         )
 
     def test_catalog_ignores_unconnected_views_and_is_idempotent(self):

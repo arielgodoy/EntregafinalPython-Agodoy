@@ -7,6 +7,18 @@ from access_control.models import Vista
 from access_control.views import VerificarPermisoMixin
 
 
+VALID_PERMISSION_NAMES = frozenset(
+    {
+        "ingresar",
+        "crear",
+        "modificar",
+        "eliminar",
+        "autorizar",
+        "supervisor",
+    }
+)
+
+
 @dataclass(frozen=True)
 class ProtectedViewDefinition:
     vista_nombre: str
@@ -118,6 +130,16 @@ def audit_protected_views():
                 )
             )
             continue
+        if permiso_requerido not in VALID_PERMISSION_NAMES:
+            issues.append(
+                ViewContractIssue(
+                    issue="invalid_permission",
+                    route_name=route_name,
+                    view_name=view_name,
+                    vista_nombre=vista_nombre,
+                )
+            )
+            continue
 
         definition = ProtectedViewDefinition(
             vista_nombre=vista_nombre,
@@ -132,15 +154,6 @@ def audit_protected_views():
             by_name[vista_nombre] = definition
             definitions.append(definition)
             continue
-        if previous.permiso_requerido != permiso_requerido:
-            issues.append(
-                ViewContractIssue(
-                    issue="inconsistent_permission",
-                    route_name=route_name,
-                    view_name=view_name,
-                    vista_nombre=vista_nombre,
-                )
-            )
         if previous.route_name != route_name:
             by_name[vista_nombre] = ProtectedViewDefinition(
                 vista_nombre=vista_nombre,

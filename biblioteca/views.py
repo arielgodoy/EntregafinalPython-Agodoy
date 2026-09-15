@@ -25,6 +25,8 @@ import logging
 from .forms import PropiedadForm, PropietarioForm, TipoDocumentoForm
 from .models import Documento, Propiedad, Propietario, TipoDocumento
 
+VISTA_PROPIETARIOS = "Biblioteca - Propietarios"
+
 # OFFICIAL IMPORTS
 from access_control.decorators import verificar_permiso
 from access_control.models import Empresa
@@ -35,7 +37,7 @@ from settings.models import UserPreferences
 
 class CrearPropietarioModalView(VerificarPermisoMixin, LoginRequiredMixin, View):
     model = Propietario
-    vista_nombre = "Biblioteca - Crear Propietario Modal"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "crear"
 
     def post(self, request, *args, **kwargs):
@@ -373,7 +375,7 @@ class CrearPropietarioView(AuditMixin, VerificarPermisoMixin, LoginRequiredMixin
     form_class = PropietarioForm
     template_name = "crear_propietario.html"
     success_url = reverse_lazy("biblioteca:listar_propietarios")
-    vista_nombre = "Biblioteca - Crear Propietario"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "crear"
     audit_action = "CREATE"
     audit_app_label = "biblioteca"
@@ -384,7 +386,7 @@ class DetallePropietarioView(AuditMixin, VerificarPermisoMixin, LoginRequiredMix
     model = Propietario
     template_name = "detalle_propietario.html"
     context_object_name = "propietario"
-    vista_nombre = "Biblioteca - Detalle Propietario"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -395,7 +397,7 @@ class ListarPropietariosView(AuditMixin, VerificarPermisoMixin, LoginRequiredMix
     model = Propietario
     template_name = "listado_propietarios.html"
     context_object_name = "propietarios"
-    vista_nombre = "Biblioteca - Listar Propietarios"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "ingresar"
     audit_action = "VIEW"
     audit_app_label = "biblioteca"
@@ -407,7 +409,7 @@ class ModificarPropietarioView(AuditMixin, VerificarPermisoMixin, LoginRequiredM
     form_class = PropietarioForm
     template_name = "modificar_propietario.html"
     success_url = reverse_lazy("biblioteca:listar_propietarios")
-    vista_nombre = "Biblioteca - Modificar Propietario"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "modificar"
     audit_action = "UPDATE"
     audit_app_label = "biblioteca"
@@ -444,7 +446,7 @@ class EliminarPropietarioView(VerificarPermisoMixin, LoginRequiredMixin, DeleteV
     model = Propietario
     template_name = "eliminar_propietario.html"
     success_url = reverse_lazy("biblioteca:listar_propietarios")
-    vista_nombre = "Biblioteca - Eliminar Propietario"
+    vista_nombre = VISTA_PROPIETARIOS
     permiso_requerido = "eliminar"
     def form_valid(self, form):
         from auditoria.helpers import audit_log
