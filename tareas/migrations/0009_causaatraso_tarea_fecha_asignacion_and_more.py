@@ -18,8 +18,9 @@ CAUSAS_ATRASO = (
 
 def seed_causas_atraso(apps, schema_editor):
     causa_model = apps.get_model("tareas", "CausaAtraso")
+    db_alias = schema_editor.connection.alias
     for codigo, nombre in CAUSAS_ATRASO:
-        causa_model.objects.update_or_create(
+        causa_model.objects.using(db_alias).update_or_create(
             codigo=codigo,
             defaults={"nombre": nombre},
         )
@@ -27,7 +28,10 @@ def seed_causas_atraso(apps, schema_editor):
 
 def unseed_causas_atraso(apps, schema_editor):
     causa_model = apps.get_model("tareas", "CausaAtraso")
-    causa_model.objects.filter(codigo__in=[codigo for codigo, _ in CAUSAS_ATRASO]).delete()
+    db_alias = schema_editor.connection.alias
+    causa_model.objects.using(db_alias).filter(
+        codigo__in=[codigo for codigo, _ in CAUSAS_ATRASO]
+    ).delete()
 
 
 class Migration(migrations.Migration):

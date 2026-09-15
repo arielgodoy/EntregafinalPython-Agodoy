@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import DEFAULT_DB_ALIAS, migrations, models
 
 
 FORMATO_CHOICES = [
@@ -15,8 +15,17 @@ FORMATO_CHOICES = [
 
 def copy_historical_evidence(apps, schema_editor):
     EvidenciaCierre = apps.get_model("tareas", "EvidenciaCierre")
+    db_alias = (
+        schema_editor.connection.alias
+        if schema_editor is not None
+        else DEFAULT_DB_ALIAS
+    )
     unresolved = []
-    for evidencia in EvidenciaCierre.objects.select_related("documento").order_by("pk"):
+    for evidencia in (
+        EvidenciaCierre.objects.using(db_alias)
+        .select_related("documento")
+        .order_by("pk")
+    ):
         documento = evidencia.documento
         if documento is None:
             continue
@@ -29,7 +38,10 @@ def copy_historical_evidence(apps, schema_editor):
         evidencia.formato_archivo = formato
         evidencia.archivo = archivo
         evidencia.url = url
-        evidencia.save(update_fields=["formato_archivo", "archivo", "url"])
+        evidencia.save(
+            using=db_alias,
+            update_fields=["formato_archivo", "archivo", "url"],
+        )
     if unresolved:
         raise RuntimeError(
             "EVIDENCE_MIGRATION_DECISION_REQUIRED: EvidenciaCierre ambigua "

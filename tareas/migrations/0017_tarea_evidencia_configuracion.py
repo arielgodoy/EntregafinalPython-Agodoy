@@ -5,9 +5,12 @@ import django.db.models.deletion
 def backfill_evidence_requirement(apps, schema_editor):
     Tarea = apps.get_model("tareas", "Tarea")
     EvidenciaCierre = apps.get_model("tareas", "EvidenciaCierre")
+    db_alias = schema_editor.connection.alias
     requeridas_por_tarea = {}
-    for tarea_id, requerida in EvidenciaCierre.objects.order_by("pk").values_list(
-        "tarea_id", "requerida"
+    for tarea_id, requerida in (
+        EvidenciaCierre.objects.using(db_alias)
+        .order_by("pk")
+        .values_list("tarea_id", "requerida")
     ):
         anterior = requeridas_por_tarea.get(tarea_id)
         if anterior is not None and anterior != bool(requerida):
@@ -17,19 +20,20 @@ def backfill_evidence_requirement(apps, schema_editor):
             )
         requeridas_por_tarea[tarea_id] = bool(requerida)
 
-    for tarea in Tarea.objects.order_by("pk"):
+    for tarea in Tarea.objects.using(db_alias).order_by("pk"):
         tarea.requiere_evidencia_cierre = requeridas_por_tarea.get(tarea.pk, False)
-        tarea.save(update_fields=["requiere_evidencia_cierre"])
+        tarea.save(using=db_alias, update_fields=["requiere_evidencia_cierre"])
 
 
 def reverse_evidence_requirement(apps, schema_editor):
     Tarea = apps.get_model("tareas", "Tarea")
     EvidenciaCierre = apps.get_model("tareas", "EvidenciaCierre")
-    for evidencia in EvidenciaCierre.objects.order_by("pk"):
-        evidencia.requerida = Tarea.objects.get(
+    db_alias = schema_editor.connection.alias
+    for evidencia in EvidenciaCierre.objects.using(db_alias).order_by("pk"):
+        evidencia.requerida = Tarea.objects.using(db_alias).get(
             pk=evidencia.tarea_id
         ).requiere_evidencia_cierre
-        evidencia.save(update_fields=["requerida"])
+        evidencia.save(using=db_alias, update_fields=["requerida"])
 
 
 class Migration(migrations.Migration):

@@ -26,14 +26,15 @@ def _format_for_document(document):
 
 def backfill_file_formats(apps, schema_editor):
     DocumentoTarea = apps.get_model("tareas", "DocumentoTarea")
+    db_alias = schema_editor.connection.alias
     unresolved = []
-    for documento in DocumentoTarea.objects.order_by("pk"):
+    for documento in DocumentoTarea.objects.using(db_alias).order_by("pk"):
         formato = _format_for_document(documento)
         if formato is None:
             unresolved.append(documento.pk)
             continue
         documento.formato_archivo = formato
-        documento.save(update_fields=["formato_archivo"])
+        documento.save(using=db_alias, update_fields=["formato_archivo"])
     if unresolved:
         raise RuntimeError(
             "FORMAT_BACKFILL_DECISION_REQUIRED: DocumentoTarea sin formato "
@@ -43,7 +44,8 @@ def backfill_file_formats(apps, schema_editor):
 
 def reverse_file_formats(apps, schema_editor):
     DocumentoTarea = apps.get_model("tareas", "DocumentoTarea")
-    DocumentoTarea.objects.update(formato_archivo=None)
+    db_alias = schema_editor.connection.alias
+    DocumentoTarea.objects.using(db_alias).update(formato_archivo=None)
 
 
 class Migration(migrations.Migration):

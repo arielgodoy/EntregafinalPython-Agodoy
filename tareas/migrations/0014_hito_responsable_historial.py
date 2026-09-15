@@ -10,9 +10,12 @@ def backfill_authorized_hito(apps, schema_editor):
     Hito = apps.get_model("tareas", "Hito")
     HitoHistorial = apps.get_model("tareas", "HitoHistorial")
     User = apps.get_model(*settings.AUTH_USER_MODEL.split("."))
+    db_alias = schema_editor.connection.alias
 
     null_ids = list(
-        Hito.objects.filter(responsable__isnull=True).values_list("pk", flat=True)
+        Hito.objects.using(db_alias)
+        .filter(responsable__isnull=True)
+        .values_list("pk", flat=True)
     )
     if not null_ids:
         return
@@ -23,7 +26,12 @@ def backfill_authorized_hito(apps, schema_editor):
             + ", ".join(str(pk) for pk in unexpected)
         )
 
-    hito = Hito.objects.filter(pk=1, responsable__isnull=True).select_related("tarea__empresa").first()
+    hito = (
+        Hito.objects.using(db_alias)
+        .filter(pk=1, responsable__isnull=True)
+        .select_related("tarea__empresa")
+        .first()
+    )
     if hito is None:
         raise RuntimeError(
             "UNEXPECTED_HISTORICAL_DATA: no se encontró Hito pk=1 sin responsable."
@@ -42,13 +50,13 @@ def backfill_authorized_hito(apps, schema_editor):
             "UNEXPECTED_HISTORICAL_DATA: la identidad contractual de Hito pk=1 no coincide."
         )
 
-    admin = User.objects.filter(username="admin").first()
+    admin = User.objects.using(db_alias).filter(username="admin").first()
     if admin is None:
         raise RuntimeError("UNEXPECTED_HISTORICAL_DATA: no existe el usuario admin.")
 
     hito.responsable_id = admin.pk
-    hito.save(update_fields=["responsable"])
-    HitoHistorial.objects.create(
+    hito.save(using=db_alias, update_fields=["responsable"])
+    HitoHistorial.objects.using(db_alias).create(
         hito_id=hito.pk,
         tipo_evento="CREACION",
         usuario_id=admin.pk,
@@ -67,8 +75,9 @@ def backfill_authorized_hito(apps, schema_editor):
 def reverse_authorized_hito(apps, schema_editor):
     Hito = apps.get_model("tareas", "Hito")
     HitoHistorial = apps.get_model("tareas", "HitoHistorial")
-    HitoHistorial.objects.filter(hito_id=1).delete()
-    Hito.objects.filter(pk=1).update(responsable=None)
+    db_alias = schema_editor.connection.alias
+    HitoHistorial.objects.using(db_alias).filter(hito_id=1).delete()
+    Hito.objects.using(db_alias).filter(pk=1).update(responsable=None)
 
 
 class Migration(migrations.Migration):
