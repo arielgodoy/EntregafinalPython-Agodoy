@@ -111,8 +111,9 @@ def _procesar_actualizacion_datos_personales(request, user, avatar):
         'session_info': get_current_session_info(request),
     })
 
-@user_passes_test(lambda u: u.is_superuser)
 @login_required
+@verificar_permiso("Control de Acceso - Maestro Usuarios", "crear")
+@user_passes_test(lambda u: u.is_superuser)
 def crear_usuario_admin(request):
     """Crear usuario admin (solo superusers)."""
     if request.method == 'POST':

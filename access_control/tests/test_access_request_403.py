@@ -20,11 +20,9 @@ class TestAccessRequest403(TestCase):
         self.empresa = Empresa.objects.create(codigo="99", descripcion="Empresa Test")
         self.vista = Vista.objects.create(nombre="Control de Acceso - Maestro Usuarios")
         
-        # Crear Vistas para solicitar_acceso y grant_access_request (para decoradores @verificar_permiso)
+        # Crear Vistas para solicitar_acceso y grant_access_request.
         self.vista_solicitar_acceso = Vista.objects.create(nombre="Control de Acceso - Solicitar Acceso")
-        # El nombre usado para la vista de otorgar acceso en el código es la clave interna
-        # 'access_control.grant_access_request' (se crea en la vista si no existe).
-        self.vista_otorgar_acceso = Vista.objects.create(nombre="access_control.grant_access_request")
+        self.vista_otorgar_acceso = Vista.objects.create(nombre="Control de Acceso - Otorgar Acceso")
         
         # Dar permisos al usuario para las nuevas vistas
         Permiso.objects.create(
@@ -39,6 +37,12 @@ class TestAccessRequest403(TestCase):
             empresa=self.empresa,
             vista=self.vista_otorgar_acceso,
             ingresar=True,
+            autorizar=True,
+        )
+        Permiso.objects.create(
+            usuario=self.staff,
+            empresa=self.empresa,
+            vista=self.vista_otorgar_acceso,
             autorizar=True,
         )
         
@@ -316,7 +320,7 @@ class TestAccessRequest403(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertIn("access_request.grant.title", response.content.decode("utf-8"))
-        self.assertTrue(Vista.objects.filter(nombre="access_control.grant_access_request").exists())
+        self.assertTrue(Vista.objects.filter(nombre="Control de Acceso - Otorgar Acceso").exists())
         self.assertTrue(Vista.objects.filter(nombre=access_request.vista_nombre).exists())
 
     def test_grant_access_request_get_non_staff(self):
@@ -331,7 +335,36 @@ class TestAccessRequest403(TestCase):
         url = reverse("access_control:grant_access_request", args=[access_request.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 403)
-        self.assertTrue(Vista.objects.filter(nombre="access_control.grant_access_request").exists())
+        self.assertTrue(Vista.objects.filter(nombre="Control de Acceso - Otorgar Acceso").exists())
+
+    def test_grant_access_request_without_permission_creates_empty_permission_then_returns_403(self):
+        self.vista_otorgar_acceso.delete()
+        access_request = AccessRequest.objects.create(
+            solicitante=self.user,
+            empresa=self.empresa,
+            vista_nombre=self.vista.nombre,
+            motivo="Necesito acceso para operar",
+            status=AccessRequest.Status.PENDING,
+        )
+        self._login_with_empresa(self.staff)
+        response = self.client.get(
+            reverse("access_control:grant_access_request", args=[access_request.id])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        permission = Permiso.objects.get(
+            usuario=self.staff,
+            empresa=self.empresa,
+            vista__nombre="Control de Acceso - Otorgar Acceso",
+        )
+        self.assertFalse(Vista.objects.filter(nombre="access_control.grant_access_request").exists())
+        self.assertFalse(permission.ver)
+        self.assertFalse(permission.ingresar)
+        self.assertFalse(permission.crear)
+        self.assertFalse(permission.modificar)
+        self.assertFalse(permission.eliminar)
+        self.assertFalse(permission.autorizar)
+        self.assertFalse(permission.supervisor)
 
     def test_grant_access_request_post_creates_permiso_and_resolves(self):
         access_request = AccessRequest.objects.create(

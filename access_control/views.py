@@ -1533,13 +1533,13 @@ class SolicitarAccesoView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 
 @login_required
+@verificar_permiso("Control de Acceso - Otorgar Acceso", "autorizar")
 def grant_access_request(request, pk):
     """
     Permite a staff (y solo a staff) otorgar acceso a usuarios que lo solicitaron.
     Validación de staff se hace dentro de la función (no por decorador).
     """
-    VISTA_NOMBRE_GRANT = "access_control.grant_access_request"
-    Vista.objects.get_or_create(nombre=VISTA_NOMBRE_GRANT, defaults={"descripcion": ""})
+    VISTA_NOMBRE_GRANT = "Control de Acceso - Otorgar Acceso"
     if not request.user.is_staff:
         contexto = build_access_request_context(
             request,
