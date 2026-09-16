@@ -22,6 +22,14 @@ from control_de_proyectos.views import (
     ListarProfesionalesView,
     ListarProyectosView,
 )
+from control_de_proyectos.views import (
+    ActualizarAvanceTareaView,
+    CrearTareaView,
+    EditarTareaView,
+    EliminarTareaView,
+    SubirDocumentoTareaView,
+    CrearTipoTareaView,
+)
 
 
 class ProjectsMotherViewMetadataTests(TestCase):
@@ -157,12 +165,70 @@ class ProjectsMotherViewMetadataTests(TestCase):
                 "ver", "ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor"
             )))
 
+    def test_tasks_and_advance_share_mother_view_and_permissions(self):
+        expected = (
+            (CrearTareaView, "crear"),
+            (EditarTareaView, "modificar"),
+            (EliminarTareaView, "eliminar"),
+            (ActualizarAvanceTareaView, "modificar"),
+        )
+
+        for view_class, permission in expected:
+            self.assertEqual(view_class.vista_nombre, "Control de Proyectos - Tareas")
+            self.assertEqual(view_class.permiso_requerido, permission)
+
+    def test_tasks_mother_deduplicates_and_has_no_task_route_issues(self):
+        definitions = [
+            definition
+            for definition in discover_protected_views()
+            if definition.vista_nombre == "Control de Proyectos - Tareas"
+        ]
+        self.assertEqual(len(definitions), 1)
+
+        _, issues = audit_protected_views()
+        task_routes = {
+            "control_de_proyectos:crear_tarea",
+            "control_de_proyectos:editar_tarea",
+            "control_de_proyectos:eliminar_tarea",
+            "control_de_proyectos:actualizar_avance_tarea",
+        }
+        self.assertFalse(any(issue.route_name in task_routes for issue in issues))
+
+    def test_tasks_mother_is_deny_by_default_and_materialization_does_not_reset(self):
+        user = User.objects.create_user(username="tasks-mother", password="pass")
+        empresa = Empresa.objects.create(codigo="05", descripcion="Empresa 05")
+        vista = Vista.objects.create(nombre="Control de Proyectos - Tareas")
+        permission = Permiso.objects.create(
+            usuario=user,
+            empresa=empresa,
+            vista=vista,
+            crear=True,
+            modificar=True,
+        )
+
+        ensure_user_view_permissions(user, empresa.id, view_names=[vista.nombre])
+
+        permission.refresh_from_db()
+        self.assertTrue(permission.crear)
+        self.assertTrue(permission.modificar)
+        self.assertFalse(permission.eliminar)
+
+    def test_documents_and_task_type_remain_separate(self):
+        self.assertEqual(
+            SubirDocumentoTareaView.vista_nombre,
+            "Control de Proyectos - Subir documento de tarea",
+        )
+        self.assertEqual(
+            CrearTipoTareaView.vista_nombre,
+            "Control de Proyectos - Crear tipo de tarea",
+        )
+
 
 class AvancePermisosTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='user1', password='pass')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa 01')
-        self.vista = Vista.objects.create(nombre='Control de Proyectos - Actualizar avance de tarea')
+        self.vista = Vista.objects.create(nombre='Control de Proyectos - Tareas')
         self.cliente = ClienteEmpresa.objects.create(
             nombre='Cliente Uno',
             rut='12.345.678-5',

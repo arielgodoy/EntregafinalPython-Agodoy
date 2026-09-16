@@ -258,7 +258,7 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Tarea
     form_class = TareaForm
     template_name = 'control_de_proyectos/tarea_form.html'
-    vista_nombre = "Control de Proyectos - Crear tarea"
+    vista_nombre = "Control de Proyectos - Tareas"
     permiso_requerido = "crear"
     
     def dispatch(self, request, *args, **kwargs):
@@ -332,7 +332,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Tarea
     form_class = TareaForm
     template_name = 'control_de_proyectos/tarea_form.html'
-    vista_nombre = "Control de Proyectos - Editar tarea"
+    vista_nombre = "Control de Proyectos - Tareas"
     permiso_requerido = "modificar"
     
     def get_queryset(self):
@@ -398,7 +398,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
 
 class EliminarTareaView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Tarea
-    vista_nombre = "Control de Proyectos - Eliminar tarea"
+    vista_nombre = "Control de Proyectos - Tareas"
     permiso_requerido = "eliminar"
     
     def get_queryset(self):
@@ -766,7 +766,7 @@ class ActualizarAvanceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View)
         - 403 Forbidden: {'success': false, 'error': str} (permisos o empresa)
         - 404 Not Found: {'success': false, 'error': str}
     """
-    vista_nombre = "Control de Proyectos - Actualizar avance de tarea"
+    vista_nombre = "Control de Proyectos - Tareas"
     permiso_requerido = "modificar"
     
     def post(self, request, tarea_id):
