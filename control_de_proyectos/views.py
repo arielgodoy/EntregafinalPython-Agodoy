@@ -486,7 +486,7 @@ class CrearClienteView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = ClienteEmpresa
     form_class = ClienteEmpresaForm
     template_name = 'control_de_proyectos/cliente_form.html'
-    vista_nombre = "Control de Proyectos - Crear cliente"
+    vista_nombre = "Control de Proyectos - Clientes"
     permiso_requerido = "crear"
 
     def form_valid(self, form):
@@ -522,7 +522,7 @@ class EditarClienteView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = ClienteEmpresa
     form_class = ClienteEmpresaForm
     template_name = 'control_de_proyectos/cliente_form.html'
-    vista_nombre = "Control de Proyectos - Editar cliente"
+    vista_nombre = "Control de Proyectos - Clientes"
     permiso_requerido = "modificar"
 
     def get_success_url(self):
@@ -560,7 +560,7 @@ class CrearProfesionalView(VerificarPermisoMixin, LoginRequiredMixin, CreateView
     model = Profesional
     form_class = ProfesionalForm
     template_name = 'control_de_proyectos/profesional_form.html'
-    vista_nombre = "Control de Proyectos - Crear profesional"
+    vista_nombre = "Control de Proyectos - Profesionales"
     permiso_requerido = "crear"
 
     def form_valid(self, form):
@@ -596,7 +596,7 @@ class EditarProfesionalView(VerificarPermisoMixin, LoginRequiredMixin, UpdateVie
     model = Profesional
     form_class = ProfesionalForm
     template_name = 'control_de_proyectos/profesional_form.html'
-    vista_nombre = "Control de Proyectos - Editar profesional"
+    vista_nombre = "Control de Proyectos - Profesionales"
     permiso_requerido = "modificar"
 
     def get_success_url(self):

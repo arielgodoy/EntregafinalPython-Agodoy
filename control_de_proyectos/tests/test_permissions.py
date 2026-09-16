@@ -10,10 +10,16 @@ from access_control.services.permissions import ensure_user_view_permissions
 from access_control.services.view_catalog import audit_protected_views, discover_protected_views
 from control_de_proyectos.models import ClienteEmpresa, Proyecto, Tarea
 from control_de_proyectos.views import (
+    CrearClienteView,
+    CrearProfesionalView,
     CrearProyectoView,
     DetalleProyectoView,
+    EditarClienteView,
+    EditarProfesionalView,
     EditarProyectoView,
     EliminarProyectoView,
+    ListarClientesView,
+    ListarProfesionalesView,
     ListarProyectosView,
 )
 
@@ -88,6 +94,68 @@ class ProjectsMotherViewMetadataTests(TestCase):
         permission.refresh_from_db()
         self.assertTrue(permission.crear)
         self.assertTrue(permission.modificar)
+
+    def test_clients_and_professionals_share_mother_views_and_permissions(self):
+        expected = {
+            "clients": (
+                "Control de Proyectos - Clientes",
+                (
+                    (ListarClientesView, "ingresar"),
+                    (CrearClienteView, "crear"),
+                    (EditarClienteView, "modificar"),
+                ),
+                ("projects_clients", "projects_create_client"),
+            ),
+            "professionals": (
+                "Control de Proyectos - Profesionales",
+                (
+                    (ListarProfesionalesView, "ingresar"),
+                    (CrearProfesionalView, "crear"),
+                    (EditarProfesionalView, "modificar"),
+                ),
+                ("projects_professionals", "projects_create_professional"),
+            ),
+        }
+
+        for mother_name, views, sidebar_keys in expected.values():
+            for view_class, permission in views:
+                self.assertEqual(view_class.vista_nombre, mother_name)
+                self.assertEqual(view_class.permiso_requerido, permission)
+            self.assertEqual(SIDEBAR_VIEW_NAMES[sidebar_keys[0]], mother_name)
+            self.assertEqual(SIDEBAR_VIEW_NAMES[sidebar_keys[1]], mother_name)
+
+    def test_catalog_deduplicates_clients_and_professionals(self):
+        definitions = discover_protected_views()
+        for mother_name in (
+            "Control de Proyectos - Clientes",
+            "Control de Proyectos - Profesionales",
+        ):
+            matches = [definition for definition in definitions if definition.vista_nombre == mother_name]
+            self.assertEqual(len(matches), 1)
+
+        _, issues = audit_protected_views()
+        affected_routes = {
+            "control_de_proyectos:listar_clientes",
+            "control_de_proyectos:crear_cliente",
+            "control_de_proyectos:editar_cliente",
+            "control_de_proyectos:listar_profesionales",
+            "control_de_proyectos:crear_profesional",
+            "control_de_proyectos:editar_profesional",
+        }
+        self.assertFalse(any(issue.route_name in affected_routes for issue in issues))
+
+    def test_clients_and_professionals_mothers_are_deny_by_default(self):
+        user = User.objects.create_user(username="catalog-mothers", password="pass")
+        empresa = Empresa.objects.create(codigo="04", descripcion="Empresa 04")
+        for mother_name in (
+            "Control de Proyectos - Clientes",
+            "Control de Proyectos - Profesionales",
+        ):
+            vista = Vista.objects.create(nombre=mother_name)
+            permission = Permiso.objects.create(usuario=user, empresa=empresa, vista=vista)
+            self.assertFalse(any(getattr(permission, field) for field in (
+                "ver", "ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor"
+            )))
 
 
 class AvancePermisosTests(TestCase):
