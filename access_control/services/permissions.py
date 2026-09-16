@@ -142,7 +142,7 @@ SIDEBAR_VIEW_NAMES = {
     "gestion_dte_certificados": "Gestión DTE - Certificados PFX-DTE",
     "evaluaciones_import": "Evaluaciones - Importar Personas",
     "projects_list": "Control de Proyectos - Proyectos",
-    "projects_create": "Control de Proyectos - Crear proyecto",
+    "projects_create": "Control de Proyectos - Proyectos",
     "projects_clients": "Control de Proyectos - Clientes",
     "projects_create_client": "Control de Proyectos - Crear cliente",
     "projects_professionals": "Control de Proyectos - Profesionales",

@@ -99,7 +99,7 @@ class DetalleProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DetailView)
     model = Proyecto
     template_name = 'control_de_proyectos/proyecto_detalle.html'
     context_object_name = 'proyecto'
-    vista_nombre = "Control de Proyectos - Detalle de proyecto"
+    vista_nombre = "Control de Proyectos - Proyectos"
     permiso_requerido = "ingresar"
 
     def get_queryset(self):
@@ -118,7 +118,7 @@ class CrearProyectoView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = 'control_de_proyectos/proyecto_form.html'
-    vista_nombre = "Control de Proyectos - Crear proyecto"
+    vista_nombre = "Control de Proyectos - Proyectos"
     permiso_requerido = "crear"
     
     def dispatch(self, request, *args, **kwargs):
@@ -164,7 +164,7 @@ class EditarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = 'control_de_proyectos/proyecto_form.html'
-    vista_nombre = "Control de Proyectos - Editar proyecto"
+    vista_nombre = "Control de Proyectos - Proyectos"
     permiso_requerido = "modificar"
 
     def get_queryset(self):
@@ -200,7 +200,7 @@ class EditarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, UpdateView):
 class EliminarProyectoView(VerificarPermisoMixin, LoginRequiredMixin, DeleteView):
     model = Proyecto
     template_name = 'control_de_proyectos/proyecto_confirmar_eliminar.html'
-    vista_nombre = "Control de Proyectos - Eliminar proyecto"
+    vista_nombre = "Control de Proyectos - Proyectos"
     permiso_requerido = "eliminar"
     success_url = reverse_lazy('control_de_proyectos:listar_proyectos')
 
