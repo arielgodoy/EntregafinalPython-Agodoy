@@ -10,6 +10,26 @@ La fuente tecnica de verdad para la clasificacion de apps es
 - `SYSTEM_SUPPORT_APPS`: infraestructura transversal no critica dentro de `SYSTEM_APPS`.
 - `APPLICATION_APPS`: modulos de negocio.
 
+### Dominio organizacional transversal aprobado
+
+Se reserva la futura `APPLICATION_APP` `organizacion` como owner canónico y
+reutilizable de los maestros `Local` y `Departamento`. Esta app aún no está
+creada, registrada ni autorizada para implementación en esta tarea.
+
+`organizacion` será responsable de `Local`, perteneciente obligatoriamente a
+`Empresa`; de `Departamento`, perteneciente obligatoriamente a `Empresa`; y
+de futuras dimensiones organizacionales sólo mediante contratos explícitos.
+`Departamento` no tendrá una relación obligatoria con `Local`: ambas son
+dimensiones alternativas de Empresa.
+
+La futura app no será de seguridad, no reemplazará VICMEAS/ICMEAS y no será el
+adaptador ERP. Usará PK internas Django y códigos funcionales únicos por
+Empresa. `Local` conservará además un `legacy_code` separado y nullable; ningún
+código legacy será PK ni relación de dominio. El ERP legacy será la fuente
+externa inicial de Local mediante sincronización futura, mientras Departamento
+comenzará como catálogo administrado localmente. Ninguna APPLICATION_APP
+consultará SQL legacy directamente ni duplicará estos maestros.
+
 ## Lectura y escritura
 
 Copilot puede leer archivos, buscar referencias, auditar, diagnosticar,
@@ -58,6 +78,21 @@ decorators y APIs públicas de otras apps. Consumir una dependencia no transfier
 ni autoriza modificarla. Todo archivo fuera del `WRITABLE ROOT` es READ-ONLY, incluyendo
 `AppDocs/`, todas las SYSTEM_APPS, templates/static globales, vendor y otras
 APPLICATION_APPS. Una APPLICATION tampoco modifica otra APPLICATION.
+
+### Arquitectura de correo
+
+Las APPLICATION_APPS no implementan SMTP propio si existe un subsistema canónico.
+Los eventos automáticos de sistema usan `Empresa` y `purpose` mediante
+`acounts.services.email_service.send_email_for_purpose(...)`; la resolución selecciona
+la cuenta de `CompanyConfig` y hace fallback a `SystemConfig`, con los purposes vigentes
+`security`, `notifications` y `alerts`. El correo automático no usa el SMTP personal del
+actor ni interpreta `settings.UserPreferences.email_enabled` como opt-in u opt-out.
+
+Las acciones manuales iniciadas por un usuario que deban usar su correo de perfil usan
+`settings.UserPreferences` y `settings.services.email_sender.send_email_message(...)`.
+`email_enabled` pertenece únicamente a ese flujo de correo de usuario/perfil. Las
+notificaciones in-app son un canal independiente y deben reutilizar
+`notificaciones.services.create_notification(...)`.
 
 El alcance efectivo es la intersección entre APPLICATION BOUNDARY y el scope explícito de
 la tarea; el scope concreto puede ser más restrictivo y nunca se amplía automáticamente.

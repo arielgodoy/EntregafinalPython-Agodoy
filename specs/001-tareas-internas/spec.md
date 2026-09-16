@@ -59,11 +59,11 @@
 
 - **FR-A01**: Al crear una tarea se MUST reservar un único número secuencial por empresa; el borrador MUST mostrarlo como `B0000001` y al publicar el mismo número MUST mostrarse como `A0000001`. `TD` queda reservado para TO-DO futuro. La publicación transforma el mismo registro, conserva la misma PK, NO consume un segundo número y NO existen secuencias A/B independientes.
 - **FR-A02**: Un borrador MUST tener vida indefinida y ser visible inicialmente SOLO en el dashboard propio del creador.
-- **FR-A03** `[PARCIAL — definición de Departamento pendiente]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a local y a departamento/área. Local sigue bloqueado por P1; no se define aún el modelo/campo de Departamento.
+- **FR-A03** `[PARCIAL — implementación organizacional pendiente]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a un `organizacion.Local` o `organizacion.Departamento` cuando corresponda. Ambas dimensiones pertenecen directamente a Empresa; Departamento no depende de Local. La futura `APPLICATION_APP` `organizacion` será su owner canónico.
 - **FR-A04** `[PARCIAL — definición de Equipo/Activo pendiente]`: Una tarea MUST poder asociarse opcionalmente a un equipo/máquina/activo cuando corresponda. No se define aún modelo, campo, código ni relación de Equipo/Activo.
 - **FR-A05**: Toda tarea MUST registrar su creador (creada_por) automáticamente desde el usuario autenticado.
 - **FR-A06**: El correlativo MUST ser único por empresa y legible.
-- **FR-A07**: LOCAL es concepto legacy → **`LEGACY API PENDIENTE`**: no se define tabla/IDs/sincronización sin autorización y lectura del legacy.
+- **FR-A07** `[ARQUITECTURA DEFINIDA — IMPLEMENTACIÓN PENDIENTE]`: Local se modelará como entidad Django canónica en `organizacion`, con PK interna, código funcional por Empresa y `legacy_code` separado. El ERP legacy (`g_maestroempresas`, accesible mediante `api`) es la fuente externa inicial y se integrará mediante sincronización futura; las APPLICATION_APPS no consultan SQL legacy directamente.
 
 **Key Entities — A**: Tarea (correlativo_borrador `B*`, correlativo_activo `A*`, `TD*` reservado para TO-DO futuro, empresa, local [LEGACY], departamento, equipo_activo [opcional], creada_por).
 
@@ -339,20 +339,75 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 - **FR-K03**: Las notificaciones MUST soportar leídas/no leídas.
 - **FR-K04**: MUST reutilizar la infraestructura existente (`notificaciones`, email de `acounts`); MUST NOT crear un subsistema paralelo.
 
+Para T054, las notificaciones in-app deben usar el adaptador local
+`notify_task_event(...)` y el correo automático de sistema debe usar
+`send_task_email(...)`, que delega en `send_email_for_purpose(...)` con
+`purpose="notifications"`; no se debe usar el SMTP personal del actor ni
+interpretar `email_enabled` como opt-in u opt-out de este canal.
+
+### Contrato funcional T054 (implementación pendiente)
+
+- Asignación o reasignación: notificar al nuevo responsable y a los participantes
+	afectados cuando el flujo real los incluya; el actor no se duplica como destinatario.
+- Lectura: solo registra `TareaLectura`; no genera notificación in-app ni email.
+- Comentarios: no existe todavía modelo, servicio ni UI funcional de comentarios en
+	`tareas`; el evento de notificación por comentario queda diferido hasta que exista
+	esa feature. Esta ausencia es NO BLOQUEANTE para cerrar T054 y T054 no debe crear la
+	feature de comentarios.
+- Documento agregado: notificar al creador (`Tarea.creada_por`), responsable y
+	participantes, excluyendo al actor y duplicados.
+- Cambio relevante: se limita a responsable, `fecha_tope`, prioridad/clasificación,
+	reprogramación o estado funcional. No incluye correcciones ortográficas, descripción
+	menor ni campos administrativos. Notificar al responsable y participantes, excluyendo
+	al actor y duplicados.
+- Solicitud de aprobación de cierre: al pasar a `PENDIENTE_APROBACION_CIERRE`, los
+	destinatarios son todos los `TareaParticipante` activos de esa Tarea cuyo rol sea
+	`AUTORIZADOR`, deduplicados por usuario. No se incluyen automáticamente todos los
+	usuarios con permiso VICMEAS `modificar`, los `SUPERVISOR`, los demás participantes ni
+	usuarios de otras Tareas.
+- Si la Tarea no tiene ningún `TareaParticipante` activo con rol `AUTORIZADOR`, se usa
+	`Tarea.creada_por` como destinatario fallback cuando exista y sea válido. Este fallback
+	evita dejar una solicitud de cierre sin destinatario y no convierte a `creada_por` en
+	`AUTORIZADOR`.
+- `SUPERVISOR` no recibe automáticamente la solicitud; solo la recibe si el contrato
+	futuro lo establece expresamente o si además tiene participación como `AUTORIZADOR`.
+	Los roles no se mezclan.
+- VICMEAS determina si un usuario puede ejecutar una acción HTTP, como aprobar o rechazar,
+	según el endpoint y `vista_nombre`. El rol funcional
+	`TareaParticipante.AUTORIZADOR` determina a quién se dirige la solicitud de esta Tarea;
+	el permiso VICMEAS no se usa como lista automática de destinatarios. La ejecución
+	posterior recibe el usuario actor en `approve_closure(tarea, usuario)` y registra
+	`TareaCierre.usuario`.
+- Aprobación o rechazo de cierre: notificar al responsable y creador, excluyendo al actor
+	y duplicados.
+- Anulación o reactivación: notificar al creador, responsable y participantes, excluyendo
+	al actor y duplicados, conforme a FR-E08.
+- El canal normal de estos eventos es in-app. Cuando `Tarea.prioridad == CRITICA`, se
+	usan in-app y email automático de sistema. El email usa `send_task_email(...)` y nunca
+	`UserPreferences`, `email_enabled` ni el SMTP del actor.
+- La deduplicación se realiza por usuario dentro de cada evento y canal; no se crea una
+	política global nueva de `dedupe_key` en esta definición.
+- Las notificaciones de T054 son efectos secundarios posteriores a una operación de
+	negocio ya persistida. Un fallo in-app o de email no revierte la operación principal,
+	no debe producir un error HTTP que haga parecer que falló y debe registrarse mediante
+	logging. No se implementan retries ni colas, ni se modifica infraestructura CORE.
+	Los adaptadores T053 continúan propagando errores cuando se invocan directamente; la
+	tolerancia pertenece únicamente a este orquestador T054.
+
 **Key Entities — K**: Notificación de tarea (tipo, leída/no leída), canal (sistema/email).
 
 ---
 
 ## L. Dashboards y KPI
 
-- **FR-L01**: Dashboard Usuario: urgentes/por vencer arriba; acordeones por clasificación; tareas donde participa como Invitado; leído/no leído manual; vista Equipo para jefaturas; acumulación de trabajo.
+- **FR-L01**: Dashboard Usuario: urgentes/por vencer arriba; acordeones por prioridad; tareas donde es responsable directo o participante activo, diferenciando invitado/observador; leído/no leído manual; vista Equipo para jefaturas; acumulación de trabajo.
 - **FR-L02**: Dashboard Jefatura/General MUST mostrar exactamente estos ocho KPI: total de tareas por estado, tareas atrasadas, tareas próximas a vencer, tareas sin movimiento, tareas esperando aprobación, carga abierta por responsable, porcentaje de cumplimiento y tiempo promedio de cierre.
 - **FR-L03**: Dimensiones activas con drill-down: General → Empresa → Departamento → Usuario → Tarea. Local queda DEFERRED por P1; Proveedor podrá incorporarse desde el maestro local cuando exista contrato de lectura.
 - **FR-L04**: Los mismos ocho KPI por cada dimensión activa: General, Empresa, Departamento, Usuario y Tarea. No se habilitan dimensiones adicionales.
 - **FR-L05**: Presentación con DataTables, modal "Ver info de la tarea" y opción de abrir la tarea completa.
 - **FR-L06**: La dimensión Local depende de P1; Proveedor dependerá del maestro Django local y no del ERP para su operación básica.
 - **FR-L07**: Los ocho KPI de FR-L02 MUST repetirse en cada dimensión permitida del drill-down; no se definirán KPI adicionales por dimensión.
-- **FR-L08**: El dashboard personal MUST mostrar las tareas donde el usuario es responsable directo y los hitos donde el usuario es responsable directo, aunque no sea responsable de la tarea padre.
+- **FR-L08**: El dashboard personal MUST mostrar las tareas donde el usuario es responsable directo, las tareas donde participa mediante `TareaParticipante` activo y los hitos donde el usuario es responsable directo, aunque no sea responsable de la tarea padre.
 - **FR-L09**: Los hitos del dashboard personal MUST agruparse para presentación según `Tarea.prioridad` de la tarea padre. La prioridad canónica usa exactamente `SIMPLE`, `NORMAL`, `URGENTE` y `CRITICA`, con jerarquía `CRITICA > URGENTE > NORMAL > SIMPLE`; no se crea una dimensión `clasificacion`, el hito no tiene clasificación propia y no se agrega un campo `prioridad` al hito.
 - **FR-L10**: Cada hito mostrado en el dashboard personal MUST identificar conceptualmente tipo `HITO`, nombre, correlativo y título de la tarea padre, prioridad heredada desde `Tarea.prioridad`, cumplimiento, peso, responsable y enlace a la pantalla existente de Hitos de su Tarea (`/tareas/<tarea_pk>/hitos/`). La navegación MUST conservar Tarea → Hito sin convertir el hito en tarea independiente; T077 no crea una vista ni un enlace de detalle individual de Hito.
 - **FR-L11**: El dashboard personal MUST mostrar como asignación pendiente solo Hitos con `responsable == usuario` y `anulado == False`; los Hitos anulados no aparecen como pendientes, aunque pueden aparecer en vistas históricas cuando corresponda.
@@ -367,16 +422,79 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 	esperando aprobación; carga abierta por responsable; porcentaje de cumplimiento; tiempo
 	promedio de cierre.
 
+### Contrato operativo cerrado de T059
+
+Para los ocho KPI V1, la población operativa excluye `BORRADOR` y toda Tarea con
+`anulada=True`. Los estados publicados son `ACTIVA`, `GESTION`,
+`PENDIENTE_APROBACION_CIERRE` y `CERRADA`. Cada Tarea persistida cuenta como una
+unidad independiente, incluyendo padres, hijas y nietas válidas; los Hitos no se
+suman como Tareas. Los KPI de estado actual usan `timezone.localdate()` como fecha
+de referencia y no crean snapshots históricos.
+
+1. **Total por estado**: cuenta una vez cada Tarea publicada no anulada según su
+	estado actual, solo en `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE` o
+	`CERRADA`.
+2. **Atrasadas**: cuenta Tareas no anuladas en `ACTIVA`, `GESTION` o
+	`PENDIENTE_APROBACION_CIERRE`, con `fecha_tope` no nula,
+	`fecha_tope < fecha_referencia` y `fecha_cumplimiento IS NULL`. No cuenta
+	`CERRADA`; una Tarea cumplida deja de estar actualmente atrasada.
+3. **Próximas a vencer**: cuenta Tareas no anuladas en `ACTIVA`, `GESTION` o
+	`PENDIENTE_APROBACION_CIERRE`, con `fecha_cumplimiento IS NULL` y
+	`fecha_tope` entre `fecha_referencia` y `fecha_referencia + 7 días` inclusive.
+	No incluye vencidas ni `CERRADA`.
+4. **Sin movimiento**: cuenta Tareas abiertas no anuladas cuyo último movimiento
+	operativo sea igual o anterior a `now() - 7 días`. El último movimiento es el
+	máximo timestamp disponible de publicación/creación operativa, última
+	`TareaTransicion`, última actividad persistida de Hito, último DocumentoTarea
+	agregado mediante su historial y, solo si existiera, modificación propia de
+	Tarea. No cuentan lecturas, aperturas de enlaces, dashboards ni notificaciones.
+	No se crea `ultima_actividad`.
+5. **Esperando aprobación**: cuenta una vez cada Tarea no anulada con
+	`estado=PENDIENTE_APROBACION_CIERRE`; no cuenta transiciones históricas ni
+	multiplica por autorizadores.
+6. **Carga abierta por responsable**: cuenta Tareas no anuladas en
+	`ACTIVA`, `GESTION` o `PENDIENTE_APROBACION_CIERRE` cuyo `responsable` sea el
+	usuario. No pondera prioridad ni incluye participantes, invitados, creador,
+	supervisor, autorizador ni Hitos.
+7. **Porcentaje de cumplimiento**: `CERRADA / total_publicadas * 100`, donde el
+	numerador son Tareas `CERRADA` no anuladas y el denominador son todas las Tareas
+	publicadas no anuladas. Si el denominador es cero, devuelve `0.00`; se redondea
+	a dos decimales. No equivale al avance ponderado de Hitos.
+8. **Tiempo promedio de cierre**: sobre Tareas `CERRADA` no anuladas con
+	`fecha_publicacion` y `fecha_cumplimiento`, promedia en horas calendario
+	`fecha_cumplimiento - fecha_publicacion`. Excluye registros sin ambas fechas y
+	no usa creación de borrador ni aprobación como inicio.
+
+El dashboard personal mantiene la autorización `Tareas - Dashboard personal` con
+`ingresar` y, dentro de la Empresa activa, muestra responsabilidad directa,
+participación activa e Hitos no anulados asignados al usuario. Usa `TareaLectura`
+para leído/no leído, destaca `CRITICA` y `URGENTE`, muestra próximas a vencer,
+agrupa por prioridad y diferencia participante/invitado. Creador, supervisor y
+autorizador no se incorporan por esos roles únicamente.
+
+El dashboard general y sus dimensiones usan `Tareas` con `supervisor`, evaluado por
+Empresa. General agrega exclusivamente Empresas autorizadas al usuario; Empresa
+restringe por `Tarea.empresa_id`; Departamento incluye solo
+`tipo_ambito=DEPARTAMENTO` y el `departamento_id` seleccionado; Usuario agrupa por
+`Tarea.responsable` sin duplicar por participantes; Tarea muestra el contexto de
+una única Tarea sin fabricar agregados. No se inserta Local en el drill-down.
+
+T059 calcula los KPI bajo demanda, sin modelo, snapshots, cache persistente ni
+migración. Su servicio entrega a T060 exactamente los ocho KPI, dimensión, filtros,
+filas, estado, prioridad, fechas relevantes, enlaces de navegación y datos mínimos
+del modal; no genera HTML. T060 es responsable de DataTables, cards, acordeones,
+modal y presentación visual.
+
 ---
 
 ## M. Reuniones de Revisión
 
 - **FR-M01**: Debe existir un botón/acción "reunión de revisión".
-- **FR-M02**: La reunión se convoca sobre un subconjunto homogéneo de tareas.
+- **FR-M02**: La reunión se convoca sobre un subconjunto homogéneo de tareas de una Empresa, con ámbito explícito `LOCAL` o `DEPARTAMENTO`; todas las tareas deben compartir ese ámbito. No se exige compartir responsable, prioridad ni clasificación.
 - **FR-M03**: Modalidad Zoom o presencial.
-- **FR-M04**: Convocatoria por email.
+- **FR-M04**: La acción explícita `CONVOCAR` envía email automático de sistema y notificación in-app a los convocados seleccionados explícitamente para esa reunión; crear o editar no convoca.
 - **FR-M05**: La reunión es una tarea planificada.
-- **FR-M06**: La reunión tiene agenda por prioridades.
+- **FR-M06**: La reunión tiene agenda por prioridades descendentes y orden manual dentro de cada prioridad; puede mezclar prioridades.
 - **FR-M07**: El cierre de la reunión registra comentarios por tarea.
 
 **Key Entities — M**: Reunión (modalidad, agenda, comentarios), Subconjunto de tareas.
@@ -388,14 +506,126 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 - **FR-N01**: Una tarea MUST poder tener como máximo un origen canónico directo: otra tarea, un TO-DO o ninguno. Una tarea no puede tener simultáneamente `todo_origen` y `tarea_origen`.
 - **FR-N02**: El historial de origen MUST ser accesible en lectura.
 - **FR-N03**: MUST NOT convertir una tarea antigua en la nueva: se crea una nueva y se referencia. Cadenas históricas permitidas.
-- **FR-N04**: Al publicar, el sistema MUST advertir si parece un problema repetido cuando la coincidencia aproximada alcance el umbral configurado para la empresa, cuyo valor predeterminado es 80%.
-- **FR-N05**: La evaluación de similitud MUST incluir también tareas cerradas.
-- **FR-N06**: El usuario MUST confirmar "es el mismo problema nuevamente"; aun confirmando, la tarea es NUEVA.
+- **FR-N04**: Durante el flujo de publicación de una Tarea nueva, el sistema MUST evaluar candidatas de la misma Empresa, aplicar el umbral recibido por el servicio y advertir cuando exista al menos una coincidencia con `supera_umbral=True`. El umbral predeterminado de 80% y su configuración por Empresa pertenecen a T057; T056 no MUST hardcodear ni persistir configuración empresarial.
+- **FR-N05**: La evaluación de similitud MUST incluir Tareas en estado `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE` y `CERRADA`. MUST excluir `BORRADOR`, cualquier Tarea con `anulada=True` y la propia Tarea evaluada.
+- **FR-N06**: El usuario MUST confirmar "es el mismo problema nuevamente" o "DISTINTO_PROBLEMA" para una coincidencia relevante; mientras la decisión sea `PENDIENTE` no se modifica el origen. Aun confirmando `MISMO_PROBLEMA`, la tarea evaluada es NUEVA.
 - **FR-N07**: La nueva tarea MUST poder mantener una o varias referencias históricas o de similitud a tareas antiguas si corresponde; estas referencias no sustituyen ni multiplican el origen canónico único.
 - **FR-N08**: Cambio de repuesto MUST NOT implicar automáticamente "mismo problema".
 - **FR-N09**: El umbral de similitud MUST ser configurable por empresa; solo usuarios autorizados podrán modificarlo y cada cambio MUST aplicar únicamente a nuevas evaluaciones de similitud.
 
 **Key Entities — N**: Origen/derivación, Relación de similitud, Cadena histórica, Umbral (80%).
+
+### Contrato de similitud T056
+
+La evaluación se limita estructuralmente a la Empresa de la Tarea evaluada; una
+Tarea de otra Empresa nunca puede ser candidata y la Empresa no participa en el
+porcentaje. Si ambas Tareas tienen dimensión organizacional definida, solo se
+comparan cuando comparten el mismo tipo y referencia: `LOCAL` con el mismo
+`Local`, o `DEPARTAMENTO` con el mismo `Departamento`. `LOCAL` y
+`DEPARTAMENTO` nunca se comparan entre sí. Las Tareas históricas sin dimensión,
+creadas antes de T093, no se descartan automáticamente: pueden compararse por
+texto dentro de la misma Empresa. Si solo una de las dos Tareas tiene dimensión,
+la comparación también puede realizarse por texto dentro de la misma Empresa.
+
+El score V1 representa semejanza del problema y usa únicamente `titulo` y
+`descripcion`. Cada valor se normaliza con `casefold`, `strip` y espacios
+múltiples antes de compararlo; los valores vacíos se normalizan de forma segura.
+El algoritmo es `difflib.SequenceMatcher` de la biblioteca estándar, sin nuevas
+dependencias:
+
+```text
+score_titulo = similitud(titulo, titulo_candidata)
+score_descripcion = similitud(descripcion, descripcion_candidata)
+score_final = score_titulo * 0.60 + score_descripcion * 0.40
+porcentaje = round(score_final * 100, 2)
+```
+
+Prioridad, estado, responsable, creador, fechas, Local y Departamento no
+alteran el porcentaje; solo estado, Empresa y ámbito participan en la selección
+contextual. Una coincidencia textual alta no equivale por sí misma a
+`MISMO_PROBLEMA`: la decisión humana debe distinguir, entre otros casos, un
+cambio de repuesto o una intervención diferente.
+
+El servicio de dominio debe exponer operaciones equivalentes a:
+
+```text
+evaluate_task_similarity(*, tarea, threshold)
+confirm_similarity(*, evaluacion, decision, actor)
+```
+
+`evaluate_task_similarity` valida la Empresa, obtiene y filtra candidatas,
+calcula y persiste una evaluación por pareja, y devuelve las coincidencias
+ordenadas por `porcentaje` descendente y luego por identificador de candidata
+ascendente. `threshold` es un argumento explícito; T056 no crea
+`UmbralSimilitudEmpresa`. `confirm_similarity` registra la decisión y el actor;
+solo una evaluación de una misma Tarea puede establecer el origen canónico
+directo `tarea_origen`.
+
+La evaluación ocurre antes o durante la publicación: primero se persisten las
+evaluaciones relevantes, luego se advierte si alguna supera el umbral y la UI
+posterior solicita la decisión. Una coincidencia nunca bloquea la creación ni
+transforma la Tarea nueva en la candidata.
+
+Con `MISMO_PROBLEMA`, la nueva Tarea sigue siendo independiente, la candidata
+permanece exactamente en su estado actual y nunca se reabre ni se reactiva una
+Tarea `CERRADA`; puede establecerse `tarea_origen` hacia esa candidata si la
+nueva Tarea aún no tiene `todo_origen` ni otro `tarea_origen`. Con
+`DISTINTO_PROBLEMA`, no se establece `tarea_origen` y la evaluación queda como
+trazabilidad. Varias evaluaciones pueden marcarse como `MISMO_PROBLEMA`, pero
+solo una puede convertirse en origen canónico; las demás permanecen como
+referencias de similitud.
+
+T056 conserva una evaluación vigente por pareja `(tarea, tarea_candidata)` y no
+define historial de reevaluaciones; la pareja es única. Los cambios de umbral de
+T057 solo afectan evaluaciones nuevas. T060 es responsable de templates,
+advertencia y confirmación; T056 no crea UI ni nuevas rutas.
+
+### Contrato de umbral T057
+
+`UmbralSimilitudEmpresa` mantiene como máximo una configuración por Empresa,
+mediante una relación `OneToOneField` obligatoria y `on_delete=PROTECT`. El
+porcentaje persistido es un `DecimalField(max_digits=5, decimal_places=2)` y
+debe cumplir `0.00 <= porcentaje <= 100.00`; no existe un mínimo práctico
+adicional.
+
+El valor funcional predeterminado es `Decimal("80.00")`. Si una Empresa no
+tiene fila persistida, `get_similarity_threshold(empresa)` devuelve
+`Decimal("80.00")` como fallback virtual y no crea ni modifica datos. La
+consulta del getter es de solo lectura. El default funcional no obliga a un
+default de base de datos ni a crear filas automáticamente.
+
+La fila solo se materializa cuando un usuario autorizado modifica explícitamente
+el umbral mediante una operación equivalente a:
+
+```text
+set_similarity_threshold(*, empresa, porcentaje, actor)
+```
+
+El setter valida el rango, crea la fila si no existe o actualiza la existente,
+registra `actualizado_por` y `actualizado_at`, y no recalcula evaluaciones ya
+persistidas. La autorización funcional usa VICMEAS con
+`vista_nombre="Configuración - Configuracion de Empresa"` y
+`permiso_requerido="modificar"`; no se crea una Vista nueva ni un sistema de
+permisos paralelo. La aplicación HTTP/UI de esa autorización queda para el
+flujo que corresponda.
+
+La integración con T056 obtiene el valor efectivo y lo pasa al servicio
+existente, sin duplicar el cálculo:
+
+```text
+threshold = get_similarity_threshold(tarea.empresa)
+evaluate_task_similarity(tarea=tarea, threshold=threshold)
+```
+
+Cambiar el umbral, por ejemplo de `80.00` a `75.00`, solo afecta evaluaciones
+posteriores. Las instancias existentes de `EvaluacionSimilitud` conservan
+`porcentaje`, `umbral_aplicado`, `supera_umbral`, `decision`,
+`confirmada_por` y `confirmada_at`; no se recalculan automáticamente.
+
+T057 implementa únicamente modelo, servicio y tests. No crea templates, forms,
+views, URLs ni sidebar; T060 conserva la responsabilidad de la UI de
+similitud. No se usan signals, seeds obligatorios, creación automática por
+lectura ni migración masiva de datos.
 
 ## S. TO-DO y Origen Canónico
 
@@ -436,11 +666,65 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 	usando VICMEAS según la acción (`ingresar`, `crear`, `modificar`, `eliminar`,
 	`autorizar` o `supervisor`), con 403 y solicitud de acceso cuando corresponda;
 	`V` no sustituye autorización funcional y V/I son independientes.
-- **FR-P03**: Enlaces compartibles: enlace parametrizado a tarea/hito, solo para usuario autenticado del sistema, acceso en lectura cuando corresponda, registro de notificación/acceso, respetando VICMEAS y seguridad existente.
+- **FR-P03**: Enlaces compartibles V1: enlace parametrizado exclusivamente a una Tarea, solo para un usuario autenticado del sistema, con acceso específico de lectura, registro de notificación/acceso y aislamiento multiempresa. El enlace no concede un `Permiso` VICMEAS general ni acceso a otras Tareas.
 - **FR-P04**: Visibilidad según rol/participación del usuario.
 - **FR-P05**: Sin usuarios externos por ahora (ver R).
 
-**Key Entities — P**: (se apoya en access_control; enlace compartible parametrizado).
+### Contrato cerrado de enlaces T058
+
+`EnlaceTarea` tiene un único `destinatario` `User` interno y obligatorio. Para
+compartir una Tarea con varios usuarios se crea un enlace independiente por
+destinatario. No existen enlaces públicos, acceso anónimo ni usuarios externos.
+
+La Empresa efectiva siempre es `enlace.tarea.empresa`; no se duplica en el
+enlace. Crear, abrir, revocar y resolver un enlace deben validar que la Empresa
+activa de la sesión coincide con `enlace.tarea.empresa_id` y que el destinatario
+es válido para esa Empresa mediante el mecanismo canónico existente. Nunca se
+permite acceso cross-empresa.
+
+El enlace usa un token multiuso generado con `secrets.token_urlsafe(32)`. Solo
+se entrega el token plano al crearlo; se persiste `SHA-256(token)` en
+`token_hash`. El token no es la PK y no se reutiliza el helper de activación de
+cuentas. `fecha_expiracion` es obligatoria y debe ser futura al crear el enlace;
+T058 no define una duración automática.
+
+El enlace permanece multiuso mientras no esté expirado ni revocado y el usuario
+y la Empresa sean válidos. La revocación registra `revocado_at` y
+`revocado_por`, conserva el registro para auditoría y rechaza accesos
+posteriores. No se consume tras el primer acceso.
+
+Abrir un enlace requiere autenticación mediante `login_required`, conservando
+`next` según el flujo estándar de Django. Después del login,
+`request.user` debe coincidir exactamente con `enlace.destinatario`. El enlace
+constituye una autorización específica de lectura de esa Tarea; no crea ni
+modifica `access_control.Permiso`, `TareaParticipante` ni otra autorización
+VICMEAS persistente. No permite modificar, publicar, gestionar, cerrar, anular
+ni acceder a otras Tareas.
+
+Crear y revocar usan VICMEAS sobre la Vista existente `Tareas` con permiso
+`modificar`. Abrir un enlace no requiere un permiso VICMEAS general adicional,
+pero sí autenticación, token válido, destinatario exacto, Empresa activa,
+vigencia y ausencia de revocación. No se crea una Vista nueva.
+
+Al crear exitosamente un enlace se notifica únicamente al destinatario por
+in-app y email automático de sistema, reutilizando `notificaciones` y
+`acounts` con `purpose="notifications"`. El contenido incluye Tarea, quién
+comparte, Empresa, expiración y URL interna. No se notifica en cada acceso ni
+al revocar. Las notificaciones son efectos secundarios: sus fallos se registran
+sin revertir el enlace ni crear retries o colas.
+
+Cada acceso con enlace existente crea un `EventoAccesoEnlace`. Los intentos
+con token inexistente no crean filas huérfanas; se registran mediante logging o
+la auditoría HTTP vigente cuando corresponda. La auditoría global permanece
+separada.
+
+T058 V1 no enlaza Hitos de forma independiente. Si se requiere compartir un
+Hito como objeto independiente, debe definirse el contrato separado
+`T058_HITO_LINK_NEEDS_SEPARATE_CONTRACT`; no se usará `GenericForeignKey`.
+
+**Key Entities — P**: `EnlaceTarea`, `EventoAccesoEnlace` y autorización
+específica de lectura por destinatario, apoyados en `access_control`, sesión,
+notificaciones y email existentes.
 
 ---
 

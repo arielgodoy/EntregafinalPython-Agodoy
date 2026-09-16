@@ -58,6 +58,50 @@ AND Tarea.tarea_origen IS NOT NULL
 
 Referencias históricas o de similitud pueden ser múltiples, pero no son origen canónico. Tampoco lo son `TareaRelacion` padre/hija/nieta, clonación ni trabajo en equipo.
 
+### `EvaluacionSimilitud`
+
+Entidad persistente de una comparación entre una Tarea nueva/candidata
+(`tarea`) y una Tarea histórica válida (`tarea_candidata`). Una Tarea puede
+tener múltiples evaluaciones, una por candidata concreta. No se usa una
+relación M2M opaca ni se crean relaciones automáticas a todas las coincidencias.
+
+| Campo | Tipo Django | Nulable | Default | Reglas |
+|---|---|---:|---|---|
+| `id` | BigAutoField (PK) | no | auto | Identidad propia. |
+| `tarea` | ForeignKey(`Tarea`) | no | — | Tarea nueva evaluada; `on_delete=PROTECT`. |
+| `tarea_candidata` | ForeignKey(`Tarea`) | no | — | Candidata histórica; `on_delete=PROTECT`; no puede ser la misma Tarea. |
+| `porcentaje` | DecimalField(max_digits=5, decimal_places=2) | no | — | Rango `0.00..100.00`; score V1 de título 60% y descripción 40%. |
+| `umbral_aplicado` | DecimalField(max_digits=5, decimal_places=2) | no | — | Rango `0.00..100.00`; valor suministrado por el servicio, sin configuración propia. |
+| `supera_umbral` | BooleanField | no | — | Resultado persistido de `porcentaje >= umbral_aplicado`. |
+| `decision` | CharField con choices | no | `PENDIENTE` | Choices: `PENDIENTE`, `MISMO_PROBLEMA`, `DISTINTO_PROBLEMA`. |
+| `confirmada_por` | ForeignKey(User) | sí | `None` | Nullable mientras `decision=PENDIENTE`; actor de la decisión humana. `on_delete=PROTECT`. |
+| `confirmada_at` | DateTimeField | sí | `None` | Nullable mientras `decision=PENDIENTE`; fecha/hora de confirmación. |
+| `created_at` | DateTimeField(auto_now_add=True) | no | auto | Auditoría de creación. |
+
+Reglas adicionales:
+
+- `tarea.empresa_id` y `tarea_candidata.empresa_id` deben coincidir.
+- La candidata debe estar en `ACTIVA`, `GESTION`,
+  `PENDIENTE_APROBACION_CIERRE` o `CERRADA`.
+- Se excluyen candidatas `BORRADOR`, candidatas con `anulada=True` y la propia
+  Tarea evaluada.
+- Si ambas Tareas tienen ámbito, deben coincidir en tipo y referencia; no se
+  compara `LOCAL` contra `DEPARTAMENTO`.
+- Las Tareas históricas sin ámbito pueden participar por texto dentro de la
+  misma Empresa para preservar compatibilidad con registros anteriores a T093.
+- `UniqueConstraint(fields=("tarea", "tarea_candidata"))` impide duplicar la
+  evaluación vigente de una pareja. T056 no conserva historial de
+  reevaluaciones; una futura necesidad de reevaluación histórica requiere una
+  ampliación contractual separada.
+- La confirmación `MISMO_PROBLEMA` no modifica la candidata. Solo una evaluación
+  por Tarea puede establecer `tarea_origen`; cualquier otra evaluación queda como
+  referencia de similitud.
+
+El score V1 se calcula con `difflib.SequenceMatcher` sobre `titulo` y
+`descripcion` normalizados (`casefold`, `strip`, espacios múltiples), con
+ponderación 60%/40% y redondeo a dos decimales. Prioridad, estado, responsable,
+creador, fechas y dimensiones organizacionales no forman parte del score.
+
 TO-DO es el asunto aún no formalizado como Tarea y puede existir sin `fecha_tope`. Una Tarea solo puede carecer técnicamente de `fecha_tope` mientras está en `BORRADOR` y edición; una Tarea publicada/operativa siempre debe tenerla.
 
 ### Auditoría mínima de TO-DO
@@ -134,12 +178,30 @@ Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el u
 
 ## Phase 2 boundary decisions
 
-- Departamento: pendiente de definición exacta; no se determina aún si será modelo propio,
-  referencia existente o código/string, ni su obligatoriedad, relación con Empresa o constraints.
-  No entra como campo de la migración Phase 2.
+- `Local` y `Departamento` tienen arquitectura canónica aprobada en la futura
+  `APPLICATION_APP` transversal `organizacion`; esta app todavía no existe y
+  no se implementa en esta feature.
+- `Local` será un modelo Django canónico con PK interna, FK obligatoria a
+  `Empresa` (`on_delete=PROTECT`), `codigo` funcional único por Empresa,
+  `nombre`, `activo`, `legacy_code` nullable separado, `source` y timestamps.
+  El ERP legacy (`g_maestroempresas`, expuesto actualmente por `api`) será la
+  fuente externa inicial mediante sincronización futura; `legacy_code` nunca
+  será PK ni FK de dominio.
+- `Departamento` será un modelo Django canónico con PK interna, FK obligatoria
+  a `Empresa` (`on_delete=PROTECT`), `codigo` funcional único por Empresa,
+  `nombre`, `activo`, `source` y timestamps. Su fuente inicial será el catálogo
+  local de `organizacion`; no tendrá FK obligatoria a `Local` ni `legacy_code`
+  mientras no exista una fuente externa definida.
+- `Local` y `Departamento` son dimensiones alternativas de Empresa. No se
+  inventa una jerarquía `Local -> Departamento`.
+- La futura implementación de `organizacion`, su registro global y su
+  sincronización ERP requieren una task y autorización separadas. No entran en
+  la migración Phase 2 ni habilitan cambios en `api` desde esta feature.
 - Equipo/Activo: pendiente de definición exacta; no se determina aún modelo, código, relación
   con Empresa, nulabilidad o constraints. No entra como campo de la migración Phase 2.
-- Local sigue bloqueado por P1 y no se confunde con Departamento.
+- Tarea y las demás APPLICATION_APPS sólo podrán consumir FKs, catálogos y
+  validaciones públicas de `organizacion`; no podrán consultar SQL legacy,
+  duplicar maestros ni modificar sincronización.
 
 ### Fechas pendientes tras reactivación
 
@@ -278,12 +340,171 @@ Los nombres son contratos de dominio y no autorizan modificar apps externas.
 
 ### Colaboración y analítica
 
-- `ReunionRevision` y `ReunionTarea`: modalidad, agenda, prioridades, convocatoria y comentario.
+#### `ReunionRevision`
+
+Entidad de una convocatoria de revisión dentro de una Empresa. La reunión se
+crea junto con una Tarea planificada obligatoria que representa la reunión
+misma; las tareas revisadas se relacionan mediante `ReunionTarea` y no
+reemplazan esa Tarea planificada.
+
+| Campo | Tipo Django | `null` | `blank` | Default | Reglas / relaciones |
+|---|---|---:|---:|---|---|
+| `id` | `BigAutoField` (PK) | no | no | auto | Identidad propia. |
+| `empresa` | `ForeignKey(Empresa)` | no | no | — | `on_delete=PROTECT`; se asigna desde la Empresa activa, no desde el request. |
+| `titulo` | `CharField(max_length=200)` | no | no | — | Nombre breve de la reunión. |
+| `descripcion` | `TextField` | no | sí | `""` | Objetivo o contexto de la revisión. |
+| `fecha_hora_programada` | `DateTimeField` | no | no | — | Fecha y hora de la convocatoria. |
+| `modalidad` | `CharField` con choices | no | no | — | Sólo `ZOOM` o `PRESENCIAL`; valores derivados de FR-M03. |
+| `lugar_o_enlace` | `CharField(max_length=500)` | sí | sí | `None` | Lugar para `PRESENCIAL` o enlace Zoom para `ZOOM`. |
+| `tipo_ambito` | `CharField` con choices | no | no | — | Sólo `LOCAL` o `DEPARTAMENTO`. Define la dimensión homogénea de la reunión. |
+| `local` | `ForeignKey(Local)` | sí | sí | `None` | `on_delete=PROTECT`; obligatorio sólo cuando `tipo_ambito=LOCAL`. Requiere el modelo/relación Local autorizado por P1. |
+| `departamento` | `ForeignKey(Departamento)` | sí | sí | `None` | `on_delete=PROTECT`; obligatorio sólo cuando `tipo_ambito=DEPARTAMENTO`. Requiere el modelo/relación Departamento autorizado por P1. |
+| `tarea_planificada` | `OneToOneField(Tarea)` | no | no | — | `on_delete=PROTECT`; Tarea que representa la reunión planificada. Debe pertenecer a la misma Empresa. |
+| `creada_por` | `ForeignKey(User)` | no | no | — | `on_delete=PROTECT`; usuario que crea la convocatoria. |
+| `estado` | `CharField` con choices | no | no | `PLANIFICADA` | Sólo `PLANIFICADA` y `REALIZADA`; `REALIZADA` se fija al cerrar la reunión. No se agrega cancelación porque no está definida en FR-M01..FR-M07. |
+| `convocada_at` | `DateTimeField` | sí | sí | `None` | `None` significa nunca convocada; fecha significa convocada al menos una vez. No crea historial en T055. |
+| `created_at` | `DateTimeField(auto_now_add=True)` | no | no | auto | Auditoría de creación. |
+| `updated_at` | `DateTimeField(auto_now=True)` | no | no | auto | Auditoría de modificación. |
+
+La creación de `ReunionRevision`, su Tarea planificada y sus relaciones de
+agenda debe ser una operación atómica. La reunión no es una entidad
+independiente de la tarea planificada: FR-M05 fija la interpretación B (toda
+reunión crea obligatoriamente una Tarea asociada). La Tarea planificada no se
+confunde con ninguna tarea incluida en la revisión.
+
+El ámbito es XOR: con `tipo_ambito=LOCAL`, `local` es obligatorio y
+`departamento` debe ser NULL; con `tipo_ambito=DEPARTAMENTO`, `departamento`
+es obligatorio y `local` debe ser NULL. Nunca se permiten ambos ni ninguno.
+La Empresa del ámbito debe coincidir con `empresa`.
+
+#### `ReunionTarea`
+
+Entidad intermedia que representa una tarea incluida en el subconjunto y en la
+agenda de una reunión.
+
+| Campo | Tipo Django | `null` | `blank` | Default | Reglas / relaciones |
+|---|---|---:|---:|---|---|
+| `id` | `BigAutoField` (PK) | no | no | auto | Identidad propia. |
+| `reunion` | `ForeignKey(ReunionRevision)` | no | no | — | `on_delete=CASCADE`; relación obligatoria con la reunión. |
+| `tarea` | `ForeignKey(Tarea)` | no | no | — | `on_delete=PROTECT`; debe pertenecer a la misma Empresa que la reunión. |
+| `orden` | `PositiveIntegerField` | no | no | — | Posición manual de agenda, única dentro de la reunión. Debe respetar prioridad descendente de Tarea; empates de prioridad se resuelven con este orden. No se crea un modelo `Agenda`. |
+| `comentario_revision` | `TextField` | no | sí | `""` | Comentario de revisión asociado a esta reunión y tarea. |
+| `comentario_cierre` | `TextField` | no | sí | `""` | Comentario registrado al cerrar la reunión para esta tarea. |
+| `created_at` | `DateTimeField(auto_now_add=True)` | no | no | auto | Auditoría de inclusión. |
+
+Reglas de `ReunionTarea`:
+
+- `UniqueConstraint(fields=("reunion", "tarea"))`: una tarea no se repite en
+  la misma reunión.
+- `UniqueConstraint(fields=("reunion", "orden"))`: cada posición de agenda
+  es única dentro de la reunión.
+- Una Tarea puede aparecer en múltiples reuniones distintas.
+- La agenda se ordena por prioridad descendente (`CRITICA`, `URGENTE`,
+  `NORMAL`, `SIMPLE`) y, dentro de cada prioridad, por `orden` ascendente.
+- El servicio debe rechazar una agenda cuyo orden manual contradiga ese
+  agrupamiento de prioridades.
+- El cierre de la reunión exige registrar `comentario_cierre` por cada tarea
+  incluida en la agenda. Estos comentarios pertenecen al contexto de la
+  reunión y no crean ni sustituyen un sistema global de comentarios de Tarea.
+
+Todas las `ReunionTarea` deben pertenecer a la Empresa de la reunión y al
+mismo ámbito: mismo `local` cuando `tipo_ambito=LOCAL`, o mismo
+`departamento` cuando `tipo_ambito=DEPARTAMENTO`. No se exige igual
+responsable, prioridad ni clasificación. La agenda puede mezclar prioridades,
+pero se ordena en descendente y luego por `orden` ascendente.
+
+#### `ReunionParticipante`
+
+| Campo | Tipo Django | `null` | `blank` | Default | Reglas / relaciones |
+|---|---|---:|---:|---|---|
+| `id` | `BigAutoField` (PK) | no | no | auto | Identidad propia. |
+| `reunion` | `ForeignKey(ReunionRevision)` | no | no | — | `on_delete=CASCADE`; una reunión tiene cero o más convocados explícitos. |
+| `usuario` | `ForeignKey(User)` | no | no | — | `on_delete=PROTECT`; debe ser usuario válido del contexto de Empresa permitido por el sistema. |
+| `created_at` | `DateTimeField(auto_now_add=True)` | no | no | auto | Auditoría de inclusión. |
+
+`UniqueConstraint(fields=("reunion", "usuario"))` impide repetir un usuario
+en la misma reunión. La relación no hereda automáticamente
+`TareaParticipante` ni agrega roles, asistencia, confirmación, estados o
+permisos propios.
+
+#### Convocatoria
+
+Crear o editar una reunión no convoca. La acción explícita `CONVOCAR` procesa
+cada `ReunionParticipante` válido y genera una notificación in-app y un email
+automático de sistema. Usa los adaptadores existentes de `tareas`, la Empresa
+de la reunión y `purpose="notifications"`; no usa SMTP de usuario/perfil ni
+modifica CORE/emailing. El contenido mínimo incluye título, fecha/hora,
+modalidad, lugar o enlace, enlace interno a la reunión cuando exista y
+Empresa/contexto.
+
+Si `convocada_at` no es NULL, `CONVOCAR` no se repite accidentalmente. Guardar
+cambios después de convocar no reenvía: editar no equivale a convocar. Una
+futura actualización de convocatoria queda fuera de T055.
+
+#### Dependencia de implementación organizacional
+
+La arquitectura de referencia para el ámbito de reuniones está resuelta, pero
+su implementación aún no existe. T055 queda pendiente de una task separada
+que cree `organizacion.Local` y `organizacion.Departamento`; T055 no debe
+inventar FKs a entidades inexistentes, códigos legacy, `CharField` de ámbito,
+`IntegerField` de referencia ni `GenericForeignKey`.
+
+Una vez implementado el dominio canónico, `ReunionRevision` podrá referenciar
+`organizacion.Local` o `organizacion.Departamento` mediante FKs nullable y
+validación XOR, exigiendo que el ámbito pertenezca a la misma Empresa de la
+reunión. Las `ReunionTarea` deberán coincidir con ese ámbito cuando `Tarea`
+disponga de la dimensión organizacional correspondiente.
 - `TareaOrigen`: tarea nueva, tarea origen y usuario/fecha de derivación.
-- `EvaluacionSimilitud`: tareas, porcentaje, umbral aplicado, confirmación y fecha; incluye cerradas.
-- `UmbralSimilitudEmpresa`: empresa, default 80%, usuario/fecha y vigencia para nuevas evaluaciones.
-- `EnlaceTarea` y `EventoAccesoEnlace`: identificador, tarea/hito, vigencia, usuario, empresa,
-  resultado y auditoría; el acceso exige autenticación, empresa activa y VICMEAS.
+- `EvaluacionSimilitud`: comparación persistente entre `tarea` y
+  `tarea_candidata`, porcentaje V1, umbral aplicado, `supera_umbral`, decisión,
+  actor/fecha de confirmación y fecha de creación; incluye candidatas cerradas.
+- `UmbralSimilitudEmpresa`: configuración empresarial única del umbral de similitud.
+  Su estructura contractual es:
+  - `id`: `BigAutoField` autoincremental.
+  - `empresa`: `OneToOneField(Empresa, on_delete=PROTECT)`, obligatorio.
+  - `porcentaje`: `DecimalField(max_digits=5, decimal_places=2)`, obligatorio,
+    con rango `0.00..100.00`.
+  - `actualizado_por`: `ForeignKey(User, on_delete=PROTECT)`, obligatorio para
+    toda fila materializada por un cambio explícito autorizado.
+  - `actualizado_at`: `DateTimeField`, obligatorio y actualizado en cada cambio.
+
+  El default funcional es `Decimal("80.00")`, pero no es necesario materializar
+  una fila default. Si no existe fila para una Empresa, el getter
+  `get_similarity_threshold(empresa)` devuelve `Decimal("80.00")` mediante
+  fallback virtual, sin escribir en la base de datos. La fila se crea o
+  actualiza únicamente mediante `set_similarity_threshold(*, empresa,
+  porcentaje, actor)` tras validar el rango y registrar actor/fecha. El cambio
+  solo rige para evaluaciones futuras; no modifica ni recalcula
+  `EvaluacionSimilitud` existentes. La autorización usa VICMEAS sobre
+  `Configuración - Configuracion de Empresa` con `modificar`. No se agregan
+  otros campos, signals ni creación automática por lectura.
+- `EnlaceTarea`: enlace V1 exclusivamente a `Tarea`, con los campos:
+  - `tarea`: FK obligatoria a `Tarea`, `on_delete=CASCADE`.
+  - `destinatario`: FK obligatoria a `auth.User`, `on_delete=PROTECT`.
+  - `creado_por`: FK obligatoria a `auth.User`, `on_delete=PROTECT`, con
+    `related_name` diferenciado.
+  - `token_hash`: `CharField(max_length=64, unique=True)` obligatorio; contiene
+    únicamente SHA-256 del token URL-safe generado con `secrets.token_urlsafe(32)`.
+  - `fecha_creacion`: `DateTimeField(auto_now_add=True)`.
+  - `fecha_expiracion`: `DateTimeField` obligatorio y futuro al crear.
+  - `revocado_at`: `DateTimeField(null=True, blank=True)`.
+  - `revocado_por`: FK nullable a `auth.User`, `on_delete=SET_NULL`.
+  No tiene Empresa duplicada, permiso VICMEAS persistente, token plano, contador
+  de accesos ni uso único. Es multiuso hasta expirar o revocarse.
+- `EventoAccesoEnlace`: evento de auditoría por acceso a un enlace existente,
+  con los campos:
+  - `enlace`: FK obligatoria a `EnlaceTarea`, `on_delete=CASCADE`.
+  - `usuario`: FK nullable a `auth.User`, `on_delete=SET_NULL`.
+  - `fecha`: `DateTimeField(auto_now_add=True)`.
+  - `resultado`: choices `ACCESO_OK`, `RECHAZADO_USUARIO`,
+    `RECHAZADO_EMPRESA`, `RECHAZADO_EXPIRADO`, `RECHAZADO_REVOCADO` y
+    `RECHAZADO_TOKEN_INVALIDO`.
+  No agrega IP ni User-Agent en T058. Un token inexistente no crea una fila,
+  por lo que `RECHAZADO_TOKEN_INVALIDO` solo aplica cuando exista contexto de
+  enlace. La Empresa se deriva de `enlace.tarea.empresa`; no se duplica.
+- El acceso exige autenticación, destinatario exacto, Empresa activa coincidente,
+  token vigente y ausencia de revocación. El enlace autoriza únicamente lectura
+  de su Tarea y no altera VICMEAS ni crea `TareaParticipante`.
 
 Las notificaciones se refieren a la infraestructura existente de `notificaciones` y email de
 `acounts`; no se duplica su modelo.
@@ -315,6 +536,51 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
   Las fechas afectadas quedan pendientes de confirmación sin recálculo automático.
 - Estados, reasignaciones, cierres, documentos, cotizaciones y accesos generan auditoría.
 - Todo texto visible nuevo lleva `data-key`; no se editan diccionarios globales silenciosamente.
+
+## Contrato de datos para T059
+
+La población operativa de los ocho KPI excluye Tareas con `estado=BORRADOR` o
+`anulada=True`. Los estados publicados considerados son `ACTIVA`, `GESTION`,
+`PENDIENTE_APROBACION_CIERRE` y `CERRADA`. Cada fila de `Tarea` cuenta como una
+unidad, sin colapsar relaciones padre/hija/nieta y sin sumar Hitos como Tareas.
+La fecha de referencia para estado actual es `timezone.localdate()`.
+
+Las fórmulas contractuales son:
+
+- Total por estado: conteo actual por cada estado publicado.
+- Atrasadas: `ACTIVA`, `GESTION` o `PENDIENTE_APROBACION_CIERRE`, con
+  `fecha_tope < fecha_referencia`, `fecha_tope` no nula y
+  `fecha_cumplimiento IS NULL`.
+- Próximas a vencer: mismos estados abiertos, sin `fecha_cumplimiento`, con
+  `fecha_tope` entre la fecha de referencia y siete días calendario después,
+  inclusive; no incluye vencidas.
+- Sin movimiento: estado abierto no anulado y último movimiento igual o anterior
+  a `now() - 7 días`.
+- Esperando aprobación: `estado=PENDIENTE_APROBACION_CIERRE`, una vez por Tarea.
+- Carga abierta: conteo de Tareas abiertas no anuladas agrupadas por
+  `Tarea.responsable`; no pondera prioridad ni incluye participantes, roles ni Hitos.
+- Porcentaje de cumplimiento: `CERRADA / total_publicadas * 100`, con `0.00` si
+  el denominador es cero y redondeo a dos decimales.
+- Tiempo promedio de cierre: promedio en horas calendario de
+  `fecha_cumplimiento - fecha_publicacion` para Tareas cerradas no anuladas con
+  ambas fechas.
+
+Para `sin movimiento`, el modelo actual no tiene modificación propia de Tarea.
+El timestamp base es `Tarea.fecha_publicacion`; se toma el máximo disponible entre
+ese valor, `TareaTransicion.timestamp`, `HitoHistorial.fecha` y
+`DocumentoHistorial.fecha` asociado a documentos de la Tarea. La creación de un
+`DocumentoTarea` sin historial adicional no aporta un timestamp inventado. No se
+usan `TareaLectura`, apertura de `EnlaceTarea`, dashboards ni notificaciones, y no
+se crea un campo `ultima_actividad`.
+
+El dashboard personal consulta `Tarea.responsable`,
+`TareaParticipante` y `Hito.responsable` dentro de la Empresa activa. Los Hitos
+no anulados pueden aportar actividad a `sin movimiento`, pero nunca se agregan como
+Tareas ni alteran `carga abierta por responsable`. El avance de Hitos sigue siendo
+distinto del porcentaje de cumplimiento del dashboard.
+
+T059 no persiste snapshots, agregados ni cache; los KPI se calculan bajo demanda
+mediante ORM y las relaciones existentes.
 
 ## Índices
 

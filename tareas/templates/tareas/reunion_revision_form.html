@@ -1,0 +1,13 @@
+{% extends "partials/base.html" %}
+{% block title %}<span data-key="tareas.meetings.form_title">Reunión de revisión</span>{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Reunión de revisión" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block content %}
+<div class="main-content"><div class="page-content"><div class="container-fluid"><div class="card"><div class="card-body">
+    <h4><span data-key="tareas.meetings.form_title">Reunión de revisión</span></h4>
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    <form method="post">{% csrf_token %}{{ form.as_p }}
+        <button class="btn btn-primary" type="submit"><span data-key="tareas.actions.guardar">Guardar</span></button>
+        <a class="btn btn-secondary" href="{% url 'tareas:reunion_revision_lista' %}"><span data-key="tareas.actions.cancelar">Cancelar</span></a>
+    </form>
+</div></div></div></div></div>
+{% endblock content %}

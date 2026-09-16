@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -54,6 +55,10 @@ class Tarea(models.Model):
         URGENTE = "URGENTE", "URGENTE"
         CRITICA = "CRITICA", "CRITICA"
 
+    class Ambito(models.TextChoices):
+        LOCAL = "LOCAL", "LOCAL"
+        DEPARTAMENTO = "DEPARTAMENTO", "DEPARTAMENTO"
+
     titulo = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True, default="")
     prioridad = models.CharField(
@@ -81,6 +86,26 @@ class Tarea(models.Model):
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
+        related_name="tareas",
+    )
+    tipo_ambito = models.CharField(
+        max_length=12,
+        choices=Ambito.choices,
+        null=True,
+        blank=True,
+    )
+    local = models.ForeignKey(
+        "organizacion.Local",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas",
+    )
+    departamento = models.ForeignKey(
+        "organizacion.Departamento",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="tareas",
     )
     creada_por = models.ForeignKey(
@@ -123,6 +148,31 @@ class Tarea(models.Model):
                 condition=models.Q(todo_origen__isnull=True)
                 | models.Q(tarea_origen__isnull=True),
                 name="tareas_unico_origen_canonico",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        tipo_ambito__isnull=True,
+                        local__isnull=True,
+                        departamento__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_ambito="",
+                        local__isnull=True,
+                        departamento__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_ambito="LOCAL",
+                        local__isnull=False,
+                        departamento__isnull=True,
+                    )
+                    | models.Q(
+                        tipo_ambito="DEPARTAMENTO",
+                        local__isnull=True,
+                        departamento__isnull=False,
+                    )
+                ),
+                name="tareas_ambito_xor",
             ),
         ]
 
@@ -170,6 +220,38 @@ class Tarea(models.Model):
             errores["todo_origen"] = "El TO-DO de origen debe pertenecer a la misma empresa."
         if self.tarea_origen_id and self.empresa_id != self.tarea_origen.empresa_id:
             errores["tarea_origen"] = "La tarea de origen debe pertenecer a la misma empresa."
+
+        if self.tipo_ambito in (None, ""):
+            if self.local_id:
+                errores["tipo_ambito"] = (
+                    "Una dimensión Local requiere tipo_ambito=LOCAL."
+                )
+            if self.departamento_id:
+                errores["tipo_ambito"] = (
+                    "Una dimensión Departamento requiere tipo_ambito=DEPARTAMENTO."
+                )
+        elif self.tipo_ambito == self.Ambito.LOCAL:
+            if not self.local_id:
+                errores["local"] = "El ámbito LOCAL requiere un Local."
+            if self.departamento_id:
+                errores["departamento"] = (
+                    "El ámbito LOCAL no puede tener Departamento."
+                )
+        elif self.tipo_ambito == self.Ambito.DEPARTAMENTO:
+            if not self.departamento_id:
+                errores["departamento"] = "El ámbito DEPARTAMENTO requiere un Departamento."
+            if self.local_id:
+                errores["local"] = "El ámbito DEPARTAMENTO no puede tener Local."
+
+        if self.local_id and self.local.empresa_id != self.empresa_id:
+            errores["local"] = "El Local debe pertenecer a la misma empresa que la tarea."
+        if (
+            self.departamento_id
+            and self.departamento.empresa_id != self.empresa_id
+        ):
+            errores["departamento"] = (
+                "El Departamento debe pertenecer a la misma empresa que la tarea."
+            )
 
         if self.estado in {
             self.Estado.ACTIVA,
@@ -266,6 +348,205 @@ class Tarea(models.Model):
             accion_evento="PUBLICAR",
             usuario=usuario or self.creada_por,
         )
+
+
+class EvaluacionSimilitud(models.Model):
+    class Decision(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente"
+        MISMO_PROBLEMA = "MISMO_PROBLEMA", "Mismo problema"
+        DISTINTO_PROBLEMA = "DISTINTO_PROBLEMA", "Distinto problema"
+
+    tarea = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="evaluaciones_similitud",
+    )
+    tarea_candidata = models.ForeignKey(
+        Tarea,
+        on_delete=models.PROTECT,
+        related_name="evaluaciones_como_candidata",
+    )
+    porcentaje = models.DecimalField(max_digits=5, decimal_places=2)
+    umbral_aplicado = models.DecimalField(max_digits=5, decimal_places=2)
+    supera_umbral = models.BooleanField()
+    decision = models.CharField(
+        max_length=20,
+        choices=Decision.choices,
+        default=Decision.PENDIENTE,
+    )
+    confirmada_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="evaluaciones_similitud_confirmadas",
+    )
+    confirmada_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("tarea", "tarea_candidata"),
+                name="unique_evaluacion_similitud_pareja",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(tarea=models.F("tarea_candidata")),
+                name="evaluacion_similitud_tareas_distintas",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(porcentaje__gte=0, porcentaje__lte=100),
+                name="evaluacion_similitud_porcentaje_rango",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(umbral_aplicado__gte=0, umbral_aplicado__lte=100),
+                name="evaluacion_similitud_umbral_rango",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errores = {}
+        if self.tarea_id and self.tarea_candidata_id:
+            if self.tarea_id == self.tarea_candidata_id:
+                errores["tarea_candidata"] = "Una Tarea no puede compararse consigo misma."
+            if self.tarea.empresa_id != self.tarea_candidata.empresa_id:
+                errores["tarea_candidata"] = "Las Tareas deben pertenecer a la misma Empresa."
+        if self.porcentaje is not None and not 0 <= self.porcentaje <= 100:
+            errores["porcentaje"] = "El porcentaje debe estar entre 0 y 100."
+        if self.umbral_aplicado is not None and not 0 <= self.umbral_aplicado <= 100:
+            errores["umbral_aplicado"] = "El umbral debe estar entre 0 y 100."
+        if self.decision == self.Decision.PENDIENTE:
+            if self.confirmada_por_id or self.confirmada_at:
+                errores["decision"] = "Una evaluación pendiente no puede tener confirmación."
+        elif not self.confirmada_por_id or not self.confirmada_at:
+            errores["decision"] = "Una decisión confirmada requiere actor y fecha."
+        if errores:
+            raise ValidationError(errores)
+
+
+class UmbralSimilitudEmpresa(models.Model):
+    empresa = models.OneToOneField(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="umbral_similitud",
+    )
+    porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
+    )
+    actualizado_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="umbrales_similitud_actualizados",
+    )
+    actualizado_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(porcentaje__gte=0, porcentaje__lte=100),
+                name="umbral_similitud_empresa_porcentaje_rango",
+            ),
+        ]
+
+
+class ReunionRevision(models.Model):
+    class Modalidad(models.TextChoices):
+        ZOOM = "ZOOM", "ZOOM"
+        PRESENCIAL = "PRESENCIAL", "PRESENCIAL"
+
+    class TipoAmbito(models.TextChoices):
+        LOCAL = "LOCAL", "LOCAL"
+        DEPARTAMENTO = "DEPARTAMENTO", "DEPARTAMENTO"
+
+    class Estado(models.TextChoices):
+        PLANIFICADA = "PLANIFICADA", "PLANIFICADA"
+        REALIZADA = "REALIZADA", "REALIZADA"
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="reuniones_revision")
+    titulo = models.CharField(max_length=200)
+    descripcion = models.TextField(blank=True, default="")
+    fecha_hora_programada = models.DateTimeField()
+    modalidad = models.CharField(max_length=10, choices=Modalidad.choices)
+    lugar_o_enlace = models.CharField(max_length=500, null=True, blank=True)
+    tipo_ambito = models.CharField(max_length=12, choices=TipoAmbito.choices)
+    local = models.ForeignKey("organizacion.Local", on_delete=models.PROTECT, null=True, blank=True, related_name="reuniones_revision")
+    departamento = models.ForeignKey("organizacion.Departamento", on_delete=models.PROTECT, null=True, blank=True, related_name="reuniones_revision")
+    tarea_planificada = models.OneToOneField(Tarea, on_delete=models.PROTECT, related_name="reunion_revision")
+    creada_por = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reuniones_revision_creadas")
+    estado = models.CharField(max_length=11, choices=Estado.choices, default=Estado.PLANIFICADA)
+    convocada_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+        errores = {}
+        if self.tipo_ambito == self.TipoAmbito.LOCAL:
+            if not self.local_id:
+                errores["local"] = "El ámbito LOCAL requiere un Local."
+            if self.departamento_id:
+                errores["departamento"] = "El ámbito LOCAL no admite Departamento."
+        elif self.tipo_ambito == self.TipoAmbito.DEPARTAMENTO:
+            if not self.departamento_id:
+                errores["departamento"] = "El ámbito DEPARTAMENTO requiere un Departamento."
+            if self.local_id:
+                errores["local"] = "El ámbito DEPARTAMENTO no admite Local."
+        if self.local_id and self.local.empresa_id != self.empresa_id:
+            errores["local"] = "El Local debe pertenecer a la misma Empresa."
+        if self.departamento_id and self.departamento.empresa_id != self.empresa_id:
+            errores["departamento"] = "El Departamento debe pertenecer a la misma Empresa."
+        if self.tarea_planificada_id:
+            tarea = self.tarea_planificada
+            if tarea.empresa_id != self.empresa_id:
+                errores["tarea_planificada"] = "La Tarea planificada debe pertenecer a la misma Empresa."
+            if tarea.tipo_ambito != self.tipo_ambito or tarea.local_id != self.local_id or tarea.departamento_id != self.departamento_id:
+                errores["tarea_planificada"] = "La Tarea planificada debe tener el mismo ámbito."
+        if errores:
+            raise ValidationError(errores)
+
+
+class ReunionTarea(models.Model):
+    reunion = models.ForeignKey(ReunionRevision, on_delete=models.CASCADE, related_name="agenda")
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="reuniones_revision")
+    orden = models.PositiveIntegerField()
+    comentario_revision = models.TextField(blank=True, default="")
+    comentario_cierre = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("reunion", "tarea"), name="unique_reunion_revision_tarea"),
+            models.UniqueConstraint(fields=("reunion", "orden"), name="unique_reunion_revision_orden"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.reunion_id or not self.tarea_id:
+            return
+        reunion = self.reunion
+        tarea = self.tarea
+        if reunion.empresa_id != tarea.empresa_id:
+            raise ValidationError({"tarea": "La Tarea debe pertenecer a la misma Empresa."})
+        if reunion.tipo_ambito == ReunionRevision.TipoAmbito.LOCAL:
+            valid = tarea.tipo_ambito == Tarea.Ambito.LOCAL and tarea.local_id == reunion.local_id
+        else:
+            valid = tarea.tipo_ambito == Tarea.Ambito.DEPARTAMENTO and tarea.departamento_id == reunion.departamento_id
+        if not valid:
+            raise ValidationError({"tarea": "La Tarea debe coincidir con el ámbito de la reunión."})
+
+
+class ReunionParticipante(models.Model):
+    reunion = models.ForeignKey(ReunionRevision, on_delete=models.CASCADE, related_name="participantes")
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="reuniones_revision_participante")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("reunion", "usuario"), name="unique_reunion_revision_participante")
+        ]
 
     class FormatoArchivo(models.TextChoices):
         PDF = "PDF", "PDF"
@@ -843,6 +1124,55 @@ class TareaLectura(models.Model):
             ),
         ]
         indexes = [models.Index(fields=["tarea", "usuario", "leido"])]
+
+
+class EnlaceTarea(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.CASCADE, related_name="enlaces")
+    destinatario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="enlaces_tareas_recibidos",
+    )
+    creado_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="enlaces_tareas_creados",
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_expiracion = models.DateTimeField()
+    revocado_at = models.DateTimeField(null=True, blank=True)
+    revocado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="enlaces_tareas_revocados",
+    )
+
+
+class EventoAccesoEnlace(models.Model):
+    class Resultado(models.TextChoices):
+        ACCESO_OK = "ACCESO_OK", "ACCESO_OK"
+        RECHAZADO_USUARIO = "RECHAZADO_USUARIO", "RECHAZADO_USUARIO"
+        RECHAZADO_EMPRESA = "RECHAZADO_EMPRESA", "RECHAZADO_EMPRESA"
+        RECHAZADO_EXPIRADO = "RECHAZADO_EXPIRADO", "RECHAZADO_EXPIRADO"
+        RECHAZADO_REVOCADO = "RECHAZADO_REVOCADO", "RECHAZADO_REVOCADO"
+
+    enlace = models.ForeignKey(
+        EnlaceTarea,
+        on_delete=models.CASCADE,
+        related_name="eventos_acceso",
+    )
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="eventos_acceso_enlaces",
+    )
+    fecha = models.DateTimeField(auto_now_add=True)
+    resultado = models.CharField(max_length=24, choices=Resultado.choices)
 
 
 class TareaReasignacion(models.Model):

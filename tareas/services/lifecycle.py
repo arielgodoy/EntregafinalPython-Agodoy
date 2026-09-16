@@ -12,7 +12,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from tareas.services.closure import validate_closure_requirements
-from tareas.models import Tarea, TareaCierre, TareaTransicion
+from tareas.services.hierarchy import get_descendants
+from tareas.models import Tarea, TareaCierre, TareaParticipante, TareaTransicion
+from tareas.services.notifications import emit_task_event, task_recipients
 
 
 _ALLOWED = {
@@ -33,6 +35,24 @@ def _raise_si_anulada(tarea):
 
     if is_effectively_annulled(tarea):
         raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
+
+
+def _emit_hierarchy_event(tarea, usuario, event, title, body):
+    for affected_task in [tarea, *get_descendants(tarea)]:
+        emit_task_event(
+            tarea=affected_task,
+            event=event,
+            recipients=task_recipients(
+                affected_task,
+                actor=usuario,
+                include_creator=True,
+                include_responsible=True,
+                participant_roles=list(TareaParticipante.Rol),
+            ),
+            title=title,
+            body=body,
+            actor=usuario,
+        )
 
 
 def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
@@ -68,12 +88,26 @@ def complete_task(tarea, usuario):
         tarea.cierre_completado = True
         tarea.fecha_cumplimiento = timezone.now()
         tarea.save(update_fields=["cierre_completado", "fecha_cumplimiento"])
-        return transition_task(
+        transition = transition_task(
             tarea,
             Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
             usuario,
             "MARCAR_100",
         )
+    emit_task_event(
+        tarea=tarea,
+        event="solicitud_aprobacion_cierre",
+        recipients=task_recipients(
+            tarea,
+            actor=usuario,
+            participant_roles={TareaParticipante.Rol.AUTORIZADOR},
+            fallback_creator=True,
+        ),
+        title="Solicitud de aprobación de cierre",
+        body="La tarea está pendiente de aprobación de cierre.",
+        actor=usuario,
+    )
+    return transition
 
 
 def approve_closure(tarea, usuario, comentario=""):
@@ -95,6 +129,19 @@ def approve_closure(tarea, usuario, comentario=""):
             resultado=TareaCierre.Resultado.APROBADO,
             comentario=comentario,
         )
+    emit_task_event(
+        tarea=tarea,
+        event="aprobacion_cierre",
+        recipients=task_recipients(
+            tarea,
+            actor=usuario,
+            include_creator=True,
+            include_responsible=True,
+        ),
+        title="Cierre de tarea aprobado",
+        body="El cierre de la tarea fue aprobado.",
+        actor=usuario,
+    )
     return transition
 
 
@@ -117,6 +164,19 @@ def reject_closure(tarea, usuario, comentario=""):
             resultado=TareaCierre.Resultado.RECHAZADO,
             comentario=comentario,
         )
+    emit_task_event(
+        tarea=tarea,
+        event="rechazo_cierre",
+        recipients=task_recipients(
+            tarea,
+            actor=usuario,
+            include_creator=True,
+            include_responsible=True,
+        ),
+        title="Cierre de tarea rechazado",
+        body="El cierre de la tarea fue rechazado.",
+        actor=usuario,
+    )
     return transition
 
 
@@ -141,6 +201,7 @@ def annul_task(tarea, usuario, motivo=""):
             usuario=usuario,
             motivo=motivo,
         )
+    _emit_hierarchy_event(tarea, usuario, "anulacion", "Tarea anulada", "La tarea fue anulada.")
     return tarea
 
 
@@ -159,4 +220,11 @@ def reactivate_task(tarea, usuario, motivo=""):
             usuario=usuario,
             motivo=motivo,
         )
+    _emit_hierarchy_event(
+        tarea,
+        usuario,
+        "reactivacion",
+        "Tarea reactivada",
+        "La tarea fue reactivada.",
+    )
     return tarea

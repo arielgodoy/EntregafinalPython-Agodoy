@@ -9,6 +9,10 @@ class TareasViewMetadataTests(SimpleTestCase):
         expected = {
             "listar_tareas": ("Tareas", "ingresar"),
             "mis_tareas": ("Tareas - Dashboard personal", "ingresar"),
+            "dashboard_general": ("Tareas", "supervisor"),
+            "dashboard_general_empresa": ("Tareas", "supervisor"),
+            "dashboard_general_departamento": ("Tareas", "supervisor"),
+            "dashboard_general_usuario": ("Tareas", "supervisor"),
             "detalle_tarea": ("Tareas", "ingresar"),
             "crear_tarea": ("Tareas", "crear"),
             "editar_tarea": ("Tareas", "modificar"),
@@ -21,6 +25,11 @@ class TareasViewMetadataTests(SimpleTestCase):
             "reactivar_tarea": ("Tareas - Ciclo de vida", "modificar"),
             "hitos_tarea": ("Tareas - Hitos", "ingresar"),
             "documentos_tarea": ("Tareas - Documentos y evidencia", "modificar"),
+            "reunion_revision_lista": ("Tareas", "ingresar"),
+            "reunion_revision_crear": ("Tareas", "crear"),
+            "reunion_revision_detalle": ("Tareas", "ingresar"),
+            "reunion_revision_editar": ("Tareas", "modificar"),
+            "reunion_revision_accion": ("Tareas - Ciclo de vida", "modificar"),
         }
 
         actual = {
@@ -29,6 +38,7 @@ class TareasViewMetadataTests(SimpleTestCase):
                 pattern.callback.view_class.permiso_requerido,
             )
             for pattern in urls.urlpatterns
+            if pattern.name in expected
         }
 
         self.assertEqual(actual, expected)

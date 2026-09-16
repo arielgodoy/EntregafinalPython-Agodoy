@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
 from tareas.models import Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.services.notifications import emit_task_event, task_recipients
 
 
 def _validate_active_user(user):
@@ -60,13 +61,22 @@ def assign_responsible(tarea, new_responsible, changed_by, motivo=""):
         tarea.responsable = new_responsible
         tarea.full_clean()
         tarea.save(update_fields=["responsable"])
-        return TareaReasignacion.objects.create(
+        reasignacion = TareaReasignacion.objects.create(
             tarea=tarea,
             responsable_anterior=anterior,
             responsable_nuevo=new_responsible,
             usuario=changed_by,
             motivo=motivo,
         )
+    emit_task_event(
+        tarea=tarea,
+        event="reasignacion",
+        recipients=task_recipients(tarea, include_responsible=True, actor=changed_by),
+        title="Tarea reasignada",
+        body="La tarea tiene un nuevo responsable.",
+        actor=changed_by,
+    )
+    return reasignacion
 
 
 def create_independent_tasks_for_responsibles(
@@ -130,4 +140,17 @@ def create_independent_tasks_for_responsibles(
                 motivo=motivo,
             )
             tareas.append(tarea)
+    for tarea in tareas:
+        emit_task_event(
+            tarea=tarea,
+            event="asignacion",
+            recipients=task_recipients(
+                tarea,
+                actor=creada_por,
+                include_responsible=True,
+            ),
+            title="Tarea asignada",
+            body="Se te asignó una nueva tarea.",
+            actor=creada_por,
+        )
     return tareas

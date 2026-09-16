@@ -3,8 +3,14 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from tareas.models import DocumentoHistorial, DocumentoTarea, EvidenciaCierre
+from tareas.models import (
+    DocumentoHistorial,
+    DocumentoTarea,
+    EvidenciaCierre,
+    TareaParticipante,
+)
 from tareas.services.assignment import _validate_user_in_task_company
+from tareas.services.notifications import emit_task_event, task_recipients
 
 
 def _history_data(documento, usuario, accion):
@@ -15,7 +21,6 @@ def _history_data(documento, usuario, accion):
     }
 
 
-@transaction.atomic
 def create_document(
     *,
     tarea,
@@ -28,23 +33,38 @@ def create_document(
     fecha_vencimiento=None,
     estado="",
 ):
-    _validate_user_in_task_company(tarea, usuario)
-    datos = {
-        "tarea": tarea,
-        "tipo": tipo,
-        "formato_archivo": formato_archivo,
-        "usuario": usuario,
-        "archivo": archivo or "",
-        "url": url or "",
-        "fecha_vencimiento": fecha_vencimiento,
-        "estado": estado,
-    }
-    if fecha_documento is not None:
-        datos["fecha_documento"] = fecha_documento
-    documento = DocumentoTarea(**datos)
-    documento.full_clean()
-    documento.save()
-    DocumentoHistorial.objects.create(**_history_data(documento, usuario, "CREADO"))
+    with transaction.atomic():
+        _validate_user_in_task_company(tarea, usuario)
+        datos = {
+            "tarea": tarea,
+            "tipo": tipo,
+            "formato_archivo": formato_archivo,
+            "usuario": usuario,
+            "archivo": archivo or "",
+            "url": url or "",
+            "fecha_vencimiento": fecha_vencimiento,
+            "estado": estado,
+        }
+        if fecha_documento is not None:
+            datos["fecha_documento"] = fecha_documento
+        documento = DocumentoTarea(**datos)
+        documento.full_clean()
+        documento.save()
+        DocumentoHistorial.objects.create(**_history_data(documento, usuario, "CREADO"))
+    emit_task_event(
+        tarea=tarea,
+        event="documento_agregado",
+        recipients=task_recipients(
+            tarea,
+            actor=usuario,
+            include_creator=True,
+            include_responsible=True,
+            participant_roles=list(TareaParticipante.Rol),
+        ),
+        title="Documento agregado a la tarea",
+        body="Se agregó un documento a la tarea.",
+        actor=usuario,
+    )
     return documento
 
 

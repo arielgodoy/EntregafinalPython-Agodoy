@@ -4,7 +4,17 @@ from django import forms
 
 from access_control.services.permissions import get_valid_users_for_empresa
 
-from .models import Avance, DocumentoTarea, EvidenciaCierre, FormatoArchivo, Hito, Tarea
+from .models import (
+    Avance,
+    DocumentoTarea,
+    EvidenciaCierre,
+    FormatoArchivo,
+    Hito,
+    ReunionParticipante,
+    ReunionRevision,
+    ReunionTarea,
+    Tarea,
+)
 
 
 class HitoForm(forms.ModelForm):
@@ -145,3 +155,50 @@ class TareaForm(forms.ModelForm):
             "descripcion": forms.Textarea(attrs={"rows": 4}),
             "fecha_tope": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class ReunionRevisionForm(forms.ModelForm):
+    class Meta:
+        model = ReunionRevision
+        fields = [
+            "titulo",
+            "descripcion",
+            "fecha_hora_programada",
+            "modalidad",
+            "lugar_o_enlace",
+            "tipo_ambito",
+            "local",
+            "departamento",
+        ]
+        widgets = {
+            "fecha_hora_programada": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "descripcion": forms.Textarea(attrs={"rows": 4}),
+        }
+
+
+class ReunionParticipanteForm(forms.ModelForm):
+    class Meta:
+        model = ReunionParticipante
+        fields = ["usuario"]
+
+    def __init__(self, *args, empresa=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["usuario"].queryset = (
+            get_valid_users_for_empresa(empresa, active_only=True)
+            if empresa is not None
+            else self.fields["usuario"].queryset.none()
+        )
+
+
+class ReunionTareaForm(forms.ModelForm):
+    class Meta:
+        model = ReunionTarea
+        fields = ["tarea", "orden", "comentario_revision"]
+
+    def __init__(self, *args, empresa=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["tarea"].queryset = (
+            Tarea.objects.filter(empresa=empresa)
+            if empresa is not None
+            else self.fields["tarea"].queryset.none()
+        )

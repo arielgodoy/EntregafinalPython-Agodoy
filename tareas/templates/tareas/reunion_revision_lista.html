@@ -1,0 +1,15 @@
+{% extends "partials/base.html" %}
+{% block title %}<span data-key="tareas.meetings.title">Reuniones de revisión</span>{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Reuniones de revisión" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block content %}
+<div class="main-content"><div class="page-content"><div class="container-fluid">
+    <div class="d-flex justify-content-between mb-3">
+        <h4><span data-key="tareas.meetings.title">Reuniones de revisión</span></h4>
+        <a class="btn btn-primary" href="{% url 'tareas:reunion_revision_crear' %}"><span data-key="tareas.meetings.create">Crear reunión</span></a>
+    </div>
+    <div class="table-responsive"><table class="table table-striped">
+        <thead><tr><th><span data-key="tareas.fields.titulo">Título</span></th><th><span data-key="tareas.fields.fecha">Fecha</span></th><th><span data-key="tareas.fields.estado">Estado</span></th></tr></thead>
+        <tbody>{% for reunion in reuniones %}<tr><td><a href="{% url 'tareas:reunion_revision_detalle' reunion.pk %}">{{ reunion.titulo }}</a></td><td>{{ reunion.fecha_hora_programada }}</td><td>{{ reunion.get_estado_display }}</td></tr>{% empty %}<tr><td colspan="3"><span data-key="tareas.meetings.empty">No hay reuniones.</span></td></tr>{% endfor %}</tbody>
+    </table></div>
+</div></div></div>
+{% endblock content %}

@@ -9,14 +9,19 @@ Patrones vigentes reutilizados:
 import logging
 
 from django.contrib import messages
+from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
 
+from access_control.models import Empresa
 from access_control.decorators import verificar_permiso
 from access_control.services.permissions import user_has_permission_for_empresa
 from access_control.views import VerificarPermisoMixin
@@ -32,9 +37,22 @@ from .forms import (
     HitoCrearForm,
     HitoForm,
     HitoReasignacionForm,
+    ReunionParticipanteForm,
+    ReunionRevisionForm,
+    ReunionTareaForm,
     TareaForm,
 )
-from .models import Avance, DocumentoHistorial, DocumentoTarea, Hito, HitoEvidencia, Tarea
+from .models import (
+    Avance,
+    DocumentoHistorial,
+    DocumentoTarea,
+    Hito,
+    HitoEvidencia,
+    EnlaceTarea,
+    ReunionRevision,
+    Tarea,
+    TareaParticipante,
+)
 from .services.context import get_active_company_id
 from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
@@ -51,6 +69,21 @@ from .services.documents import (
     create_document,
     register_closure_evidence,
 )
+from .services.notifications import emit_task_event, task_recipients
+from .services.meetings import (
+    add_meeting_participant,
+    add_task_to_meeting,
+    convene_meeting,
+    create_meeting,
+    mark_meeting_completed,
+    update_meeting,
+)
+from .services.links import (
+    TaskLinkAccessError,
+    create_task_link,
+    resolve_task_link,
+    revoke_task_link,
+)
 from .services.progress import (
     create_milestone,
     complete_milestone,
@@ -62,6 +95,14 @@ from .services.progress import (
     set_weighted_progress_mode,
     update_milestone,
     weighted_progress,
+)
+from .services.kpi import (
+    DashboardPermissionError,
+    get_company_dashboard,
+    get_department_dashboard,
+    get_general_dashboard,
+    get_personal_dashboard,
+    get_user_dashboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,53 +142,122 @@ class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmp
 
     def get_context_data(self):
         empresa_id = _get_empresa_id(self.request)
-        prioridades = (
-            Tarea.Prioridad.CRITICA,
-            Tarea.Prioridad.URGENTE,
-            Tarea.Prioridad.NORMAL,
-            Tarea.Prioridad.SIMPLE,
+        return get_personal_dashboard(
+            user=self.request.user,
+            empresa_id=empresa_id,
         )
-        tareas = list(
-            self.get_queryset()
-            .filter(responsable=self.request.user)
-            .order_by("prioridad", "fecha_tope", "pk")
-        )
-        hitos = list(
-            Hito.objects.filter(
-                tarea__empresa_id=empresa_id,
-                responsable=self.request.user,
-                anulado=False,
-            )
-            .select_related(
-                "tarea",
-                "tarea__empresa",
-                "tarea__responsable",
-                "responsable",
-                "completado_por",
-            )
-            .order_by("tarea__prioridad", "tarea__pk", "fecha_creacion", "pk")
-        )
-        tareas_por_prioridad = {prioridad: [] for prioridad in prioridades}
-        hitos_por_prioridad = {prioridad: [] for prioridad in prioridades}
-        for tarea in tareas:
-            tareas_por_prioridad[tarea.prioridad].append(tarea)
-        for hito in hitos:
-            hitos_por_prioridad[hito.tarea.prioridad].append(hito)
-
-        return {
-            "priority_groups": [
-                {
-                    "value": prioridad,
-                    "label": Tarea.Prioridad(prioridad).label,
-                    "tareas": tareas_por_prioridad[prioridad],
-                    "hitos": hitos_por_prioridad[prioridad],
-                }
-                for prioridad in prioridades
-            ],
-        }
 
     def get(self, request):
         return render(request, self.template_name, self.get_context_data())
+
+
+def _dashboard_filters(request):
+    return {
+        key: request.GET.get(key)
+        for key in ("empresa_id", "departamento_id", "usuario_id", "estado", "prioridad")
+        if request.GET.get(key)
+    }
+
+
+def _serialize_dashboard_value(value):
+    if isinstance(value, Tarea):
+        return {
+            "id": value.pk,
+            "correlativo": value.correlativo,
+            "titulo": value.titulo,
+            "estado": value.estado,
+            "prioridad": value.prioridad,
+            "responsable_id": value.responsable_id,
+            "empresa_id": value.empresa_id,
+            "tipo_ambito": value.tipo_ambito,
+            "departamento_id": value.departamento_id,
+            "local_id": value.local_id,
+            "fecha_publicacion": value.fecha_publicacion,
+            "fecha_tope": value.fecha_tope,
+            "fecha_cumplimiento": value.fecha_cumplimiento,
+            "detalle_url": str(reverse_lazy("tareas:detalle_tarea", kwargs={"pk": value.pk})),
+        }
+    if isinstance(value, (Empresa, User)):
+        return {"id": value.pk, "label": str(value)}
+    if hasattr(value, "_meta") and hasattr(value, "pk"):
+        return {"id": value.pk, "label": str(value)}
+    if isinstance(value, dict):
+        return {key: _serialize_dashboard_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_dashboard_value(item) for item in value]
+    return value
+
+
+class TareasDashboardGeneralView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    verificar_vicmeas_en_dispatch = False
+    crear_permiso_faltante = False
+
+    def get(self, request):
+        context = get_general_dashboard(
+            user=request.user,
+            filters=_dashboard_filters(request),
+        )
+        if not context["rows"]:
+            return self.handle_no_permission(request, "No tienes Empresas autorizadas para este dashboard.")
+        return JsonResponse(_serialize_dashboard_value(context))
+
+
+class TareasDashboardEmpresaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    verificar_vicmeas_en_dispatch = False
+    crear_permiso_faltante = False
+
+    def get(self, request, empresa_id):
+        try:
+            context = get_company_dashboard(
+                user=request.user,
+                empresa_id=empresa_id,
+                filters=_dashboard_filters(request),
+            )
+        except DashboardPermissionError as error:
+            return self.handle_no_permission(request, str(error))
+        return JsonResponse(_serialize_dashboard_value(context))
+
+
+class TareasDashboardDepartamentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    verificar_vicmeas_en_dispatch = False
+    crear_permiso_faltante = False
+
+    def get(self, request, empresa_id, departamento_id):
+        try:
+            context = get_department_dashboard(
+                user=request.user,
+                empresa_id=empresa_id,
+                departamento_id=departamento_id,
+                filters=_dashboard_filters(request),
+            )
+        except DashboardPermissionError as error:
+            return self.handle_no_permission(request, str(error))
+        return JsonResponse(_serialize_dashboard_value(context))
+
+
+class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    verificar_vicmeas_en_dispatch = False
+    crear_permiso_faltante = False
+
+    def get(self, request, empresa_id, usuario_id):
+        try:
+            context = get_user_dashboard(
+                user=request.user,
+                empresa_id=empresa_id,
+                usuario_id=usuario_id,
+                filters=_dashboard_filters(request),
+            )
+        except DashboardPermissionError as error:
+            return self.handle_no_permission(request, str(error))
+        return JsonResponse(_serialize_dashboard_value(context))
 
 
 class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, DetailView):
@@ -200,6 +310,94 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         return self.render_to_response(context)
 
 
+class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+    crear_permiso_faltante = False
+
+    def post(self, request, tarea_id):
+        empresa_id = _get_empresa_id(request)
+        tarea = get_object_or_404(
+            Tarea.objects.select_related("empresa"),
+            pk=tarea_id,
+            empresa_id=empresa_id,
+        )
+        destinatario_id = request.POST.get("destinatario_id")
+        if not destinatario_id:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.links.create_error"},
+                status=400,
+            )
+        destinatario = get_object_or_404(User, pk=destinatario_id)
+        fecha_expiracion = parse_datetime(request.POST.get("fecha_expiracion", ""))
+        if fecha_expiracion is not None and timezone.is_naive(fecha_expiracion):
+            fecha_expiracion = timezone.make_aware(fecha_expiracion)
+        try:
+            enlace, token = create_task_link(
+                tarea=tarea,
+                destinatario=destinatario,
+                creado_por=request.user,
+                fecha_expiracion=fecha_expiracion,
+            )
+        except ValidationError:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.links.create_error"},
+                status=400,
+            )
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": "tareas.links.created",
+                "token": token,
+                "url": request.build_absolute_uri(
+                    reverse_lazy("tareas:enlace_tarea", kwargs={"token": token})
+                ),
+                "enlace_id": enlace.pk,
+            },
+            status=201,
+        )
+
+
+class AbrirEnlaceTareaView(LoginRequiredMixin, View):
+    template_name = "tareas/enlace_tarea_lectura.html"
+
+    def get(self, request, token):
+        empresa_id = _get_empresa_id(request)
+        try:
+            enlace = resolve_task_link(
+                token=token,
+                usuario=request.user,
+                empresa=empresa_id,
+            )
+        except TaskLinkAccessError:
+            return HttpResponseForbidden("No es posible acceder al enlace.")
+        return render(request, self.template_name, {"tarea": enlace.tarea})
+
+
+class RevocarEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+    crear_permiso_faltante = False
+
+    def post(self, request, enlace_id):
+        empresa_id = _get_empresa_id(request)
+        enlace = get_object_or_404(
+            EnlaceTarea.objects.select_related("tarea", "tarea__empresa"),
+            pk=enlace_id,
+            tarea__empresa_id=empresa_id,
+        )
+        try:
+            revoke_task_link(enlace=enlace, actor=request.user)
+        except ValidationError:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.links.revoke_error"},
+                status=400,
+            )
+        return JsonResponse(
+            {"success": True, "message_key": "tareas.links.revoked"}
+        )
+
+
 class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Tarea
     form_class = TareaForm
@@ -210,7 +408,21 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.empresa_id = _get_empresa_id(self.request)
         form.instance.creada_por = self.request.user
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if self.object.responsable is not None:
+            emit_task_event(
+                tarea=self.object,
+                event="asignacion",
+                recipients=task_recipients(
+                    self.object,
+                    actor=self.request.user,
+                    include_responsible=True,
+                ),
+                title="Tarea asignada",
+                body="Se te asignó una nueva tarea.",
+                actor=self.request.user,
+            )
+        return response
 
 
 class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, UpdateView):
@@ -219,6 +431,26 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQue
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+
+    def form_valid(self, form):
+        campos_relevantes = {"responsable", "fecha_tope", "prioridad"}
+        cambio_relevante = bool(campos_relevantes.intersection(form.changed_data))
+        response = super().form_valid(form)
+        if cambio_relevante:
+            emit_task_event(
+                tarea=self.object,
+                event="cambio_relevante",
+                recipients=task_recipients(
+                    self.object,
+                    actor=self.request.user,
+                    include_responsible=True,
+                    participant_roles=list(TareaParticipante.Rol),
+                ),
+                title="Cambio relevante en la tarea",
+                body="Se actualizó información funcional de la tarea.",
+                actor=self.request.user,
+            )
+        return response
 
 
 class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
@@ -590,3 +822,111 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_registro_form=form))
         raise ValidationError("Acción documental no configurada.")
+
+
+class ReunionEmpresaQuerysetMixin:
+    def get_queryset(self):
+        empresa_id = _get_empresa_id(self.request)
+        if not empresa_id:
+            return ReunionRevision.objects.none()
+        return ReunionRevision.objects.filter(empresa_id=empresa_id).select_related(
+            "empresa", "local", "departamento", "tarea_planificada", "creada_por"
+        )
+
+
+class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, ListView):
+    model = ReunionRevision
+    template_name = "tareas/reunion_revision_lista.html"
+    context_object_name = "reuniones"
+    vista_nombre = "Tareas"
+    permiso_requerido = "ingresar"
+
+
+class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    template_name = "tareas/reunion_revision_form.html"
+    vista_nombre = "Tareas"
+    permiso_requerido = "crear"
+
+    def get(self, request):
+        return render(request, self.template_name, {"form": ReunionRevisionForm()})
+
+    def post(self, request):
+        form = ReunionRevisionForm(request.POST)
+        if form.is_valid():
+            try:
+                create_meeting(
+                    empresa=Empresa.objects.get(pk=_get_empresa_id(request)),
+                    creada_por=request.user,
+                    **form.cleaned_data,
+                )
+            except (ValidationError, TypeError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                return redirect("tareas:reunion_revision_lista")
+        return render(request, self.template_name, {"form": form})
+
+
+class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
+    model = ReunionRevision
+    template_name = "tareas/reunion_revision_detalle.html"
+    context_object_name = "reunion"
+    vista_nombre = "Tareas"
+    permiso_requerido = "ingresar"
+
+
+class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+    template_name = "tareas/reunion_revision_form.html"
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def get_reunion(self, pk):
+        return get_object_or_404(self.get_queryset(), pk=pk)
+
+    def get(self, request, pk):
+        reunion = self.get_reunion(pk)
+        return render(request, self.template_name, {"form": ReunionRevisionForm(instance=reunion), "object": reunion})
+
+    def post(self, request, pk):
+        reunion = self.get_reunion(pk)
+        form = ReunionRevisionForm(request.POST, instance=reunion)
+        if form.is_valid():
+            try:
+                update_meeting(reunion, **form.cleaned_data)
+            except ValidationError as exc:
+                form.add_error(None, str(exc))
+            else:
+                return redirect("tareas:reunion_revision_detalle", pk=reunion.pk)
+        return render(request, self.template_name, {"form": form, "object": reunion})
+
+
+class ReunionRevisionActionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+    vista_nombre = "Tareas - Ciclo de vida"
+    permiso_requerido = "modificar"
+
+    def post(self, request, pk):
+        reunion = get_object_or_404(self.get_queryset(), pk=pk)
+        try:
+            accion = request.POST.get("accion")
+            if accion == "CONVOCAR":
+                convene_meeting(reunion, actor=request.user)
+            elif accion == "REALIZADA":
+                comentarios = {
+                    item.pk: request.POST.get(f"comentario_cierre_{item.pk}", "")
+                    for item in reunion.agenda.all()
+                }
+                mark_meeting_completed(reunion, comentarios=comentarios)
+            elif accion == "PARTICIPANTE":
+                form = ReunionParticipanteForm(request.POST, empresa=reunion.empresa)
+                if not form.is_valid():
+                    raise ValidationError(form.errors.as_text())
+                add_meeting_participant(reunion=reunion, usuario=form.cleaned_data["usuario"])
+            elif accion == "TAREA":
+                form = ReunionTareaForm(request.POST, empresa=reunion.empresa)
+                if not form.is_valid():
+                    raise ValidationError(form.errors.as_text())
+                add_task_to_meeting(reunion=reunion, **form.cleaned_data)
+            else:
+                raise ValidationError("Acción de reunión no configurada.")
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+        return redirect("tareas:reunion_revision_detalle", pk=reunion.pk)

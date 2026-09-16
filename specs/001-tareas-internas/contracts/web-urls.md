@@ -94,9 +94,39 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 
 La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal de solo lectura; no crea una URL ni una acción POST nueva. Solo se muestra cuando `Hito.completado=True` y la autorización de lectura vigente permite consultar la Tarea/Hito. El modal lee los campos canónicos del Hito y lista todas sus `HitoEvidencia` (`0..N`), sin mezclar `EvidenciaCierre` de Tarea ni modificar datos. Para un Hito completado, el contrato visual solo ofrece `Ver cumplimiento Hito` y `Anular` cuando el actor tenga esa facultad; no ofrece edición, reasignación, nueva completitud, actualización de avance ni eliminación física. La reactivación de un Hito completado y anulado queda fuera de contrato hasta resolver FR-F44.
 | 4 | Cotizaciones | GET/POST | `rondas_cotizacion` / `cotizaciones_ronda` | Default 3; máximo 3 versiones |
-| 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` | Tareas cerradas incluidas; confirmar repetición |
-| 5 | Enlace compartible | GET | `enlace_tarea` | Solo autenticado, lectura e ICMEAS |
-| 6 | Dashboard/KPI | GET | `dashboard_tareas` | Ocho KPI por dimensión permitida |
+| 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` | Reunión: ver, crear, modificar, `CONVOCAR` y marcar realizada; crea su Tarea planificada, usa ámbito LOCAL/DEPARTAMENTO y no duplica una Tarea dentro de la misma reunión |
+| 5 | Crear enlace compartible | POST | `/tareas/<tarea_id>/enlaces/crear/` | `Tareas` + `modificar`; destinatario interno, Empresa activa y fecha de expiración futura |
+| 5 | Abrir enlace compartible | GET | `/tareas/enlace/<token>/` | `login_required`, destinatario exacto, Empresa activa, token vigente; lectura específica sin permiso VICMEAS general |
+| 5 | Revocar enlace compartible | POST | `/tareas/enlaces/<enlace_id>/revocar/` | `Tareas` + `modificar`; conserva el enlace y registra revocación |
+| 6 | Dashboard personal | GET | `/tareas/mis-tareas/` | `Tareas - Dashboard personal` + `ingresar`; Empresa activa |
+| 6 | Dashboard general | GET | `/tareas/dashboard/general/` | `Tareas` + `supervisor`; solo Empresas autorizadas |
+| 6 | Drill-down Empresa | GET | `/tareas/dashboard/general/empresa/<empresa_id>/` | Hereda `Tareas` + `supervisor` de la Empresa seleccionada |
+| 6 | Drill-down Departamento | GET | `/tareas/dashboard/general/empresa/<empresa_id>/departamento/<departamento_id>/` | Departamento directo de la Empresa; `tipo_ambito=DEPARTAMENTO` |
+| 6 | Drill-down Usuario | GET | `/tareas/dashboard/general/empresa/<empresa_id>/usuario/<usuario_id>/` | Agrupa por `Tarea.responsable`; no duplica participantes |
+| 6 | Drill-down Tarea | GET | `/tareas/<pk>/` | Reutiliza `detalle_tarea`; muestra contexto de una Tarea |
+
+### Dashboard y KPI — T059
+
+Las rutas de dashboard requieren sesión autenticada y Empresa activa. El dashboard
+personal conserva `vista_nombre="Tareas - Dashboard personal"` y
+`permiso_requerido="ingresar"`. El dashboard general y todos sus drill-down usan
+`vista_nombre="Tareas"` y `permiso_requerido="supervisor"`, validado para la
+Empresa efectiva de la consulta. General no consulta todas las Empresas: agrega
+solo aquellas donde el usuario tiene `Permiso.supervisor=True` para la Vista
+`Tareas`. Una Empresa seleccionada y sus niveles descendientes heredan esa misma
+autorización; nunca se confía en el `empresa_id` recibido sin validar alcance.
+
+Cada respuesta de dashboard entrega contexto server-side para exactamente ocho KPI:
+dimensión actual, filtros activos, filas, estado, prioridad, fechas relevantes,
+enlaces al siguiente nivel y datos mínimos de la Tarea. El servicio no genera HTML.
+Los KPI se calculan bajo demanda y no crean snapshots, cache persistente, modelos
+ni migraciones. T060 es responsable de DataTables, cards, acordeones, modal y
+presentación.
+
+El drill-down contractual es `General -> Empresa -> Departamento -> Usuario ->
+Tarea`. Departamento filtra exclusivamente Tareas con
+`tipo_ambito=DEPARTAMENTO` y `departamento_id` seleccionado. No existe nivel Local
+en T059 V1 y no se agrega Proveedor ni `Cotizacion.proveedor`.
 
 ### P2 — Integración ERP del proveedor local
 

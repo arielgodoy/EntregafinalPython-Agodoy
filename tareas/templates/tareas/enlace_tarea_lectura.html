@@ -1,0 +1,40 @@
+{% extends "partials/base.html" %}
+
+{% block title %}<span data-key="tareas.links.read_only_title">Tarea compartida</span>{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tarea compartida" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-8 offset-lg-2">
+                    <div class="card shadow-lg">
+                        <div class="card-body">
+                            <h4 class="card-title mb-4">{{ tarea.titulo }}</h4>
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
+                                <dd class="col-sm-8">{{ tarea.correlativo|default:"-" }}</dd>
+                                <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
+                                <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>
+                                <dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt>
+                                <dd class="col-sm-8"><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></dd>
+                                <dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripcion</span></dt>
+                                <dd class="col-sm-8">{{ tarea.descripcion|default:"-"|linebreaksbr }}</dd>
+                                <dt class="col-sm-4"><span data-key="tareas.fields.responsable">Responsable</span></dt>
+                                <dd class="col-sm-8">{{ tarea.responsable|default:"-" }}</dd>
+                                <dt class="col-sm-4"><span data-key="tareas.fields.empresa">Empresa</span></dt>
+                                <dd class="col-sm-8">{{ tarea.empresa }}</dd>
+                            </dl>
+                            <p class="mt-4 mb-0 text-muted"><span data-key="tareas.links.read_only_notice">Vista de solo lectura</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

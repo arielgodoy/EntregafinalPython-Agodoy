@@ -44,6 +44,7 @@ APPLICATION_APPS = (
     "control_operacional",
     "tareas",
     "proveedores",
+    "organizacion",
 )
 
 PROJECT_APPS = SYSTEM_APPS + APPLICATION_APPS

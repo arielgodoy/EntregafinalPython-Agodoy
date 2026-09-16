@@ -7,7 +7,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
-from tareas.models import CausaAtraso, Reprogramacion, Tarea, TareaTransicion
+from tareas.models import CausaAtraso, Reprogramacion, Tarea, TareaParticipante, TareaTransicion
+from tareas.services.notifications import emit_task_event, task_recipients
 
 
 def _as_date(value):
@@ -101,4 +102,17 @@ def reprogramar(tarea, fecha_tope_nueva, justificacion, usuario, causas):
         )
         historial.causas.set(causas_ids)
     tarea.fecha_tope = fecha_tope_nueva
+    emit_task_event(
+        tarea=tarea,
+        event="reprogramacion",
+        recipients=task_recipients(
+            tarea,
+            actor=usuario,
+            include_responsible=True,
+            participant_roles=list(TareaParticipante.Rol),
+        ),
+        title="Fecha tope reprogramada",
+        body="La fecha tope de la tarea fue reprogramada.",
+        actor=usuario,
+    )
     return historial

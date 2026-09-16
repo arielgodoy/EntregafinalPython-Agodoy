@@ -1,0 +1,15 @@
+{% extends "partials/base.html" %}
+{% block title %}{{ reunion.titulo }}{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Reunión de revisión" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block content %}
+<div class="main-content"><div class="page-content"><div class="container-fluid">
+    <h4>{{ reunion.titulo }}</h4>
+    <dl><dt><span data-key="tareas.fields.descripcion">Descripción</span></dt><dd>{{ reunion.descripcion }}</dd><dt><span data-key="tareas.fields.fecha">Fecha</span></dt><dd>{{ reunion.fecha_hora_programada }}</dd><dt><span data-key="tareas.fields.estado">Estado</span></dt><dd>{{ reunion.get_estado_display }}</dd></dl>
+    <a class="btn btn-secondary" href="{% url 'tareas:reunion_revision_editar' reunion.pk %}"><span data-key="tareas.actions.editar">Editar</span></a>
+    <form method="post" action="{% url 'tareas:reunion_revision_accion' reunion.pk %}" class="d-inline">{% csrf_token %}<input type="hidden" name="accion" value="CONVOCAR"><button class="btn btn-primary" type="submit"><span data-key="tareas.meetings.convene">Convocar</span></button></form>
+    <h5 class="mt-4"><span data-key="tareas.meetings.agenda">Agenda</span></h5>
+    <ul>{% for item in reunion.agenda.all %}<li>{{ item.tarea.titulo }}: {{ item.comentario_revision }}</li>{% empty %}<li><span data-key="tareas.meetings.empty_agenda">Sin tareas en agenda.</span></li>{% endfor %}</ul>
+    <h5 class="mt-4"><span data-key="tareas.meetings.participants">Participantes</span></h5>
+    <ul>{% for item in reunion.participantes.all %}<li>{{ item.usuario.username }}</li>{% empty %}<li><span data-key="tareas.meetings.empty_participants">Sin participantes.</span></li>{% endfor %}</ul>
+</div></div></div>
+{% endblock content %}
