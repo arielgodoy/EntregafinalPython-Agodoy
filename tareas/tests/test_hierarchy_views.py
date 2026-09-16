@@ -17,7 +17,7 @@ class HierarchyViewsTests(TestCase):
         cls.empresa = create_empresa(codigo="HV1", descripcion="Empresa navegación")
         cls.otra_empresa = create_empresa(codigo="HV2", descripcion="Empresa externa")
         cls.user = create_user(username="hierarchy_view_user")
-        assign_permission(cls.user, cls.empresa, "Tareas - Detalle", ingresar=True)
+        assign_permission(cls.user, cls.empresa, "Tareas", ingresar=True)
 
     def setUp(self):
         self.client.login(username="hierarchy_view_user", password="password-prueba")

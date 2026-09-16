@@ -21,11 +21,8 @@ class TareasViewsBase(TestCase):
         cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.user = User.objects.create_user(username="user1", password="pass")
         cls.responsable = User.objects.create_user(username="resp", password="pass")
-        cls.vista_listado = Vista.objects.create(nombre="Tareas - Listado")
-        cls.vista_detalle = Vista.objects.create(nombre="Tareas - Detalle")
-        cls.vista_crear = Vista.objects.create(nombre="Tareas - Crear tarea")
-        cls.vista_editar = Vista.objects.create(nombre="Tareas - Editar tarea")
-        cls.vista_publicar = Vista.objects.create(nombre="Tareas - Publicar tarea")
+        cls.vista_tareas = Vista.objects.create(nombre="Tareas")
+        cls.vista_ciclo = Vista.objects.create(nombre="Tareas - Ciclo de vida")
 
     def _login(self, empresa=None):
         self.client.login(username="user1", password="pass")
@@ -57,8 +54,7 @@ class TareasViewsBase(TestCase):
 class CrearEditarBorradoresTests(TareasViewsBase):
     def test_crear_solo_titulo_guarda_borrador_con_empresa_de_sesion(self):
         # Permisos completos para que el redirect al detalle sea exitoso.
-        self._permiso(self.vista_crear, crear=True, ingresar=True)
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, crear=True, ingresar=True)
         self._login()
         response = self.client.post(
             reverse("tareas:crear_tarea"),
@@ -79,7 +75,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         )
 
     def test_editar_borrador_persiste_sin_fecha_publicacion(self):
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea()
         self._login()
         self.client.post(
@@ -91,8 +87,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
 
     def test_crear_borrador_sin_fecha_tope_y_con_fecha_tope(self):
-        self._permiso(self.vista_crear, crear=True, ingresar=True)
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, crear=True, ingresar=True)
         self._login()
         self.client.post(reverse("tareas:crear_tarea"), {"titulo": "Sin fecha"})
         self.client.post(
@@ -103,7 +98,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(Tarea.objects.get(titulo="Con fecha").fecha_tope, date(2026, 9, 20))
 
     def test_editar_borrador_conserva_y_modifica_fecha_tope(self):
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea(fecha_tope=None)
         self._login()
         self.client.post(
@@ -114,7 +109,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(tarea.fecha_tope, date(2026, 9, 21))
 
     def test_editar_tarea_operativa_no_cambia_fecha_tope(self):
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable)
         tarea.publicar()
         original = tarea.fecha_tope
@@ -132,7 +127,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(tarea.fecha_tope, original)
 
     def test_detalle_muestra_fechas_temporales_y_guiones_para_null(self):
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         tarea = self._crear_tarea()
         self._login()
         response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
@@ -142,7 +137,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertContains(response, "—")
 
     def test_detalle_muestra_configuracion_de_cierre_en_lectura(self):
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         tarea = self._crear_tarea(requiere_evidencia_cierre=True)
         self._login()
 
@@ -153,8 +148,8 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertNotContains(response, 'name="requiere_evidencia_cierre"')
 
     def test_usuario_con_modificar_puede_cambiar_configuracion_sin_crear_evidencia(self):
-        self._permiso(self.vista_detalle, ingresar=True)
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea()
         self._login()
 
@@ -169,7 +164,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertFalse(tarea.evidencias_cierre.exists())
 
     def test_usuario_solo_lectura_no_puede_cambiar_configuracion(self):
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         tarea = self._crear_tarea()
         self._login()
 
@@ -183,8 +178,8 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertFalse(tarea.requiere_evidencia_cierre)
 
     def test_configuracion_de_cierre_respeta_empresa_activa(self):
-        self._permiso(self.vista_detalle, ingresar=True)
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea(empresa=self.otra_empresa)
         self._login()
 
@@ -198,7 +193,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertFalse(tarea.requiere_evidencia_cierre)
 
     def test_detalle_muestra_fecha_asignacion_y_cumplimiento(self):
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable)
         tarea.publicar()
         tarea.fecha_cumplimiento = tarea.fecha_publicacion
@@ -210,7 +205,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertContains(response, "Fecha de cumplimiento")
 
     def test_crear_sin_permiso_devuelve_403(self):
-        self._permiso(self.vista_crear, crear=False, ingresar=False)
+        self._permiso(self.vista_tareas, crear=False, ingresar=False)
         self._login()
         response = self.client.get(reverse("tareas:crear_tarea"))
         self.assertEqual(response.status_code, 403)
@@ -218,7 +213,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
     def test_crear_sin_empresa_activa_redirige_a_seleccionar_empresa(self):
         # Comportamiento vigente verificado: el decorador ICMEAS redirige al
         # selector de empresa cuando no hay empresa activa en sesión.
-        self._permiso(self.vista_crear, crear=True, ingresar=True)
+        self._permiso(self.vista_tareas, crear=True, ingresar=True)
         self.client.login(username="user1", password="pass")
         # No se fija empresa_id en la sesión.
         response = self.client.post(
@@ -232,7 +227,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertFalse(Tarea.objects.filter(titulo="Sin empresa").exists())
 
     def test_editar_publicada_quitando_responsable_rechazado(self):
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable)
         tarea.publicar()
         self._login()
@@ -250,7 +245,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self.assertEqual(tarea.responsable, self.responsable)
 
     def test_editar_tarea_de_otra_empresa_devuelve_404(self):
-        self._permiso(self.vista_editar, modificar=True, ingresar=True)
+        self._permiso(self.vista_tareas, modificar=True, ingresar=True)
         tarea = self._crear_tarea(empresa=self.otra_empresa)
         self._login(empresa=self.empresa)
         response = self.client.post(
@@ -262,7 +257,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
 
 class PublicarTests(TareasViewsBase):
     def test_publicar_sin_responsable_rechazado_y_permanece_borrador(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         tarea = self._crear_tarea()
         self._login()
         self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
@@ -271,7 +266,7 @@ class PublicarTests(TareasViewsBase):
         self.assertIsNone(tarea.fecha_publicacion)
 
     def test_publicar_sin_fecha_tope_sigue_rechazado(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable, fecha_tope=None)
         self._login()
         response = self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
@@ -280,7 +275,7 @@ class PublicarTests(TareasViewsBase):
         self.assertEqual(response.status_code, 302)
 
     def test_publicar_con_fecha_tope_funciona(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable, fecha_tope=date(2026, 9, 20))
         self._login()
         self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
@@ -289,7 +284,7 @@ class PublicarTests(TareasViewsBase):
         self.assertIsNotNone(tarea.fecha_asignacion)
 
     def test_publicar_con_responsable_inactivo_rechazado(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         self.responsable.is_active = False
         self.responsable.save()
         tarea = self._crear_tarea(responsable=self.responsable)
@@ -299,7 +294,7 @@ class PublicarTests(TareasViewsBase):
         self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
 
     def test_publicar_con_responsable_activo_ok(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         tarea = self._crear_tarea(responsable=self.responsable)
         self._login()
         self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
@@ -308,14 +303,14 @@ class PublicarTests(TareasViewsBase):
         self.assertIsNotNone(tarea.fecha_publicacion)
 
     def test_publicar_tarea_de_otra_empresa_devuelve_404(self):
-        self._permiso(self.vista_publicar, modificar=True, ingresar=True)
+        self._permiso(self.vista_ciclo, modificar=True, ingresar=True)
         tarea = self._crear_tarea(empresa=self.otra_empresa, responsable=self.responsable)
         self._login(empresa=self.empresa)
         response = self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
         self.assertEqual(response.status_code, 404)
 
     def test_publicar_sin_permiso_devuelve_403(self):
-        self._permiso(self.vista_publicar, modificar=False)
+        self._permiso(self.vista_ciclo, modificar=False)
         tarea = self._crear_tarea(responsable=self.responsable)
         self._login()
         response = self.client.post(reverse("tareas:publicar_tarea", args=[tarea.pk]))
@@ -324,7 +319,7 @@ class PublicarTests(TareasViewsBase):
 
 class AislamientoPermisosTests(TareasViewsBase):
     def test_listado_muestra_solo_empresa_activa(self):
-        self._permiso(self.vista_listado, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         self._crear_tarea(titulo="De A", empresa=self.empresa)
         self._crear_tarea(titulo="De B", empresa=self.otra_empresa)
         self._login(empresa=self.empresa)
@@ -333,11 +328,11 @@ class AislamientoPermisosTests(TareasViewsBase):
         self.assertNotContains(response, "De B")
 
     def test_cambio_de_empresa_activa_cambia_listado(self):
-        self._permiso(self.vista_listado, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         Permiso.objects.update_or_create(
             usuario=self.user,
             empresa=self.otra_empresa,
-            vista=self.vista_listado,
+            vista=self.vista_tareas,
             defaults={"ingresar": True},
         )
         self._crear_tarea(titulo="De A", empresa=self.empresa)
@@ -348,14 +343,14 @@ class AislamientoPermisosTests(TareasViewsBase):
         self.assertNotContains(response, "De A")
 
     def test_detalle_tarea_de_otra_empresa_devuelve_404(self):
-        self._permiso(self.vista_detalle, ingresar=True)
+        self._permiso(self.vista_tareas, ingresar=True)
         tarea = self._crear_tarea(empresa=self.otra_empresa)
         self._login(empresa=self.empresa)
         response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
         self.assertEqual(response.status_code, 404)
 
     def test_listado_sin_permiso_ingresar_devuelve_403(self):
-        self._permiso(self.vista_listado, ingresar=False)
+        self._permiso(self.vista_tareas, ingresar=False)
         self._login()
         response = self.client.get(reverse("tareas:listar_tareas"))
         self.assertEqual(response.status_code, 403)

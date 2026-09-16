@@ -32,8 +32,8 @@ class HierarchyPhase3Tests(TestCase):
         cls.otra_empresa = create_empresa(codigo="H4", descripcion="Otra empresa")
         cls.creator = create_user(username="h3_creator")
         cls.responsible = create_user(username="h3_resp")
-        assign_permission(cls.creator, cls.empresa, "Tareas - Listado", ingresar=True)
-        assign_permission(cls.responsible, cls.empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(cls.creator, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.responsible, cls.empresa, "Tareas", ingresar=True)
 
     def make_task(self, titulo="Tarea", empresa=None):
         return create_tarea(

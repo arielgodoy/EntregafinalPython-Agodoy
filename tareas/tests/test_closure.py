@@ -25,8 +25,8 @@ class MiniTaskClosureTests(TestCase):
         cls.creador = create_user("t31_creador")
         cls.responsable = create_user("t31_responsable")
         cls.proveedor = Proveedor.objects.create(nombre="Proveedor de cierre")
-        assign_permission(cls.creador, cls.empresa, "Tareas - Listado", ingresar=True)
-        assign_permission(cls.responsable, cls.empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.responsable, cls.empresa, "Tareas", ingresar=True)
 
     def make_task(self):
         tarea = Tarea.objects.create(
@@ -113,7 +113,7 @@ class MiniTaskClosureTests(TestCase):
         tarea.requiere_evidencia_cierre = True
         tarea.save(update_fields=["requiere_evidencia_cierre"])
         otra_empresa = Empresa.objects.create(codigo="T33", descripcion="Otra empresa")
-        assign_permission(self.creador, otra_empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(self.creador, otra_empresa, "Tareas", ingresar=True)
         otra_tarea = Tarea.objects.create(
             titulo="Otra tarea",
             empresa=otra_empresa,

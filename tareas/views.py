@@ -87,7 +87,7 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     model = Tarea
     template_name = "tareas/tarea_lista.html"
     context_object_name = "tareas"
-    vista_nombre = "Tareas - Listado"
+    vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
 
     def get_queryset(self):
@@ -154,7 +154,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     model = Tarea
     template_name = "tareas/tarea_detalle.html"
     context_object_name = "tarea"
-    vista_nombre = "Tareas - Detalle"
+    vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
 
     def get_context_data(self, **kwargs):
@@ -170,7 +170,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
             user=self.request.user,
             empresa=self.object.empresa,
-            vista_nombre="Tareas - Editar tarea",
+            vista_nombre="Tareas",
             accion="modificar",
         )
         context["evidencia_config_form"] = kwargs.get(
@@ -183,7 +183,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         )
         return context
 
-    @method_decorator(verificar_permiso("Tareas - Editar tarea", "modificar"))
+    @method_decorator(verificar_permiso("Tareas", "modificar"))
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = EvidenciaConfigForm(request.POST)
@@ -204,7 +204,7 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = Tarea
     form_class = TareaForm
     template_name = "tareas/tarea_form.html"
-    vista_nombre = "Tareas - Crear tarea"
+    vista_nombre = "Tareas"
     permiso_requerido = "crear"
 
     def form_valid(self, form):
@@ -217,14 +217,14 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQue
     model = Tarea
     form_class = TareaForm
     template_name = "tareas/tarea_form.html"
-    vista_nombre = "Tareas - Editar tarea"
+    vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
 
 class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     """Publica un borrador (FR-007/FR-008, Q1). Publicación irreversible (Q2)."""
 
-    vista_nombre = "Tareas - Publicar tarea"
+    vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
     def post(self, request, *args, **kwargs):
@@ -248,7 +248,7 @@ class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
 
     permiso_requerido = "modificar"
     accion = None
-    vista_nombre = "Tareas - Transición"
+    vista_nombre = "Tareas - Ciclo de vida"
 
     def post(self, request, *args, **kwargs):
         tarea = self.get_queryset().filter(pk=kwargs["pk"]).first()
@@ -280,32 +280,26 @@ class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
 
 class IniciarGestionView(TareaLifecycleView):
     accion = "gestion"
-    vista_nombre = "Tareas - Iniciar gestión"
 
 
 class CompletarTareaView(TareaLifecycleView):
     accion = "completar"
-    vista_nombre = "Tareas - Completar tarea"
 
 
 class AprobarCierreView(TareaLifecycleView):
     accion = "aprobar"
-    vista_nombre = "Tareas - Aprobar cierre"
 
 
 class RechazarCierreView(TareaLifecycleView):
     accion = "rechazar"
-    vista_nombre = "Tareas - Rechazar cierre"
 
 
 class AnularTareaView(TareaLifecycleView):
     accion = "anular"
-    vista_nombre = "Tareas - Anular tarea"
 
 
 class ReactivarTareaView(TareaLifecycleView):
     accion = "reactivar"
-    vista_nombre = "Tareas - Reactivar tarea"
 
 
 class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):

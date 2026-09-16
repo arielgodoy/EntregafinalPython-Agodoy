@@ -24,7 +24,7 @@ class SchedulingT030Tests(TestCase):
         cls.creador = create_user("t30_creador")
         cls.responsable = create_user("t30_responsable")
         cls.autorizador = create_user("t30_autorizador")
-        assign_permission(cls.creador, cls.empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
 
     def make_task(self, **kwargs):
         defaults = {
@@ -131,7 +131,7 @@ class SchedulingT030Tests(TestCase):
     def test_reprogramacion_rechaza_usuario_de_otra_empresa_sin_cambios(self):
         otra_empresa = Empresa.objects.create(codigo="T31", descripcion="Otra")
         otro_usuario = create_user("t30_otro_contexto")
-        assign_permission(otro_usuario, otra_empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(otro_usuario, otra_empresa, "Tareas", ingresar=True)
         task = self.publish_and_start()
         fecha_original = task.fecha_tope
         causas = list(CausaAtraso.objects.order_by("codigo")[:1])

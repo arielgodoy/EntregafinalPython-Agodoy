@@ -38,8 +38,8 @@ class AssignmentPhase3Tests(TestCase):
             cls.nuevo_responsable,
             cls.inactivo,
         ]:
-            assign_permission(user, cls.empresa, "Tareas - Listado", ingresar=True)
-        assign_permission(cls.usuario_otra_empresa, cls.otra_empresa, "Tareas - Listado", ingresar=True)
+            assign_permission(user, cls.empresa, "Tareas", ingresar=True)
+            assign_permission(cls.usuario_otra_empresa, cls.otra_empresa, "Tareas", ingresar=True)
 
     def make_task(self, **kwargs):
         defaults = {
@@ -66,7 +66,7 @@ class AssignmentPhase3Tests(TestCase):
         ]
         for index, rol in enumerate(roles):
             user = create_user(username=f"rol_user_{index}")
-            assign_permission(user, self.empresa, "Tareas - Listado", ingresar=True)
+            assign_permission(user, self.empresa, "Tareas", ingresar=True)
             tarea = self.make_task(titulo=f"Tarea rol {index}")
             participante = add_participant(tarea, user, rol)
             participante.refresh_from_db()

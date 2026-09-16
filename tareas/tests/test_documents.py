@@ -21,7 +21,7 @@ class DocumentTests(TestCase):
         cls.empresa = create_empresa()
         cls.usuario = create_user(username="documents-user")
         cls.tarea = create_tarea(cls.empresa, cls.usuario)
-        assign_permission(cls.usuario, cls.empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(cls.usuario, cls.empresa, "Tareas", ingresar=True)
 
     def test_tarea_evidence_requirement_defaults_false(self):
         self.assertFalse(self.tarea.requiere_evidencia_cierre)
@@ -145,7 +145,7 @@ class DocumentTests(TestCase):
         otra_empresa = create_empresa(codigo="02")
         otro_usuario = create_user(username="other-documents-user")
         otra_tarea = create_tarea(otra_empresa, otro_usuario)
-        assign_permission(otro_usuario, otra_empresa, "Tareas - Listado", ingresar=True)
+        assign_permission(otro_usuario, otra_empresa, "Tareas", ingresar=True)
 
         with self.assertRaises(ValidationError):
             create_document(
