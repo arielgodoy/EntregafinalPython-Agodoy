@@ -100,6 +100,35 @@ SIDEBAR_MENU = (
             },
         ),
     },
+    {
+        "key": "database_manager",
+        "label_key": "database_manager.dashboard.heading",
+        "label": "Gestión de Bases del Sistema",
+        "icon": "ri-database-2-line",
+        "children": (
+            {
+                "key": "database_manager_dashboard",
+                "label_key": "control_operacional.dashboard.title",
+                "label": "Dashboard",
+                "route_name": "database_manager:dashboard",
+                "vista": "Gestión de Bases - Dashboard",
+            },
+            {
+                "key": "database_manager_compare",
+                "label_key": "database_manager.dashboard.compare",
+                "label": "Comparar bases",
+                "route_name": "database_manager:compare",
+                "vista": "Gestión de Bases - Comparar",
+            },
+            {
+                "key": "database_manager_preflight",
+                "label_key": "database_manager.preflight.title",
+                "label": "Preflight",
+                "route_name": "database_manager:preflight",
+                "vista": "Gestión de Bases - Preflight",
+            },
+        ),
+    },
 )
 
 
@@ -168,6 +197,9 @@ SIDEBAR_VIEW_NAMES = {
     "settings_company": "Configuración - Configuracion de Empresa",
     "settings_email": "Configuración - Cuentas de Correo",
     "settings_mysql": "Configuración - Conexiones MySQL",
+    "database_manager_dashboard": "Gestión de Bases - Dashboard",
+    "database_manager_compare": "Gestión de Bases - Comparar",
+    "database_manager_preflight": "Gestión de Bases - Preflight",
 }
 
 SIDEBAR_GROUPS = {
@@ -185,6 +217,11 @@ SIDEBAR_GROUPS = {
     "access": tuple(_ACCESS_VIEW_NAMES),
     "apis": ("api_home",),
     "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql"),
+    "database_manager": (
+        "database_manager_dashboard",
+        "database_manager_compare",
+        "database_manager_preflight",
+    ),
 }
 
 SIDEBAR_GROUP_LABELS = {
@@ -202,6 +239,7 @@ SIDEBAR_GROUP_LABELS = {
     "access": "Control de Acceso",
     "apis": "APIs",
     "settings": "Settings",
+    "database_manager": "Gestión de Bases del Sistema",
 }
 
 SIDEBAR_GLOBAL_ITEMS = {"account_email"}

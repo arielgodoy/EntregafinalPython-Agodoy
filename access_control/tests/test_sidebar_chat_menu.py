@@ -185,13 +185,12 @@ class SidebarChatMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Auditoría Biblioteca")
         self.assertNotContains(response, "Auditoría Gestión DTE")
-        self.assertEqual(
-            Permiso.objects.filter(
-                usuario=self.user,
-                vista__nombre__in=("Auditoría - Biblioteca", "Auditoría - Gestión DTE"),
-            ).count(),
-            0,
+        auditoria_permisos = Permiso.objects.filter(
+            usuario=self.user,
+            vista__nombre__in=("Auditoría - Biblioteca", "Auditoría - Gestión DTE"),
         )
+        self.assertTrue(auditoria_permisos.exists())
+        self.assertFalse(any(permission.ver for permission in auditoria_permisos))
 
     def test_sidebar_auditoria_sin_permiso_conduce_a_403(self):
         self._login_with_empresa()

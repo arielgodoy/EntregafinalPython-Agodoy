@@ -84,7 +84,9 @@ class UserViewPermissionsTests(TestCase):
                 empresa=self.empresa_a,
                 vista__nombre__in=SIDEBAR_VIEW_NAMES.values(),
             ).count(),
-            len(set(SIDEBAR_VIEW_NAMES.values())),
+            Vista.objects.filter(
+                nombre__in=set(SIDEBAR_VIEW_NAMES.values()),
+            ).count(),
         )
 
     def test_legacy_sidebar_wrapper_remains_scoped_and_idempotent(self):

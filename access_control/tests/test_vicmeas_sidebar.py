@@ -20,7 +20,10 @@ from access_control.services.permissions import (
     get_sidebar_access_tree,
     get_sidebar_visible_items,
 )
-from access_control.services.view_catalog import ensure_protected_views_catalog
+from access_control.services.view_catalog import (
+    discover_protected_views,
+    ensure_protected_views_catalog,
+)
 
 
 class VicmeasSidebarTests(TestCase):
@@ -345,7 +348,8 @@ class VicmeasSidebarTests(TestCase):
         declared_keys = set(SIDEBAR_VIEW_NAMES) | set(SIDEBAR_GROUPS) | SIDEBAR_GLOBAL_ITEMS
 
         access_keys = set(get_descendant_sidebar_keys("control_acceso"))
-        legacy_declared_keys = declared_keys - access_keys - {"access"}
+        database_manager_keys = set(get_descendant_sidebar_keys("database_manager"))
+        legacy_declared_keys = declared_keys - access_keys - database_manager_keys - {"access", "database_manager"}
         self.assertEqual(template_keys, legacy_declared_keys)
         self.assertIn('{% include "partials/sidebar_node.html"', template.read_text(encoding="utf-8"))
 
@@ -392,6 +396,133 @@ class VicmeasSidebarTests(TestCase):
         self.assertNotIn("vista", permisos)
         self.assertIn("children", usuarios)
         self.assertIn("children", permisos)
+
+    def test_database_manager_catalog_is_navigable_without_parent_view(self):
+        database_manager = next(node for node in SIDEBAR_MENU if node["key"] == "database_manager")
+
+        self.assertEqual(database_manager["label"], "Gestión de Bases del Sistema")
+        self.assertNotIn("vista", database_manager)
+        self.assertNotIn("route_name", database_manager)
+        self.assertEqual(
+            {
+                child["key"]: (child["vista"], child["route_name"])
+                for child in database_manager["children"]
+            },
+            {
+                "database_manager_dashboard": (
+                    "Gestión de Bases - Dashboard",
+                    "database_manager:dashboard",
+                ),
+                "database_manager_compare": (
+                    "Gestión de Bases - Comparar",
+                    "database_manager:compare",
+                ),
+                "database_manager_preflight": (
+                    "Gestión de Bases - Preflight",
+                    "database_manager:preflight",
+                ),
+            },
+        )
+        self.assertEqual(
+            {
+                key: SIDEBAR_VIEW_NAMES[key]
+                for key in (
+                    "database_manager_dashboard",
+                    "database_manager_compare",
+                    "database_manager_preflight",
+                )
+            },
+            {
+                "database_manager_dashboard": "Gestión de Bases - Dashboard",
+                "database_manager_compare": "Gestión de Bases - Comparar",
+                "database_manager_preflight": "Gestión de Bases - Preflight",
+            },
+        )
+        self.assertFalse(Vista.objects.filter(nombre="Gestión de Bases").exists())
+
+        definitions = {
+            definition.vista_nombre: definition
+            for definition in discover_protected_views()
+            if definition.vista_nombre.startswith("Gestión de Bases - ")
+        }
+        self.assertEqual(
+            set(definitions),
+            {
+                "Gestión de Bases - Dashboard",
+                "Gestión de Bases - Comparar",
+                "Gestión de Bases - Preflight",
+            },
+        )
+        self.assertTrue(all(definition.navigable for definition in definitions.values()))
+
+    def test_database_manager_visibility_uses_ver_and_prunes_parent(self):
+        database_vistas = [
+            Vista.objects.create(
+                nombre=nombre,
+                route_name=route_name,
+            )
+            for nombre, route_name in (
+                ("Gestión de Bases - Dashboard", "database_manager:dashboard"),
+                ("Gestión de Bases - Comparar", "database_manager:compare"),
+                ("Gestión de Bases - Preflight", "database_manager:preflight"),
+            )
+        ]
+        keys = {
+            "Gestión de Bases - Dashboard": "database_manager_dashboard",
+            "Gestión de Bases - Comparar": "database_manager_compare",
+            "Gestión de Bases - Preflight": "database_manager_preflight",
+        }
+
+        get_sidebar_visible_items(self.user, self.empresa_a.id)
+        for vista in database_vistas:
+            permission = vista.permiso_set.get(
+                usuario=self.user,
+                empresa=self.empresa_a,
+            )
+            self.assertFalse(any(getattr(permission, field) for field in VICMEAS_FIELDS))
+            permission.ingresar = True
+            permission.save(update_fields=["ingresar"])
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id, materialize_permissions=False)
+        self.assertFalse(any(keys[vista.nombre] in visible for vista in database_vistas))
+        self.assertNotIn("database_manager", visible)
+
+        dashboard_permission = database_vistas[0].permiso_set.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+        )
+        dashboard_permission.ver = True
+        dashboard_permission.save(update_fields=["ver"])
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id, materialize_permissions=False)
+        self.assertIn("database_manager_dashboard", visible)
+        self.assertNotIn("database_manager_compare", visible)
+        self.assertNotIn("database_manager_preflight", visible)
+        self.assertIn("database_manager", visible)
+
+        tree = get_sidebar_access_tree(visible)
+        database_node = next(node for node in tree if node["key"] == "database_manager")
+        self.assertEqual(
+            [child["key"] for child in database_node["children"]],
+            ["database_manager_dashboard"],
+        )
+
+        dashboard_permission.ver = False
+        dashboard_permission.save(update_fields=["ver"])
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id, materialize_permissions=False)
+        self.assertNotIn("database_manager", visible)
+        self.assertEqual(get_sidebar_access_tree(visible), ())
+
+        for vista in database_vistas:
+            permiso = vista.permiso_set.get(
+                usuario=self.user,
+                empresa=self.empresa_a,
+            )
+            self.assertTrue(permiso.ingresar)
+            self.assertFalse(permiso.ver)
+            self.assertFalse(permiso.crear)
+            self.assertFalse(permiso.modificar)
+            self.assertFalse(permiso.eliminar)
+            self.assertFalse(permiso.autorizar)
+            self.assertFalse(permiso.supervisor)
 
     def test_access_tree_contract_and_i18n_keys(self):
         expected_es = {
@@ -683,7 +814,15 @@ class VicmeasSidebarTests(TestCase):
         nodes = list(containers(tree))
         ids = [node["collapse_id"] for node in nodes]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(ids, ["sidebar-control-acceso", "sidebar-usuarios", "sidebar-permisos"])
+        self.assertEqual(
+            ids,
+            [
+                "sidebar-control-acceso",
+                "sidebar-usuarios",
+                "sidebar-permisos",
+                "sidebar-database-manager",
+            ],
+        )
 
     def test_filter_sidebar_tree_supports_arbitrary_depth_without_mutation(self):
         source = (
