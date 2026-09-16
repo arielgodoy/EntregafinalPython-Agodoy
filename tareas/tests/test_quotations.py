@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
+from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -150,6 +151,16 @@ class QuotationTests(TestCase):
         cotizacion.refresh_from_db()
         self.assertEqual(cotizacion.estado, Cotizacion.Estado.SELECCIONADA)
         self.assertTrue(cotizacion.vigente)
+
+    def test_selected_quotation_exposes_local_provider_without_adjudication(self):
+        cotizacion = self._create(estado=Cotizacion.Estado.SELECCIONADA)
+
+        cotizacion.refresh_from_db()
+        self.assertEqual(cotizacion.proveedor, self.proveedor)
+        self.assertEqual(cotizacion.proveedor.nombre, "Proveedor de prueba")
+        self.assertFalse(
+            any(model.__name__ == "Adjudicacion" for model in apps.get_models())
+        )
 
     def test_versions_are_independent_historical_rows(self):
         primera = self._create(version=1, vigente=False)

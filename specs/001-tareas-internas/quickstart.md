@@ -119,9 +119,13 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 
 ### E11. Cotizaciones (Phase 4)
 
-- Crear dos rondas y comprobar histórico independiente.
-- Verificar mínimo predeterminado 3, máximo 3 versiones por `(ronda, proveedor)` y bloqueo del cierre cuando la evolución local esté implementada.
-- Confirmar que el maestro local Django permite operar sin ERP; la integración, conciliación y sincronización legacy permanecen bloqueadas por P2.
+- Crear o reutilizar proveedores del maestro local Django y abrir una `RondaCotizacion`.
+- Crear cotizaciones asociadas a proveedores locales, conservando cotizaciones históricas con `proveedor=NULL` sin contarlas para el mínimo.
+- Verificar máximo de 3 versiones por `(ronda, proveedor)`, mínimo por proveedores distintos y que varias versiones del mismo proveedor cuentan una sola vez.
+- Confirmar que el cierre de ronda se bloquea hasta cumplir el mínimo y que cotizaciones vigentes de proveedores distintos permiten cerrarla.
+- Marcar una cotización como `SELECCIONADA`, comprobar que el proveedor seleccionado es visible dentro de Django y que no se crea `Adjudicacion`.
+- Reutilizar el cierre de Tarea vigente y validar que la ronda más reciente controla el mínimo.
+- Confirmar que todo el flujo opera con el maestro local Django sin consultar ERP/legacy; la integración, conciliación y sincronización permanecen bloqueadas por P2.
 
 ### E12. Colaboración, similitud y enlaces (Phase 5)
 

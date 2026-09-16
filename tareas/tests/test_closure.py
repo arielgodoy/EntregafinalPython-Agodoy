@@ -1,6 +1,7 @@
 from datetime import date
 from unittest.mock import patch
 
+from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -14,7 +15,13 @@ from tareas.services.closure import (
 from tareas.services.documents import register_closure_evidence
 from tareas.services.hierarchy import add_child
 from tareas.services.lifecycle import approve_closure, complete_task, transition_task
-from tareas.services.quotations import create_quotation, create_quotation_round, open_next_quotation_round
+from tareas.services.quotations import (
+    close_quotation_round,
+    create_quotation,
+    create_quotation_round,
+    open_next_quotation_round,
+    update_quotation_status,
+)
 from tareas.tests.factories import assign_permission, create_user
 
 
@@ -179,6 +186,53 @@ class MiniTaskClosureTests(TestCase):
 
         approve_closure(tarea, self.creador)
         self.assertEqual(Tarea.objects.get(pk=tarea.pk).estado, Tarea.Estado.CERRADA)
+
+    def test_e11_local_provider_flow_closes_round_and_task_without_adjudication(self):
+        tarea = self.make_task()
+        ronda = create_quotation_round(tarea=tarea, minimo_cotizaciones=2)
+
+        for version in (1, 2, 3):
+            create_quotation(
+                ronda=ronda,
+                version=version,
+                monto="10",
+                fecha_cotizacion=date.today(),
+                proveedor=self.proveedor,
+            )
+        Cotizacion.objects.create(
+            ronda=ronda,
+            version=99,
+            monto="10",
+            fecha_cotizacion=date.today(),
+            proveedor=None,
+            vigente=True,
+        )
+
+        with self.assertRaisesMessage(ValidationError, "QUOTATION_MINIMUM_NOT_MET"):
+            close_quotation_round(ronda)
+
+        otro_proveedor = Proveedor.objects.create(nombre="Proveedor E11 adicional")
+        seleccionada = create_quotation(
+            ronda=ronda,
+            version=1,
+            monto="12",
+            fecha_cotizacion=date.today(),
+            proveedor=otro_proveedor,
+        )
+        update_quotation_status(
+            cotizacion=seleccionada,
+            estado=Cotizacion.Estado.SELECCIONADA,
+        )
+        ronda = close_quotation_round(ronda)
+        approve_closure(tarea, self.creador)
+
+        seleccionada.refresh_from_db()
+        self.assertEqual(seleccionada.proveedor, otro_proveedor)
+        self.assertEqual(ronda.estado, ronda.Estado.CERRADA)
+        self.assertEqual(Tarea.objects.get(pk=tarea.pk).estado, Tarea.Estado.CERRADA)
+        self.assertFalse(
+            any(model.__name__ == "Adjudicacion" for model in apps.get_models())
+        )
 
     def test_three_versions_same_provider_do_not_satisfy_three_provider_minimum(self):
         tarea = self.make_task()

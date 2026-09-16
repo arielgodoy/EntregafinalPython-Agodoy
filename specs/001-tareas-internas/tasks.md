@@ -142,9 +142,9 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T086 [US5] Exigir proveedor para nuevas `Cotizacion` desde el servicio/formulario después de disponer de la relación nullable, manteniendo compatibilidad de registros históricos.
 - [x] T087 [US5] Implementar el máximo de 3 versiones por `(ronda, proveedor)` mediante validación transaccional de servicio, sin imponer máximo por ronda completa.
 - [x] T088 [US5] Evolucionar el mínimo de `RondaCotizacion` para contar proveedores Django distintos con al menos una `Cotizacion.vigente=True`, sin sumar proveedores entre rondas.
-- [ ] T089 [US5] Actualizar y ampliar tests de cotizaciones/proveedores para identidad local, nulabilidad histórica, RUT, inactivación, versionado, conteo distinto y selección interna sin `Adjudicacion`.
-- [ ] T090 [US5] Actualizar y validar E11 para el maestro local Django, la relación de cotización, el conteo distinto y el bloqueo exclusivo de integración ERP por P2.
-- [ ] T091 [US5] Mantener la integración ERP/legacy como bloque P2 separado: lookup, validación, identificador legacy, conciliación, sincronización y actualización desde ERP.
+- [x] T089 [US5] Actualizar y ampliar tests de cotizaciones/proveedores para identidad local, nulabilidad histórica, RUT, inactivación, versionado, conteo distinto y selección interna sin `Adjudicacion`.
+- [x] T090 [US5] Actualizar y validar E11 para el maestro local Django, la relación de cotización, el conteo distinto y el bloqueo exclusivo de integración ERP por P2.
+- [x] T091 [US5] Mantener la integración ERP/legacy como bloque P2 separado: lookup, validación, identificador legacy, conciliación, sincronización y actualización desde ERP.
 
 ## Phase 6: Collaboration, similarity, links and dashboards [US6]
 
