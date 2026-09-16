@@ -90,7 +90,7 @@ class AlertasOperacionalesView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 
 class AckAlertaView(VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Control Operacional - Reconocer alerta"
+    vista_nombre = "Control Operacional - Alertas"
     permiso_requerido = "ingresar"
     
     def post(self, request, *args, **kwargs):

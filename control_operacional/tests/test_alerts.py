@@ -14,7 +14,7 @@ class ControlOperacionalAlertsTests(TestCase):
     def setUp(self):
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
         self.user = User.objects.create_user(username="supervisor", password="pass")
-        self.vista = Vista.objects.create(nombre="Control Operacional - Reconocer alerta")
+        self.vista = Vista.objects.create(nombre="Control Operacional - Alertas")
         self.vista_dashboard = Vista.objects.create(nombre="Control Operacional - Dashboard")
         Permiso.objects.create(
             usuario=self.user,
