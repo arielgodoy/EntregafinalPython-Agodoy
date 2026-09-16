@@ -80,7 +80,7 @@ class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
 
 class ImportarPersonasStartView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Evaluaciones - Importar Personas"
-    permiso_requerido = "Supervisor"
+    permiso_requerido = "supervisor"
 
     def post(self, request, *args, **kwargs):
         from datetime import date as date_cls

@@ -6,6 +6,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
+from access_control.services.view_catalog import audit_protected_views
+from evaluaciones.views import ImportarPersonasStartView
 
 
 class PersonaImportProgressEndpointsTests(TestCase):
@@ -55,6 +57,30 @@ class PersonaImportProgressEndpointsTests(TestCase):
         payload = resp.json()
         self.assertFalse(payload.get("success"))
         self.assertIn("error", payload)
+
+    def test_import_start_requires_supervisor_flag(self):
+        permission = Permiso.objects.get(usuario=self.user, empresa=self.empresa, vista=self.vista)
+        permission.supervisor = False
+        permission.save(update_fields=["supervisor"])
+
+        url = reverse("evaluaciones:importar_personas_start")
+        response = self.client.post(url, {"date": "2026-03-07"}, **self._ajax_headers())
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(response.json().get("success"))
+
+    def test_import_start_uses_canonical_supervisor_permission(self):
+        self.assertEqual(ImportarPersonasStartView.permiso_requerido, "supervisor")
+
+        _, issues = audit_protected_views()
+
+        self.assertFalse(
+            any(
+                issue.issue == "invalid_permission"
+                and issue.route_name == "evaluaciones:importar_personas_start"
+                for issue in issues
+            )
+        )
 
     def test_import_status_requires_permission(self):
         user2 = User.objects.create_user(username="u2", password="p")
