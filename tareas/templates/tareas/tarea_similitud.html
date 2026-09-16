@@ -1,0 +1,91 @@
+{% extends "partials/base.html" %}
+
+{% block title %}<span data-key="tareas.similarity.title">Revisión de similitud</span>{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Revisión de similitud" pagetitle="Tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4><span data-key="tareas.similarity.title">Revisión de similitud</span></h4>
+                    <p class="mb-0"><span data-key="tareas.fields.tarea">Tarea</span>: {{ tarea.correlativo|default:"-" }} - {{ tarea.titulo }}</p>
+                </div>
+                <a class="btn btn-outline-secondary" href="{% url 'tareas:detalle_tarea' tarea.pk %}"><span data-key="tareas.actions.volver">Volver</span></a>
+            </div>
+
+            {% if evaluaciones %}
+            <div class="alert alert-warning" role="alert">
+                <span data-key="tareas.similarity.warning">Existen coincidencias sobre el umbral que requieren una decisión.</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th><span data-key="tareas.fields.correlativo">Correlativo</span></th>
+                            <th><span data-key="tareas.fields.titulo">Título</span></th>
+                            <th><span data-key="tareas.fields.estado">Estado</span></th>
+                            <th><span data-key="tareas.fields.prioridad">Prioridad</span></th>
+                            <th><span data-key="tareas.similarity.percentage">Porcentaje</span></th>
+                            <th><span data-key="tareas.similarity.threshold">Umbral</span></th>
+                            <th><span data-key="tareas.similarity.closed">Cerrada</span></th>
+                            <th><span data-key="tareas.similarity.decision">Decisión</span></th>
+                            <th><span data-key="tareas.list.acciones">Acciones</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for evaluacion in evaluaciones %}
+                        <tr>
+                            <td>{{ evaluacion.tarea_candidata.correlativo|default:"-" }}</td>
+                            <td>{{ evaluacion.tarea_candidata.titulo }}</td>
+                            <td><span data-key="tareas.state.{{ evaluacion.tarea_candidata.estado|lower }}">{{ evaluacion.tarea_candidata.get_estado_display }}</span></td>
+                            <td><span data-key="tareas.priority.{{ evaluacion.tarea_candidata.prioridad|lower }}">{{ evaluacion.tarea_candidata.get_prioridad_display }}</span></td>
+                            <td>{{ evaluacion.porcentaje }}%</td>
+                            <td>{{ evaluacion.umbral_aplicado }}%</td>
+                            <td>{% if evaluacion.tarea_candidata.estado == "CERRADA" %}<span data-key="tareas.common.yes">Sí</span>{% else %}<span data-key="tareas.common.no">No</span>{% endif %}</td>
+                            <td>{{ evaluacion.get_decision_display }}</td>
+                            <td>
+                                <a class="btn btn-sm btn-outline-secondary" href="{% url 'tareas:detalle_tarea' evaluacion.tarea_candidata.pk %}"><span data-key="tareas.actions.ver">Ver</span></a>
+                                {% if evaluacion.decision == "PENDIENTE" %}
+                                <form method="post" action="{% url 'tareas:confirmar_similitud' tarea.pk evaluacion.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="decision" value="MISMO_PROBLEMA">
+                                    <button class="btn btn-sm btn-warning" type="submit"><span data-key="tareas.similarity.same">Mismo problema</span></button>
+                                </form>
+                                <form method="post" action="{% url 'tareas:confirmar_similitud' tarea.pk evaluacion.pk %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="decision" value="DISTINTO_PROBLEMA">
+                                    <button class="btn btn-sm btn-outline-primary" type="submit"><span data-key="tareas.similarity.different">Distinto problema</span></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-success" role="status">
+                <span data-key="tareas.similarity.no_matches">No existen coincidencias relevantes.</span>
+            </div>
+            {% endif %}
+
+            {% if not hay_pendientes %}
+            <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="mt-3">
+                {% csrf_token %}
+                <button class="btn btn-success" type="submit"><span data-key="tareas.similarity.continue_publish">Continuar publicación</span></button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}

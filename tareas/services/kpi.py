@@ -210,7 +210,9 @@ def _personal_task_queryset(*, empresa_id, user):
     ).values("tarea_id")
     return _operational_queryset(
         Tarea.objects.filter(Q(pk__in=direct_ids) | Q(pk__in=participant_ids))
-    ).select_related("empresa", "responsable", "creada_por").distinct()
+    ).select_related(
+        "empresa", "responsable", "creada_por", "local", "departamento"
+    ).distinct()
 
 
 def get_personal_dashboard(*, user, empresa_id, reference_date=None):
@@ -292,18 +294,42 @@ def _authorized_companies(*, user):
 
 
 def _dashboard_queryset(*, empresa_id, filters=None):
-    queryset = Tarea.objects.filter(empresa_id=empresa_id)
+    queryset = Tarea.objects.all()
+    if empresa_id is not None:
+        queryset = queryset.filter(empresa_id=empresa_id)
     return _apply_task_filters(queryset, filters)
 
 
 def _company_row(empresa, queryset):
+    summary = get_kpis(queryset=queryset)
     return {
         "empresa_id": empresa.pk,
+        "codigo": empresa.codigo,
         "empresa": str(empresa),
-        "kpis": get_kpis(queryset=queryset),
+        "resumen": summary,
+        "kpis": summary,
         "next_dimension": "empresa",
         "url_name": "tareas:dashboard_general_empresa",
         "url_kwargs": {"empresa_id": empresa.pk},
+    }
+
+
+def _task_row(tarea):
+    return {
+        "id": tarea.pk,
+        "correlativo": tarea.correlativo,
+        "titulo": tarea.titulo,
+        "descripcion": tarea.descripcion,
+        "estado": tarea.estado,
+        "prioridad": tarea.prioridad,
+        "responsable": str(tarea.responsable) if tarea.responsable else "",
+        "responsable_id": tarea.responsable_id,
+        "fecha_tope": tarea.fecha_tope,
+        "fecha_publicacion": tarea.fecha_publicacion,
+        "tipo_ambito": tarea.tipo_ambito,
+        "local": str(tarea.local) if tarea.local_id else "",
+        "departamento": str(tarea.departamento) if tarea.departamento_id else "",
+        "url_detalle": reverse("tareas:detalle_tarea", kwargs={"pk": tarea.pk}),
     }
 
 
@@ -343,12 +369,36 @@ def _require_supervisor(*, user, empresa_id):
 def get_company_dashboard(*, user, empresa_id, filters=None):
     empresa = _require_supervisor(user=user, empresa_id=empresa_id)
     queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=filters)
+    from organizacion.models import Departamento
+
+    departamentos = Departamento.objects.filter(empresa=empresa).order_by("codigo", "pk")
+    outside_tasks = list(
+        queryset.filter(departamento_id__isnull=True)
+        .filter(
+            Q(tipo_ambito=Tarea.Ambito.LOCAL)
+            | Q(tipo_ambito__isnull=True)
+            | Q(tipo_ambito="")
+        )
+        .select_related("responsable", "local")
+    )
     return {
         "dimension_actual": "Empresa",
         "empresa": empresa,
         "filters": filters or {},
         "kpis": get_kpis(queryset=queryset),
-        "rows": [],
+        "rows": [
+            {
+                "departamento_id": departamento.pk,
+                "departamento": str(departamento),
+                "url_name": "tareas:dashboard_general_departamento",
+                "url_kwargs": {
+                    "empresa_id": empresa.pk,
+                    "departamento_id": departamento.pk,
+                },
+            }
+            for departamento in departamentos
+        ],
+        "outside_department_tasks": [_task_row(tarea) for tarea in outside_tasks],
         "links": {
             "departamento": "tareas:dashboard_general_departamento",
             "usuario": "tareas:dashboard_general_usuario",
@@ -368,13 +418,31 @@ def get_department_dashboard(*, user, empresa_id, departamento_id, filters=None)
         raise DashboardPermissionError("Departamento no pertenece a la Empresa.")
     local_filters = dict(filters or {}, departamento_id=departamento.pk)
     queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=local_filters)
+    responsible_rows = (
+        queryset.filter(tipo_ambito=Tarea.Ambito.DEPARTAMENTO)
+        .filter(departamento_id=departamento.pk, responsable_id__isnull=False)
+        .values("responsable_id", "responsable__username")
+        .distinct()
+        .order_by("responsable__username", "responsable_id")
+    )
     return {
         "dimension_actual": "Departamento",
         "empresa": empresa,
         "departamento": departamento,
         "filters": local_filters,
         "kpis": get_kpis(queryset=queryset),
-        "rows": [],
+        "rows": [
+            {
+                "usuario_id": row["responsable_id"],
+                "usuario": row["responsable__username"],
+                "url_name": "tareas:dashboard_general_usuario",
+                "url_kwargs": {
+                    "empresa_id": empresa.pk,
+                    "usuario_id": row["responsable_id"],
+                },
+            }
+            for row in responsible_rows
+        ],
         "links": {"usuario": "tareas:dashboard_general_usuario"},
     }
 
@@ -388,13 +456,16 @@ def get_user_dashboard(*, user, empresa_id, usuario_id, filters=None):
         raise DashboardPermissionError("Usuario no pertenece a la Empresa.")
     local_filters = dict(filters or {}, usuario_id=target.pk)
     queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=local_filters)
+    tasks = queryset.filter(responsable=target).select_related(
+        "responsable", "local", "departamento"
+    )
     return {
         "dimension_actual": "Usuario",
         "empresa": empresa,
         "usuario": target,
         "filters": local_filters,
         "kpis": get_kpis(queryset=queryset),
-        "rows": [],
+        "rows": [_task_row(tarea) for tarea in tasks],
         "links": {"tarea": "tareas:detalle_tarea"},
     }
 
@@ -413,7 +484,7 @@ def get_task_dashboard(*, user, empresa_id, tarea_id, filters=None):
         "tarea": tarea,
         "filters": filters or {},
         "kpis": get_kpis(queryset=queryset.filter(pk=tarea.pk)),
-        "rows": [],
+        "rows": [_task_row(tarea)],
         "links": {
             "detalle": reverse("tareas:detalle_tarea", kwargs={"pk": tarea.pk})
         },

@@ -1,0 +1,17 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}<span data-key="tareas.dashboard.general.title">Dashboard general</span>{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Dashboard general" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block content %}
+<div class="main-content"><div class="page-content"><div class="container-fluid">
+    <h4><span data-key="tareas.dashboard.general.title">Dashboard general</span></h4>
+    <div class="row g-3 mb-4">
+        {% for key, value in kpis.items %}<div class="col-md-3"><div class="card"><div class="card-body"><span data-key="tareas.dashboard.kpi.{{ key }}">{{ key }}</span><strong class="d-block">{{ value }}</strong></div></div></div>{% endfor %}
+    </div>
+    <div class="table-responsive"><table class="table table-striped js-t060-datatable"><thead><tr><th><span data-key="tareas.fields.empresa">Empresa</span></th><th><span data-key="tareas.dashboard.summary">Resumen</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>
+    {% for row in rows %}<tr><td>{{ row.codigo }} - {{ row.empresa }}</td><td>{{ row.resumen }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url row.url_name empresa_id=row.url_kwargs.empresa_id %}"><span data-key="tareas.dashboard.open">Abrir</span></a></td></tr>{% endfor %}
+    </tbody></table></div>
+</div></div></div>
+{% endblock content %}
+{% block extra_js %}<script src="{% static 'biblioteca/datatables.js' %}"></script><script src="{% static 'tareas/js/dashboard.js' %}"></script>{% endblock extra_js %}

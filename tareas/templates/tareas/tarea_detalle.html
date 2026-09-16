@@ -117,6 +117,20 @@ Detalle de tarea
                                 <dd class="col-sm-8">{{ tarea.fechas_pendientes_confirmacion }}</dd>
                             </dl>
 
+                            {% if puede_configurar_evidencia %}
+                            <section class="mt-4" aria-labelledby="tareas-enlaces-titulo">
+                                <h5 id="tareas-enlaces-titulo"><span data-key="tareas.links.title">Enlaces compartidos</span></h5>
+                                <form method="post" action="{% url 'tareas:crear_enlace_tarea' tarea.pk %}" class="row g-2 align-items-end js-task-link-form">
+                                    {% csrf_token %}
+                                    <div class="col-md-4"><label class="form-label" for="enlace-destinatario"><span data-key="tareas.links.recipient">Destinatario</span></label><select id="enlace-destinatario" name="destinatario_id" class="form-select" required>{% for destinatario in destinatarios_enlace %}<option value="{{ destinatario.pk }}">{{ destinatario.username }}</option>{% endfor %}</select></div>
+                                    <div class="col-md-4"><label class="form-label" for="enlace-expiracion"><span data-key="tareas.links.expiration">Expiración</span></label><input id="enlace-expiracion" name="fecha_expiracion" type="datetime-local" class="form-control" required></div>
+                                    <div class="col-md-4"><button class="btn btn-primary" type="submit"><span data-key="tareas.links.share">Compartir</span></button></div>
+                                </form>
+                                <div id="task-link-feedback" class="alert d-none mt-3" role="status"></div>
+                                {% if enlaces %}<div class="table-responsive mt-3"><table class="table table-sm"><thead><tr><th><span data-key="tareas.links.recipient">Destinatario</span></th><th><span data-key="tareas.links.created_by">Creado por</span></th><th><span data-key="tareas.links.created_at">Creación</span></th><th><span data-key="tareas.links.expiration">Expiración</span></th><th><span data-key="tareas.links.status">Estado</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>{% for enlace in enlaces %}<tr><td>{{ enlace.destinatario.username }}</td><td>{{ enlace.creado_por.username }}</td><td>{{ enlace.fecha_creacion }}</td><td>{{ enlace.fecha_expiracion }}</td><td>{{ enlace.estado_t060 }}</td><td>{% if enlace.estado_t060 == "ACTIVO" %}<form method="post" action="{% url 'tareas:revocar_enlace_tarea' enlace.pk %}" class="d-inline js-task-link-revoke">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit"><span data-key="tareas.links.revoke">Revocar</span></button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="mt-3"><span data-key="tareas.links.empty">No hay enlaces compartidos.</span></p>{% endif %}
+                            </section>
+                            {% endif %}
+
                             <div class="text-end mt-4">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
                                 <a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.editar">Editar</span></a>
@@ -167,3 +181,7 @@ Detalle de tarea
     </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'tareas/js/task_links.js' %}"></script>
+{% endblock extra_js %}

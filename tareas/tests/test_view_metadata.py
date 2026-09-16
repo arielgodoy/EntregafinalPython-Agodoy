@@ -17,6 +17,8 @@ class TareasViewMetadataTests(SimpleTestCase):
             "crear_tarea": ("Tareas", "crear"),
             "editar_tarea": ("Tareas", "modificar"),
             "publicar_tarea": ("Tareas - Ciclo de vida", "modificar"),
+            "similitud_tarea": ("Tareas - Ciclo de vida", "modificar"),
+            "confirmar_similitud": ("Tareas - Ciclo de vida", "modificar"),
             "gestionar_tarea": ("Tareas - Ciclo de vida", "modificar"),
             "completar_tarea": ("Tareas - Ciclo de vida", "modificar"),
             "aprobar_cierre": ("Tareas - Ciclo de vida", "modificar"),

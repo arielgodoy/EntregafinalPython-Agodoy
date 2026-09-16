@@ -23,7 +23,10 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView, V
 
 from access_control.models import Empresa
 from access_control.decorators import verificar_permiso
-from access_control.services.permissions import user_has_permission_for_empresa
+from access_control.services.permissions import (
+    get_valid_users_for_empresa,
+    user_has_permission_for_empresa,
+)
 from access_control.views import VerificarPermisoMixin
 
 from .forms import (
@@ -46,6 +49,7 @@ from .models import (
     Avance,
     DocumentoHistorial,
     DocumentoTarea,
+    EvaluacionSimilitud,
     Hito,
     HitoEvidencia,
     EnlaceTarea,
@@ -70,6 +74,11 @@ from .services.documents import (
     register_closure_evidence,
 )
 from .services.notifications import emit_task_event, task_recipients
+from .services.similarity import (
+    confirm_similarity,
+    evaluate_task_similarity,
+    get_similarity_threshold,
+)
 from .services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
@@ -102,6 +111,7 @@ from .services.kpi import (
     get_department_dashboard,
     get_general_dashboard,
     get_personal_dashboard,
+    get_task_dashboard,
     get_user_dashboard,
 )
 
@@ -201,7 +211,7 @@ class TareasDashboardGeneralView(VerificarPermisoMixin, LoginRequiredMixin, View
         )
         if not context["rows"]:
             return self.handle_no_permission(request, "No tienes Empresas autorizadas para este dashboard.")
-        return JsonResponse(_serialize_dashboard_value(context))
+        return render(request, "tareas/dashboard_general.html", context)
 
 
 class TareasDashboardEmpresaView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -219,7 +229,7 @@ class TareasDashboardEmpresaView(VerificarPermisoMixin, LoginRequiredMixin, View
             )
         except DashboardPermissionError as error:
             return self.handle_no_permission(request, str(error))
-        return JsonResponse(_serialize_dashboard_value(context))
+        return render(request, "tareas/dashboard_empresa.html", context)
 
 
 class TareasDashboardDepartamentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -238,7 +248,7 @@ class TareasDashboardDepartamentoView(VerificarPermisoMixin, LoginRequiredMixin,
             )
         except DashboardPermissionError as error:
             return self.handle_no_permission(request, str(error))
-        return JsonResponse(_serialize_dashboard_value(context))
+        return render(request, "tareas/dashboard_departamento.html", context)
 
 
 class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -257,7 +267,7 @@ class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View
             )
         except DashboardPermissionError as error:
             return self.handle_no_permission(request, str(error))
-        return JsonResponse(_serialize_dashboard_value(context))
+        return render(request, "tareas/dashboard_usuario.html", context)
 
 
 class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, DetailView):
@@ -291,6 +301,23 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
                 }
             ),
         )
+        context["enlaces"] = list(
+            self.object.enlaces.select_related(
+                "destinatario", "creado_por", "revocado_por"
+            ).order_by("-fecha_creacion")
+        )
+        ahora = timezone.now()
+        for enlace in context["enlaces"]:
+            enlace.estado_t060 = (
+                "REVOCADO"
+                if enlace.revocado_at is not None
+                else "EXPIRADO"
+                if enlace.fecha_expiracion <= ahora
+                else "ACTIVO"
+            )
+        context["destinatarios_enlace"] = get_valid_users_for_empresa(
+            self.object.empresa, active_only=True
+        ).exclude(pk=self.request.user.pk)
         return context
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
@@ -465,6 +492,24 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
             from django.http import Http404
 
             raise Http404
+        if tarea.estado == Tarea.Estado.BORRADOR:
+            try:
+                evaluations = evaluate_task_similarity(
+                    tarea=tarea,
+                    threshold=get_similarity_threshold(tarea.empresa),
+                )
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("tareas:detalle_tarea", pk=tarea.pk)
+            pending = [
+                evaluation
+                for evaluation in evaluations
+                if evaluation.supera_umbral
+                and evaluation.decision == EvaluacionSimilitud.Decision.PENDIENTE
+            ]
+            if pending:
+                messages.warning(request, "La publicación requiere revisar coincidencias de similitud.")
+                return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
         try:
             publish_task(tarea, request.user)
         except ValidationError as e:
@@ -472,6 +517,80 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
             messages.error(request, mensaje)
         else:
             messages.success(request, "Tarea publicada correctamente.")
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+
+class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    template_name = "tareas/tarea_similitud.html"
+    vista_nombre = "Tareas - Ciclo de vida"
+    permiso_requerido = "modificar"
+
+    def get(self, request, tarea_id):
+        tarea = get_object_or_404(self.get_queryset(), pk=tarea_id)
+        try:
+            evaluations = evaluate_task_similarity(
+                tarea=tarea,
+                threshold=get_similarity_threshold(tarea.empresa),
+            )
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        evaluations = [evaluation for evaluation in evaluations if evaluation.supera_umbral]
+        return render(
+            request,
+            self.template_name,
+            {
+                "tarea": tarea,
+                "evaluaciones": evaluations,
+                "hay_pendientes": any(
+                    evaluation.decision == EvaluacionSimilitud.Decision.PENDIENTE
+                    for evaluation in evaluations
+                ),
+            },
+        )
+
+
+class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+    vista_nombre = "Tareas - Ciclo de vida"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, evaluacion_id):
+        tarea = get_object_or_404(self.get_queryset(), pk=tarea_id)
+        evaluation = get_object_or_404(
+            EvaluacionSimilitud.objects.select_related("tarea", "tarea_candidata"),
+            pk=evaluacion_id,
+            tarea=tarea,
+            supera_umbral=True,
+        )
+        decision = request.POST.get("decision")
+        if decision not in {
+            EvaluacionSimilitud.Decision.MISMO_PROBLEMA,
+            EvaluacionSimilitud.Decision.DISTINTO_PROBLEMA,
+        }:
+            messages.error(request, "La decisión de similitud no es válida.")
+            return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
+        try:
+            confirm_similarity(
+                evaluacion=evaluation,
+                decision=decision,
+                actor=request.user,
+            )
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
+        pending = EvaluacionSimilitud.objects.filter(
+            tarea=tarea,
+            supera_umbral=True,
+            decision=EvaluacionSimilitud.Decision.PENDIENTE,
+        ).exists()
+        if pending:
+            return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
+        try:
+            publish_task(tarea, request.user)
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        messages.success(request, "La coincidencia fue confirmada y la tarea fue publicada.")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
@@ -872,6 +991,12 @@ class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reun
     context_object_name = "reunion"
     vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["participante_form"] = ReunionParticipanteForm(empresa=self.object.empresa)
+        context["tarea_form"] = ReunionTareaForm(empresa=self.object.empresa)
+        return context
 
 
 class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):

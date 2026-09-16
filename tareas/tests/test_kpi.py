@@ -23,6 +23,9 @@ from tareas.services.kpi import (
     get_general_dashboard,
     get_kpis,
     get_personal_dashboard,
+    get_task_dashboard,
+    get_company_dashboard,
+    get_user_dashboard,
 )
 
 
@@ -271,3 +274,51 @@ class T059KpiTests(TestCase):
                 empresa_id=self.otra_empresa.pk,
                 departamento_id=departamento.pk,
             )
+
+    def test_t061_rows_y_ocho_kpi_en_dimensiones_activas(self):
+        departamento = Departamento.objects.create(
+            empresa=self.empresa,
+            codigo="DEP-T061",
+            nombre="Departamento T061",
+            source=OrganizationalSource.LOCAL,
+        )
+        tarea = self.crear_tarea(
+            responsable=self.usuario,
+            tipo_ambito=Tarea.Ambito.DEPARTAMENTO,
+            departamento=departamento,
+        )
+
+        general = get_general_dashboard(user=self.usuario)
+        company = get_company_dashboard(user=self.usuario, empresa_id=self.empresa.pk)
+        department = get_department_dashboard(
+            user=self.usuario,
+            empresa_id=self.empresa.pk,
+            departamento_id=departamento.pk,
+        )
+        user = get_user_dashboard(
+            user=self.usuario,
+            empresa_id=self.empresa.pk,
+            usuario_id=self.usuario.pk,
+        )
+        task = get_task_dashboard(
+            user=self.usuario,
+            empresa_id=self.empresa.pk,
+            tarea_id=tarea.pk,
+        )
+
+        expected_kpis = {
+            "por_estado",
+            "atrasadas",
+            "proximas_vencer",
+            "sin_movimiento",
+            "esperando_aprobacion",
+            "carga_por_responsable",
+            "cumplimiento",
+            "tiempo_promedio_cierre_horas",
+        }
+        for context in (general, company, department, user, task):
+            self.assertEqual(set(context["kpis"]), expected_kpis)
+        self.assertEqual(company["rows"][0]["departamento_id"], departamento.pk)
+        self.assertEqual(department["rows"][0]["usuario_id"], self.usuario.pk)
+        self.assertEqual(user["rows"][0]["id"], tarea.pk)
+        self.assertEqual(task["rows"][0]["id"], tarea.pk)

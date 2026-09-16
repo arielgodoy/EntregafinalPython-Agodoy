@@ -483,7 +483,49 @@ T059 calcula los KPI bajo demanda, sin modelo, snapshots, cache persistente ni
 migración. Su servicio entrega a T060 exactamente los ocho KPI, dimensión, filtros,
 filas, estado, prioridad, fechas relevantes, enlaces de navegación y datos mínimos
 del modal; no genera HTML. T060 es responsable de DataTables, cards, acordeones,
-modal y presentación visual.
+modal y presentación visual. T060 puede completar la orquestación HTTP mínima y
+el render server-side para convertir ese contexto en páginas HTML, sin mover las
+fórmulas ni duplicar consultas de KPI en las vistas.
+
+### Contrato de filas y presentación T060
+
+Las filas de dashboard son navegables y conservan los ocho KPI de T059:
+
+- **General**: una fila por Empresa autorizada, con `empresa_id`, código/nombre,
+	resumen operativo y URL al siguiente nivel.
+- **Empresa**: una fila por Departamento disponible y un bloque separado para
+	Tareas `LOCAL` o sin Departamento histórico. Estas Tareas siguen contando en
+	los KPI de Empresa y no se colocan en un Departamento ficticio.
+- **Departamento**: una fila por responsable/Usuario con Tareas en ese
+	Departamento.
+- **Usuario**: una fila por Tarea cuyo responsable sea ese Usuario.
+
+Las filas de Tarea incluyen como mínimo `id`, correlativo, título, estado,
+prioridad, responsable, `fecha_tope`, `fecha_publicacion`, `tipo_ambito` y URL
+de detalle. La dimensión Tarea reutiliza el detalle existente para navegación
+completa y no requiere una ruta redundante.
+
+El modal contractual `Ver info de la tarea` es de solo lectura y puede usar
+datos embebidos en atributos `data-*` o el contexto existente. Muestra
+correlativo, título, descripción resumida, estado, prioridad, responsable, fecha
+de publicación, fecha tope, ámbito, Local o Departamento cuando corresponda y
+el enlace `Ver detalle completo`. No contiene edición, publicación, cierre,
+anulación ni reasignación.
+
+DataTables se aplica exclusivamente a las tablas de dashboard y drill-down que
+necesiten búsqueda, orden, paginación o filtros visuales. No se aplica por
+defecto a formularios, reuniones pequeñas, gestión de enlaces ni similitud.
+
+El dashboard personal conserva `mis-tareas/` y usa el contexto de T059
+(`priority_groups`, `tareas`, `hitos`, `read_status`, `upcoming_tasks` y
+`filters`) sin modificar fórmulas KPI.
+
+La presentación de T060 puede usar JavaScript app-local, preferentemente en
+`tareas/static/tareas/js/dashboard.js`, `similarity.js` y `task_links.js`.
+`static/js/app.js` y cualquier vendor son inmutables. Todo texto estático nuevo
+visible usa `data-key`; los títulos, usuarios, fechas, correlativos y nombres
+dinámicos no reciben `data-key`. Los diccionarios de idioma no se modifican como
+parte de T060.
 
 ---
 
@@ -499,6 +541,13 @@ modal y presentación visual.
 
 **Key Entities — M**: Reunión (modalidad, agenda, comentarios), Subconjunto de tareas.
 
+### Contrato visual de reuniones T060
+
+El detalle de reunión reutiliza el backend T055 existente y debe exponer UI para
+agregar una Tarea a la agenda, agregar un participante, marcar `REALIZADA` y
+registrar el comentario de revisión/cierre por Tarea. No se crea lógica paralela
+ni se exige eliminación cuando el backend/contrato no la define.
+
 ---
 
 ## N. Origen, Derivación y Similitud
@@ -506,7 +555,7 @@ modal y presentación visual.
 - **FR-N01**: Una tarea MUST poder tener como máximo un origen canónico directo: otra tarea, un TO-DO o ninguno. Una tarea no puede tener simultáneamente `todo_origen` y `tarea_origen`.
 - **FR-N02**: El historial de origen MUST ser accesible en lectura.
 - **FR-N03**: MUST NOT convertir una tarea antigua en la nueva: se crea una nueva y se referencia. Cadenas históricas permitidas.
-- **FR-N04**: Durante el flujo de publicación de una Tarea nueva, el sistema MUST evaluar candidatas de la misma Empresa, aplicar el umbral recibido por el servicio y advertir cuando exista al menos una coincidencia con `supera_umbral=True`. El umbral predeterminado de 80% y su configuración por Empresa pertenecen a T057; T056 no MUST hardcodear ni persistir configuración empresarial.
+- **FR-N04**: Durante el flujo de publicación de una Tarea nueva, el sistema MUST obtener el umbral efectivo mediante `get_similarity_threshold(tarea.empresa)`, evaluar candidatas de la misma Empresa con `evaluate_task_similarity(tarea=tarea, threshold=threshold)` y advertir cuando exista al menos una evaluación con `supera_umbral=True` y `decision=PENDIENTE`. Las evaluaciones relevantes pueden persistirse antes de publicar, pero mientras exista una coincidencia pendiente sobre el umbral la Tarea MUST permanecer en `BORRADOR` y la publicación MUST quedar suspendida; no se permite publicar y despublicar. El umbral predeterminado de 80% y su configuración por Empresa pertenecen a T057; T056 no MUST hardcodear ni persistir configuración empresarial.
 - **FR-N05**: La evaluación de similitud MUST incluir Tareas en estado `ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE` y `CERRADA`. MUST excluir `BORRADOR`, cualquier Tarea con `anulada=True` y la propia Tarea evaluada.
 - **FR-N06**: El usuario MUST confirmar "es el mismo problema nuevamente" o "DISTINTO_PROBLEMA" para una coincidencia relevante; mientras la decisión sea `PENDIENTE` no se modifica el origen. Aun confirmando `MISMO_PROBLEMA`, la tarea evaluada es NUEVA.
 - **FR-N07**: La nueva tarea MUST poder mantener una o varias referencias históricas o de similitud a tareas antiguas si corresponde; estas referencias no sustituyen ni multiplican el origen canónico único.
@@ -563,8 +612,10 @@ directo `tarea_origen`.
 
 La evaluación ocurre antes o durante la publicación: primero se persisten las
 evaluaciones relevantes, luego se advierte si alguna supera el umbral y la UI
-posterior solicita la decisión. Una coincidencia nunca bloquea la creación ni
-transforma la Tarea nueva en la candidata.
+posterior solicita la decisión. Si no existen coincidencias relevantes
+pendientes, la publicación continúa normalmente mediante `publish_task()`.
+Mientras exista alguna pendiente, la publicación no continúa. Una coincidencia
+nunca bloquea la creación ni transforma la Tarea nueva en la candidata.
 
 Con `MISMO_PROBLEMA`, la nueva Tarea sigue siendo independiente, la candidata
 permanece exactamente en su estado actual y nunca se reabre ni se reactiva una
@@ -578,7 +629,34 @@ referencias de similitud.
 T056 conserva una evaluación vigente por pareja `(tarea, tarea_candidata)` y no
 define historial de reevaluaciones; la pareja es única. Los cambios de umbral de
 T057 solo afectan evaluaciones nuevas. T060 es responsable de templates,
-advertencia y confirmación; T056 no crea UI ni nuevas rutas.
+advertencia, confirmación y de la orquestación HTTP mínima de este flujo; T056 no
+crea UI ni nuevas rutas.
+
+### Contrato HTTP y visual de similitud T060
+
+La superficie HTTP mínima de T060 es:
+
+- `GET /tareas/<tarea_id>/similitud/`: muestra las evaluaciones de la Tarea,
+	restringidas a su Empresa activa y autorizadas por el flujo de ciclo de vida.
+- `POST /tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/`: recibe
+	exclusivamente `MISMO_PROBLEMA` o `DISTINTO_PROBLEMA` y delega en
+	`confirm_similarity(...)`. La continuación de publicación reutiliza, cuando
+	corresponda, el POST existente de publicación; no se crea una API REST
+	paralela.
+
+La autorización de ambas operaciones reutiliza
+`vista_nombre="Tareas - Ciclo de vida"` y `permiso_requerido="modificar"`.
+La Tarea, la evaluación y la candidata deben pertenecer a la Empresa activa.
+Los errores de `ValidationError`, incluido el intento de establecer un segundo
+origen incompatible, se muestran mediante respuesta controlada.
+
+La vista `tareas/templates/tareas/tarea_similitud.html` debe mostrar todas las
+evaluaciones con `supera_umbral=True`, ordenadas por porcentaje descendente, con
+correlativo de candidata, título, estado, prioridad, porcentaje, umbral
+aplicado, indicador de cierre, decisión actual y enlace de solo lectura al
+detalle cuando exista autorización. Debe permitir resolver cada evaluación
+relevante y continuar la publicación sólo cuando no queden decisiones
+`PENDIENTE`; no permite editar la Tarea histórica.
 
 ### Contrato de umbral T057
 
@@ -717,6 +795,20 @@ Cada acceso con enlace existente crea un `EventoAccesoEnlace`. Los intentos
 con token inexistente no crean filas huérfanas; se registran mediante logging o
 la auditoría HTTP vigente cuando corresponda. La auditoría global permanece
 separada.
+
+### Contrato visual de gestión de enlaces T060
+
+El detalle de Tarea debe ofrecer, según autorización, botón `Compartir`, selector
+de destinatario interno válido, fecha/hora de expiración y listado de enlaces
+de esa Tarea. El listado muestra destinatario, creador, fecha de creación, fecha
+de expiración, estado derivado `ACTIVO`, `EXPIRADO` o `REVOCADO` y acción
+`Revocar` cuando corresponda. Reutiliza exclusivamente las rutas y servicios de
+T058.
+
+El token plano sólo existe en la respuesta de creación. La UI debe mostrar y
+permitir copiar la URL inmediatamente después de crear el enlace. No intenta
+reconstruir posteriormente la URL secreta desde `token_hash`; los enlaces ya
+creados sólo se listan mediante sus metadatos y estado.
 
 T058 V1 no enlaza Hitos de forma independiente. Si se requiere compartir un
 Hito como objeto independiente, debe definirse el contrato separado

@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+{% load static %}
 
 {% block title %}Mis tareas y hitos{% endblock title %}
 
@@ -42,7 +43,7 @@
                                         <td><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></td>
                                         <td>{{ tarea.responsable.username }}</td>
                                         <td>{{ tarea.fecha_tope|default:"-" }}</td>
-                                        <td><a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.view_task">Ver tarea</span></a></td>
+                                        <td><a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.view_task">Ver tarea</span></a> <button type="button" class="btn btn-sm btn-outline-info js-task-info" data-bs-toggle="modal" data-bs-target="#tareaInfoModal" data-correlativo="{{ tarea.correlativo }}" data-titulo="{{ tarea.titulo }}" data-descripcion="{{ tarea.descripcion }}" data-estado="{{ tarea.estado }}" data-prioridad="{{ tarea.prioridad }}" data-responsable="{{ tarea.responsable.username }}" data-fecha-publicacion="{{ tarea.fecha_publicacion|default:"-" }}" data-fecha-tope="{{ tarea.fecha_tope|default:"-" }}" data-ambito="{{ tarea.tipo_ambito|default:"-" }}" data-local="{{ tarea.local }}" data-departamento="{{ tarea.departamento }}" data-detalle-url="{% url 'tareas:detalle_tarea' tarea.pk %}"><span data-key="tareas.dashboard.task_info">Ver info</span></button></td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>
@@ -99,7 +100,12 @@
                     <span data-key="tareas.personal.empty_milestones">No tienes hitos asignados en esta empresa.</span>
                 </div>
             </section>
+            <div class="modal fade" id="tareaInfoModal" tabindex="-1" aria-labelledby="tareaInfoModalLabel" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="tareaInfoModalLabel"><span data-key="tareas.dashboard.task_info">Ver info de la tarea</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div><div class="modal-body"><dl class="row"><dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt><dd class="col-sm-8" id="task-info-correlativo"></dd><dt class="col-sm-4"><span data-key="tareas.fields.titulo">Título</span></dt><dd class="col-sm-8" id="task-info-titulo"></dd><dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripción</span></dt><dd class="col-sm-8" id="task-info-descripcion"></dd><dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt><dd class="col-sm-8" id="task-info-estado"></dd><dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt><dd class="col-sm-8" id="task-info-prioridad"></dd><dt class="col-sm-4"><span data-key="tareas.fields.responsable">Responsable</span></dt><dd class="col-sm-8" id="task-info-responsable"></dd><dt class="col-sm-4"><span data-key="tareas.fields.fecha_publicacion">Fecha publicación</span></dt><dd class="col-sm-8" id="task-info-fecha-publicacion"></dd><dt class="col-sm-4"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></dt><dd class="col-sm-8" id="task-info-fecha-tope"></dd><dt class="col-sm-4"><span data-key="tareas.fields.ambito">Ámbito</span></dt><dd class="col-sm-8" id="task-info-ambito"></dd><dt class="col-sm-4"><span data-key="tareas.fields.local">Local</span></dt><dd class="col-sm-8" id="task-info-local"></dd><dt class="col-sm-4"><span data-key="tareas.fields.departamento">Departamento</span></dt><dd class="col-sm-8" id="task-info-departamento"></dd></dl></div><div class="modal-footer"><a id="task-info-detail" class="btn btn-primary" href="#"><span data-key="tareas.dashboard.full_detail">Ver detalle completo</span></a></div></div></div></div>
         </div>
     </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'tareas/js/dashboard.js' %}"></script>
+{% endblock extra_js %}

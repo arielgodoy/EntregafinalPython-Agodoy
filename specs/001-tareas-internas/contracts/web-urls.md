@@ -35,6 +35,8 @@ este contrato salvo clasificación explícita.
 | GET/POST | `/tareas/crear/` | `crear_tarea` | `CrearTareaView` | `Tareas - Crear tarea` | `crear` |
 | GET/POST | `/tareas/<pk>/editar/` | `editar_tarea` | `EditarTareaView` | `Tareas - Editar tarea` | `modificar` |
 | POST | `/tareas/<pk>/publicar/` | `publicar_tarea` | `PublicarTareaView` | `Tareas - Publicar tarea` | `modificar` |
+| GET | `/tareas/<tarea_id>/similitud/` | `similitud_tarea` | Vista de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
+| POST | `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/` | `confirmar_similitud` | Acción de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
 
 ## Contratos por operación
 
@@ -67,11 +69,33 @@ este contrato salvo clasificación explícita.
 ### Publicar — `POST /tareas/<pk>/publicar/`
 
 - **Precondición**: tarea en `BORRADOR` de la empresa activa.
-- **Éxito**: `estado=PUBLICADA`, `fecha_publicacion=now()`; redirect a detalle con mensaje
-  de éxito.
+- **Precondición de similitud**: obtener el umbral efectivo con
+  `get_similarity_threshold(tarea.empresa)` y ejecutar
+  `evaluate_task_similarity(tarea=tarea, threshold=threshold)`. Si existe alguna
+  evaluación con `supera_umbral=True` y `decision=PENDIENTE`, la Tarea permanece
+  en `BORRADOR`, se muestra la advertencia y no se publica.
+- **Éxito**: cuando no existen coincidencias relevantes pendientes,
+  `publish_task()` completa la publicación, con `estado=PUBLICADA` y
+  `fecha_publicacion=now()`; redirect a detalle con mensaje de éxito.
 - **Rechazo (responsable ausente o inválido)**: la tarea permanece en `BORRADOR`; se informa
   el motivo (mensaje de error en la vista, patrón `messages` / JSON controlado según canal).
 - **Publicación irreversible**: no existe ruta ni operación de retorno a borrador (Q2).
+
+### Similitud — T060
+
+- **GET** `/tareas/<tarea_id>/similitud/`: muestra todas las evaluaciones de la
+  Tarea con `supera_umbral=True`, ordenadas por porcentaje descendente, con
+  candidata, título, estado, prioridad, porcentaje, umbral aplicado, indicador
+  `CERRADA`, decisión y enlace de solo lectura si está autorizado.
+- **POST** `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/`: recibe sólo
+  `MISMO_PROBLEMA` o `DISTINTO_PROBLEMA` y llama a `confirm_similarity(...)`.
+  No modifica `EvaluacionSimilitud` directamente desde la vista.
+- **Empresa y autorización**: la Tarea y evaluación deben pertenecer a la
+  Empresa activa; usa `Tareas - Ciclo de vida` + `modificar`.
+- **Continuación**: reutiliza `/tareas/<pk>/publicar/` cuando todas las
+  coincidencias relevantes están resueltas; no crea una API REST paralela.
+- **Errores**: los `ValidationError` se devuelven como respuesta controlada y
+  se muestran en la UI.
 
 ### Eliminación — FUERA DE ALCANCE
 
@@ -94,7 +118,7 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 
 La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal de solo lectura; no crea una URL ni una acción POST nueva. Solo se muestra cuando `Hito.completado=True` y la autorización de lectura vigente permite consultar la Tarea/Hito. El modal lee los campos canónicos del Hito y lista todas sus `HitoEvidencia` (`0..N`), sin mezclar `EvidenciaCierre` de Tarea ni modificar datos. Para un Hito completado, el contrato visual solo ofrece `Ver cumplimiento Hito` y `Anular` cuando el actor tenga esa facultad; no ofrece edición, reasignación, nueva completitud, actualización de avance ni eliminación física. La reactivación de un Hito completado y anulado queda fuera de contrato hasta resolver FR-F44.
 | 4 | Cotizaciones | GET/POST | `rondas_cotizacion` / `cotizaciones_ronda` | Default 3; máximo 3 versiones |
-| 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` | Reunión: ver, crear, modificar, `CONVOCAR` y marcar realizada; crea su Tarea planificada, usa ámbito LOCAL/DEPARTAMENTO y no duplica una Tarea dentro de la misma reunión |
+| 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` / `confirmar_similitud` | Reunión: ver, crear, modificar, `CONVOCAR` y marcar realizada; similitud: evaluar, mostrar coincidencias y confirmar decisiones antes de publicar |
 | 5 | Crear enlace compartible | POST | `/tareas/<tarea_id>/enlaces/crear/` | `Tareas` + `modificar`; destinatario interno, Empresa activa y fecha de expiración futura |
 | 5 | Abrir enlace compartible | GET | `/tareas/enlace/<token>/` | `login_required`, destinatario exacto, Empresa activa, token vigente; lectura específica sin permiso VICMEAS general |
 | 5 | Revocar enlace compartible | POST | `/tareas/enlaces/<enlace_id>/revocar/` | `Tareas` + `modificar`; conserva el enlace y registra revocación |
@@ -120,8 +144,30 @@ Cada respuesta de dashboard entrega contexto server-side para exactamente ocho K
 dimensión actual, filtros activos, filas, estado, prioridad, fechas relevantes,
 enlaces al siguiente nivel y datos mínimos de la Tarea. El servicio no genera HTML.
 Los KPI se calculan bajo demanda y no crean snapshots, cache persistente, modelos
-ni migraciones. T060 es responsable de DataTables, cards, acordeones, modal y
-presentación.
+ni migraciones. T060 puede renderizar ese contexto en templates HTML y es
+responsable de DataTables, cards, acordeones, modal y presentación, sin mover ni
+duplicar fórmulas de T059.
+
+Las filas contractuales son: Empresas autorizadas en General; Departamentos y,
+separadamente, Tareas `LOCAL` o sin Departamento histórico en Empresa;
+responsables/Usuarios del Departamento en la dimensión Departamento; y Tareas
+del responsable seleccionado en Usuario. Una fila de Tarea contiene `id`,
+correlativo, título, estado, prioridad, responsable, `fecha_tope`,
+`fecha_publicacion`, `tipo_ambito` y URL de detalle. Nunca se crea un
+Departamento ficticio.
+
+El modal `Ver info de la tarea` es de solo lectura, puede consumir datos
+embebidos en la fila y muestra correlativo, título, descripción resumida, estado,
+prioridad, responsable, fechas, ámbito, Local/Departamento y enlace al detalle.
+No ofrece mutaciones. DataTables sólo se aplica a tablas de dashboard/drill-down
+que requieran búsqueda, orden, paginación o filtros; no se aplica por defecto a
+reuniones, enlaces ni similitud.
+
+El dashboard personal conserva `/tareas/mis-tareas/` y el contexto de T059.
+T060 puede usar JavaScript app-local en `tareas/static/tareas/js/`, separado por
+dashboard, similitud y enlaces. `static/js/app.js` y vendor son inmutables.
+Todo texto estático nuevo usa `data-key`; no se añaden claves dinámicas ni se
+editan diccionarios de idioma en T060.
 
 El drill-down contractual es `General -> Empresa -> Departamento -> Usuario ->
 Tarea`. Departamento filtra exclusivamente Tareas con
