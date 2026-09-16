@@ -216,7 +216,7 @@ class ProjectsMotherViewMetadataTests(TestCase):
     def test_documents_and_task_type_remain_separate(self):
         self.assertEqual(
             SubirDocumentoTareaView.vista_nombre,
-            "Control de Proyectos - Subir documento de tarea",
+            "Control de Proyectos - Documentos de Tarea",
         )
         self.assertEqual(
             CrearTipoTareaView.vista_nombre,

@@ -664,7 +664,7 @@ class CrearTipoTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
 
 class SubirDocumentoTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Vista AJAX para subir documentos a una tarea"""
-    vista_nombre = "Control de Proyectos - Subir documento de tarea"
+    vista_nombre = "Control de Proyectos - Documentos de Tarea"
     permiso_requerido = "crear"
     
     def post(self, request, tarea_id):
