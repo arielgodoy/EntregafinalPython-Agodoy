@@ -27,9 +27,9 @@
 
 ## Regla arquitectónica (vigente)
 
-- Toda la lógica funcional nueva vive dentro de `tareas/` (app autocontenida; COPILOT/ARQUITECTURA_APPS.md).
+- Toda la lógica funcional nueva vive dentro de `tareas/` y respeta APPLICATION BOUNDARY (ver Constitución y `COPILOT/ARQUITECTURA_APPS.md`).
 - `tareas` REUTILIZA, no duplica: VICMEAS/access_control, sesión/usuario autenticado, seguridad, multiempresa, `notificaciones`, email (`acounts`/email_service).
-- No se modifican otras apps ni archivos globales salvo integración técnica mínima con autorización expresa.
+- No se modifican otras apps ni archivos globales desde este scope; cualquier registro o cambio externo requiere una tarea separada con autorización y scope explícitos.
 - Detención: si una necesidad no puede resolverse dentro de `tareas/`, se DETIENE y reporta (archivo, motivo, impacto, alternativa).
 
 ### Seguridad funcional y visibilidad de navegación
@@ -500,7 +500,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - Se reutilizan usuarios, empresa activa, VICMEAS, notificaciones y email existentes; sin sistemas paralelos.
 - Prioridad: SIMPLE/NORMAL/URGENTE/CRITICA, default NORMAL (sin "baja").
 - Fechas: UTC almacenamiento, presentación en zona local configurada.
-- App `tareas` autocontenida; integración externa mínima requiere autorización expresa.
+- App `tareas` bajo APPLICATION BOUNDARY; una dependencia externa no se elude localmente y requiere tarea separada.
 - Implementación por fases; Fase 1 (borrador/publicada, aislamiento, VICMEAS) ya implementada y válida.
 
 ---

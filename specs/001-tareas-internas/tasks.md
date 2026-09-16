@@ -15,7 +15,7 @@ description: "Task list for the Tareas Internas master feature"
 
 - Toda lógica futura pertenece a `tareas/`; se reutilizan VICMEAS para visibilidad del sidebar, ICMEAS para autorización funcional, sesión, multiempresa, notificaciones y email existentes.
 - VICMEAS ya está implementado en la infraestructura base. No crear una fase ni una task para implementarlo; las tasks de `tareas` solo deben consumir el mapping explícito de sus Vistas y preservar la independencia V/I.
-- El alta inicial de `tareas` en `AppDocs/app_classification.py`, `AppDocs/settings.py` y `AppDocs/urls.py` ya está resuelta; no se generan tareas pendientes para repetirla.
+- El alta inicial de `tareas` en `AppDocs/app_classification.py`, `AppDocs/settings.py` y `AppDocs/urls.py` ya está resuelta; no se generan tareas pendientes para repetirla. APPLICATION BOUNDARY prohíbe cambios globales desde este scope.
 - P1 Local permanece `LEGACY API PENDIENTE`: no se crean tareas de implementación, filtros, modelos, IDs, endpoints ni sincronización.
 - P2 Proveedor limita únicamente la integración ERP; el maestro local Django se planifica en nuevas tasks posteriores al checkpoint histórico T048.
 - Cotizaciones se implementan solo hasta el punto previo a necesitar identidad real del proveedor; desde ese punto quedan bloqueadas.
@@ -135,7 +135,7 @@ description: "Task list for the Tareas Internas master feature"
 > queda supersedida por el maestro global local Django; las siguientes tasks evolucionan el
 > contrato sin reabrir las tasks cerradas ni modificar retroactivamente su implementación.
 
-- [x] T082 [US5] Diseñar y registrar la nueva `APPLICATION_APP` transversal `proveedores`, autocontenida y separada de `tareas`, incluyendo únicamente el registro técnico mínimo autorizado en `AppDocs/*`.
+- [x] T082 [US5] Diseñar y registrar la nueva `APPLICATION_APP` transversal `proveedores`, autocontenida y separada de `tareas`; su registro global se ejecutó mediante autorización y scope separados, no como excepción de APPLICATION BOUNDARY.
 - [x] T083 [US5] Implementar el modelo global Django `Proveedor` con los campos aprobados, RUT opcional normalizado y único global, `activo=True`, inactivación lógica, timestamps y auditoría mínima.
 - [x] T084 [US5] Implementar Vista VICMEAS `Proveedores - Maestro` (`proveedores:listado`), seed idempotente local y CRUD del maestro global de proveedores: `ver` para menú, `ingresar` para listado/detalle, `crear` para alta, `modificar` para edición/reactivación y `eliminar` únicamente para inactivación lógica; sin eliminación física, sin `autorizar`/`supervisor`, sin crear `ProveedorEmpresa`, `visitas` ni integración ERP. La navegación usará un grupo existente si hay ubicación canónica; no se inventará `Maestros`.
 - [x] T085 [US5] Añadir la relación nullable `Cotizacion.proveedor -> proveedores.Proveedor`, preservando cotizaciones PRE-P2 con `proveedor=NULL` y sin backfill inventado.
@@ -265,7 +265,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 - No hay tareas de implementación para P1 Local.
 - No hay tareas de implementación para identidad externa o integración ERP de Proveedor fuera de T091; el maestro local se aborda en T082-T090.
 - T047–T052 conservan el cierre PRE-P2 histórico; T082–T091 contienen la evolución local y separan la integración ERP futura P2.
-- Cualquier modificación futura adicional en `AppDocs/app_classification.py`, `AppDocs/settings.py` o `AppDocs/urls.py` requiere autorización expresa; su alta inicial ya está resuelta y no es tarea pendiente.
+- Cualquier modificación futura adicional en `AppDocs/app_classification.py`, `AppDocs/settings.py` o `AppDocs/urls.py` requiere una tarea separada con autorización y scope explícitos; su alta inicial ya está resuelta y no es tarea pendiente.
 - Cualquier modificación futura de otras apps, templates globales, diccionarios i18n globales o infraestructura requiere autorización expresa y detención previa.
 
 ## Implementation strategy

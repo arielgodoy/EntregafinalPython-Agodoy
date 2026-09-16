@@ -17,6 +17,10 @@ Sync Impact Report
 - Enmienda 2026-09-07 (v1.2.0, MINOR): se formaliza en el Principio V la separación
   entre visibilidad VICMEAS y autorización ICMEAS, incluyendo el uso de `ver`, la
   evaluación uniforme de `is_superuser` y la prohibición de usar `ver` como autorización.
+- Enmienda 2026-09-16 (v1.3.0, MINOR): se formaliza el principio de APPLICATION
+  BOUNDARY, la reutilización obligatoria de infraestructura base, la prohibición de
+  SHADOW INFRASTRUCTURE, la dependencia externa explícita y la validación física del
+  scope mediante Git.
 -->
 
 # AppDocs Constitution
@@ -57,13 +61,25 @@ CORE_SYSTEM_APPS tienen protección reforzada según `COPILOT/ARQUITECTURA_APPS.
 mínimo, tests y `git diff --check`). La lectura y el diagnóstico son libres; la
 escritura requiere autorización.
 
-Además, toda nueva APPLICATION_APP MUST ser AUTOCONTENIDA: su lógica funcional vive en
-su propia carpeta y solo puede tocar archivos externos para el registro técnico mínimo
-(`AppDocs/app_classification.py`, `AppDocs/settings.py`, `AppDocs/urls.py`). Para
-consumir funcionalidad de otras apps, usa sus interfaces existentes desde su carpeta,
-sin modificarlas. La regla completa y su regla de detención están en
-`COPILOT/ARQUITECTURA_APPS.md` (sección "Autocontencion de APPLICATION_APPS").
-Rationale: la infraestructura transversal es compartida por todo el sistema.
+Además, toda APPLICATION_APP MUST respetar una APPLICATION BOUNDARY estricta: cuando el
+scope de una tarea es una APPLICATION, su `WRITABLE ROOT` es exclusivamente el directorio
+de esa aplicación. Puede leer, importar y consumir contratos públicos externos, pero todo
+archivo fuera de ese directorio es READ-ONLY, incluyendo `AppDocs/`, SYSTEM_APPS y otras
+APPLICATION_APPS. El alcance efectivo es la intersección entre este boundary y el scope
+explícito de la tarea, que puede ser más restrictivo.
+
+Una APPLICATION MUST reutilizar la infraestructura base existente y MUST NOT duplicarla,
+forkearla, shadowearla ni crear equivalentes locales de VICMEAS, multiempresa,
+autenticación, sesiones, auditoría, notificaciones, búsqueda, API authentication,
+catálogos de Vistas, materialización de Permisos, selección de empresa, 403 estructural
+o preferencias globales. Los servicios propios sólo pueden contener lógica de dominio.
+Si el contrato público no alcanza y se requiere un cambio externo, el caso se clasifica
+`BOUNDARY_EXTERNAL_DEPENDENCY` (o `REVIEW_REQUIRED_EXTERNAL_DEPENDENCY`) y se detiene
+esa parte; modificar una app base u otra APPLICATION requiere una tarea separada con
+scope y autorización explícitos.
+
+Rationale: la propiedad física, la reutilización de infraestructura y la detención ante
+dependencias externas preservan aislamiento, seguridad y estabilidad transversal.
 
 ### IV. Código vendor inmutable (NON-NEGOTIABLE)
 
@@ -130,7 +146,8 @@ especificado.
   resume principios obligatorios y referencia los documentos especializados.
 - Documentación de referencia: `COPILOT/INDICE.md` (índice y regla de lectura),
   `COPILOT/ESTADO_ACTUAL.md` (estado técnico vigente), `COPILOT/ARQUITECTURA_APPS.md`
-  (protección de apps), `COPILOT/REGLAS_CODIGO_VENDOR.md` (código vendor).
+  (clasificación, APPLICATION BOUNDARY y protección de apps),
+  `COPILOT/REGLAS_CODIGO_VENDOR.md` (código vendor).
 - Ante contradicción entre una tarea/spec y estos principios, NO asumir que Spec Kit
   autoriza modificar arquitectura protegida: detenerse y señalar el conflicto al
   usuario. Ante contradicción documental, prevalece el orden definido en
@@ -141,4 +158,4 @@ especificado.
   MINOR: nuevo principio o sección; PATCH: aclaraciones sin cambio semántico) y
   actualización del Sync Impact Report al inicio de este archivo.
 
-**Version**: 1.2.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-07
+**Version**: 1.3.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-16

@@ -8,7 +8,8 @@ se describen escenarios de verificación end-to-end.
 
 > **REGISTRO INICIAL RESUELTO**: el alta de la app en `AppDocs/app_classification.py`,
 > `INSTALLED_APPS` y `AppDocs/urls.py` ya fue autorizada, ejecutada, testeada y versionada.
-> Cualquier modificación futura adicional de esos archivos requiere autorización expresa.
+> Cualquier modificación futura adicional de esos archivos requiere una tarea separada con
+> autorización y scope explícitos; no es una excepción al APPLICATION BOUNDARY.
 
 ## Prerequisitos
 
@@ -19,8 +20,8 @@ se describen escenarios de verificación end-to-end.
    ```
 3. El sidebar consume la infraestructura VICMEAS existente: `Permiso.ver` controla solo
    visibilidad por empresa activa y el mapping explícito de items a Vistas. No se agrega
-   una implementación de VICMEAS en `tareas`; cualquier seed o cambio futuro en
-   SYSTEM_APPS requiere autorización expresa previa.
+   una implementación de VICMEAS en `tareas`; cualquier cambio futuro en SYSTEM_APPS
+   requiere una tarea separada con autorización y scope explícitos.
 4. Un usuario con empresa activa en sesión y permisos ICMEAS sobre las vistas `Tareas - *`
    para las acciones que probará, y `Permiso.ver` cuando deba verificar visibilidad.
 
@@ -152,5 +153,6 @@ git status --short
 
 Esperado: diff sin errores de whitespace; cambios de código limitados a `tareas/` y `specs/`.
 Los cambios futuros adicionales en `AppDocs/app_classification.py`, `AppDocs/settings.py` y
-`AppDocs/urls.py` solo pueden aparecer si el usuario otorga autorización expresa previa.
+`AppDocs/urls.py` sólo pueden aparecer en una tarea separada con autorización y scope
+explícitos; desde este scope son dependencias externas.
 Sin commit ni push sin autorización expresa del usuario.

@@ -9,7 +9,8 @@ la anulación es una acción protegida y auditada.
 
 > **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
 > `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
-> adicional de esos archivos requiere autorización expresa.
+> adicional de esos archivos requiere una tarea separada con autorización y scope
+> explícitos; no forma parte del APPLICATION BOUNDARY de `tareas`.
 
 Todas las rutas viven bajo el include `tareas/` con namespace `tareas`. Todas requieren
 sesión autenticada + empresa activa + autorización ICMEAS según la operación; ante falta

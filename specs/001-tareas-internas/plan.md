@@ -43,15 +43,16 @@ en `tareas/tests/` y escenarios manuales de `quickstart.md`.
 estado, fechas, correlativo y relaciones; KPI y similitud consultarán solo la empresa activa
 y usarán paginación cuando corresponda.
 
-**Constraints**: lógica nueva dentro de `tareas/`; `session['empresa_id']` es obligatorio,
+**Constraints**: lógica nueva dentro de `tareas/` bajo APPLICATION BOUNDARY; `session['empresa_id']` es obligatorio,
 `Permiso.ver` controla solo visibilidad del sidebar y ICMEAS autorización funcional;
 `static/js/app.js` es inmutable; no se crean maestros legacy; no se elimina
-físicamente una tarea; cambios fuera de `tareas/` requieren autorización expresa.
+físicamente una tarea; cambios fuera de `tareas/` requieren una tarea separada con autorización y scope explícitos.
 
 **Registration status**: El alta inicial de `tareas` en `AppDocs/app_classification.py`,
 `AppDocs/settings.py` y `AppDocs/urls.py` ya fue autorizada, ejecutada, testeada y
-versionada. Cualquier modificación futura adicional de esos archivos requiere autorización
-expresa. Cualquier otro archivo externo a `tareas/` queda bloqueado por la regla de detención.
+versionada. Cualquier modificación futura adicional de esos archivos queda fuera de este
+scope y requiere una tarea separada con autorización explícita. Cualquier otro archivo
+externo a `tareas/` queda bloqueado por APPLICATION BOUNDARY.
 Local requiere contrato legacy antes de cerrar su fase. Proveedor puede operar localmente;
 solo su integración ERP requiere contrato P2.
 

@@ -45,45 +45,82 @@ Antes de modificar una `CORE_SYSTEM_APP` expresamente autorizada, Copilot debe:
 6. Ejecutar `git diff --check` y revisar el diff final completo.
 7. No hacer commit ni push sin autorizacion expresa.
 
-## Autocontencion de APPLICATION_APPS (regla permanente)
+## APPLICATION BOUNDARY (regla permanente)
 
-Toda nueva `APPLICATION_APP` debe ser AUTOCONTENIDA: la logica funcional de una app de
-negocio vive dentro de su propia carpeta (`models.py`, `views.py`, `forms.py`, `urls.py`,
-`templates/`, `static/`, `tests/`, `services/`, `migrations/` y demas archivos propios).
+Una `APPLICATION_APP` es propietaria únicamente de los archivos dentro de su propio
+directorio. Para una tarea cuyo scope sea una APPLICATION, el `WRITABLE ROOT` es
+exclusivamente `<application_name>/`. Esto incluye modelos, vistas, formularios, URLs
+propias, servicios, templates, static propios, tests, migrations y demás recursos
+físicamente contenidos allí.
 
-Una `APPLICATION_APP` nueva NO debe modificar otras apps ni archivos globales para
-implementar su logica funcional, salvo el registro tecnico minimo indispensable para
-integrarse al proyecto. Fuera de la app solo se permiten, cuando sean necesarios, cambios
-minimos y focalizados en:
+La APPLICATION puede leer, importar, llamar y consumir modelos, servicios, mixins,
+decorators y APIs públicas de otras apps. Consumir una dependencia no transfiere ownership
+ni autoriza modificarla. Todo archivo fuera del `WRITABLE ROOT` es READ-ONLY, incluyendo
+`AppDocs/`, todas las SYSTEM_APPS, templates/static globales, vendor y otras
+APPLICATION_APPS. Una APPLICATION tampoco modifica otra APPLICATION.
 
-- `AppDocs/app_classification.py` — registrar la app en `APPLICATION_APPS`;
-- `AppDocs/settings.py` — agregarla a `INSTALLED_APPS`;
-- `AppDocs/urls.py` — incluir las URLs raiz de la app.
+El alcance efectivo es la intersección entre APPLICATION BOUNDARY y el scope explícito de
+la tarea; el scope concreto puede ser más restrictivo y nunca se amplía automáticamente.
+Las excepciones históricas de registro inicial no crean una autorización permanente: un
+nuevo registro global o cambio de infraestructura requiere una tarea separada, con scope,
+archivos autorizados, motivo, tests y regresión explícitos.
 
-Esta regla NO autoriza modificar: `access_control/`, `settings/`, `dashboard/`,
-`notificaciones/`, `common/`, templates globales, static global, otras APPLICATION_APPS,
-ni otras SYSTEM_APPS o CORE_SYSTEM_APPS.
+### Reutilización de infraestructura base
 
-Si una nueva app necesita funcionalidades de otra app o de una SYSTEM_APP, debe CONSUMIR
-sus interfaces, modelos, servicios, mixins, decorators o APIs existentes desde dentro de
-su propia carpeta (p. ej., `tareas` importa y usa `VerificarPermisoMixin` de
-`access_control`), sin modificar la app consumida.
+Una APPLICATION MUST consumir la infraestructura base oficial y NO puede duplicarla,
+forkearla, copiarla, parchearla, envolverla para eludir su contrato ni crear SHADOW
+INFRASTRUCTURE local. Esto prohíbe equivalentes funcionales locales de VICMEAS/ICMEAS,
+empresa activa y multiempresa, autenticación, sesiones, auditoría, notificaciones,
+búsqueda global, autenticación API, catálogo de Vistas, materialización de Permisos,
+selección de empresa, 403 estructural o preferencias globales.
 
-### Regla de detencion
+Los servicios, helpers, selectors y validators propios son válidos únicamente cuando
+implementan reglas específicas del dominio de la APPLICATION. El criterio es funcional,
+no el nombre del archivo o clase.
 
-Si durante el desarrollo de una `APPLICATION_APP` el agente determina que necesita
-modificar un archivo fuera de: la carpeta propia de la app, `AppDocs/app_classification.py`,
-`AppDocs/settings.py` o `AppDocs/urls.py`, debe DETENERSE antes de editar e informar:
+### Dependencias externas y detención
 
-1. que archivo externo necesita modificar;
-2. por que no puede resolverse dentro de la app;
-3. que dependencia o comportamiento transversal esta involucrado;
-4. que alternativas existen;
-5. cual es el impacto y riesgo;
-6. solicitar autorizacion expresa del usuario.
+Si el contrato público existente no alcanza y la solución requiere modificar algo fuera
+del `WRITABLE ROOT`, no se implementa un workaround local ni se copia la infraestructura.
+El caso se clasifica como `BOUNDARY_EXTERNAL_DEPENDENCY` o
+`REVIEW_REQUIRED_EXTERNAL_DEPENDENCY` y se informa:
 
-No se asume autorizacion por el solo hecho de que la feature requiera integracion con otra
-app. Esta regla aplica a todo desarrollo futuro de nuevas APPLICATION_APPS.
+1. APPLICATION afectada;
+2. necesidad funcional;
+3. app/archivo externo requerido;
+4. motivo por el que el contrato público no alcanza;
+5. cambio externo mínimo necesario;
+6. impacto esperado.
+
+Sólo puede continuar el trabajo independiente que respete el boundary. Modificar una
+SYSTEM_APP, CORE_SYSTEM_APP, SYSTEM_SUPPORT_APP u otra APPLICATION exige una tarea
+separada y autorización explícita; una necesidad descubierta no constituye autorización.
+
+### Reglas específicas
+
+- `urls.py` dentro de la APPLICATION es modificable; `AppDocs/urls.py` es externo y read-only.
+- El sidebar global puede leerse, pero no modificarse desde una APPLICATION. Si vive en
+	`access_control/services/permissions.py`, cualquier cambio es una dependencia externa.
+- Una APPLICATION puede declarar `vista_nombre` y `permiso_requerido` en sus vistas y usar
+	`VerificarPermisoMixin` o los decorators/servicios VICMEAS oficiales, sin modificar
+	`access_control` ni crear tablas o bypasses paralelos.
+- Las migrations, templates y static modificables son únicamente los que viven dentro de
+	la APPLICATION; los recursos globales y vendor son externos.
+
+### Validación física del boundary
+
+Antes de editar se establece `WRITABLE ROOT=<application>/`. Antes de stage se ejecuta:
+
+```text
+git status --short --untracked-files=all
+git diff --name-only
+```
+
+Todo cambio debe pertenecer al `WRITABLE ROOT`; de lo contrario es `SCOPE VIOLATION`:
+se detiene, no se stagea, no se borra y no se modifica el archivo externo. Antes del
+commit se ejecuta `git diff --cached --name-status`; si existe una ruta externa, el commit
+está prohibido. Se usa stage selectivo (`git add -- <application>/<archivo>`), nunca
+`git add .` ni `git add -A`.
 
 ## Deuda arquitectonica conocida
 
