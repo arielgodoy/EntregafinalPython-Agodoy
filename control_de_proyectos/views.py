@@ -630,7 +630,7 @@ class CrearTipoTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     model = TipoTarea
     form_class = TipoTareaForm
     template_name = 'control_de_proyectos/tipotarea_form.html'
-    vista_nombre = "Control de Proyectos - Crear tipo de tarea"
+    vista_nombre = "Control de Proyectos - Tareas"
     permiso_requerido = "crear"
 
     def form_valid(self, form):

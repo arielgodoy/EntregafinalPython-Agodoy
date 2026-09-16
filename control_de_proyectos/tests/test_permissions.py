@@ -213,15 +213,16 @@ class ProjectsMotherViewMetadataTests(TestCase):
         self.assertTrue(permission.modificar)
         self.assertFalse(permission.eliminar)
 
-    def test_documents_and_task_type_remain_separate(self):
+    def test_documents_remain_separate_and_task_type_uses_task_mother(self):
         self.assertEqual(
             SubirDocumentoTareaView.vista_nombre,
             "Control de Proyectos - Documentos de Tarea",
         )
         self.assertEqual(
             CrearTipoTareaView.vista_nombre,
-            "Control de Proyectos - Crear tipo de tarea",
+            "Control de Proyectos - Tareas",
         )
+        self.assertEqual(CrearTipoTareaView.permiso_requerido, "crear")
 
 
 class AvancePermisosTests(TestCase):
