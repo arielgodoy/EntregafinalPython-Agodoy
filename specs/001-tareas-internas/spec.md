@@ -137,6 +137,14 @@ posteriores de reprogramación.
 - **FR-D09**: Permisos por rol integrados con VICMEAS (sin sistema paralelo).
 - **FR-D10**: Confirmación de lectura para participantes/invitados cuando corresponda.
 
+**Nota UX pendiente**: cada Tarea mantiene un único `responsable` principal,
+mientras el trabajo en equipo puede incluir múltiples participantes. El contrato
+actual de `/tareas/crear/` conserva únicamente la selección del responsable
+principal; los participantes se gestionan después de crear la Tarea. Al cierre
+del desarrollo se evaluará si conviene permitir seleccionar participantes durante
+la creación. Esta nota no cambia el contrato funcional actual, no convierte
+participantes en múltiples responsables y no requiere implementación ahora.
+
 **Key Entities — D**: Asignación de rol, Reasignación, Confirmación de lectura.
 
 ---

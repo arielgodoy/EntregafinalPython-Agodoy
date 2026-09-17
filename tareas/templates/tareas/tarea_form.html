@@ -17,9 +17,12 @@
                 <div class="col-lg-8 offset-lg-2">
                     <div class="card shadow-lg rounded">
                         <div class="card-body">
-                            <h4 class="card-title mb-4">
-                                {% if object %}<span data-key="tareas.form.title_edit">Editar tarea</span>{% else %}<span data-key="tareas.form.title_create">Crear tarea</span>{% endif %}
-                            </h4>
+                            <div class="border-bottom pb-3 mb-4">
+                                <h4 class="card-title mb-1">
+                                    {% if object %}<span data-key="tareas.form.title_edit">Editar tarea</span>{% else %}<span data-key="tareas.form.title_create">Crear tarea</span>{% endif %}
+                                </h4>
+                                {% if not object %}<p class="text-muted small mb-0">Se creará un borrador; algunos datos pueden completarse antes de publicar.</p>{% endif %}
+                            </div>
 
                             {% if form.non_field_errors %}
                             <div class="alert alert-danger">
@@ -29,6 +32,9 @@
 
                             <form method="post" novalidate>
                                 {% csrf_token %}
+
+                                <section class="mb-4" aria-labelledby="datos-basicos-titulo">
+                                    <h5 id="datos-basicos-titulo" class="h6 text-uppercase text-muted mb-3">Datos básicos</h5>
 
                                 <div class="mb-3">
                                     <label for="{{ form.titulo.id_for_label }}" class="form-label"><span data-key="tareas.fields.titulo">Título</span> *</label>
@@ -41,25 +47,33 @@
                                     {{ form.descripcion }}
                                     {% for error in form.descripcion.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 </div>
+                                </section>
 
-                                <div class="mb-3">
-                                    <label for="{{ form.prioridad.id_for_label }}" class="form-label"><span data-key="tareas.fields.prioridad">Prioridad</span></label>
-                                    {{ form.prioridad }}
-                                    {% for error in form.prioridad.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                                </div>
+                                <section class="border-top pt-4 mb-4" aria-labelledby="planificacion-titulo">
+                                    <h5 id="planificacion-titulo" class="h6 text-uppercase text-muted mb-3">Planificación</h5>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label for="{{ form.prioridad.id_for_label }}" class="form-label"><span data-key="tareas.fields.prioridad">Prioridad</span></label>
+                                            {{ form.prioridad }}
+                                            {% for error in form.prioridad.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                        </div>
 
-                                <div class="mb-3">
-                                    <label for="{{ form.responsable.id_for_label }}" class="form-label"><span data-key="tareas.fields.responsable">Responsable</span></label>
-                                    {{ form.responsable }}
-                                    {% for error in form.responsable.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                                </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.responsable.id_for_label }}" class="form-label"><span data-key="tareas.fields.responsable">Responsable</span></label>
+                                            {{ form.responsable }}
+                                            <div class="form-text">Puede dejarse sin responsable mientras la tarea permanezca en borrador.</div>
+                                            {% for error in form.responsable.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                        </div>
 
-                                <div class="mb-3">
-                                    <label for="{{ form.fecha_tope.id_for_label }}" class="form-label"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></label>
-                                    {{ form.fecha_tope }}
-                                    {% for error in form.fecha_tope.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                                    {% if object and object.estado != "BORRADOR" %}<div class="form-text"><span data-key="tareas.fields.fecha_tope_readonly">La fecha tope se modifica mediante reprogramación.</span></div>{% endif %}
-                                </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.fecha_tope.id_for_label }}" class="form-label"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></label>
+                                            {{ form.fecha_tope }}
+                                            <div class="form-text">Puede definirse posteriormente, pero será obligatoria al publicar.</div>
+                                            {% for error in form.fecha_tope.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                            {% if object and object.estado != "BORRADOR" %}<div class="form-text"><span data-key="tareas.fields.fecha_tope_readonly">La fecha tope se modifica mediante reprogramación.</span></div>{% endif %}
+                                        </div>
+                                    </div>
+                                </section>
 
                                 <div class="text-end">
                                     <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><span data-key="tareas.actions.cancelar">Cancelar</span></a>

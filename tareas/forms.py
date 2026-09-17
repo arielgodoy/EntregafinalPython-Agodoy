@@ -145,6 +145,19 @@ class TareaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        widget_classes = {
+            "titulo": "form-control w-100",
+            "descripcion": "form-control w-100",
+            "prioridad": "form-select w-100",
+            "responsable": "form-select w-100",
+            "fecha_tope": "form-control w-100",
+        }
+        for field_name, class_names in widget_classes.items():
+            widget = self.fields[field_name].widget
+            existing_classes = widget.attrs.get("class", "")
+            widget.attrs["class"] = " ".join(
+                dict.fromkeys(f"{existing_classes} {class_names}".split())
+            )
         if self.instance and self.instance.estado != Tarea.Estado.BORRADOR:
             self.fields["fecha_tope"].disabled = True
 
