@@ -125,10 +125,10 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T046 [US5] Implementar la regla general de cierre por mínimo de cotizaciones y apertura de nuevas rondas en `tareas/services/closure.py` y `tareas/services/quotations.py`, deteniéndose antes de contar proveedores distintos o evaluar identidad real.
 - [x] T047 [US5] Detener la implementación de cotizaciones en `tareas/services/quotations.py` exactamente antes de requerir identidad real de proveedor; documentar el punto de bloqueo P2 en `specs/001-tareas-internas/contracts/web-urls.md`.
 - [x] T048 [US5] Mantener `ProveedorReferencia` únicamente como **PLACEHOLDER DE DISEÑO — IMPLEMENTACIÓN BLOQUEADA POR P2** en `specs/001-tareas-internas/data-model.md`; no crear modelo, campos, ID, endpoint, tabla, sincronización ni tarea adicional.
-- [ ] T049 [US5] No implementar maestro, filtros de elegibilidad, endpoint ni sincronización de Local; conservar P1 como `LEGACY API PENDIENTE` (FR-A07, FR-R05) en la documentación de fase.
-- [ ] T050 [US5] Añadir tests de rondas, mínimos, estados, fechas, observaciones, documentos asociados, histórico y bloqueo P2 en `tareas/tests/test_quotations.py`; no probar identidad, conteo o máximo efectivo por proveedor.
-- [ ] T051 [US5] Preparar migraciones aditivas únicamente para la parte interna de cotizaciones en `tareas/migrations/`, sin modelar identidad legacy de proveedor y sin ejecutar migraciones durante esta generación.
-- [ ] T052 [US5] Validar escenarios E11 de `specs/001-tareas-internas/quickstart.md` y registrar el bloqueo antes de identidad real de proveedor.
+- [x] T049 [US5] No implementar maestro, filtros de elegibilidad, endpoint ni sincronización de Local; conservar P1 como `LEGACY API PENDIENTE` (FR-A07, FR-R05) en la documentación de fase.
+- [x] T050 [US5] Añadir tests de rondas, mínimos, estados, fechas, observaciones, documentos asociados, histórico y bloqueo P2 en `tareas/tests/test_quotations.py`; no probar identidad, conteo o máximo efectivo por proveedor.
+- [x] T051 [US5] Preparar migraciones aditivas únicamente para la parte interna de cotizaciones en `tareas/migrations/`, sin modelar identidad legacy de proveedor y sin ejecutar migraciones durante esta generación.
+- [x] T052 [US5] Validar escenarios E11 de `specs/001-tareas-internas/quickstart.md` y registrar el bloqueo antes de identidad real de proveedor.
 
 > **Decisión posterior a T047/T048**: T047 y T048 permanecen `[x]` como checkpoints
 > históricos válidos del diseño PRE-P2. La estrategia de identidad dependiente del legacy
@@ -168,7 +168,7 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T077 [US6] Implementar dashboard personal de tareas y hitos asignados: incluir Tareas con `responsable == usuario` y Hitos activos (`responsable == usuario` y `anulado == False`) aunque difieran del responsable de la Tarea; agrupar ambos por `Tarea.prioridad` usando exactamente `SIMPLE`, `NORMAL`, `URGENTE`, `CRITICA`, sin crear `clasificacion` ni prioridad propia en Hito; mostrar contexto suficiente y navegar desde cada Tarea a su detalle y desde cada Hito a la pantalla existente `/tareas/<tarea_pk>/hitos/`, sin crear detalle individual de Hito (FR-L08, FR-L09, FR-L10, FR-L11). La futura vista personal debe ofrecer al responsable del Hito `Actualizar avance` y `Completar Hito`, sin conceder reasignación, y reutilizar también la consulta canónica `Ver cumplimiento Hito` definida en T081.
 - [x] T061 [US6] Añadir tests con mocks de notificaciones/email, reuniones, similitud 80%/por empresa, enlaces cross-company y ocho KPI por dimensión en `tareas/tests/test_collaboration.py`, `tareas/tests/test_similarity.py` y `tareas/tests/test_kpi.py`.
 - [x] T062 [US6] Preparar migraciones aditivas de colaboración, similitud, enlaces y configuración de umbral en `tareas/migrations/`, sin tocar proveedores/locales ni ejecutar migraciones durante esta generación.
-- [ ] T063 [US6] Validar escenarios E12–E13 de `specs/001-tareas-internas/quickstart.md`, manteniendo Local/Proveedor bloqueados en drill-down.
+- [x] T063 [US6] Validar escenarios E12–E13 de `specs/001-tareas-internas/quickstart.md`, manteniendo Local/Proveedor bloqueados en drill-down.
 
 ### TO-DO y origen canónico (diseño aprobado; implementación futura)
 
@@ -183,12 +183,12 @@ description: "Task list for the Tareas Internas master feature"
 
 **Purpose**: Cerrar trazabilidad, seguridad, compatibilidad y documentación sin ampliar alcance.
 
-- [ ] T064 [P] Actualizar claves i18n nuevas en documentación de `specs/001-tareas-internas/contracts/web-urls.md`; cualquier edición de diccionarios globales queda bloqueada y requiere autorización separada.
-- [ ] T065 [P] Ejecutar revisión de permisos ICMEAS, empresa activa, aislamiento, respuestas controladas y ausencia de exposición de credenciales en `tareas/`.
-- [ ] T066 [P] Revisar que ningún archivo de `tareas/` importe o modifique `static/js/app.js`, `common/utils.py`, `api/Router_Databases.py` u otra infraestructura protegida.
-- [ ] T067 Ejecutar la suite completa `python manage.py test --settings=AppDocs.settings_test` y `python manage.py check` después de implementar las fases autorizadas.
-- [ ] T068 Ejecutar `git diff --check` y revisar el diff completo; detenerse si aparece cualquier cambio fuera de `tareas/` o de documentación autorizada.
-- [ ] T069 Confirmar en `specs/001-tareas-internas/quickstart.md` los escenarios ejecutados y mantener P1/P2 como bloqueos explícitos hasta autorización de sus contratos.
+- [x] T064 [P] Actualizar claves i18n nuevas en documentación de `specs/001-tareas-internas/contracts/web-urls.md`; cualquier edición de diccionarios globales queda bloqueada y requiere autorización separada.
+- [x] T065 [P] Ejecutar revisión de permisos ICMEAS, empresa activa, aislamiento, respuestas controladas y ausencia de exposición de credenciales en `tareas/`.
+- [x] T066 [P] Revisar que ningún archivo de `tareas/` importe o modifique `static/js/app.js`, `common/utils.py`, `api/Router_Databases.py` u otra infraestructura protegida.
+- [x] T067 Ejecutar la suite completa `python manage.py test --settings=AppDocs.settings_test` y `python manage.py check` después de implementar las fases autorizadas.
+- [x] T068 Ejecutar `git diff --check` y revisar el diff completo; detenerse si aparece cualquier cambio fuera de `tareas/` o de documentación autorizada.
+- [x] T069 Confirmar en `specs/001-tareas-internas/quickstart.md` los escenarios ejecutados y mantener P1/P2 como bloqueos explícitos hasta autorización de sus contratos.
 
 ## Success criteria traceability
 

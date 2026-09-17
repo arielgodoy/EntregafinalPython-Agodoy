@@ -3,6 +3,7 @@ import re
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from tareas.models import Hito, Tarea
 from tareas.services.progress import create_milestone
@@ -27,6 +28,8 @@ class T077DashboardTests(TestCase):
             responsable=cls.usuario,
             prioridad=Tarea.Prioridad.CRITICA,
             fecha_tope=date(2026, 10, 1),
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
         )
         cls.tarea_urgente = create_tarea(
             cls.empresa,
@@ -34,18 +37,24 @@ class T077DashboardTests(TestCase):
             titulo="Tarea urgente propia",
             responsable=cls.usuario,
             prioridad=Tarea.Prioridad.URGENTE,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
         )
         cls.tarea_otro_usuario = create_tarea(
             cls.empresa,
             cls.otro_usuario,
             titulo="Tarea ajena",
             responsable=cls.otro_usuario,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
         )
         cls.tarea_otra_empresa = create_tarea(
             cls.otra_empresa,
             cls.usuario,
             titulo="Tarea otra empresa",
             responsable=cls.usuario,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
         )
         cls.hito_pendiente = create_milestone(
             cls.tarea_urgente,

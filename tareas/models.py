@@ -560,7 +560,7 @@ class ReunionParticipante(models.Model):
 
 
 def formato_coincide_extension(formato, extension):
-    if formato in {Tarea.FormatoArchivo.JPG, Tarea.FormatoArchivo.JPEG}:
+    if formato in {FormatoArchivo.JPG, FormatoArchivo.JPEG}:
         return extension in {"jpg", "jpeg"}
     return extension == formato.lower()
 

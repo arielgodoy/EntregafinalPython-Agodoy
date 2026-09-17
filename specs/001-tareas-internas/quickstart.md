@@ -127,6 +127,16 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 - Reutilizar el cierre de Tarea vigente y validar que la ronda más reciente controla el mínimo.
 - Confirmar que todo el flujo opera con el maestro local Django sin consultar ERP/legacy; la integración, conciliación y sincronización permanecen bloqueadas por P2.
 
+Estado E11 PRE-P2: EJECUTADO/VALIDADO exclusivamente sobre las capacidades
+internas autorizadas: rondas, mínimos, estados, fechas, observaciones,
+documentos, histórico, selección interna, cierre controlado, nuevas rondas,
+maestro local Django y versionado por `(ronda, proveedor)`.
+
+Estado P2 ERP/legacy: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN. Quedan
+fuera de esta validación la identidad externa del proveedor, lookup ERP,
+validación ERP, conciliación, sincronización y actualización desde legacy.
+No se declara identidad ERP ni se implementa integración legacy.
+
 ### E12. Colaboración, similitud y enlaces (Phase 5)
 
 - Verificar notificaciones internas/email mediante mocks y reuniones de revisión.
@@ -134,16 +144,26 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
    y comprobar que solo afecta evaluaciones nuevas.
 - Abrir enlace como usuario autenticado de la empresa y rechazar acceso cross-company/externo.
 
+Estado E12: EJECUTADO/VALIDADO mediante la regresión focal de colaboración,
+similitud, enlaces y reuniones, con mocks de notificaciones/email y cobertura
+de aislamiento cross-company.
+
 ### E13. Dashboards (Phase 6)
 
 - Comprobar exactamente ocho KPI en cada dimensión permitida: estado, atrasadas, próximas a
    vencer, sin movimiento, aprobación pendiente, carga, cumplimiento y tiempo promedio de cierre.
 - Verificar drill-down, paginación y aislamiento; mantener Local/Proveedor bloqueados sin legacy.
 
+Estado E13: EJECUTADO/VALIDADO mediante la regresión integrada de KPI,
+dashboards, T060, dashboard personal y metadata, manteniendo Local/Proveedor
+fuera de las dimensiones de drill-down.
+
 ## Límites y bloqueos
 
 - No hay eliminación física; se usa anulación auditada.
-- P1 Local permanece `LEGACY API PENDIENTE`. P2 Proveedor bloquea únicamente la integración/validación/conciliación con ERP legacy; el maestro Django local no queda bloqueado.
+- P1 Local: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN; permanece `LEGACY API PENDIENTE`.
+- P2 Proveedor: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN para integración,
+  validación y conciliación con ERP legacy; el maestro Django local no queda bloqueado.
 - No hay usuarios externos, plantilla de hitos ni vencimiento automático de documentos.
 - El alta inicial ya está resuelta; cualquier modificación futura de `AppDocs/*` requiere
    autorización expresa.

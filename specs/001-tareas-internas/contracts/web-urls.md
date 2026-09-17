@@ -214,17 +214,62 @@ Local no tiene rutas propias ni endpoints inventados hasta resolver P1. Las ruta
 maestro local de Proveedor se definirán dentro de la futura app `proveedores` con ICMEAS;
 las rutas de integración ERP permanecen bloqueadas por P2.
 
-## Claves i18n nuevas (a reportar para alta en `static/lang/sp.json` / `en.json`)
+## Claves i18n T060/T064
 
-- `tareas.list.title`, `tareas.form.title_create`, `tareas.form.title_edit`,
-  `tareas.detail.title`, `tareas.fields.*` (titulo, descripcion, prioridad, estado,
-  responsable, empresa, fecha_creacion, fecha_publicacion), `tareas.state.*` (borrador,
-  publicada), `tareas.actions.*` (crear, editar, publicar),
-  `tareas.publish.error_no_responsable`, `tareas.publish.error_responsable_invalido`,
-  `tareas.empty_list`.
-- `tareas.priority.*`: `tareas.priority.simple`, `tareas.priority.normal`,
-  `tareas.priority.urgente`, `tareas.priority.critica` (valores aprobados: simple, normal,
-  urgente, crítica).
+El inventario de `data-key` literales estáticos de
+`tareas/templates/tareas/` identifica 176 claves. Se excluyen claves que
+contienen expresiones Django (`{{ ... }}` o tags `{% ... %}`), además de los
+valores dinámicos de tareas, usuarios, fechas y correlativos.
 
-> Nota: las claves se reportan en la entrega; los diccionarios de idioma se actualizan solo
-> si el usuario lo autoriza (regla i18n: reportar, no editar silenciosamente).
+Las superficies nuevas de US6/T060 usan estos prefijos reales:
+
+### Catálogo base
+
+- `tareas.actions.*`
+- `tareas.common.*`
+- `tareas.empty_list`
+- `tareas.fields.*`
+- `tareas.form.*`
+- `tareas.list.*`
+- `tareas.priority.*`
+- `tareas.state.*`
+
+### Dashboards
+
+- `tareas.dashboard.*`
+- `tareas.personal.*`
+
+### Reuniones
+
+- `tareas.meetings.*`
+
+### Similitud
+
+- `tareas.similarity.*`
+
+### Enlaces
+
+- `tareas.links.*`
+
+### Documentos y evidencia
+
+- `tareas.documents.*`
+- `tareas.evidence.*`
+
+### Hitos, progreso y jerarquía
+
+- `tareas.milestones.*`
+- `tareas.progress.*`
+- `tareas.hierarchy.*`
+
+La comparación contra `static/lang/sp.json` y `static/lang/en.json` muestra:
+
+- **20 claves literales presentes en ambos diccionarios**: estado A,
+  `YA PRESENTE EN SP/EN`.
+- **156 claves literales ausentes en ambos diccionarios**: estado B,
+  `AUSENTE EN SP/EN — PENDIENTE DE DICCIONARIO GLOBAL`.
+
+Las 156 claves faltantes quedan documentadas para una autorización separada
+de edición de diccionarios globales. T064 no modifica
+`static/lang/sp.json` ni `static/lang/en.json`, y no interpreta la ausencia
+como autorización para agregarlas.
