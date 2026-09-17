@@ -1,9 +1,9 @@
 {% extends "partials/base.html" %}
 
-{% block title %}<span data-key="tareas.similarity.title">Revisión de similitud</span>{% endblock title %}
+{% block title %}Revisión de similitud{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Revisión de similitud" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Revisión de similitud" pagetitle="Tareas" title_key="tareas.similarity.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -11,9 +11,9 @@
     <div class="page-content">
         <div class="container-fluid">
             {% if messages %}
-                {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
-                {% endfor %}
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
+                            {% endfor %}
             {% endif %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
@@ -47,8 +47,8 @@
                         <tr>
                             <td>{{ evaluacion.tarea_candidata.correlativo|default:"-" }}</td>
                             <td>{{ evaluacion.tarea_candidata.titulo }}</td>
-                            <td><span data-key="tareas.state.{{ evaluacion.tarea_candidata.estado|lower }}">{{ evaluacion.tarea_candidata.get_estado_display }}</span></td>
-                            <td><span data-key="tareas.priority.{{ evaluacion.tarea_candidata.prioridad|lower }}">{{ evaluacion.tarea_candidata.get_prioridad_display }}</span></td>
+                            <td>{% include "tareas/_state_label.html" with value=evaluacion.tarea_candidata.estado %}</td>
+                            <td>{% include "tareas/_priority_label.html" with value=evaluacion.tarea_candidata.prioridad %}</td>
                             <td>{{ evaluacion.porcentaje }}%</td>
                             <td>{{ evaluacion.umbral_aplicado }}%</td>
                             <td>{% if evaluacion.tarea_candidata.estado == "CERRADA" %}<span data-key="tareas.common.yes">Sí</span>{% else %}<span data-key="tareas.common.no">No</span>{% endif %}</td>

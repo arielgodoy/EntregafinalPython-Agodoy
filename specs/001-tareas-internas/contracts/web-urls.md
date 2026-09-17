@@ -216,6 +216,23 @@ las rutas de integración ERP permanecen bloqueadas por P2.
 
 ## Claves i18n T060/T064
 
+### Gate transversal de cierre
+
+Las rutas y templates de `tareas` no se consideran completamente implementados
+solo por contener `data-key`. Todo texto estático y todo `message_key` debe existir
+en los catálogos español e inglés; no se aceptan claves dinámicas no resolubles,
+enums técnicos visibles sin etiqueta, ni mensajes backend/AJAX mostrados como
+claves. El cierre requiere validación manual ES/EN de la superficie afectada y
+estas métricas en cero: `MISSING_SP`, `MISSING_EN`, `ONE_SIDE`, `DYNAMIC_KEYS`,
+`RAW_MESSAGE_KEYS_VISIBLE` y `VISIBLE_HARDCODED_TEXT`, salvo excepciones
+justificadas y documentadas.
+
+La prueba automática canónica es:
+
+```powershell
+python manage.py test tareas.tests.test_i18n --settings=AppDocs.settings_test
+```
+
 El inventario de `data-key` literales estáticos de
 `tareas/templates/tareas/` identifica 176 claves. Se excluyen claves que
 contienen expresiones Django (`{{ ... }}` o tags `{% ... %}`), además de los

@@ -6,7 +6,7 @@ Detalle de tarea
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" title_key="tareas.list.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -16,7 +16,7 @@ Detalle de tarea
             {% if messages %}
                 {% for message in messages %}
                 <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
+                    {% include "tareas/_i18n_message.html" with message=message %}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
                 {% endfor %}
@@ -42,7 +42,7 @@ Detalle de tarea
                                     <a href="{% url 'tareas:detalle_tarea' tarea_padre.pk %}">
                                         {{ tarea_padre.correlativo|default:"—" }} - {{ tarea_padre.titulo }}
                                     </a>
-                                    <span data-key="tareas.state.{{ tarea_padre.estado|lower }}">({{ tarea_padre.get_estado_display }})</span>
+                                    (<span>{% include "tareas/_state_label.html" with value=tarea_padre.estado %}</span>)
                                 </p>
                                 {% endif %}
                                 {% if tareas_hijas %}
@@ -54,7 +54,7 @@ Detalle de tarea
                                             <a href="{% url 'tareas:detalle_tarea' hija.pk %}">
                                                 {{ hija.correlativo|default:"—" }} - {{ hija.titulo }}
                                             </a>
-                                            <span data-key="tareas.state.{{ hija.estado|lower }}">({{ hija.get_estado_display }})</span>
+                                            (<span>{% include "tareas/_state_label.html" with value=hija.estado %}</span>)
                                             {% if hija.anulada %}<span data-key="tareas.hierarchy.annulled">Anulada</span>{% endif %}
                                         </li>
                                         {% endfor %}
@@ -65,7 +65,7 @@ Detalle de tarea
 
                             <dl class="row mb-0">
                                 <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
-                                <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>
+                                <dd class="col-sm-8">{% include "tareas/_state_label.html" with value=tarea.estado %}</dd>
 
                                 <dt class="col-sm-4"><span data-key="tareas.evidence.configuration">Configuración de cierre</span></dt>
                                 <dd class="col-sm-8">
@@ -84,7 +84,7 @@ Detalle de tarea
                                 </dd>
 
                                 <dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt>
-                                <dd class="col-sm-8"><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></dd>
+                                <dd class="col-sm-8">{% include "tareas/_priority_label.html" with value=tarea.prioridad %}</dd>
 
                                 <dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripción</span></dt>
                                 <dd class="col-sm-8">{{ tarea.descripcion|default:"—"|linebreaksbr }}</dd>
@@ -127,6 +127,11 @@ Detalle de tarea
                                     <div class="col-md-4"><button class="btn btn-primary" type="submit"><span data-key="tareas.links.share">Compartir</span></button></div>
                                 </form>
                                 <div id="task-link-feedback" class="alert d-none mt-3" role="status"></div>
+                                <div class="d-none" aria-hidden="true">
+                                    <span data-key="tareas.links.create_error">No fue posible crear el enlace.</span>
+                                    <span data-key="tareas.links.created">Enlace creado correctamente.</span>
+                                    <span data-key="tareas.links.url_created">URL creada:</span>
+                                </div>
                                 {% if enlaces %}<div class="table-responsive mt-3"><table class="table table-sm"><thead><tr><th><span data-key="tareas.links.recipient">Destinatario</span></th><th><span data-key="tareas.links.created_by">Creado por</span></th><th><span data-key="tareas.links.created_at">Creación</span></th><th><span data-key="tareas.links.expiration">Expiración</span></th><th><span data-key="tareas.links.status">Estado</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>{% for enlace in enlaces %}<tr><td>{{ enlace.destinatario.username }}</td><td>{{ enlace.creado_por.username }}</td><td>{{ enlace.fecha_creacion }}</td><td>{{ enlace.fecha_expiracion }}</td><td>{{ enlace.estado_t060 }}</td><td>{% if enlace.estado_t060 == "ACTIVO" %}<form method="post" action="{% url 'tareas:revocar_enlace_tarea' enlace.pk %}" class="d-inline js-task-link-revoke">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit"><span data-key="tareas.links.revoke">Revocar</span></button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="mt-3"><span data-key="tareas.links.empty">No hay enlaces compartidos.</span></p>{% endif %}
                             </section>
                             {% endif %}

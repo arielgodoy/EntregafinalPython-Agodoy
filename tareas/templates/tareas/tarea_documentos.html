@@ -4,7 +4,7 @@
 {% block title %}Documentos y evidencia{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Documentos y evidencia" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Documentos y evidencia" pagetitle="Tareas" title_key="tareas.documents.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -12,9 +12,9 @@
     <div class="page-content">
         <div class="container-fluid">
             {% if messages %}
-                {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
-                {% endfor %}
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
+                            {% endfor %}
             {% endif %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4><span data-key="tareas.documents.title">Documentos y evidencia</span></h4>
@@ -91,7 +91,7 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                             </div>
                             <div class="modal-body">
-                                {{ document_form.non_field_errors }}
+                                {% include "tareas/_i18n_form_errors.html" with errors=document_form.non_field_errors %}
                                 <div class="mb-2"><label for="{{ document_form.tipo.id_for_label }}"><span data-key="tareas.documents.type">Tipo</span></label>{{ document_form.tipo }}{{ document_form.tipo.errors }}</div>
                                 <div class="mb-2"><label for="{{ document_form.formato_archivo.id_for_label }}"><span data-key="tareas.documents.format">Formato de archivo</span></label>{{ document_form.formato_archivo }}{{ document_form.formato_archivo.errors }}</div>
                                 <div class="mb-2"><label for="{{ document_form.archivo.id_for_label }}"><span data-key="tareas.documents.file">Archivo</span></label>{{ document_form.archivo }}{{ document_form.archivo.errors }}</div>
@@ -116,7 +116,7 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                             </div>
                             <div class="modal-body">
-                                {{ evidencia_registro_form.non_field_errors }}
+                                {% include "tareas/_i18n_form_errors.html" with errors=evidencia_registro_form.non_field_errors %}
                                 <div class="mb-2"><label for="{{ evidencia_registro_form.formato_archivo.id_for_label }}"><span data-key="tareas.evidence.file_format">Formato de archivo</span></label>{{ evidencia_registro_form.formato_archivo }}{{ evidencia_registro_form.formato_archivo.errors }}</div>
                                 <div class="mb-2"><label for="{{ evidencia_registro_form.archivo.id_for_label }}"><span data-key="tareas.evidence.file">Archivo</span></label>{{ evidencia_registro_form.archivo }}{{ evidencia_registro_form.archivo.errors }}</div>
                                 <div class="mb-2"><label for="{{ evidencia_registro_form.url.id_for_label }}"><span data-key="tareas.evidence.url">URL</span></label>{{ evidencia_registro_form.url }}{{ evidencia_registro_form.url.errors }}</div>

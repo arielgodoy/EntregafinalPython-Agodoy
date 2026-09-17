@@ -6,7 +6,7 @@ Tareas
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" title_key="tareas.list.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -44,8 +44,8 @@ Tareas
                                     {% for tarea in tareas %}
                                     <tr>
                                         <td>{{ tarea.titulo }}</td>
-                                        <td><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></td>
-                                        <td><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></td>
+                                        <td>{% include "tareas/_priority_label.html" with value=tarea.prioridad %}</td>
+                                        <td>{% include "tareas/_state_label.html" with value=tarea.estado %}</td>
                                         <td>{% if tarea.responsable %}{{ tarea.responsable.username }}{% else %}—{% endif %}</td>
                                         <td>{{ tarea.fecha_creacion }}</td>
                                         <td>

@@ -1,9 +1,9 @@
 {% extends "partials/base.html" %}
 
-{% block title %}<span data-key="tareas.links.read_only_title">Tarea compartida</span>{% endblock title %}
+{% block title %}Tarea compartida{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Tarea compartida" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Tarea compartida" pagetitle="Tareas" title_key="tareas.links.read_only_title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -19,9 +19,9 @@
                                 <dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
                                 <dd class="col-sm-8">{{ tarea.correlativo|default:"-" }}</dd>
                                 <dt class="col-sm-4"><span data-key="tareas.fields.estado">Estado</span></dt>
-                                <dd class="col-sm-8"><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></dd>
+                                <dd class="col-sm-8">{% include "tareas/_state_label.html" with value=tarea.estado %}</dd>
                                 <dt class="col-sm-4"><span data-key="tareas.fields.prioridad">Prioridad</span></dt>
-                                <dd class="col-sm-8"><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></dd>
+                                <dd class="col-sm-8">{% include "tareas/_priority_label.html" with value=tarea.prioridad %}</dd>
                                 <dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripcion</span></dt>
                                 <dd class="col-sm-8">{{ tarea.descripcion|default:"-"|linebreaksbr }}</dd>
                                 <dt class="col-sm-4"><span data-key="tareas.fields.responsable">Responsable</span></dt>

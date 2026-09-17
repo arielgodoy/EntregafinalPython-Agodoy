@@ -67,7 +67,10 @@ class CompletarHitoForm(forms.Form):
         tiene_archivo = bool(cleaned_data.get("archivo"))
         tiene_url = bool(cleaned_data.get("url"))
         if tiene_archivo == tiene_url:
-            raise forms.ValidationError("La evidencia debe indicar exactamente un archivo o una URL.")
+            raise forms.ValidationError(
+                "tareas.validation.evidence_file_or_url_required",
+                code="tareas.validation.evidence_file_or_url_required",
+            )
         return cleaned_data
 
 
@@ -101,7 +104,8 @@ class DocumentoForm(forms.ModelForm):
         tiene_url = bool(cleaned_data.get("url"))
         if tiene_archivo == tiene_url:
             raise forms.ValidationError(
-                "El documento debe indicar exactamente un archivo o una URL."
+                "tareas.validation.document_file_or_url_required",
+                code="tareas.validation.document_file_or_url_required",
             )
         return cleaned_data
 
@@ -121,7 +125,8 @@ class EvidenciaRegistroForm(forms.Form):
         tiene_url = bool(cleaned_data.get("url"))
         if tiene_archivo == tiene_url:
             raise forms.ValidationError(
-                "La evidencia debe indicar exactamente un archivo o una URL."
+                "tareas.validation.evidence_file_or_url_required",
+                code="tareas.validation.evidence_file_or_url_required",
             )
         return cleaned_data
 

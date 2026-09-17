@@ -32,6 +32,26 @@
 - No se modifican otras apps ni archivos globales desde este scope; cualquier registro o cambio externo requiere una tarea separada con autorización y scope explícitos.
 - Detención: si una necesidad no puede resolverse dentro de `tareas/`, se DETIENE y reporta (archivo, motivo, impacto, alternativa).
 
+### Gate transversal permanente de i18n
+
+Una superficie de UI no se considera terminada solo por incluir `data-key`.
+El cierre i18n exige simultáneamente:
+
+`template/data-key o message_key correcto` + `clave en sp.json` + `clave en en.json`
++ `sin claves dinámicas no resolubles` + `enums visibles con etiqueta traducida`
++ `mensajes backend/AJAX traducidos` + `validación manual ES/EN completada`.
+
+El gate de cierre debe producir estas métricas, todas en cero:
+
+- `MISSING_SP`
+- `MISSING_EN`
+- `ONE_SIDE`
+- `DYNAMIC_KEYS`
+- `RAW_MESSAGE_KEYS_VISIBLE`
+- `VISIBLE_HARDCODED_TEXT`, salvo excepciones explícitamente justificadas como datos dinámicos, valores técnicos no visibles, logs/debug o excepciones documentadas.
+
+Toda nueva superficie o task de UI de `tareas` debe pasar este gate antes de marcarse terminada.
+
 ### Seguridad funcional y visibilidad de navegación
 
 - `VICMEAS` es la nomenclatura canónica única del sistema de visibilidad y autorización.

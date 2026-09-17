@@ -1,6 +1,6 @@
 {% extends "partials/base.html" %}
 {% block title %}{{ reunion.titulo }}{% endblock title %}
-{% block pagetitle %}{% include "partials/page-title.html" with title="Reunión de revisión" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Reunión de revisión" pagetitle="Tareas" title_key="tareas.meetings.form_title" pagetitle_key="menu.tareas" %}{% endblock pagetitle %}
 {% block content %}
 <div class="main-content"><div class="page-content"><div class="container-fluid">
     <h4>{{ reunion.titulo }}</h4>

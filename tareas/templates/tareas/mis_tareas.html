@@ -4,7 +4,7 @@
 {% block title %}Mis tareas y hitos{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Mis tareas y hitos" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Mis tareas y hitos" pagetitle="Tareas" title_key="tareas.personal.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -20,7 +20,7 @@
                 {% for group in priority_groups %}
                     {% if group.tareas %}
                     <div class="card mb-3">
-                        <div class="card-header"><span data-key="tareas.personal.priority.{{ group.value|lower }}">{{ group.label }}</span></div>
+                        <div class="card-header">{% include "tareas/_priority_label.html" with value=group.value %}</div>
                         <div class="table-responsive">
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead>
@@ -39,8 +39,8 @@
                                     <tr>
                                         <td>{{ tarea.correlativo|default:"-" }}</td>
                                         <td>{{ tarea.titulo }}</td>
-                                        <td><span data-key="tareas.priority.{{ tarea.prioridad|lower }}">{{ tarea.get_prioridad_display }}</span></td>
-                                        <td><span data-key="tareas.state.{{ tarea.estado|lower }}">{{ tarea.get_estado_display }}</span></td>
+                                        <td>{% include "tareas/_priority_label.html" with value=tarea.prioridad %}</td>
+                                        <td>{% include "tareas/_state_label.html" with value=tarea.estado %}</td>
                                         <td>{{ tarea.responsable.username }}</td>
                                         <td>{{ tarea.fecha_tope|default:"-" }}</td>
                                         <td><a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.view_task">Ver tarea</span></a> <button type="button" class="btn btn-sm btn-outline-info js-task-info" data-bs-toggle="modal" data-bs-target="#tareaInfoModal" data-correlativo="{{ tarea.correlativo }}" data-titulo="{{ tarea.titulo }}" data-descripcion="{{ tarea.descripcion }}" data-estado="{{ tarea.estado }}" data-prioridad="{{ tarea.prioridad }}" data-responsable="{{ tarea.responsable.username }}" data-fecha-publicacion="{{ tarea.fecha_publicacion|default:"-" }}" data-fecha-tope="{{ tarea.fecha_tope|default:"-" }}" data-ambito="{{ tarea.tipo_ambito|default:"-" }}" data-local="{{ tarea.local }}" data-departamento="{{ tarea.departamento }}" data-detalle-url="{% url 'tareas:detalle_tarea' tarea.pk %}"><span data-key="tareas.dashboard.task_info">Ver info</span></button></td>
@@ -62,7 +62,7 @@
                 {% for group in priority_groups %}
                     {% if group.hitos %}
                     <div class="card mb-3">
-                        <div class="card-header"><span data-key="tareas.personal.priority.{{ group.value|lower }}">{{ group.label }}</span></div>
+                        <div class="card-header">{% include "tareas/_priority_label.html" with value=group.value %}</div>
                         <div class="table-responsive">
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead>
@@ -83,11 +83,11 @@
                                         <td>{{ hito.nombre }}</td>
                                         <td>{{ hito.tarea.correlativo|default:"-" }}</td>
                                         <td>{{ hito.tarea.titulo }}</td>
-                                        <td><span data-key="tareas.priority.{{ hito.tarea.prioridad|lower }}">{{ hito.tarea.get_prioridad_display }}</span></td>
+                                        <td>{% include "tareas/_priority_label.html" with value=hito.tarea.prioridad %}</td>
                                         <td>{{ hito.cumplimiento }}%</td>
                                         <td>{{ hito.peso }}</td>
                                         <td>{% if hito.completado %}<span data-key="tareas.milestones.completed">Completado</span>{% else %}<span data-key="tareas.milestones.pending">Pendiente</span>{% endif %}</td>
-                                        <td><a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.{% if hito.completado %}view_completion{% else %}manage_milestone{% endif %}">{% if hito.completado %}Ver cumplimiento{% else %}Gestionar Hito{% endif %}</span></a></td>
+                                        <td><a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}" class="btn btn-sm btn-outline-primary">{% if hito.completado %}<span data-key="tareas.personal.actions.view_completion">Ver cumplimiento</span>{% else %}<span data-key="tareas.personal.actions.manage_milestone">Gestionar Hito</span>{% endif %}</a></td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>

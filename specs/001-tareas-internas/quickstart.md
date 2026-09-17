@@ -175,6 +175,30 @@ git diff --check
 git status --short
 ```
 
+### Gate permanente de i18n
+
+Antes de cerrar cualquier cambio de UI en `tareas`, ejecutar el inventario y la
+validación funcional en ambos idiomas. Una superficie solo está completa cuando
+el `data-key` o `message_key` es correcto, existe en `static/lang/sp.json` y
+`static/lang/en.json`, no es dinámico, los enums visibles tienen etiqueta i18n,
+los mensajes backend/AJAX se resuelven y la pantalla fue comprobada en ES y EN.
+
+El cierre requiere:
+
+```powershell
+python manage.py test tareas.tests.test_i18n --settings=AppDocs.settings_test
+```
+
+Y estas métricas en cero: `MISSING_SP`, `MISSING_EN`, `ONE_SIDE`, `DYNAMIC_KEYS`,
+`RAW_MESSAGE_KEYS_VISIBLE` y `VISIBLE_HARDCODED_TEXT`, salvo excepciones
+explícitamente justificadas y registradas. El inventario debe cubrir templates,
+formularios, vistas, JavaScript app-local y ambos catálogos.
+
+La comprobación manual mínima recorre sidebar, listado, crear/editar, detalle,
+ciclo de vida, mis hitos y tareas, hitos, documentos/evidencias, cotizaciones,
+reuniones, similitud, enlaces, dashboards y TO-DO si su UI está activa; debe
+alternar ES → EN → ES sin reiniciar datos ni alterar la lógica.
+
 Esperado: diff sin errores de whitespace; cambios de código limitados a `tareas/` y `specs/`.
 Los cambios futuros adicionales en `AppDocs/app_classification.py`, `AppDocs/settings.py` y
 `AppDocs/urls.py` sólo pueden aparecer en una tarea separada con autorización y scope

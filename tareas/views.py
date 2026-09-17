@@ -330,7 +330,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
                 usuario=request.user,
                 requiere_evidencia_cierre=form.cleaned_data["requiere_evidencia_cierre"],
             )
-            messages.success(request, "Configuración de evidencia actualizada.")
+            messages.success(request, "tareas.messages.evidence_configuration_updated")
             return redirect("tareas:detalle_tarea", pk=self.object.pk)
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
@@ -508,7 +508,7 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
                 and evaluation.decision == EvaluacionSimilitud.Decision.PENDIENTE
             ]
             if pending:
-                messages.warning(request, "La publicación requiere revisar coincidencias de similitud.")
+                messages.warning(request, "tareas.messages.publication_requires_similarity_review")
                 return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
         try:
             publish_task(tarea, request.user)
@@ -516,7 +516,7 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
             mensaje = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
             messages.error(request, mensaje)
         else:
-            messages.success(request, "Tarea publicada correctamente.")
+            messages.success(request, "tareas.messages.task_published")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
@@ -567,7 +567,7 @@ class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmp
             EvaluacionSimilitud.Decision.MISMO_PROBLEMA,
             EvaluacionSimilitud.Decision.DISTINTO_PROBLEMA,
         }:
-            messages.error(request, "La decisión de similitud no es válida.")
+            messages.error(request, "tareas.messages.similarity_decision_invalid")
             return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
         try:
             confirm_similarity(
@@ -590,7 +590,7 @@ class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmp
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
             return redirect("tareas:detalle_tarea", pk=tarea.pk)
-        messages.success(request, "La coincidencia fue confirmada y la tarea fue publicada.")
+        messages.success(request, "tareas.messages.similarity_confirmed_and_published")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
@@ -621,11 +621,14 @@ class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
             elif self.accion == "reactivar":
                 reactivate_task(tarea, request.user)
             else:
-                raise ValidationError("Acción de ciclo no configurada.")
+                raise ValidationError(
+                    "tareas.messages.lifecycle_action_not_configured",
+                    code="tareas.messages.lifecycle_action_not_configured",
+                )
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
         else:
-            messages.success(request, "Acción de ciclo aplicada correctamente.")
+            messages.success(request, "tareas.messages.lifecycle_action_applied")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
@@ -716,7 +719,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Hito creado correctamente.")
+                    messages.success(request, "tareas.messages.milestone_created")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
         hito = None
@@ -741,7 +744,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Hito completado correctamente.")
+                    messages.success(request, "tareas.messages.milestone_completed")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(
                 request,
@@ -767,7 +770,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Hito actualizado correctamente.")
+                    messages.success(request, "tareas.messages.milestone_updated")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(
                 request,
@@ -791,7 +794,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Cumplimiento actualizado correctamente.")
+                    messages.success(request, "tareas.messages.milestone_progress_updated")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(
                 request,
@@ -816,7 +819,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Hito reasignado correctamente.")
+                    messages.success(request, "tareas.messages.milestone_reassigned")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(
                 request,
@@ -834,7 +837,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
-                messages.success(request, "Estado del hito actualizado correctamente.")
+                messages.success(request, "tareas.messages.milestone_status_updated")
             return redirect("tareas:hitos_tarea", pk=tarea.pk)
         if accion == "eliminar_hito":
             try:
@@ -842,7 +845,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
-                messages.success(request, "Hito eliminado o anulado correctamente.")
+                messages.success(request, "tareas.messages.milestone_deleted_or_annulled")
             return redirect("tareas:hitos_tarea", pk=tarea.pk)
         if accion == "manual":
             form = AvanceManualForm(request.POST)
@@ -852,7 +855,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Avance manual actualizado.")
+                    messages.success(request, "tareas.messages.manual_progress_updated")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, manual_form=form))
         if accion == "ponderado":
@@ -863,10 +866,13 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
-                    messages.success(request, "Modo ponderado configurado.")
+                    messages.success(request, "tareas.messages.weighted_mode_configured")
                     return redirect("tareas:hitos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, ponderado_form=form))
-        raise ValidationError("Acción de avance no configurada.")
+        raise ValidationError(
+            "tareas.messages.progress_action_not_configured",
+            code="tareas.messages.progress_action_not_configured",
+        )
 
 
 class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
@@ -909,7 +915,7 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                     fecha_documento=form.cleaned_data["fecha_documento"],
                     fecha_vencimiento=form.cleaned_data["fecha_vencimiento"],
                 )
-                messages.success(request, "Documento registrado correctamente.")
+                messages.success(request, "tareas.messages.document_registered")
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, document_form=form))
         if accion == "registrar_evidencia":
@@ -937,10 +943,13 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                         "tareas/tarea_documentos.html",
                         self.get_context(tarea, evidencia_registro_form=form),
                     )
-                messages.success(request, "Evidencia registrada correctamente.")
+                messages.success(request, "tareas.messages.evidence_registered")
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_registro_form=form))
-        raise ValidationError("Acción documental no configurada.")
+        raise ValidationError(
+            "tareas.messages.document_action_not_configured",
+            code="tareas.messages.document_action_not_configured",
+        )
 
 
 class ReunionEmpresaQuerysetMixin:
@@ -1051,7 +1060,10 @@ class ReunionRevisionActionView(VerificarPermisoMixin, LoginRequiredMixin, Reuni
                     raise ValidationError(form.errors.as_text())
                 add_task_to_meeting(reunion=reunion, **form.cleaned_data)
             else:
-                raise ValidationError("Acción de reunión no configurada.")
+                raise ValidationError(
+                    "tareas.messages.meeting_action_not_configured",
+                    code="tareas.messages.meeting_action_not_configured",
+                )
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
         return redirect("tareas:reunion_revision_detalle", pk=reunion.pk)

@@ -3,7 +3,7 @@
 {% block title %}Hitos y avance{% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Hitos y avance" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Hitos y avance" pagetitle="Tareas" title_key="tareas.progress.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -12,7 +12,7 @@
         <div class="container-fluid">
             {% if messages %}
                 {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+                <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
                 {% endfor %}
             {% endif %}
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -37,7 +37,7 @@
                                 <div class="col-sm-6">
                                     <h6><span data-key="tareas.progress.manual">Configurar avance manual</span></h6>
                                     <form method="post">
-                                        {% csrf_token %}<input type="hidden" name="accion" value="manual">{{ manual_form.non_field_errors }}
+                                        {% csrf_token %}<input type="hidden" name="accion" value="manual">{% include "tareas/_i18n_form_errors.html" with errors=manual_form.non_field_errors %}
                                         <label for="{{ manual_form.porcentaje.id_for_label }}" class="visually-hidden"><span data-key="tareas.progress.percentage">Porcentaje</span></label>
                                         {{ manual_form.porcentaje }}{{ manual_form.porcentaje.errors }}
                                         <button type="submit" class="btn btn-outline-primary mt-2"><span data-key="tareas.actions.save_progress">Guardar avance</span></button>
@@ -46,7 +46,7 @@
                                 <div class="col-sm-6">
                                     <h6><span data-key="tareas.progress.weighted_mode">Usar avance ponderado</span></h6>
                                     <form method="post">
-                                        {% csrf_token %}<input type="hidden" name="accion" value="ponderado">{{ ponderado_form.non_field_errors }}
+                                        {% csrf_token %}<input type="hidden" name="accion" value="ponderado">{% include "tareas/_i18n_form_errors.html" with errors=ponderado_form.non_field_errors %}
                                         <button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.set_weighted">Configurar ponderado</span></button>
                                     </form>
                                 </div>
@@ -121,7 +121,7 @@
                         {% csrf_token %}<input type="hidden" name="accion" value="editar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
                         <div class="modal-header"><h5 class="modal-title" id="editarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.edit">Editar Hito</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
                         <div class="modal-body">
-                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.non_field_errors }}{% endif %}
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{% include "tareas/_i18n_form_errors.html" with errors=editar_form.non_field_errors %}{% endif %}
                             <div class="mb-2"><label for="editar-nombre-{{ hito.pk }}"><span data-key="tareas.milestones.name">Nombre</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.nombre }}{{ editar_form.nombre.errors }}{% else %}<input id="editar-nombre-{{ hito.pk }}" class="form-control" name="nombre" value="{{ hito.nombre }}" required>{% endif %}</div>
                             <div class="mb-2"><label for="editar-cumplimiento-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.cumplimiento }}{{ editar_form.cumplimiento.errors }}{% else %}<input id="editar-cumplimiento-{{ hito.pk }}" class="form-control" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01">{% endif %}</div>
                             <div class="mb-2"><label for="editar-peso-{{ hito.pk }}"><span data-key="tareas.milestones.weight">Peso del hito (%)</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}{{ editar_form.peso }}{{ editar_form.peso.errors }}{% else %}<input id="editar-peso-{{ hito.pk }}" class="form-control" name="peso" value="{{ hito.peso }}" type="number" min="0.01" step="0.01">{% endif %}</div>
@@ -136,7 +136,7 @@
                         {% csrf_token %}<input type="hidden" name="accion" value="reasignar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
                         <div class="modal-header"><h5 class="modal-title" id="reasignarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.reassign">Reasignar responsable</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
                         <div class="modal-body">
-                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.non_field_errors }}{% endif %}
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{% include "tareas/_i18n_form_errors.html" with errors=reasignar_form.non_field_errors %}{% endif %}
                             <div class="mb-2"><label for="reasignar-responsable-{{ hito.pk }}"><span data-key="tareas.milestones.new_responsible">Nuevo responsable</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.responsable }}{{ reasignar_form.responsable.errors }}{% else %}<select id="reasignar-responsable-{{ hito.pk }}" class="form-select" name="responsable">{% for responsable in responsables_validos %}<option value="{{ responsable.pk }}">{{ responsable.username }}</option>{% endfor %}</select>{% endif %}</div>
                             <div class="mb-2"><label for="reasignar-motivo-{{ hito.pk }}"><span data-key="tareas.milestones.reason">Motivo</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'reasignar_hito' %}{{ reasignar_form.motivo }}{{ reasignar_form.motivo.errors }}{% else %}<input id="reasignar-motivo-{{ hito.pk }}" class="form-control" name="motivo" required>{% endif %}</div>
                         </div>
@@ -151,7 +151,7 @@
                     <form method="post">
                         {% csrf_token %}<input type="hidden" name="accion" value="cumplimiento_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
                         <div class="modal-header"><h5 class="modal-title" id="cumplimientoHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.milestones.update_progress">Actualizar cumplimiento</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-                        <div class="modal-body">{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %}{{ cumplimiento_form.non_field_errors }}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ cumplimiento_form.cumplimiento }}{{ cumplimiento_form.cumplimiento.errors }}{% else %}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label><input id="cumplimiento-hito-{{ hito.pk }}" class="form-control" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01">{% endif %}</div>
+                        <div class="modal-body">{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %}{% include "tareas/_i18n_form_errors.html" with errors=cumplimiento_form.non_field_errors %}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ cumplimiento_form.cumplimiento }}{{ cumplimiento_form.cumplimiento.errors }}{% else %}<label for="cumplimiento-hito-{{ hito.pk }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label><input id="cumplimiento-hito-{{ hito.pk }}" class="form-control" name="cumplimiento" value="{{ hito.cumplimiento }}" type="number" min="0" max="100" step="0.01">{% endif %}</div>
                         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-primary"><span data-key="tareas.actions.save">Guardar</span></button></div>
                     </form>
                 </div></div>
@@ -165,7 +165,7 @@
                         <div class="modal-header"><h5 class="modal-title" id="completarHitoModalLabel-{{ hito.pk }}"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
                         <div class="modal-body">
                             <p><span data-key="tareas.milestones.name">Hito</span>: {{ hito.nombre }}</p>
-                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.non_field_errors }}{% endif %}
+                            {% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{% include "tareas/_i18n_form_errors.html" with errors=completar_form.non_field_errors %}{% endif %}
                             <div class="mb-2"><label for="completar-resena-{{ hito.pk }}"><span data-key="tareas.milestones.closure_review">Reseña de cierre *</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.resena_cierre }}{{ completar_form.resena_cierre.errors }}{% else %}<textarea id="completar-resena-{{ hito.pk }}" class="form-control" name="resena_cierre" rows="3" required></textarea>{% endif %}</div>
                             <div class="mb-2"><label for="completar-formato-{{ hito.pk }}"><span data-key="tareas.evidence.file_format">Formato de evidencia *</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.formato_archivo }}{{ completar_form.formato_archivo.errors }}{% else %}<select id="completar-formato-{{ hito.pk }}" class="form-select" name="formato_archivo" required>{% for value, label in completar_form.fields.formato_archivo.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>{% endif %}</div>
                             <div class="mb-2"><label for="completar-archivo-{{ hito.pk }}"><span data-key="tareas.evidence.file">Archivo</span></label>{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'completar_hito' %}{{ completar_form.archivo }}{{ completar_form.archivo.errors }}{% else %}<input id="completar-archivo-{{ hito.pk }}" class="form-control" name="archivo" type="file">{% endif %}</div>
@@ -209,7 +209,7 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                             </div>
                             <div class="modal-body">
-                                {{ hito_form.non_field_errors }}
+                                {% include "tareas/_i18n_form_errors.html" with errors=hito_form.non_field_errors %}
                                 <div class="mb-2"><label for="{{ hito_form.nombre.id_for_label }}"><span data-key="tareas.milestones.name">Nombre</span></label>{{ hito_form.nombre }}{{ hito_form.nombre.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.responsable.id_for_label }}"><span data-key="tareas.milestones.responsible">Responsable</span></label>{{ hito_form.responsable }}{{ hito_form.responsable.errors }}</div>
                                 <div class="mb-2"><label for="{{ hito_form.cumplimiento.id_for_label }}"><span data-key="tareas.milestones.compliance">Cumplimiento (%)</span></label>{{ hito_form.cumplimiento }}{{ hito_form.cumplimiento.errors }}</div>

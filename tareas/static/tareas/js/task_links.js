@@ -9,6 +9,11 @@
         element.textContent = message;
     }
 
+    function resolveMessage(key) {
+        var element = document.querySelector('[data-key="' + key + '"]');
+        return element ? element.textContent : "";
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll(".js-task-link-form").forEach(function (form) {
             form.addEventListener("submit", function (event) {
@@ -27,15 +32,23 @@
                     });
                 }).then(function (result) {
                     if (!result.ok || !result.data.success) {
-                        showFeedback(feedback, false, result.data.message_key || "No fue posible crear el enlace.");
+                        showFeedback(
+                            feedback,
+                            false,
+                            resolveMessage(result.data.message_key || "tareas.links.create_error")
+                        );
                         return;
                     }
-                    showFeedback(feedback, true, "URL creada: " + result.data.url);
+                    showFeedback(
+                        feedback,
+                        true,
+                        resolveMessage("tareas.links.url_created") + " " + result.data.url
+                    );
                     if (navigator.clipboard && result.data.url) {
                         navigator.clipboard.writeText(result.data.url);
                     }
                 }).catch(function () {
-                    showFeedback(feedback, false, "No fue posible crear el enlace.");
+                    showFeedback(feedback, false, resolveMessage("tareas.links.create_error"));
                 });
             });
         });

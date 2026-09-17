@@ -1,12 +1,12 @@
 {% extends "partials/base.html" %}
 {% load static %}
 
-{% block title %}<span data-key="tareas.dashboard.department.title">Dashboard Departamento</span>{% endblock title %}
-{% block pagetitle %}{% include "partials/page-title.html" with title="Dashboard Departamento" pagetitle="Tareas" %}{% endblock pagetitle %}
+{% block title %}Dashboard Departamento{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Dashboard Departamento" pagetitle="Tareas" title_key="tareas.dashboard.department.title" pagetitle_key="menu.tareas" %}{% endblock pagetitle %}
 {% block content %}
 <div class="main-content"><div class="page-content"><div class="container-fluid">
     <h4><span data-key="tareas.dashboard.department.title">Dashboard Departamento</span> {{ departamento }}</h4>
-    <div class="row g-3 mb-4">{% for key, value in kpis.items %}<div class="col-md-3"><div class="card"><div class="card-body"><span data-key="tareas.dashboard.kpi.{{ key }}">{{ key }}</span><strong class="d-block">{{ value }}</strong></div></div></div>{% endfor %}</div>
+    <div class="row g-3 mb-4">{% for key, value in kpis.items %}<div class="col-md-3"><div class="card"><div class="card-body">{% include "tareas/_kpi_label.html" with value=key %}<strong class="d-block">{{ value }}</strong></div></div></div>{% endfor %}</div>
     <div class="table-responsive"><table class="table table-striped js-t060-datatable"><thead><tr><th><span data-key="tareas.fields.responsable">Usuario</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row.usuario }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url row.url_name empresa_id=row.url_kwargs.empresa_id usuario_id=row.url_kwargs.usuario_id %}"><span data-key="tareas.dashboard.open">Abrir</span></a></td></tr>{% endfor %}</tbody></table></div>
 </div></div></div>
 {% endblock content %}

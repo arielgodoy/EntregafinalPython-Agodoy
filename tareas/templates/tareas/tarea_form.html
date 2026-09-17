@@ -6,7 +6,7 @@
 {% endblock title %}
 
 {% block pagetitle %}
-{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" %}
+{% include "partials/page-title.html" with title="Tareas" pagetitle="Tareas" title_key="tareas.list.title" pagetitle_key="menu.tareas" %}
 {% endblock pagetitle %}
 
 {% block content %}
@@ -21,12 +21,12 @@
                                 <h4 class="card-title mb-1">
                                     {% if object %}<span data-key="tareas.form.title_edit">Editar tarea</span>{% else %}<span data-key="tareas.form.title_create">Crear tarea</span>{% endif %}
                                 </h4>
-                                {% if not object %}<p class="text-muted small mb-0">Se creará un borrador; algunos datos pueden completarse antes de publicar.</p>{% endif %}
+                                {% if not object %}<p class="text-muted small mb-0"><span data-key="tareas.form.draft_notice">Se creará un borrador; algunos datos pueden completarse antes de publicar.</span></p>{% endif %}
                             </div>
 
                             {% if form.non_field_errors %}
                             <div class="alert alert-danger">
-                                {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
+                                {% include "tareas/_i18n_form_errors.html" with errors=form.non_field_errors %}
                             </div>
                             {% endif %}
 
@@ -34,7 +34,7 @@
                                 {% csrf_token %}
 
                                 <section class="mb-4" aria-labelledby="datos-basicos-titulo">
-                                    <h5 id="datos-basicos-titulo" class="h6 text-uppercase text-muted mb-3">Datos básicos</h5>
+                                    <h5 id="datos-basicos-titulo" class="h6 text-uppercase text-muted mb-3"><span data-key="tareas.form.basic_data">Datos básicos</span></h5>
 
                                 <div class="mb-3">
                                     <label for="{{ form.titulo.id_for_label }}" class="form-label"><span data-key="tareas.fields.titulo">Título</span> *</label>
@@ -50,25 +50,29 @@
                                 </section>
 
                                 <section class="border-top pt-4 mb-4" aria-labelledby="planificacion-titulo">
-                                    <h5 id="planificacion-titulo" class="h6 text-uppercase text-muted mb-3">Planificación</h5>
+                                    <h5 id="planificacion-titulo" class="h6 text-uppercase text-muted mb-3"><span data-key="tareas.form.planning">Planificación</span></h5>
                                     <div class="row g-3">
                                         <div class="col-md-4">
                                             <label for="{{ form.prioridad.id_for_label }}" class="form-label"><span data-key="tareas.fields.prioridad">Prioridad</span></label>
-                                            {{ form.prioridad }}
+                                            <select name="{{ form.prioridad.html_name }}" id="{{ form.prioridad.id_for_label }}" class="form-select">
+                                                {% for value, label in form.prioridad.field.choices %}
+                                                <option value="{{ value }}"{% if value == "CRITICA" %} data-key="tareas.priority.critica"{% elif value == "URGENTE" %} data-key="tareas.priority.urgente"{% elif value == "NORMAL" %} data-key="tareas.priority.normal"{% elif value == "SIMPLE" %} data-key="tareas.priority.simple"{% endif %}{% if form.prioridad.value == value %} selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
                                             {% for error in form.prioridad.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                         </div>
 
                                         <div class="col-md-4">
                                             <label for="{{ form.responsable.id_for_label }}" class="form-label"><span data-key="tareas.fields.responsable">Responsable</span></label>
                                             {{ form.responsable }}
-                                            <div class="form-text">Puede dejarse sin responsable mientras la tarea permanezca en borrador.</div>
+                                            <div class="form-text"><span data-key="tareas.form.assignee_draft_help">Puede dejarse sin responsable mientras la tarea permanezca en borrador.</span></div>
                                             {% for error in form.responsable.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                         </div>
 
                                         <div class="col-md-4">
                                             <label for="{{ form.fecha_tope.id_for_label }}" class="form-label"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></label>
                                             {{ form.fecha_tope }}
-                                            <div class="form-text">Puede definirse posteriormente, pero será obligatoria al publicar.</div>
+                                            <div class="form-text"><span data-key="tareas.form.due_date_publish_help">Puede definirse posteriormente, pero será obligatoria al publicar.</span></div>
                                             {% for error in form.fecha_tope.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                             {% if object and object.estado != "BORRADOR" %}<div class="form-text"><span data-key="tareas.fields.fecha_tope_readonly">La fecha tope se modifica mediante reprogramación.</span></div>{% endif %}
                                         </div>

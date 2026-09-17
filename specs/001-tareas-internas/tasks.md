@@ -190,6 +190,18 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T068 Ejecutar `git diff --check` y revisar el diff completo; detenerse si aparece cualquier cambio fuera de `tareas/` o de documentación autorizada.
 - [x] T069 Confirmar en `specs/001-tareas-internas/quickstart.md` los escenarios ejecutados y mantener P1/P2 como bloqueos explícitos hasta autorización de sus contratos.
 
+### Regla transversal de cierre i18n
+
+Ninguna task nueva que agregue o modifique UI puede marcarse `[x]` sin ejecutar el
+gate i18n definido en `spec.md` y `quickstart.md`. El gate debe verificar claves
+`data-key` y `message_key` en ambos catálogos, ausencia de claves dinámicas,
+etiquetas para enums visibles, mensajes backend/AJAX traducidos y validación manual
+ES/EN. Las métricas `MISSING_SP`, `MISSING_EN`, `ONE_SIDE`, `DYNAMIC_KEYS`,
+`RAW_MESSAGE_KEYS_VISIBLE` y `VISIBLE_HARDCODED_TEXT` deben ser cero, salvo
+excepciones justificadas y registradas.
+
+- [x] T094 Ejecutar el gate permanente de i18n sobre templates, formularios, vistas, JavaScript y catálogos de `tareas`; cubrirlo con `tareas/tests/test_i18n.py`, validar manualmente las superficies principales ES/EN y registrar las métricas de cierre sin reabrir tasks históricas.
+
 ## Success criteria traceability
 
 Esta matriz define qué tareas y escenarios deberán validar cada criterio. La presencia de
