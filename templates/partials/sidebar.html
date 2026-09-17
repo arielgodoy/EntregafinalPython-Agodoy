@@ -176,13 +176,13 @@
                     <div class="collapse menu-dropdown" id="sidebarTareas">
                         <ul class="nav nav-sm flex-column">
                             {% if "tasks_list" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'tareas:listar_tareas' %}" class="nav-link" data-key="menu.tareas.list">Listado de Tareas</a>
+                                <a href="{% url 'tareas:listar_tareas' %}" class="nav-link" data-key="menu.tareas.list">Lista de Tareas</a>
                             </li>{% endif %}
                             {% if "tasks_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:crear_tarea' %}" class="nav-link" data-key="menu.tareas.create">Crear Tarea</a>
                             </li>{% endif %}
                             {% if "tasks_dashboard" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'tareas:mis_tareas' %}" class="nav-link" data-key="menu.tareas.dashboard">Mis tareas y hitos</a>
+                                <a href="{% url 'tareas:mis_tareas' %}" class="nav-link" data-key="menu.tareas.dashboard">Mis Hitos y Tareas</a>
                             </li>{% endif %}
                         </ul>
                     </div>
