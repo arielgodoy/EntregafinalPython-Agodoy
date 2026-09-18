@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from importlib import import_module
 
@@ -74,6 +76,7 @@ class CatalogResult:
     existing_rows: tuple[CatalogItem, ...]
     updated_rows: tuple[CatalogItem, ...]
     legacy: tuple[CatalogItem, ...]
+    legacy_reports: tuple[LegacyViewReport, ...]
     conflicts: tuple[CatalogConflict, ...]
     dry_run: bool
 
@@ -84,6 +87,33 @@ class CatalogResult:
     @property
     def invalid_count(self):
         return len(self.conflicts)
+
+
+@dataclass(frozen=True)
+class LegacyPermissionSummary:
+    count: int
+    usuarios_distintos: int
+    empresas_distintas: int
+    flags: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class LegacyReference:
+    model: str
+    field: str
+    count: int
+    ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class LegacyViewReport:
+    vista: Vista
+    motivo_legacy: str
+    referencias: tuple[LegacyReference, ...]
+    permisos: LegacyPermissionSummary
+    reemplazo_canonico_sugerido: str | None
+    safe_to_delete: bool
+    blockers: tuple[str, ...]
 
 
 def _catalog_item(definition, vista_id=None):
@@ -105,6 +135,8 @@ def _legacy_item(vista):
 
 
 def _belongs_to_app(vista, app, definitions):
+    if not definitions:
+        return False
     if vista.route_name and vista.route_name.startswith(f"{app}:"):
         return True
     prefixes = {
@@ -116,6 +148,116 @@ def _belongs_to_app(vista, app, definitions):
         vista.nombre == prefix or vista.nombre.startswith(f"{prefix} - ")
         for prefix in prefixes
     )
+
+
+def _legacy_replacement(nombre, definitions):
+    replacement_by_suffix = {
+        "Listado": "Tareas",
+        "Crear tarea": "Tareas",
+        "Detalle": "Tareas",
+        "Editar tarea": "Tareas",
+        "Publicar tarea": "Tareas - Ciclo de vida",
+        "Iniciar gestión": "Tareas - Ciclo de vida",
+        "Anular tarea": "Tareas - Ciclo de vida",
+        "Completar tarea": "Tareas - Ciclo de vida",
+        "Aprobar cierre": "Tareas - Ciclo de vida",
+        "Rechazar cierre": "Tareas - Ciclo de vida",
+        "Reactivar tarea": "Tareas - Ciclo de vida",
+    }
+    suffix = nombre.split(" - ", 1)[-1]
+    replacement = replacement_by_suffix.get(suffix)
+    declared_names = {definition.nombre for definition in definitions}
+    return replacement if replacement in declared_names else None
+
+
+def get_legacy_views_for_app(app="tareas", *, definitions=None, views=None):
+    """Report historical Vista rows without changing any persistent data."""
+    from django.apps import apps
+    from access_control.models import AccessRequest, Permiso
+
+    from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    module_path = APP_DEFINITION_MODULES.get(app)
+    if module_path is None:
+        return ()
+    if definitions is None:
+        import_module(module_path)
+        definitions = definitions_for_app(app)
+    definitions = tuple(definitions)
+    if not definitions:
+        return ()
+
+    declared_names = {definition.nombre for definition in definitions}
+    queryset = Vista.objects.all() if views is None else views
+    legacy_views = tuple(
+        vista
+        for vista in queryset
+        if vista.nombre not in declared_names and _belongs_to_app(vista, app, definitions)
+    )
+    reference_fields = []
+    for model in apps.get_models():
+        for field in model._meta.get_fields():
+            if (
+                getattr(field, "many_to_one", False)
+                and getattr(field, "remote_field", None)
+                and field.remote_field.model is Vista
+                and model is not Permiso
+            ):
+                reference_fields.append((model, field.name))
+
+    reports = []
+    for vista in legacy_views:
+        permission_rows = Permiso.objects.filter(vista=vista)
+        flags = tuple(
+            (field, permission_rows.filter(**{field: True}).count())
+            for field in ("ver", "ingresar", "crear", "modificar", "eliminar", "autorizar", "supervisor")
+        )
+        references = []
+        for model, field_name in reference_fields:
+            rows = model.objects.filter(**{field_name: vista})
+            if rows.exists():
+                references.append(
+                    LegacyReference(
+                        model=model._meta.label,
+                        field=field_name,
+                        count=rows.count(),
+                        ids=tuple(rows.values_list("pk", flat=True)),
+                    )
+                )
+
+        requests = AccessRequest.objects.filter(vista_nombre=vista.nombre)
+        if requests.exists():
+            references.append(
+                LegacyReference(
+                    model=AccessRequest._meta.label,
+                    field="vista_nombre",
+                    count=requests.count(),
+                    ids=tuple(requests.values_list("pk", flat=True)),
+                )
+            )
+
+        blockers = []
+        if permission_rows.exists():
+            blockers.append("permisos históricos")
+        if references:
+            blockers.append("referencias persistentes")
+        reports.append(
+            LegacyViewReport(
+                vista=vista,
+                motivo_legacy="No corresponde a una definición declarativa activa de la app.",
+                referencias=tuple(references),
+                permisos=LegacyPermissionSummary(
+                    count=permission_rows.count(),
+                    usuarios_distintos=permission_rows.values("usuario_id").distinct().count(),
+                    empresas_distintas=permission_rows.values("empresa_id").distinct().count(),
+                    flags=flags,
+                ),
+                reemplazo_canonico_sugerido=_legacy_replacement(vista.nombre, definitions),
+                safe_to_delete=not blockers,
+                blockers=tuple(blockers),
+            )
+        )
+    return tuple(reports)
 
 
 def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=None):
@@ -200,6 +342,14 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
         if vista.nombre not in declared_names
         and _belongs_to_app(vista, app, definitions)
     )
+    legacy_reports = get_legacy_views_for_app(
+        app,
+        definitions=definitions,
+        views=tuple(
+            vista for vista in existing_rows
+            if vista.id in {item.vista_id for item in legacy}
+        ),
+    )
 
     if not dry_run and (created_rows or updated_rows):
         with transaction.atomic():
@@ -221,6 +371,7 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
         existing_rows=tuple(existing_catalog_rows),
         updated_rows=tuple(updated_rows),
         legacy=legacy,
+        legacy_reports=legacy_reports,
         conflicts=tuple(conflicts),
         dry_run=dry_run,
     )

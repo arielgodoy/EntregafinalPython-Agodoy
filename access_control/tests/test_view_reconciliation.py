@@ -10,30 +10,27 @@ from access_control.services.view_reconciliation import (
 
 class ViewRouteReconciliationTests(TestCase):
     def setUp(self):
-        Vista.objects.create(
-            id=34,
+        self.legacy_listado = Vista.objects.create(
             nombre="Tareas - Listado",
             route_name="tareas:listar_tareas",
         )
-        Vista.objects.create(
-            id=38,
+        self.legacy_publicar = Vista.objects.create(
             nombre="Tareas - Publicar tarea",
             route_name="tareas:publicar_tarea",
         )
-        Vista.objects.create(id=130, nombre="Tareas")
-        Vista.objects.create(id=131, nombre="Tareas - Ciclo de vida")
-        Vista.objects.create(
-            id=57,
+        self.canonical_tasks = Vista.objects.create(nombre="Tareas")
+        self.canonical_lifecycle = Vista.objects.create(nombre="Tareas - Ciclo de vida")
+        self.personal_dashboard = Vista.objects.create(
             nombre="Tareas - Dashboard personal",
             route_name="tareas:mis_tareas",
         )
 
     def test_navigation_guard_uses_declarative_navigable_flag(self):
         route_overrides = {
-            34: None,
-            38: None,
-            130: "tareas:listar_tareas",
-            131: "tareas:publicar_tarea",
+            self.legacy_listado.id: None,
+            self.legacy_publicar.id: None,
+            self.canonical_tasks.id: "tareas:listar_tareas",
+            self.canonical_lifecycle.id: "tareas:publicar_tarea",
         }
 
         visible_names = {
@@ -58,20 +55,29 @@ class ViewRouteReconciliationTests(TestCase):
         self.assertEqual(
             result.would_clear,
             (
-                (34, "Tareas - Listado", "tareas:listar_tareas"),
-                (38, "Tareas - Publicar tarea", "tareas:publicar_tarea"),
+                (self.legacy_listado.id, "Tareas - Listado", "tareas:listar_tareas"),
+                (self.legacy_publicar.id, "Tareas - Publicar tarea", "tareas:publicar_tarea"),
             ),
         )
         self.assertEqual(
             result.would_set,
             (
-                (130, "Tareas", "tareas:listar_tareas"),
-                (131, "Tareas - Ciclo de vida", "tareas:publicar_tarea"),
+                (self.canonical_tasks.id, "Tareas", "tareas:listar_tareas"),
+                (self.canonical_lifecycle.id, "Tareas - Ciclo de vida", "tareas:publicar_tarea"),
             ),
+        )
+        self.assertNotEqual(
+            {
+                self.legacy_listado.id,
+                self.legacy_publicar.id,
+                self.canonical_tasks.id,
+                self.canonical_lifecycle.id,
+            },
+            {34, 38, 130, 131},
         )
 
     def test_precondition_rejects_unexpected_route(self):
-        Vista.objects.filter(pk=34).update(route_name="tareas:otra_ruta")
+        Vista.objects.filter(pk=self.legacy_listado.id).update(route_name="tareas:otra_ruta")
 
         with self.assertRaises(ReconciliationPreconditionError):
             preview_reconciliation()

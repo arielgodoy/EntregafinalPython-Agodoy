@@ -147,11 +147,7 @@ def _is_navigable_vista_with_policies(vista, policies, route_name=None):
     declarative_policy = policies[app]
     if vista.nombre in declarative_policy:
         return declarative_policy[vista.nombre]
-
-    # Transitional compatibility is limited to explicit sidebar entries.
-    from access_control.services.permissions import SIDEBAR_VIEW_NAMES
-
-    return vista.nombre in SIDEBAR_VIEW_NAMES.values()
+    return False
 
 
 def _get_navigable_vistas(*, route_overrides=None):

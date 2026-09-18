@@ -67,16 +67,61 @@ def _expectation(vista_id, nombre, current_route_name, target_route_name):
     return RouteExpectation(vista_id, nombre, current_route_name, target_route_name)
 
 
-TASKS_ROUTE_RECONCILIATION_PLAN = ReconciliationPlan(
-    release_routes=(
-        _expectation(34, "Tareas - Listado", "tareas:listar_tareas", None),
-        _expectation(38, "Tareas - Publicar tarea", "tareas:publicar_tarea", None),
-    ),
-    assign_routes=(
-        _expectation(130, "Tareas", None, "tareas:listar_tareas"),
-        _expectation(131, "Tareas - Ciclo de vida", None, "tareas:publicar_tarea"),
-    ),
+TASKS_LEGACY_ROUTE_SPECS = (
+    ("Tareas - Listado", "tareas:listar_tareas"),
+    ("Tareas - Publicar tarea", "tareas:publicar_tarea"),
 )
+TASKS_CANONICAL_ROUTE_NAMES = {
+    "Tareas": "tareas:listar_tareas",
+    "Tareas - Ciclo de vida": "tareas:publicar_tarea",
+}
+
+
+def _resolve_vista(nombre, current_route_name):
+    rows = Vista.objects.filter(nombre=nombre)
+    if rows.count() != 1:
+        raise ReconciliationPreconditionError(
+            f"El nombre no existe exactamente una vez: {nombre}."
+        )
+    vista = rows.get()
+    if vista.route_name != current_route_name:
+        raise ReconciliationPreconditionError(
+            f"La Vista {nombre} tiene route_name inesperado: {vista.route_name}."
+        )
+    return vista
+
+
+def build_tasks_reconciliation_plan():
+    """Build the route plan from current database identities, never fixed PKs."""
+    from tareas.vicmeas import TASKS_VIEW_DEFINITIONS
+
+    definitions_by_name = {
+        definition.nombre: definition
+        for definition in TASKS_VIEW_DEFINITIONS
+    }
+    release_routes = []
+    for nombre, route_name in TASKS_LEGACY_ROUTE_SPECS:
+        vista = _resolve_vista(nombre, route_name)
+        release_routes.append(_expectation(vista.id, nombre, route_name, None))
+
+    assign_routes = []
+    for nombre, route_name in TASKS_CANONICAL_ROUTE_NAMES.items():
+        definition = definitions_by_name.get(nombre)
+        if definition is None or definition.route_name != route_name:
+            raise ReconciliationPreconditionError(
+                f"La definición canónica no coincide para {nombre}."
+            )
+        vista = _resolve_vista(nombre, None)
+        assign_routes.append(_expectation(vista.id, nombre, None, route_name))
+
+    return ReconciliationPlan(
+        release_routes=tuple(release_routes),
+        assign_routes=tuple(assign_routes),
+    )
+
+
+def _resolved_plan(plan):
+    return build_tasks_reconciliation_plan() if plan is None else plan
 
 
 def _model_rows(model, **filters):
@@ -94,7 +139,8 @@ def _view_rows():
     )
 
 
-def snapshot_view_usage(plan=TASKS_ROUTE_RECONCILIATION_PLAN):
+def snapshot_view_usage(plan=None):
+    plan = _resolved_plan(plan)
     view_ids = tuple(expectation.vista_id for expectation in plan.all_expectations)
     view_names = tuple(expectation.nombre for expectation in plan.all_expectations)
     return ViewUsageSnapshot(
@@ -242,8 +288,9 @@ def _baseline_mismatch(snapshot, expected_snapshot):
 
 
 def preview_reconciliation(
-    *, plan=TASKS_ROUTE_RECONCILIATION_PLAN, expected_snapshot=None
+    *, plan=None, expected_snapshot=None
 ):
+    plan = _resolved_plan(plan)
     _validate_preconditions(plan)
     snapshot = snapshot_view_usage(plan)
     mismatches = _baseline_mismatch(snapshot, expected_snapshot)
@@ -277,8 +324,9 @@ def preview_reconciliation(
 
 
 def apply_reconciliation(
-    *, plan=TASKS_ROUTE_RECONCILIATION_PLAN, expected_snapshot=None
+    *, plan=None, expected_snapshot=None
 ):
+    plan = _resolved_plan(plan)
     with transaction.atomic():
         _validate_preconditions(plan)
         locked = tuple(
