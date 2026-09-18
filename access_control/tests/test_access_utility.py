@@ -13,6 +13,7 @@ from access_control.services.access_utility import (
     get_scope_vistas,
     resolve_scope_vistas,
 )
+from access_control.services.view_registry import definitions_for_app
 from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
@@ -136,6 +137,112 @@ class AccessUtilityTests(TestCase):
         self.assertEqual(len(get_scope_vistas("usuarios")), 3)
         self.assertEqual(len(get_scope_vistas("permisos")), 5)
 
+    def test_tasks_scope_uses_five_canonical_registry_surfaces(self):
+        canonical_definitions = tuple(
+            definition
+            for definition in definitions_for_app("tareas")
+            if definition.access_utility and definition.group == "tasks"
+        )
+        canonical_names = {definition.nombre for definition in canonical_definitions}
+        for nombre in canonical_names:
+            Vista.objects.get_or_create(nombre=nombre)
+
+        resolution = resolve_scope_vistas("tasks")
+
+        self.assertEqual(
+            resolution.requested_leaf_names,
+            tuple(definition.nombre for definition in canonical_definitions),
+        )
+        self.assertEqual(
+            {vista.nombre for vista in resolution.vistas},
+            canonical_names,
+        )
+        self.assertEqual(resolution.missing_names, ())
+        self.assertEqual(resolution.conflicts, ())
+        self.assertFalse(
+            {vista.nombre for vista in resolution.vistas}
+            & {
+                "Tareas - Listado",
+                "Tareas - Crear tarea",
+                "Tareas - Publicar tarea",
+                "Tareas - Detalle",
+                "Tareas - Editar tarea",
+            }
+        )
+
+    def test_tasks_scope_reports_missing_without_materializing_view_or_permission(self):
+        canonical_names = {
+            definition.nombre
+            for definition in definitions_for_app("tareas")
+            if definition.access_utility and definition.group == "tasks"
+        }
+        for nombre in canonical_names - {"Tareas - Hitos"}:
+            Vista.objects.get_or_create(nombre=nombre)
+        before_views = Vista.objects.count()
+        before_permissions = Permiso.objects.count()
+
+        resolution = resolve_scope_vistas("tasks")
+
+        self.assertEqual(resolution.missing_names, ("Tareas - Hitos",))
+        self.assertEqual(Vista.objects.count(), before_views)
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+
+    def test_tasks_scope_does_not_copy_legacy_permission(self):
+        canonical_names = {
+            definition.nombre
+            for definition in definitions_for_app("tareas")
+            if definition.access_utility and definition.group == "tasks"
+        }
+        for nombre in canonical_names:
+            Vista.objects.get_or_create(nombre=nombre)
+        legacy = self.sidebar_vistas["Tareas - Listado"]
+        Permiso.objects.create(
+            usuario=self.target,
+            empresa=self.empresa_objetivo,
+            vista=legacy,
+            ingresar=True,
+        )
+
+        resolution = resolve_scope_vistas("tasks")
+
+        self.assertNotIn(legacy, resolution.vistas)
+        self.assertFalse(
+            Permiso.objects.filter(
+                usuario=self.target,
+                empresa=self.empresa_objetivo,
+                vista__nombre="Tareas",
+            ).exists()
+        )
+
+    def test_unregistered_scope_keeps_legacy_fallback(self):
+        resolution = resolve_scope_vistas("apis")
+
+        self.assertEqual(
+            [vista.nombre for vista in resolution.vistas],
+            ["APIs - Inicio"],
+        )
+
+    def test_tasks_preview_reports_five_requested_and_processed(self):
+        canonical_names = {
+            definition.nombre
+            for definition in definitions_for_app("tareas")
+            if definition.access_utility and definition.group == "tasks"
+        }
+        for nombre in canonical_names:
+            Vista.objects.get_or_create(nombre=nombre)
+        before_permissions = Permiso.objects.count()
+
+        response = self._post(action="preview", alcance="tasks", ver=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["preview"]["requested"], 5)
+        self.assertEqual(response.context["preview"]["processed"], 5)
+        self.assertEqual(
+            {vista.nombre for vista in response.context["preview"]["vistas"]},
+            canonical_names,
+        )
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+
     def test_hierarchical_scopes_exclude_containers_from_hideable_views(self):
         names = {vista.nombre for vista in get_hideable_sidebar_vistas()}
 
@@ -255,7 +362,7 @@ class AccessUtilityTests(TestCase):
         response = self._sync_post()
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(Vista.objects.filter(nombre=missing_name).exists())
+        self.assertFalse(Vista.objects.filter(nombre=missing_name).exists())
         self.assertContains(response, "Catálogo VICMEAS sincronizado")
         self.assertGreater(response.context["sync_result"]["created"], 0)
         self.assertGreater(response.context["sync_result"]["permissions_created"], 0)

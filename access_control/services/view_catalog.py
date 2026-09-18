@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from importlib import import_module
 
 from django.db import transaction
 from django.urls import URLPattern, URLResolver, get_resolver
 
 from access_control.models import Vista
 from access_control.views import VerificarPermisoMixin
+from access_control.services.view_registry import definitions_for_app
 
 
 VALID_PERMISSION_NAMES = frozenset(
@@ -44,6 +46,184 @@ class ViewCatalogSummary:
     route_names_updated: int
     invalid_count: int
     issues: tuple[ViewContractIssue, ...]
+
+
+@dataclass(frozen=True)
+class CatalogItem:
+    key: str | None
+    nombre: str
+    route_name: str | None
+    vista_id: int | None = None
+
+
+@dataclass(frozen=True)
+class CatalogConflict:
+    code: str
+    key: str | None
+    nombre: str | None
+    route_name: str | None
+    detail: str
+
+
+@dataclass(frozen=True)
+class CatalogResult:
+    created: int
+    existing: int
+    updated: int
+    created_rows: tuple[CatalogItem, ...]
+    existing_rows: tuple[CatalogItem, ...]
+    updated_rows: tuple[CatalogItem, ...]
+    legacy: tuple[CatalogItem, ...]
+    conflicts: tuple[CatalogConflict, ...]
+    dry_run: bool
+
+    @property
+    def route_names_updated(self):
+        return self.updated
+
+    @property
+    def invalid_count(self):
+        return len(self.conflicts)
+
+
+def _catalog_item(definition, vista_id=None):
+    return CatalogItem(
+        key=definition.key,
+        nombre=definition.nombre,
+        route_name=definition.route_name,
+        vista_id=vista_id,
+    )
+
+
+def _legacy_item(vista):
+    return CatalogItem(
+        key=None,
+        nombre=vista.nombre,
+        route_name=vista.route_name,
+        vista_id=vista.id,
+    )
+
+
+def _belongs_to_app(vista, app, definitions):
+    if vista.route_name and vista.route_name.startswith(f"{app}:"):
+        return True
+    prefixes = {
+        definition.nombre.split(" - ", 1)[0]
+        for definition in definitions
+        if definition.nombre
+    }
+    return any(
+        vista.nombre == prefix or vista.nombre.startswith(f"{prefix} - ")
+        for prefix in prefixes
+    )
+
+
+def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=None):
+    """Reconcile persistent Vista rows from explicit VICMEAS definitions only."""
+    if definitions is None:
+        import_module(f"{app}.vicmeas")
+    definitions = tuple(
+        definitions_for_app(app) if definitions is None else definitions
+    )
+    existing_rows = tuple(Vista.objects.order_by("id"))
+    declared_names = {definition.nombre for definition in definitions}
+    by_name = {}
+    for vista in existing_rows:
+        by_name.setdefault(vista.nombre, []).append(vista)
+
+    created_rows = []
+    existing_catalog_rows = []
+    updated_rows = []
+    conflicts = []
+    seen_names = {}
+    for definition in definitions:
+        previous = seen_names.get(definition.nombre)
+        if previous is not None and previous != definition:
+            conflicts.append(
+                CatalogConflict(
+                    code="duplicate_declared_name",
+                    key=definition.key,
+                    nombre=definition.nombre,
+                    route_name=definition.route_name,
+                    detail="Más de una definición declara el mismo nombre canónico.",
+                )
+            )
+            continue
+        seen_names[definition.nombre] = definition
+
+        matches = by_name.get(definition.nombre, [])
+        if len(matches) > 1:
+            conflicts.append(
+                CatalogConflict(
+                    code="persistent_identity_conflict",
+                    key=definition.key,
+                    nombre=definition.nombre,
+                    route_name=definition.route_name,
+                    detail="Existen varias filas Vista con el mismo nombre canónico.",
+                )
+            )
+            continue
+
+        route_conflicts = [
+            vista
+            for vista in existing_rows
+            if vista.route_name == definition.route_name
+            and vista.nombre != definition.nombre
+        ]
+        if route_conflicts:
+            conflicts.append(
+                CatalogConflict(
+                    code="route_identity_conflict",
+                    key=definition.key,
+                    nombre=definition.nombre,
+                    route_name=definition.route_name,
+                    detail=(
+                        "La ruta canónica ya pertenece a otra Vista: "
+                        + ", ".join(sorted({vista.nombre for vista in route_conflicts}))
+                    ),
+                )
+            )
+            continue
+
+        if not matches:
+            created_rows.append(_catalog_item(definition))
+            continue
+
+        vista = matches[0]
+        existing_catalog_rows.append(_catalog_item(definition, vista.id))
+        if vista.route_name != definition.route_name:
+            updated_rows.append(_catalog_item(definition, vista.id))
+
+    legacy = tuple(
+        _legacy_item(vista)
+        for vista in existing_rows
+        if vista.nombre not in declared_names
+        and _belongs_to_app(vista, app, definitions)
+    )
+
+    if not dry_run and (created_rows or updated_rows):
+        with transaction.atomic():
+            for item in created_rows:
+                Vista.objects.create(
+                    nombre=item.nombre,
+                    route_name=item.route_name,
+                )
+            for item in updated_rows:
+                Vista.objects.filter(pk=item.vista_id).update(
+                    route_name=item.route_name,
+                )
+
+    return CatalogResult(
+        created=len(created_rows),
+        existing=len(existing_catalog_rows),
+        updated=len(updated_rows),
+        created_rows=tuple(created_rows),
+        existing_rows=tuple(existing_catalog_rows),
+        updated_rows=tuple(updated_rows),
+        legacy=legacy,
+        conflicts=tuple(conflicts),
+        dry_run=dry_run,
+    )
 
 
 def _route_name(namespaces, pattern_name):
@@ -180,32 +360,6 @@ def _sidebar_view_names():
     return frozenset(SIDEBAR_VIEW_NAMES.values())
 
 
-@transaction.atomic
-def ensure_protected_views_catalog():
-    definitions, issues = audit_protected_views()
-    created = 0
-    existing = 0
-    route_names_updated = 0
-    for definition in definitions:
-        vista = Vista.objects.filter(nombre=definition.vista_nombre).order_by("id").first()
-        if vista is None:
-            Vista.objects.create(
-                nombre=definition.vista_nombre,
-                route_name=definition.route_name,
-            )
-            created += 1
-            continue
-
-        existing += 1
-        if definition.route_name and not vista.route_name:
-            vista.route_name = definition.route_name
-            vista.save(update_fields=["route_name"])
-            route_names_updated += 1
-
-    return ViewCatalogSummary(
-        created=created,
-        existing=existing,
-        route_names_updated=route_names_updated,
-        invalid_count=len(issues),
-        issues=issues,
-    )
+def ensure_protected_views_catalog(*, dry_run=False, app="tareas"):
+    """Backward-compatible entry point for declarative catalog reconciliation."""
+    return ensure_declared_views_catalog(app=app, dry_run=dry_run)

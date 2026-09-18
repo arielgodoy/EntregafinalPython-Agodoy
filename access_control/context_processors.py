@@ -27,22 +27,6 @@ def global_context(request):
         # No queremos que un fallo en el context processor rompa el render
         mail_enabled = False
 
-    should_materialize_permissions = not getattr(
-        request,
-        "_skip_sidebar_permission_materialization",
-        False,
-    )
-    if should_materialize_permissions and not getattr(
-        request,
-        "_user_view_permissions_ensured",
-        False,
-    ):
-        ensure_user_view_permissions(
-            getattr(request, "user", None),
-            request.session.get("empresa_id"),
-        )
-        request._user_view_permissions_ensured = True
-
     request.sidebar_visible_items = get_sidebar_visible_items(
         getattr(request, "user", None),
         request.session.get("empresa_id"),

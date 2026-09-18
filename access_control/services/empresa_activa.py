@@ -1,9 +1,11 @@
+from importlib import import_module
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from access_control.models import Empresa, Permiso, Vista
+from access_control.services.view_registry import definitions_for_app
 from common.navigation import (
     EXCLUDED_NAVIGATION_PATHS,
     is_excluded_navigation_path,
@@ -86,6 +88,13 @@ def get_user_initial_view_url(user):
         if not route_name:
             raise NoReverseMatch
 
+        if not _is_navigable_vista_with_policies(
+            vista,
+            _declarative_navigation_policies(),
+            route_name,
+        ):
+            raise NoReverseMatch
+
         target = reverse(route_name)
         path = urlsplit(target).path or target
         if is_excluded_last_view_path(path) or not is_valid_internal_path(path):
@@ -95,12 +104,74 @@ def get_user_initial_view_url(user):
         return reverse("dashboard:dashboard_general")
 
 
-def get_navigable_vistas():
+def get_navigable_vistas(*, route_overrides=None):
+    return _get_navigable_vistas(route_overrides=route_overrides)
+
+
+def _declarative_navigation_policies():
+    from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    policies = {}
+    for app, module_path in APP_DEFINITION_MODULES.items():
+        import_module(module_path)
+        policies[app] = {
+            definition.nombre: definition.navigable
+            for definition in definitions_for_app(app)
+        }
+    return policies
+
+
+def _route_namespace(route_name):
+    return route_name.split(":", 1)[0] if ":" in route_name else None
+
+
+def _is_navigable_vista_with_policies(vista, policies, route_name=None):
+    route_name = (route_name if route_name is not None else vista.route_name) or ""
+    route_name = route_name.strip()
+    if not route_name:
+        return False
+
+    try:
+        target = reverse(route_name)
+        path = urlsplit(target).path or target
+    except (NoReverseMatch, AttributeError):
+        return False
+
+    if is_excluded_last_view_path(path) or not is_valid_internal_path(path):
+        return False
+
+    app = _route_namespace(route_name)
+    if app not in policies:
+        return True
+
+    declarative_policy = policies[app]
+    if vista.nombre in declarative_policy:
+        return declarative_policy[vista.nombre]
+
+    # Transitional compatibility is limited to explicit sidebar entries.
+    from access_control.services.permissions import SIDEBAR_VIEW_NAMES
+
+    return vista.nombre in SIDEBAR_VIEW_NAMES.values()
+
+
+def _get_navigable_vistas(*, route_overrides=None):
+    policies = _declarative_navigation_policies()
+    route_overrides = route_overrides or {}
     vistas = []
-    for vista in Vista.objects.exclude(route_name__isnull=True).exclude(route_name="").order_by("nombre"):
-        if _is_navigable_vista(vista):
+    for vista in Vista.objects.order_by("nombre"):
+        route_name = route_overrides.get(vista.id, vista.route_name)
+        if not route_name:
+            continue
+        if _is_navigable_vista_with_policies(vista, policies, route_name):
             vistas.append(vista)
     return vistas
+
+
+def _is_navigable_vista(vista):
+    return _is_navigable_vista_with_policies(
+        vista,
+        _declarative_navigation_policies(),
+    )
 
 
 def get_user_navigable_vistas(user):
@@ -131,15 +202,6 @@ def get_navigable_vistas_by_user_ids(user_ids):
         user_id: [vistas_by_id[vista_id] for vista_id in vista_ids]
         for user_id, vista_ids in user_vista_ids.items()
     }
-
-
-def _is_navigable_vista(vista):
-    try:
-        target = reverse((vista.route_name or "").strip())
-        path = urlsplit(target).path or target
-        return not is_excluded_last_view_path(path) and is_valid_internal_path(path)
-    except (NoReverseMatch, AttributeError):
-        return False
 
 
 def is_excluded_last_view_path(path):

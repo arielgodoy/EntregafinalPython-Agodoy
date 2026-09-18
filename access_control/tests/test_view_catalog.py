@@ -103,7 +103,7 @@ class ProtectedViewCatalogTests(TestCase):
         self.assertEqual(Vista.objects.filter(nombre="Vista desconectada").count(), 1)
         self.assertGreater(first.created, 0)
         self.assertEqual(second.created, 0)
-        self.assertEqual(Vista.objects.filter(nombre="Biblioteca - Documentos").count(), 1)
+        self.assertEqual(Vista.objects.filter(nombre="Biblioteca - Documentos").count(), 0)
 
     def test_catalog_does_not_create_permissions_and_sidebar_materializes_empty_rows(self):
         ensure_protected_views_catalog()
@@ -120,7 +120,12 @@ class ProtectedViewCatalogTests(TestCase):
         empresa = Empresa.objects.create(codigo="01")
         ensure_sidebar_permissions(user, empresa.id)
 
-        sidebar_names = set(SIDEBAR_VIEW_NAMES.values())
+        sidebar_names = {
+            nombre
+            for item_key, nombre in SIDEBAR_VIEW_NAMES.items()
+            if item_key not in {"tasks_list", "tasks_create"}
+        }
+        sidebar_names.add("Tareas")
         permisos = Permiso.objects.filter(usuario=user, empresa=empresa)
         self.assertEqual(permisos.count(), len(sidebar_names))
         for permiso in permisos:

@@ -202,6 +202,12 @@ SIDEBAR_VIEW_NAMES = {
     "database_manager_preflight": "Gestión de Bases - Preflight",
 }
 
+SIDEBAR_DEFINITION_KEYS = {
+    "tasks_list": "tareas.tasks",
+    "tasks_create": "tareas.tasks",
+    "tasks_dashboard": "tareas.personal_dashboard",
+}
+
 SIDEBAR_GROUPS = {
     "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
     "master_files": ("suppliers_master",),
@@ -310,7 +316,50 @@ def get_descendant_sidebar_keys(node_key):
 
 
 def ensure_sidebar_permissions(user, empresa_id):
-    return ensure_user_view_permissions(user, empresa_id, view_names=SIDEBAR_VIEW_NAMES.values())
+    return ensure_user_view_permissions(
+        user,
+        empresa_id,
+        view_names=_sidebar_permission_view_names(),
+    )
+
+
+def _sidebar_definition_names():
+    from importlib import import_module
+
+    from access_control.services.view_registry import definitions_for_app
+    from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    definitions_by_key = {}
+    for definition_key in SIDEBAR_DEFINITION_KEYS.values():
+        app = definition_key.split(".", 1)[0]
+        module_path = APP_DEFINITION_MODULES.get(app)
+        if module_path is None:
+            continue
+        try:
+            import_module(module_path)
+        except (ImportError, ValueError):
+            continue
+        definitions_by_key.update(
+            {
+                definition.key: definition.nombre
+                for definition in definitions_for_app(app)
+            }
+        )
+    return {
+        item_key: definitions_by_key[definition_key]
+        for item_key, definition_key in SIDEBAR_DEFINITION_KEYS.items()
+        if definition_key in definitions_by_key
+    }
+
+
+def _sidebar_permission_view_names():
+    definition_names = _sidebar_definition_names()
+    legacy_names = {
+        vista_nombre
+        for item_key, vista_nombre in SIDEBAR_VIEW_NAMES.items()
+        if item_key not in SIDEBAR_DEFINITION_KEYS
+    }
+    return legacy_names | set(definition_names.values())
 
 
 def ensure_user_view_permissions(user, empresa_id, *, view_names=None):
@@ -367,19 +416,26 @@ def get_sidebar_visible_items(user, empresa_id, *, materialize_permissions=True)
     if materialize_permissions:
         ensure_sidebar_permissions(user, empresa_id)
 
+    definition_names = _sidebar_definition_names()
     visible_names = set(
         Permiso.objects.filter(
             usuario=user,
             empresa_id=empresa_id,
             ver=True,
-            vista__nombre__in=SIDEBAR_VIEW_NAMES.values(),
+            vista__nombre__in=_sidebar_permission_view_names(),
         ).values_list("vista__nombre", flat=True)
     )
     visible_items = {
         item_key
         for item_key, vista_nombre in SIDEBAR_VIEW_NAMES.items()
+        if item_key not in SIDEBAR_DEFINITION_KEYS
         if vista_nombre in visible_names
     }
+    visible_items.update(
+        item_key
+        for item_key, vista_nombre in definition_names.items()
+        if vista_nombre in visible_names
+    )
     for group, children in SIDEBAR_GROUPS.items():
         if any(child in visible_items for child in children):
             visible_items.add(group)

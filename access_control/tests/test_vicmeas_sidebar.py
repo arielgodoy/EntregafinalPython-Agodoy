@@ -4,15 +4,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
 
 from access_control.models import Empresa, Permiso, Vista
+from access_control.context_processors import global_context
 from access_control.services.permissions import (
     SIDEBAR_MENU,
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
+    SIDEBAR_DEFINITION_KEYS,
     SIDEBAR_VIEW_NAMES,
     VICMEAS_FIELDS,
     filter_sidebar_tree,
@@ -88,6 +90,16 @@ class VicmeasSidebarTests(TestCase):
             nombre="Tareas - Dashboard personal",
             defaults={"route_name": "tareas:mis_tareas"},
         )
+        self.tasks_core, _ = Vista.objects.get_or_create(
+            nombre="Tareas",
+            defaults={"route_name": "tareas:listar_tareas"},
+        )
+        for nombre in (
+            "Biblioteca - Propietarios",
+            "Biblioteca - Propiedades",
+            "Biblioteca - Tipos de Documento",
+        ):
+            Vista.objects.get_or_create(nombre=nombre)
         self.suppliers_master, _ = Vista.objects.get_or_create(
             nombre="Maestros - Proveedores",
             defaults={"route_name": "proveedores:listado"},
@@ -718,6 +730,95 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertNotIn("tasks_dashboard", visible)
+
+    def test_tasks_sidebar_items_bind_to_canonical_registry_definitions(self):
+        self.assertEqual(SIDEBAR_DEFINITION_KEYS["tasks_list"], "tareas.tasks")
+        self.assertEqual(SIDEBAR_DEFINITION_KEYS["tasks_create"], "tareas.tasks")
+        self.assertEqual(
+            SIDEBAR_DEFINITION_KEYS["tasks_dashboard"],
+            "tareas.personal_dashboard",
+        )
+
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+        visible = get_sidebar_visible_items(
+            self.user,
+            self.empresa_a.id,
+            materialize_permissions=False,
+        )
+
+        self.assertIn("tasks_list", visible)
+        self.assertIn("tasks_create", visible)
+        self.assertNotIn("tasks_dashboard", visible)
+
+    def test_tasks_sidebar_does_not_need_legacy_list_or_create_views(self):
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+
+        visible = get_sidebar_visible_items(
+            self.user,
+            self.empresa_a.id,
+            materialize_permissions=False,
+        )
+
+        self.assertIn("tasks_list", visible)
+        self.assertIn("tasks_create", visible)
+        self.assertFalse(Vista.objects.filter(nombre="Tareas - Listado").exists())
+        self.assertFalse(Vista.objects.filter(nombre="Tareas - Crear tarea").exists())
+
+    def test_tasks_sidebar_uses_v_only_for_shared_surface(self):
+        permiso = self._permission(self.empresa_a, self.tasks_core, ver=True)
+        permiso.crear = False
+        permiso.save(update_fields=["crear"])
+
+        visible = get_sidebar_visible_items(
+            self.user,
+            self.empresa_a.id,
+            materialize_permissions=False,
+        )
+
+        self.assertIn("tasks_list", visible)
+        self.assertIn("tasks_create", visible)
+
+    def test_tasks_sidebar_dashboard_uses_its_own_view(self):
+        self._permission(self.empresa_a, self.tasks_dashboard, ver=True)
+
+        visible = get_sidebar_visible_items(
+            self.user,
+            self.empresa_a.id,
+            materialize_permissions=False,
+        )
+
+        self.assertIn("tasks_dashboard", visible)
+        self.assertNotIn("tasks_list", visible)
+        self.assertNotIn("tasks_create", visible)
+
+    def test_invalid_tasks_definition_key_fails_closed(self):
+        with patch.dict(
+            SIDEBAR_DEFINITION_KEYS,
+            {"tasks_list": "tareas.missing"},
+            clear=False,
+        ):
+            visible = get_sidebar_visible_items(
+                self.user,
+                self.empresa_a.id,
+                materialize_permissions=False,
+            )
+
+        self.assertNotIn("tasks_list", visible)
+
+    def test_rendering_sidebar_does_not_materialize_permissions_or_views(self):
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+        request = RequestFactory().get("/")
+        request.user = self.user
+        request.session = {"empresa_id": self.empresa_a.id}
+        before_permissions = Permiso.objects.count()
+        before_views = Vista.objects.count()
+
+        context = global_context(request)
+
+        self.assertIn("tasks_list", context["sidebar_visible_items"])
+        self.assertIn("tasks_create", context["sidebar_visible_items"])
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+        self.assertEqual(Vista.objects.count(), before_views)
 
     def test_suppliers_master_v_controls_sidebar_visibility(self):
         self._permission(self.empresa_a, self.suppliers_master, ver=True)

@@ -25,6 +25,14 @@ class ScopeResolution:
     requested_leaf_names: tuple
     vistas: tuple
     missing_names: tuple
+    conflicts: tuple = ()
+
+
+@dataclass(frozen=True)
+class ScopeConflict:
+    code: str
+    nombre: str
+    detail: str
 
 
 def get_access_utility_vista():
@@ -64,8 +72,117 @@ def _get_scope_item_keys(scope):
     return list(dict.fromkeys(item_keys))
 
 
-def resolve_scope_vistas(scope):
+def _registry_definitions_for_scope(scope, group=None):
+    from importlib import import_module
+
+    from access_control.services.view_registry import (
+        VistaDefinition,
+        definitions_for_app,
+        register_app_definitions,
+    )
+    from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    expected_group = group or scope
+    candidate_apps = (scope,) if scope in APP_DEFINITION_MODULES else APP_DEFINITION_MODULES
+    for app in candidate_apps:
+        module_path = APP_DEFINITION_MODULES.get(app)
+        if module_path is None:
+            continue
+        module = import_module(module_path)
+        declared_definitions = tuple(
+            definition
+            for value in vars(module).values()
+            for definition in (value if isinstance(value, (tuple, list)) else (value,))
+            if isinstance(definition, VistaDefinition)
+        )
+        if declared_definitions:
+            register_app_definitions(app, declared_definitions)
+        definitions = tuple(
+            definition
+            for definition in definitions_for_app(app)
+            if definition.access_utility and definition.group == expected_group
+        )
+        if definitions:
+            return definitions
+    return None
+
+
+def _resolve_registry_scope_vistas(scope, definitions):
+    definitions_by_key = {}
+    definitions_by_name = {}
+    conflicts = []
+    for definition in definitions:
+        previous_key = definitions_by_key.get(definition.key)
+        if previous_key is not None and previous_key != definition:
+            conflicts.append(
+                ScopeConflict(
+                    code="duplicate_definition_key",
+                    nombre=definition.nombre,
+                    detail=f"La key {definition.key} tiene metadatos incompatibles.",
+                )
+            )
+            continue
+        previous_name = definitions_by_name.get(definition.nombre)
+        if previous_name is not None and previous_name != definition:
+            conflicts.append(
+                ScopeConflict(
+                    code="duplicate_definition_name",
+                    nombre=definition.nombre,
+                    detail="El nombre canónico pertenece a definiciones incompatibles.",
+                )
+            )
+            continue
+        definitions_by_key[definition.key] = definition
+        definitions_by_name[definition.nombre] = definition
+
+    requested_names = tuple(definition.nombre for definition in definitions_by_key.values())
+    rows_by_name = {}
+    duplicate_names = set()
+    for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
+        if vista.nombre in rows_by_name:
+            duplicate_names.add(vista.nombre)
+            continue
+        rows_by_name[vista.nombre] = vista
+
+    for nombre in sorted(duplicate_names):
+        conflicts.append(
+            ScopeConflict(
+                code="duplicate_persistent_name",
+                nombre=nombre,
+                detail="Existen varias filas Vista con el mismo nombre canónico.",
+            )
+        )
+
+    missing_names = tuple(
+        nombre
+        for nombre in requested_names
+        if nombre not in rows_by_name
+    )
+    return ScopeResolution(
+        requested_leaf_names=requested_names,
+        vistas=tuple(
+            rows_by_name[nombre]
+            for nombre in requested_names
+            if nombre in rows_by_name and nombre not in duplicate_names
+        ),
+        missing_names=missing_names,
+        conflicts=tuple(conflicts),
+    )
+
+
+def _resolve_legacy_scope_vistas(scope, *, excluded_groups=()):
     item_keys = _get_scope_item_keys(scope)
+    excluded_groups = set(excluded_groups)
+    if scope == "all":
+        item_keys = [
+            item_key
+            for item_key in item_keys
+            if not any(
+                item_key in group_items
+                for group, group_items in SIDEBAR_GROUPS.items()
+                if group in excluded_groups
+            )
+        ]
     requested_names = tuple(SIDEBAR_VIEW_NAMES[item_key] for item_key in item_keys)
     vistas_by_name = {}
     for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
@@ -79,10 +196,67 @@ def resolve_scope_vistas(scope):
     )
 
 
+def resolve_scope_vistas(scope, *, group=None):
+    from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    if scope == "all":
+        registry_groups = tuple(
+            app for app in APP_DEFINITION_MODULES if app in SIDEBAR_GROUPS
+        )
+        registry_resolutions = [
+            _resolve_registry_scope_vistas(
+                app,
+                _registry_definitions_for_scope(app),
+            )
+            for app in registry_groups
+        ]
+        legacy_resolution = _resolve_legacy_scope_vistas(
+            scope,
+            excluded_groups=registry_groups,
+        )
+        requested_names = tuple(
+            dict.fromkeys(
+                name
+                for resolution in (*registry_resolutions, legacy_resolution)
+                for name in resolution.requested_leaf_names
+            )
+        )
+        resolved_vistas = []
+        seen_ids = set()
+        missing_names = []
+        conflicts = []
+        for resolution in (*registry_resolutions, legacy_resolution):
+            for vista in resolution.vistas:
+                if vista.id not in seen_ids:
+                    seen_ids.add(vista.id)
+                    resolved_vistas.append(vista)
+            missing_names.extend(resolution.missing_names)
+            conflicts.extend(resolution.conflicts)
+        return ScopeResolution(
+            requested_leaf_names=requested_names,
+            vistas=tuple(resolved_vistas),
+            missing_names=tuple(dict.fromkeys(missing_names)),
+            conflicts=tuple(conflicts),
+        )
+
+    registry_definitions = _registry_definitions_for_scope(scope, group=group)
+    if registry_definitions is not None:
+        return _resolve_registry_scope_vistas(scope, registry_definitions)
+    return _resolve_legacy_scope_vistas(scope)
+
+
 def get_scope_vistas(scope, *, require_all=True):
     resolution = resolve_scope_vistas(scope)
-    if resolution.missing_names and require_all:
-        raise ValidationError("Faltan Vistas catalogadas: " + ", ".join(resolution.missing_names))
+    if require_all and (resolution.missing_names or resolution.conflicts):
+        messages = []
+        if resolution.missing_names:
+            messages.append("Faltan Vistas catalogadas: " + ", ".join(resolution.missing_names))
+        if resolution.conflicts:
+            messages.append(
+                "Conflictos de Vistas: "
+                + "; ".join(conflict.detail for conflict in resolution.conflicts)
+            )
+        raise ValidationError(" ".join(messages))
     return list(resolution.vistas)
 
 

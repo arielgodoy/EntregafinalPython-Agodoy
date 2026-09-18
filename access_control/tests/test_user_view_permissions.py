@@ -18,6 +18,7 @@ from access_control.services.view_catalog import (
 class UserViewPermissionsTests(TestCase):
     def setUp(self):
         ensure_protected_views_catalog()
+        Vista.objects.get_or_create(nombre="Biblioteca - Propiedades")
         self.user = User.objects.create_user(username="matrix-user")
         self.empresa_a = Empresa.objects.create(codigo="01")
         self.empresa_b = Empresa.objects.create(codigo="02")
