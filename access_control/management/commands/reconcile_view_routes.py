@@ -12,6 +12,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--app",
+            default="tareas",
+            help="App con definitions declarativas a reconciliar.",
+        )
+        parser.add_argument(
             "--apply",
             action="store_true",
             help="Aplica la reconciliación transaccional explícita.",
@@ -20,7 +25,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         operation = apply_reconciliation if options["apply"] else preview_reconciliation
         try:
-            result = operation()
+            result = operation(app=options["app"])
         except ReconciliationError as error:
             raise CommandError(str(error)) from error
 

@@ -86,3 +86,8 @@ TASKS_VIEW_DEFINITIONS = (
 
 
 register_app_definitions("tareas", TASKS_VIEW_DEFINITIONS)
+
+RECONCILIATION_RELEASES = (
+    ("Tareas - Listado", "tareas:listar_tareas"),
+    ("Tareas - Publicar tarea", "tareas:publicar_tarea"),
+)

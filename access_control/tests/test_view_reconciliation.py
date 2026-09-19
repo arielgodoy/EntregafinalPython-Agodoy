@@ -20,6 +20,14 @@ class ViewRouteReconciliationTests(TestCase):
         )
         self.canonical_tasks = Vista.objects.create(nombre="Tareas")
         self.canonical_lifecycle = Vista.objects.create(nombre="Tareas - Ciclo de vida")
+        Vista.objects.create(
+            nombre="Tareas - Hitos",
+            route_name="tareas:hitos_tarea",
+        )
+        Vista.objects.create(
+            nombre="Tareas - Documentos y evidencia",
+            route_name="tareas:documentos_tarea",
+        )
         self.personal_dashboard = Vista.objects.create(
             nombre="Tareas - Dashboard personal",
             route_name="tareas:mis_tareas",
