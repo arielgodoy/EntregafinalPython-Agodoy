@@ -209,6 +209,7 @@ SIDEBAR_DEFINITION_KEYS = {
     "operational_dashboard": "control_operacional.dashboard",
     "operational_alerts": "control_operacional.alertas",
     "evaluaciones_import": "evaluaciones.importar_personas",
+    "suppliers_master": "proveedores.maestros",
 }
 
 SIDEBAR_GROUPS = {

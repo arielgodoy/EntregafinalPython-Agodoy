@@ -13,6 +13,7 @@ APP_DEFINITION_MODULES = {
     "tareas": "tareas.vicmeas",
     "control_operacional": "control_operacional.vicmeas",
     "evaluaciones": "evaluaciones.vicmeas",
+    "proveedores": "proveedores.vicmeas",
 }
 DEFAULT_EXCLUDED_ROUTES = frozenset({"tareas:enlace_tarea"})
 
