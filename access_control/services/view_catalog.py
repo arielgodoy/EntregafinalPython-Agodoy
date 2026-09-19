@@ -150,7 +150,11 @@ def _belongs_to_app(vista, app, definitions):
     )
 
 
-def _legacy_replacement(nombre, definitions):
+def _legacy_replacement(vista, definitions):
+    for definition in definitions:
+        if vista.route_name in {binding.route_name for binding in definition.routes}:
+            return definition.nombre
+
     replacement_by_suffix = {
         "Listado": "Tareas",
         "Crear tarea": "Tareas",
@@ -164,7 +168,7 @@ def _legacy_replacement(nombre, definitions):
         "Rechazar cierre": "Tareas - Ciclo de vida",
         "Reactivar tarea": "Tareas - Ciclo de vida",
     }
-    suffix = nombre.split(" - ", 1)[-1]
+    suffix = vista.nombre.split(" - ", 1)[-1]
     replacement = replacement_by_suffix.get(suffix)
     declared_names = {definition.nombre for definition in definitions}
     return replacement if replacement in declared_names else None
@@ -252,7 +256,7 @@ def get_legacy_views_for_app(app="tareas", *, definitions=None, views=None):
                     empresas_distintas=permission_rows.values("empresa_id").distinct().count(),
                     flags=flags,
                 ),
-                reemplazo_canonico_sugerido=_legacy_replacement(vista.nombre, definitions),
+                reemplazo_canonico_sugerido=_legacy_replacement(vista, definitions),
                 safe_to_delete=not blockers,
                 blockers=tuple(blockers),
             )

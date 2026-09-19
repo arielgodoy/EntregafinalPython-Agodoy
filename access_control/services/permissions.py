@@ -206,6 +206,8 @@ SIDEBAR_DEFINITION_KEYS = {
     "tasks_list": "tareas.tasks",
     "tasks_create": "tareas.tasks",
     "tasks_dashboard": "tareas.personal_dashboard",
+    "operational_dashboard": "control_operacional.dashboard",
+    "operational_alerts": "control_operacional.alertas",
 }
 
 SIDEBAR_GROUPS = {

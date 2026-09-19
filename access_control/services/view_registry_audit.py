@@ -5,10 +5,14 @@ from importlib import import_module
 
 from django.urls import URLPattern, URLResolver, get_resolver
 
+from access_control.services.view_registry import VistaDefinition
 from access_control.views import VerificarPermisoMixin
 
 
-APP_DEFINITION_MODULES = {"tareas": "tareas.vicmeas"}
+APP_DEFINITION_MODULES = {
+    "tareas": "tareas.vicmeas",
+    "control_operacional": "control_operacional.vicmeas",
+}
 DEFAULT_EXCLUDED_ROUTES = frozenset({"tareas:enlace_tarea"})
 
 
@@ -144,8 +148,11 @@ def _definitions_for_app(app, definitions):
     module = import_module(module_path)
     return tuple(
         definition
-        for definition in getattr(module, "TASKS_VIEW_DEFINITIONS", ())
-        if definition.app == app
+        for value in vars(module).values()
+        for definition in (
+            value if isinstance(value, (tuple, list)) else (value,)
+        )
+        if isinstance(definition, VistaDefinition) and definition.app == app
     )
 
 
