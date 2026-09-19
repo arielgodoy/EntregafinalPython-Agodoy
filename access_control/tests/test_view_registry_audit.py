@@ -19,6 +19,13 @@ def _definition_with_bindings(definition, bindings):
 
 
 class ViewRegistryAuditTests(TestCase):
+    def test_audit_exposes_unique_route_count_separately_from_method_bindings(self):
+        result = audit_app("control_de_proyectos", definitions=())
+
+        self.assertEqual(result.protected_route_count, 19)
+        self.assertGreater(len(result.protected_routes), result.protected_route_count)
+        self.assertEqual(len(result.protected_route_names), 19)
+
     def test_real_tareas_snapshot_is_deterministic_and_clean(self):
         result = audit_app("tareas")
 

@@ -52,6 +52,14 @@ class AuditResult:
     def issue_count(self):
         return len(self.issues)
 
+    @property
+    def protected_route_names(self):
+        return tuple(sorted({route.route_name for route in self.protected_routes}))
+
+    @property
+    def protected_route_count(self):
+        return len(self.protected_route_names)
+
     def by_code(self, code):
         return tuple(issue for issue in self.issues if issue.code == code)
 
