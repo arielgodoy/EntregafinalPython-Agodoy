@@ -37,7 +37,7 @@ class SchedulingT030Tests(TestCase):
         return Tarea.objects.create(**defaults)
 
     def publish_and_start(self, **kwargs):
-        task = self.make_task(fecha_tope=date.today() - timedelta(days=2), **kwargs)
+        task = self.make_task(fecha_tope=timezone.localdate() - timedelta(days=2), **kwargs)
         task.publicar(self.creador)
         transition_task(task, Tarea.Estado.GESTION, self.creador, "INICIAR_GESTION")
         return task
