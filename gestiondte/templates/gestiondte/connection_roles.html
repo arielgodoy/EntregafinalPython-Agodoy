@@ -57,11 +57,36 @@
               {{ item.form.mysql_connection }}
               {% for error in item.form.mysql_connection.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
             </div>
+            {% if item.role == 'serverbasedte' and can_install_base_dte %}
+              <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#baseDteSchemaModal" data-key="gestiondte.connection_roles.create_base_dte">Crear estructura Base DTE</button>
+            {% endif %}
           </section>
           {% endfor %}
           <button type="submit" class="btn btn-success" data-key="buttons.save">Guardar</button>
         </form>
       </div>
+      {% if can_install_base_dte %}
+        <div class="modal fade" id="baseDteSchemaModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" data-key="gestiondte.connection_roles.create_base_dte">Crear estructura Base DTE</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body" data-key="gestiondte.connection_roles.create_base_dte.confirmation">
+                Se ejecutará la creación de la estructura Base DTE en la conexión configurada. Las tablas existentes no serán eliminadas.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
+                <form method="post" action="{% url 'gestion_dte:base_dte_schema_install' %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-primary" data-key="gestiondte.connection_roles.create_base_dte.confirm">Confirmar creación</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>

@@ -27,6 +27,10 @@ class GestionDTEConnectionInactiveError(GestionDTEConnectionError):
     pass
 
 
+class GestionDTEConnectionSourceError(GestionDTEConnectionError):
+    pass
+
+
 def _database_vendor(alias: str, config: dict) -> str:
     try:
         return connections[alias].vendor
@@ -170,3 +174,19 @@ def get_gestiondte_connection(role: str) -> dict[str, object]:
         'nombre_logico': connection.nombre_logico,
         'engine': connection.engine,
     }
+
+
+def get_gestiondte_mysql_connection(role: str):
+    role_config = GestionDTEConnectionRole.objects.select_related(
+        'mysql_connection', 'mysql_connection__empresa'
+    ).get(role=role)
+    if role_config.source_type != 'MYSQL_CONFIG':
+        raise GestionDTEConnectionSourceError(
+            f'El rol {role!r} no utiliza una conexión MYSQL_CONFIG.'
+        )
+    connection = role_config.mysql_connection
+    if connection is None or not connection.is_active:
+        raise GestionDTEConnectionInactiveError(
+            f'La conexión MySQL del rol {role!r} está inactiva o no existe.'
+        )
+    return connection
