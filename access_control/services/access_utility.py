@@ -20,6 +20,16 @@ from access_control.services.permissions import (
 ACCESS_UTILITY_VISTA_NAME = "Control de Acceso - Utilitario de Acceso"
 SENSITIVE_FIELDS = frozenset(("autorizar", "supervisor"))
 
+ACCESS_UTILITY_SCOPE_VIEWS = {
+    "tasks": (
+        "Tareas",
+        "Tareas - Ciclo de vida",
+        "Tareas - Hitos",
+        "Tareas - Documentos y evidencia",
+        "Tareas - Dashboard personal",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class ScopeResolution:
@@ -177,6 +187,19 @@ def _resolve_registry_scope_vistas(scope, definitions):
     )
 
 
+def _resolve_named_scope_vistas(requested_names):
+    vistas_by_name = {}
+    for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
+        vistas_by_name.setdefault(vista.nombre, vista)
+    missing_names = tuple(name for name in requested_names if name not in vistas_by_name)
+    resolved_names = tuple(dict.fromkeys(requested_names))
+    return ScopeResolution(
+        requested_leaf_names=requested_names,
+        vistas=tuple(vistas_by_name[name] for name in resolved_names if name in vistas_by_name),
+        missing_names=missing_names,
+    )
+
+
 def _resolve_legacy_scope_vistas(scope, *, excluded_groups=()):
     item_keys = _get_scope_item_keys(scope)
     excluded_groups = set(excluded_groups)
@@ -191,20 +214,15 @@ def _resolve_legacy_scope_vistas(scope, *, excluded_groups=()):
             )
         ]
     requested_names = tuple(SIDEBAR_VIEW_NAMES[item_key] for item_key in item_keys)
-    vistas_by_name = {}
-    for vista in Vista.objects.filter(nombre__in=requested_names).order_by("id"):
-        vistas_by_name.setdefault(vista.nombre, vista)
-    missing_names = tuple(name for name in requested_names if name not in vistas_by_name)
-    resolved_names = tuple(dict.fromkeys(requested_names))
-    return ScopeResolution(
-        requested_leaf_names=requested_names,
-        vistas=tuple(vistas_by_name[name] for name in resolved_names if name in vistas_by_name),
-        missing_names=missing_names,
-    )
+    return _resolve_named_scope_vistas(requested_names)
 
 
 def resolve_scope_vistas(scope, *, group=None):
     from access_control.services.view_registry_audit import APP_DEFINITION_MODULES
+
+    explicit_names = ACCESS_UTILITY_SCOPE_VIEWS.get(scope)
+    if explicit_names is not None:
+        return _resolve_named_scope_vistas(explicit_names)
 
     if scope == "all":
         registry_groups = tuple(

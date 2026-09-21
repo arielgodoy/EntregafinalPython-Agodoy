@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
+from types import SimpleNamespace
 
 from django.db import transaction
 from django.urls import URLPattern, URLResolver, get_resolver
@@ -516,5 +517,18 @@ def _sidebar_view_names():
 
 
 def ensure_protected_views_catalog(*, dry_run=False, app="tareas"):
-    """Backward-compatible entry point for declarative catalog reconciliation."""
-    return ensure_declared_views_catalog(app=app, dry_run=dry_run)
+    """Reconcile the catalog from active View metadata without registry imports."""
+    if app != "tareas":
+        return ensure_declared_views_catalog(app=app, dry_run=dry_run)
+
+    definitions = tuple(
+        SimpleNamespace(
+            key=None,
+            nombre=definition.vista_nombre,
+            route_name=definition.route_name,
+            routes=(),
+        )
+        for definition in discover_protected_views()
+        if definition.namespace == app
+    )
+    return ensure_declared_views_catalog(app=app, dry_run=dry_run, definitions=definitions)

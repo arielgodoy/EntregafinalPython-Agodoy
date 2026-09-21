@@ -178,8 +178,8 @@ SIDEBAR_VIEW_NAMES = {
     "projects_create_professional": "Control de Proyectos - Profesionales",
     "operational_dashboard": "Control Operacional - Dashboard",
     "operational_alerts": "Control Operacional - Alertas",
-    "tasks_list": "Tareas - Listado",
-    "tasks_create": "Tareas - Crear tarea",
+    "tasks_list": "Tareas",
+    "tasks_create": "Tareas",
     "tasks_dashboard": "Tareas - Dashboard personal",
     "account_profile": "Accounts - Editar Perfil",
     "account_email": "Configuración - Cuentas de Correo",
@@ -203,9 +203,6 @@ SIDEBAR_VIEW_NAMES = {
 }
 
 SIDEBAR_DEFINITION_KEYS = {
-    "tasks_list": "tareas.tasks",
-    "tasks_create": "tareas.tasks",
-    "tasks_dashboard": "tareas.personal_dashboard",
 }
 
 SIDEBAR_GROUPS = {

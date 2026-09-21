@@ -10,7 +10,6 @@ from access_control.views import VerificarPermisoMixin
 
 
 APP_DEFINITION_MODULES = {
-    "tareas": "tareas.vicmeas",
 }
 DEFAULT_EXCLUDED_ROUTES = frozenset({"tareas:enlace_tarea"})
 

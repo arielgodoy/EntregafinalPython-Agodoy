@@ -17,38 +17,18 @@ from access_control.services.view_registry import (
     navigable_definitions,
 )
 from access_control.services.permissions import SIDEBAR_GROUPS
-from tareas.vicmeas import TASKS_VIEW_DEFINITIONS
 
 
 class ViewRegistryTests(TestCase):
-    def test_tareas_registers_five_functional_surfaces(self):
-        definitions = definitions_for_app("tareas")
-
-        self.assertEqual(len(definitions), 5)
-        self.assertEqual(
-            {definition.key for definition in definitions},
-            {
-                "tareas.tasks",
-                "tareas.lifecycle",
-                "tareas.milestones",
-                "tareas.documents",
-                "tareas.personal_dashboard",
-            },
-        )
-        self.assertEqual(
-            {definition.nombre for definition in definitions_for_group("tasks")},
-            {
-                "Tareas",
-                "Tareas - Ciclo de vida",
-                "Tareas - Hitos",
-                "Tareas - Documentos y evidencia",
-                "Tareas - Dashboard personal",
-            },
-        )
-
     def test_keys_are_unique_and_registration_is_idempotent(self):
         registry = ViewRegistry()
-        definition = TASKS_VIEW_DEFINITIONS[0]
+        definition = VistaDefinition(
+            key="sample.definition",
+            app="sample",
+            nombre="Sample",
+            route_name="sample:index",
+            routes=(RouteBinding("sample:index", "ingresar"),),
+        )
 
         registry.register(definition)
         registry.register(definition)
@@ -58,39 +38,12 @@ class ViewRegistryTests(TestCase):
             registry.register(
                 VistaDefinition(
                     key=definition.key,
-                    app="tareas",
+                    app="sample",
                     nombre="Otra Vista",
-                    route_name="tareas:otra",
-                    routes=(RouteBinding("tareas:otra", "ingresar"),),
+                    route_name="sample:otra",
+                    routes=(RouteBinding("sample:otra", "ingresar"),),
                 )
             )
-
-    def test_surface_supports_multiple_routes_and_method_permissions(self):
-        definition = definition_for_key("tareas.tasks")
-
-        self.assertEqual(definition_for_key("tareas.tasks"), definition)
-        self.assertEqual(definition_for_key("tareas.tasks").route_name, "tareas:listar_tareas")
-        self.assertEqual(
-            bindings_for_route("tareas:detalle_tarea", "GET")[0].permiso_requerido,
-            "ingresar",
-        )
-        self.assertEqual(
-            bindings_for_route("tareas:detalle_tarea", "POST")[0].permiso_requerido,
-            "modificar",
-        )
-        self.assertEqual(
-            definition_for_key("tareas.tasks").routes[-1].route_name,
-            "tareas:dashboard_general_usuario",
-        )
-
-    def test_administrable_surface_can_be_non_navigable(self):
-        definitions = {definition.key: definition for definition in administrable_definitions()}
-        navigable = {definition.key for definition in navigable_definitions()}
-
-        self.assertIn("tareas.lifecycle", definitions)
-        self.assertNotIn("tareas.lifecycle", navigable)
-        self.assertIn("tareas.tasks", navigable)
-        self.assertIn("tareas.personal_dashboard", navigable)
 
     def test_technical_non_administrable_definition_is_excluded(self):
         registry = ViewRegistry()
@@ -142,15 +95,6 @@ class ViewRegistryTests(TestCase):
                     routes=(RouteBinding("sample:first", "modificar"),),
                 )
             )
-
-    def test_importing_declarations_does_not_touch_vista_or_permiso(self):
-        vista_count = Vista.objects.count()
-        permiso_count = Permiso.objects.count()
-
-        __import__("tareas.vicmeas")
-
-        self.assertEqual(Vista.objects.count(), vista_count)
-        self.assertEqual(Permiso.objects.count(), permiso_count)
 
     def test_registry_order_is_deterministic_without_sidebar_changes(self):
         first = tuple(definition.key for definition in all_definitions())

@@ -732,13 +732,6 @@ class VicmeasSidebarTests(TestCase):
         self.assertNotIn("tasks_dashboard", visible)
 
     def test_tasks_sidebar_items_bind_to_canonical_registry_definitions(self):
-        self.assertEqual(SIDEBAR_DEFINITION_KEYS["tasks_list"], "tareas.tasks")
-        self.assertEqual(SIDEBAR_DEFINITION_KEYS["tasks_create"], "tareas.tasks")
-        self.assertEqual(
-            SIDEBAR_DEFINITION_KEYS["tasks_dashboard"],
-            "tareas.personal_dashboard",
-        )
-
         self._permission(self.empresa_a, self.tasks_core, ver=True)
         visible = get_sidebar_visible_items(
             self.user,
@@ -790,20 +783,6 @@ class VicmeasSidebarTests(TestCase):
         self.assertIn("tasks_dashboard", visible)
         self.assertNotIn("tasks_list", visible)
         self.assertNotIn("tasks_create", visible)
-
-    def test_invalid_tasks_definition_key_fails_closed(self):
-        with patch.dict(
-            SIDEBAR_DEFINITION_KEYS,
-            {"tasks_list": "tareas.missing"},
-            clear=False,
-        ):
-            visible = get_sidebar_visible_items(
-                self.user,
-                self.empresa_a.id,
-                materialize_permissions=False,
-            )
-
-        self.assertNotIn("tasks_list", visible)
 
     def test_rendering_sidebar_does_not_materialize_permissions_or_views(self):
         self._permission(self.empresa_a, self.tasks_core, ver=True)
