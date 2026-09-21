@@ -209,7 +209,6 @@ SIDEBAR_DEFINITION_KEYS = {
     "operational_dashboard": "control_operacional.dashboard",
     "operational_alerts": "control_operacional.alertas",
     "evaluaciones_import": "evaluaciones.importar_personas",
-    "suppliers_master": "proveedores.maestros",
 }
 
 SIDEBAR_GROUPS = {
@@ -253,6 +252,10 @@ SIDEBAR_GROUP_LABELS = {
 }
 
 SIDEBAR_GLOBAL_ITEMS = {"account_email"}
+
+SIDEBAR_SCOPE_ALIASES = {
+    "proveedores": ("suppliers_master",),
+}
 
 
 def get_sidebar_group_options():

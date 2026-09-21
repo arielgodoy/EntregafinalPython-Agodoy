@@ -9,6 +9,7 @@ from access_control.models import Permiso, UsuarioPerfilEmpresa, Vista
 from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
+    SIDEBAR_SCOPE_ALIASES,
     SIDEBAR_VIEW_NAMES,
     VICMEAS_FIELDS,
     get_descendant_sidebar_keys,
@@ -57,6 +58,12 @@ def _get_scope_item_keys(scope):
         item_keys = [
             item_key
             for item_key in get_descendant_sidebar_keys(scope)
+            if item_key not in SIDEBAR_GLOBAL_ITEMS
+        ]
+    elif scope in SIDEBAR_SCOPE_ALIASES:
+        item_keys = [
+            item_key
+            for item_key in SIDEBAR_SCOPE_ALIASES[scope]
             if item_key not in SIDEBAR_GLOBAL_ITEMS
         ]
     elif scope in SIDEBAR_GROUPS:
