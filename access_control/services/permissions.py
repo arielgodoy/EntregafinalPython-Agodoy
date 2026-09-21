@@ -208,7 +208,6 @@ SIDEBAR_DEFINITION_KEYS = {
     "tasks_dashboard": "tareas.personal_dashboard",
     "operational_dashboard": "control_operacional.dashboard",
     "operational_alerts": "control_operacional.alertas",
-    "evaluaciones_import": "evaluaciones.importar_personas",
 }
 
 SIDEBAR_GROUPS = {
@@ -255,6 +254,7 @@ SIDEBAR_GLOBAL_ITEMS = {"account_email"}
 
 SIDEBAR_SCOPE_ALIASES = {
     "proveedores": ("suppliers_master",),
+    "evaluaciones": ("evaluaciones_import",),
 }
 
 
