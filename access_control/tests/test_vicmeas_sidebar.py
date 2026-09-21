@@ -856,6 +856,31 @@ class VicmeasSidebarTests(TestCase):
         self.user.save(update_fields=["is_superuser"])
         self.assertIn("account_email", get_sidebar_visible_items(self.user, self.empresa_a.id))
 
+    def test_gestiondte_connection_roles_sidebar_requires_vicmeas_ver(self):
+        vista, _ = Vista.objects.get_or_create(
+            nombre="Configuración - Conexiones Gestión DTE",
+            defaults={"route_name": "gestion_dte:connection_roles"},
+        )
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("settings_gestion_dte_connections", visible)
+        self.assertNotIn("settings_gestion_dte_connections", SIDEBAR_GLOBAL_ITEMS)
+
+        permiso = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa_a,
+            vista=vista,
+        )
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("settings_gestion_dte_connections", visible)
+
+        permiso.ingresar = True
+        permiso.ver = True
+        permiso.save(update_fields=["ver", "ingresar"])
+
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertIn("settings_gestion_dte_connections", visible)
+
     def test_superuser_visibility_changes_by_active_company(self):
         self.user.is_superuser = True
         self.user.save(update_fields=["is_superuser"])

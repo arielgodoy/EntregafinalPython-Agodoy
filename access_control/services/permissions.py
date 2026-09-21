@@ -197,6 +197,7 @@ SIDEBAR_VIEW_NAMES = {
     "settings_company": "Configuración - Configuracion de Empresa",
     "settings_email": "Configuración - Cuentas de Correo",
     "settings_mysql": "Configuración - Conexiones MySQL",
+    "settings_gestion_dte_connections": "Configuración - Conexiones Gestión DTE",
     "database_manager_dashboard": "Gestión de Bases - Dashboard",
     "database_manager_compare": "Gestión de Bases - Comparar",
     "database_manager_preflight": "Gestión de Bases - Preflight",
@@ -219,7 +220,7 @@ SIDEBAR_GROUPS = {
     "audit": ("audit_library", "audit_gestion_dte"),
     "access": tuple(_ACCESS_VIEW_NAMES),
     "apis": ("api_home",),
-    "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql"),
+    "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql", "settings_gestion_dte_connections"),
     "database_manager": (
         "database_manager_dashboard",
         "database_manager_compare",
@@ -246,6 +247,10 @@ SIDEBAR_GROUP_LABELS = {
 }
 
 SIDEBAR_GLOBAL_ITEMS = {"account_email"}
+
+SIDEBAR_PERMISSION_REQUIREMENTS = {
+    "settings_gestion_dte_connections": ("ver", "ingresar"),
+}
 
 SIDEBAR_SCOPE_ALIASES = {
     "proveedores": ("suppliers_master",),
@@ -420,19 +425,25 @@ def get_sidebar_visible_items(user, empresa_id, *, materialize_permissions=True)
         ensure_sidebar_permissions(user, empresa_id)
 
     definition_names = _sidebar_definition_names()
-    visible_names = set(
-        Permiso.objects.filter(
+    visible_permissions = {
+        item["vista__nombre"]: item
+        for item in Permiso.objects.filter(
             usuario=user,
             empresa_id=empresa_id,
             ver=True,
             vista__nombre__in=_sidebar_permission_view_names(),
-        ).values_list("vista__nombre", flat=True)
-    )
+        ).values("vista__nombre", "ver", "ingresar")
+    }
+    visible_names = set(visible_permissions)
     visible_items = {
         item_key
         for item_key, vista_nombre in SIDEBAR_VIEW_NAMES.items()
         if item_key not in SIDEBAR_DEFINITION_KEYS
-        if vista_nombre in visible_names
+        if vista_nombre in visible_permissions
+        and all(
+            visible_permissions[vista_nombre][field]
+            for field in SIDEBAR_PERMISSION_REQUIREMENTS.get(item_key, ("ver",))
+        )
     }
     visible_items.update(
         item_key

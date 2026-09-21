@@ -1,0 +1,52 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Conexiones Gestión DTE{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="gestiondte.connection_roles.title" pagetitle_key="menu.settings" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="card p-4">
+        <h3 data-key="gestiondte.connection_roles.heading">Conexiones Gestión DTE</h3>
+        <p data-key="gestiondte.connection_roles.description">
+          Configuración global de los roles lógicos de conexión.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          {% for item in role_forms %}
+          <section class="border rounded p-3 mb-3">
+            <h5 data-key="gestiondte.connection_roles.role.{{ item.role }}">{{ item.label }}</h5>
+            {% for hidden in item.form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% if item.form.non_field_errors %}
+              {% for error in item.form.non_field_errors %}
+                <div class="alert alert-danger" data-key="gestiondte.connection_roles.error">{{ error }}</div>
+              {% endfor %}
+            {% endif %}
+            <div class="mb-3">
+              <label class="form-label" data-key="gestiondte.connection_roles.source_type">Tipo de conexión</label>
+              {{ item.form.source_type }}
+              {% for error in item.form.source_type.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" data-key="gestiondte.connection_roles.django_alias">Conexión del sistema</label>
+              {{ item.form.django_alias }}
+              {% for error in item.form.django_alias.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="mb-3">
+              <label class="form-label" data-key="gestiondte.connection_roles.mysql_connection">Conexión MySQL</label>
+              {{ item.form.mysql_connection }}
+              {% for error in item.form.mysql_connection.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+          </section>
+          {% endfor %}
+          <button type="submit" class="btn btn-success" data-key="buttons.save">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}

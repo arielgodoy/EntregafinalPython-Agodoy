@@ -1,9 +1,11 @@
 from django.urls import path
 from . import views
+from .connection_views import GestionDTEConnectionRoleView
 
 app_name = 'gestion_dte'
 
 urlpatterns = [
+    path('configuracion/conexiones/', GestionDTEConnectionRoleView.as_view(), name='connection_roles'),
     path('', views.index, name='index'),
     path('dashboard/resumen/', views.dashboard_resumen, name='dashboard_resumen'),
     path('cesiones/', views.cesiones, name='cesiones'),

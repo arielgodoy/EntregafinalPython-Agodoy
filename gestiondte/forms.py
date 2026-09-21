@@ -3,6 +3,8 @@ import os
 from .models import CertificadoSII
 from .utils.maestro import get_maestroempresa_by_codigo
 from .services.rpetc import RPETCParameterError, validar_parametros_cesiones
+from .models import GestionDTEConnectionRole
+from .services.connection_roles import get_active_mysql_connection_catalog, get_system_database_catalog
 
 
 class CertificadoUploadForm(forms.ModelForm):
@@ -84,4 +86,61 @@ class SincronizarCesionesRPETCForm(forms.Form):
                 )
             except RPETCParameterError as exc:
                 raise forms.ValidationError(str(exc)) from exc
+        return cleaned
+
+
+class GestionDTEConnectionRoleForm(forms.ModelForm):
+    class Meta:
+        model = GestionDTEConnectionRole
+        fields = ('source_type', 'django_alias', 'mysql_connection')
+        widgets = {
+            'source_type': forms.Select(attrs={'data-role-source-type': 'true'}),
+            'django_alias': forms.Select(attrs={'data-role-django-alias': 'true'}),
+            'mysql_connection': forms.Select(attrs={'data-role-mysql-connection': 'true'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['django_alias'].choices = [
+            ('', 'Seleccione una conexión del sistema'),
+            *[
+                (
+                    item['alias'],
+                    f"{item['alias']} ({item['vendor']} / {item['classification']})",
+                )
+                for item in get_system_database_catalog()
+            ],
+        ]
+        self.fields['django_alias'].required = False
+        self.fields['mysql_connection'].queryset = get_active_mysql_connection_catalog()
+        self.fields['mysql_connection'].required = False
+        self.fields['mysql_connection'].label_from_instance = (
+            lambda connection: f"{connection.empresa.codigo} - "
+            f"{connection.empresa.descripcion or 'Sin descripción'} / "
+            f"{connection.nombre_logico}"
+        )
+        self.fields['source_type'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        source_type = cleaned.get('source_type')
+        django_alias = (cleaned.get('django_alias') or '').strip()
+        mysql_connection = cleaned.get('mysql_connection')
+
+        if source_type == 'DJANGO':
+            if not django_alias:
+                self.add_error('django_alias', 'Debe seleccionar un alias Django SYSTEM.')
+            if mysql_connection is not None:
+                self.add_error('mysql_connection', 'No puede combinar ambas fuentes.')
+            cleaned['django_alias'] = django_alias or None
+            cleaned['mysql_connection'] = None
+        elif source_type == 'MYSQL_CONFIG':
+            if mysql_connection is None:
+                self.add_error('mysql_connection', 'Debe seleccionar una conexión MySQL activa.')
+            if django_alias:
+                self.add_error('django_alias', 'No puede combinar ambas fuentes.')
+            cleaned['django_alias'] = None
+        else:
+            self.add_error('source_type', 'Debe seleccionar el tipo de conexión.')
+
         return cleaned

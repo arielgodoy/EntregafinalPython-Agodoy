@@ -4,9 +4,87 @@ from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 from access_control.models import Empresa
+from settings.models import SettingsMySQLConnection
 
 def upload_to_certificado(instance, filename):
     return f'gestiondte/certificados/{instance.empresa_codigo}/{filename}'
+
+
+class GestionDTEConnectionRole(models.Model):
+    ROLE_CHOICES = (
+        ('serverbasedte', 'Base DTE'),
+        ('serverauditoriagestiondte', 'Auditoría Gestión DTE'),
+        ('servercontabilidad', 'Contabilidad'),
+        ('serverauditoriacontabilidad', 'Auditoría Contabilidad'),
+    )
+    SOURCE_TYPE_CHOICES = (
+        ('DJANGO', 'Sistema Django'),
+        ('MYSQL_CONFIG', 'Conexión MySQL'),
+    )
+
+    role = models.CharField(max_length=40, choices=ROLE_CHOICES, unique=True)
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES)
+    django_alias = models.CharField(max_length=100, null=True, blank=True)
+    mysql_connection = models.ForeignKey(
+        SettingsMySQLConnection,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='gestiondte_roles',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        source_type='DJANGO',
+                        django_alias__isnull=False,
+                        mysql_connection__isnull=True,
+                    )
+                    & ~models.Q(django_alias='')
+                )
+                | (
+                    models.Q(
+                        source_type='MYSQL_CONFIG',
+                        django_alias__isnull=True,
+                        mysql_connection__isnull=False,
+                    )
+                ),
+                name='gestiondte_role_source_xor',
+            ),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from gestiondte.services.connection_roles import get_system_database_catalog
+
+        errors = {}
+        alias = (self.django_alias or '').strip()
+        if self.source_type == 'DJANGO':
+            if not alias:
+                errors['django_alias'] = 'Debe seleccionar un alias Django SYSTEM.'
+            elif alias not in {item['alias'] for item in get_system_database_catalog()}:
+                errors['django_alias'] = 'El alias debe existir y estar clasificado como SYSTEM.'
+            if self.mysql_connection_id is not None:
+                errors['mysql_connection'] = 'No puede combinar alias Django y conexión MySQL.'
+            self.django_alias = alias or None
+        elif self.source_type == 'MYSQL_CONFIG':
+            if self.mysql_connection_id is None:
+                errors['mysql_connection'] = 'Debe seleccionar una conexión MySQL activa.'
+            elif not self.mysql_connection.is_active:
+                errors['mysql_connection'] = 'La conexión MySQL seleccionada está inactiva.'
+            if alias:
+                errors['django_alias'] = 'No puede combinar conexión MySQL y alias Django.'
+            self.django_alias = None
+        else:
+            errors['source_type'] = 'Tipo de conexión inválido.'
+
+        if errors:
+            raise ValidationError(errors)
+        super().clean()
 
 
 class CertificadoSII(models.Model):
