@@ -314,7 +314,8 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
         route_conflicts = [
             vista
             for vista in existing_rows
-            if vista.route_name == definition.route_name
+            if definition.route_name is not None
+            and vista.route_name == definition.route_name
             and vista.nombre != definition.nombre
         ]
         if route_conflicts:
@@ -338,7 +339,10 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
 
         vista = matches[0]
         existing_catalog_rows.append(_catalog_item(definition, vista.id))
-        if vista.route_name != definition.route_name:
+        if (
+            definition.route_name is not None
+            and vista.route_name != definition.route_name
+        ):
             updated_rows.append(_catalog_item(definition, vista.id))
 
     legacy = tuple(
@@ -516,11 +520,15 @@ def _sidebar_view_names():
     return frozenset(SIDEBAR_VIEW_NAMES.values())
 
 
-def ensure_protected_views_catalog(*, dry_run=False, app="tareas"):
-    """Reconcile the catalog from active View metadata without registry imports."""
-    if app != "tareas":
-        return ensure_declared_views_catalog(app=app, dry_run=dry_run)
-
+def ensure_protected_views_catalog(*, dry_run=False, app=None):
+    """Reconcile Vista rows from all active protected Views without registries."""
+    discovered = discover_protected_views()
+    if app is not None:
+        discovered = tuple(
+            definition
+            for definition in discovered
+            if definition.namespace == app
+        )
     definitions = tuple(
         SimpleNamespace(
             key=None,
@@ -528,7 +536,10 @@ def ensure_protected_views_catalog(*, dry_run=False, app="tareas"):
             route_name=definition.route_name,
             routes=(),
         )
-        for definition in discover_protected_views()
-        if definition.namespace == app
+        for definition in discovered
     )
-    return ensure_declared_views_catalog(app=app, dry_run=dry_run, definitions=definitions)
+    return ensure_declared_views_catalog(
+        app=app or "active_views",
+        dry_run=dry_run,
+        definitions=definitions,
+    )

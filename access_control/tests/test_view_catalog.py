@@ -22,6 +22,27 @@ from proveedores.views import (
 
 
 class ProtectedViewCatalogTests(TestCase):
+    def test_catalog_discovers_biblioteca_mother_views_from_active_views(self):
+        result = ensure_protected_views_catalog()
+
+        expected_names = {
+            "Biblioteca - Propiedades",
+            "Biblioteca - Propietarios",
+            "Biblioteca - Tipos de Documento",
+            "Biblioteca - Documentos",
+            "Biblioteca - Respaldo Biblioteca",
+        }
+        catalog_names = {
+            item.nombre
+            for item in (*result.created_rows, *result.existing_rows, *result.updated_rows)
+        }
+
+        self.assertTrue(expected_names.issubset(catalog_names))
+        self.assertEqual(
+            Vista.objects.filter(nombre__in=expected_names).count(),
+            len(expected_names),
+        )
+
     def test_proveedores_crud_shares_master_view_and_action_permissions(self):
         expected = {
             ListadoProveedoresView: "ingresar",
@@ -103,7 +124,7 @@ class ProtectedViewCatalogTests(TestCase):
         self.assertEqual(Vista.objects.filter(nombre="Vista desconectada").count(), 1)
         self.assertGreater(first.created, 0)
         self.assertEqual(second.created, 0)
-        self.assertEqual(Vista.objects.filter(nombre="Biblioteca - Documentos").count(), 0)
+        self.assertEqual(Vista.objects.filter(nombre="Biblioteca - Documentos").count(), 1)
 
     def test_catalog_does_not_create_permissions_and_sidebar_materializes_empty_rows(self):
         ensure_protected_views_catalog()
