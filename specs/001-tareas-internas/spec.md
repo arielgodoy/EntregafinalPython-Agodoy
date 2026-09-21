@@ -373,15 +373,15 @@ Para T054, las notificaciones in-app deben usar el adaptador local
 `purpose="notifications"`; no se debe usar el SMTP personal del actor ni
 interpretar `email_enabled` como opt-in u opt-out de este canal.
 
-### Contrato funcional T054 (implementación pendiente)
+### Contrato funcional T054 (`DEFERRED_BY_CONTRACT`)
 
 - Asignación o reasignación: notificar al nuevo responsable y a los participantes
 	afectados cuando el flujo real los incluya; el actor no se duplica como destinatario.
 - Lectura: solo registra `TareaLectura`; no genera notificación in-app ni email.
 - Comentarios: no existe todavía modelo, servicio ni UI funcional de comentarios en
 	`tareas`; el evento de notificación por comentario queda diferido hasta que exista
-	esa feature. Esta ausencia es NO BLOQUEANTE para cerrar T054 y T054 no debe crear la
-	feature de comentarios.
+		esa feature. Esta ausencia bloquea la implementación completa de T054 por contrato;
+	T054 queda `DEFERRED_BY_CONTRACT` y no debe crear la feature de comentarios.
 - Documento agregado: notificar al creador (`Tarea.creada_por`), responsable y
 	participantes, excluyendo al actor y duplicados.
 - Cambio relevante: se limita a responsable, `fecha_tope`, prioridad/clasificación,

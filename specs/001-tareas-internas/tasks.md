@@ -144,7 +144,7 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T088 [US5] Evolucionar el mínimo de `RondaCotizacion` para contar proveedores Django distintos con al menos una `Cotizacion.vigente=True`, sin sumar proveedores entre rondas.
 - [x] T089 [US5] Actualizar y ampliar tests de cotizaciones/proveedores para identidad local, nulabilidad histórica, RUT, inactivación, versionado, conteo distinto y selección interna sin `Adjudicacion`.
 - [x] T090 [US5] Actualizar y validar E11 para el maestro local Django, la relación de cotización, el conteo distinto y el bloqueo exclusivo de integración ERP por P2.
-- [x] T091 [US5] Mantener la integración ERP/legacy como bloque P2 separado: lookup, validación, identificador legacy, conciliación, sincronización y actualización desde ERP.
+- [x] T091 [US5] [DEFERRED_P2_ERP] Mantener la integración ERP/legacy como bloque P2 separado: lookup, validación, identificador legacy, conciliación, sincronización y actualización desde ERP. El maestro local Django y su operación PRE-P2 permanecen fuera de este diferimiento.
 
 ## Phase 6: Collaboration, similarity, links and dashboards [US6]
 
@@ -155,7 +155,7 @@ description: "Task list for the Tareas Internas master feature"
 **FR coverage**: FR-K01, FR-K02, FR-K03, FR-K04, FR-L01, FR-L02, FR-L03, FR-L04, FR-L05, FR-L06, FR-L07, FR-L08, FR-L09, FR-L10, FR-L11, FR-M01, FR-M02, FR-M03, FR-M04, FR-M05, FR-M06, FR-M07, FR-N01, FR-N02, FR-N03, FR-N04, FR-N05, FR-N06, FR-N07, FR-N08, FR-N09, FR-O01, FR-O02, FR-O03, FR-O04, FR-P03, FR-P04, FR-P05.
 
 - [x] T053 [US6] Implementar adaptadores locales en `tareas/services/notifications.py` para consumir `notificaciones` y email de `acounts`, sin modificar esas apps ni crear subsistema paralelo.
-- [x] T054 [US6] Integrar notificaciones de asignación, lectura, comentarios, documentos, cambios, aprobación, anulación y reactivación en los servicios de `tareas/`.
+- [ ] T054 [US6] [DEFERRED_BY_CONTRACT] Integrar notificaciones de asignación, lectura, comentarios, documentos, cambios, aprobación, anulación y reactivación en los servicios de `tareas/`. La notificación por comentarios queda diferida porque no existe modelo, servicio ni UI global de comentarios de Tarea; T054 no debe crear esa feature.
  - [x] T092 [US6] Crear e implementar la APPLICATION_APP transversal `organizacion`, registrarla únicamente con autorización explícita en `app_classification.py` e `INSTALLED_APPS`, definir los modelos canónicos `Local` y `Departamento` con aislamiento obligatorio por Empresa, PK interna, código único por Empresa, baja lógica, timestamps, source y constraints aprobados, crear su migración inicial y añadir tests de modelos, unicidad, Empresa y ausencia de relación Departamento→Local. No incluir sincronización ERP, CRUD, vistas, sidebar, VICMEAS, cambios en Tarea, T055 ni integración con `api` legacy.
  - [x] T093 [US6] Incorporar en `Tarea` las dimensiones organizacionales canónicas `Local` y `Departamento` provistas por `organizacion`, implementando relación opcional y exclusiva por ámbito, validación de coherencia con Empresa, migración aditiva y tests de integridad, sincronización y compatibilidad con tareas históricas, dependiendo de T092. El ámbito deberá usar `tipo_ambito` (`LOCAL` o `DEPARTAMENTO`), una FK nullable a `organizacion.Local` y una FK nullable a `organizacion.Departamento`, con validación XOR, coherencia de Empresa y sin cruce multiempresa. Las tareas históricas podrán permanecer sin ámbito y no se inventará backfill; el ámbito obligatorio para nuevas tareas deberá quedar documentado en la implementación futura si el contrato vigente lo exige. No implementar reuniones, ERP, CRUD organizacional, sidebar ni nuevas vistas VICMEAS.
  > **Dependencia de T055**: T055 depende de T092 y T093; T055 no puede implementarse completamente antes de T093 porque `ReunionTarea` debe validar la homogeneidad contra las dimensiones reales de cada `Tarea`.
@@ -209,16 +209,16 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 
 | Success Criterion | Tareas / escenario de validación | Estado |
 |---|---|---|
-| SC-001 | T006-T013 / E1 | Pendiente de ejecución |
-| SC-002 | T010-T013 / E3 | Pendiente de ejecución |
-| SC-003 | T011-T013 / E6 | Pendiente de ejecución |
-| SC-004 | T010-T013 / E1-E4 | Pendiente de ejecución |
-| SC-005 | T008-T013 / E2 | Pendiente de ejecución |
-| SC-006 | T017-T024, T031, T039, T046 / E8-E11 | Pendiente de ejecución; P2 limita únicamente la integración ERP del proveedor |
-| SC-007 | T053-T055, T061 / E12 | Pendiente de ejecución |
-| SC-008 | T059-T063 / E13 | Pendiente de ejecución; Local deferred y Proveedor local planificado |
-| SC-009 | T056-T057, T061 / E12 | Pendiente de ejecución |
-| SC-010 | T014-T015, T022 / E8 | Pendiente de ejecución |
+| SC-001 | T006-T013 / E1 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-002 | T010-T013 / E3 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-003 | T011-T013 / E6 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-004 | T010-T013 / E1-E4 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-005 | T008-T013 / E2 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-006 | T017-T024, T031, T039, T046 / E8-E11 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING; P2 solo limita integración ERP |
+| SC-007 | T053-T055, T061 / E12 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-008 | T059-T063 / E13 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING; Local deferred y Proveedor ERP deferred |
+| SC-009 | T056-T057, T061 / E12 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-010 | T014-T015, T022 / E8 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
 
 ## Functional blocks to user stories matrix
 

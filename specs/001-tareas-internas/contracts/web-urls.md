@@ -38,6 +38,50 @@ este contrato salvo clasificación explícita.
 | GET | `/tareas/<tarea_id>/similitud/` | `similitud_tarea` | Vista de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
 | POST | `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/` | `confirmar_similitud` | Acción de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
 
+## Reconciliación con `tareas/urls.py`
+
+Esta matriz distingue el estado documental de cada superficie sin cambiar el contrato
+funcional. `ACTIVE` significa que la ruta existe actualmente en `tareas/urls.py`;
+`DEFERRED` conserva una superficie prevista pero bloqueada por contrato; `OUT_OF_SCOPE`
+identifica una ruta que no debe inventarse en esta feature.
+
+| Estado | Método | Ruta actual | Nombre |
+|---|---|---|---|
+| ACTIVE | GET | `/tareas/` | `listar_tareas` |
+| ACTIVE | GET | `/tareas/mis-tareas/` | `mis_tareas` |
+| ACTIVE | GET | `/tareas/dashboard/general/` | `dashboard_general` |
+| ACTIVE | GET | `/tareas/dashboard/general/empresa/<empresa_id>/` | `dashboard_general_empresa` |
+| ACTIVE | GET | `/tareas/dashboard/general/empresa/<empresa_id>/departamento/<departamento_id>/` | `dashboard_general_departamento` |
+| ACTIVE | GET | `/tareas/dashboard/general/empresa/<empresa_id>/usuario/<usuario_id>/` | `dashboard_general_usuario` |
+| ACTIVE | GET | `/tareas/<pk>/` | `detalle_tarea` |
+| ACTIVE | GET/POST | `/tareas/crear/` | `crear_tarea` |
+| ACTIVE | GET/POST | `/tareas/<pk>/editar/` | `editar_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/publicar/` | `publicar_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/gestionar/` | `gestionar_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/completar/` | `completar_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/aprobar-cierre/` | `aprobar_cierre` |
+| ACTIVE | POST | `/tareas/<pk>/rechazar-cierre/` | `rechazar_cierre` |
+| ACTIVE | POST | `/tareas/<pk>/anular/` | `anular_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/reactivar/` | `reactivar_tarea` |
+| ACTIVE | GET/POST | `/tareas/<pk>/hitos/` | `hitos_tarea` |
+| ACTIVE | GET/POST | `/tareas/<pk>/documentos/` | `documentos_tarea` |
+| ACTIVE | GET | `/tareas/<tarea_id>/similitud/` | `similitud_tarea` |
+| ACTIVE | POST | `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/` | `confirmar_similitud` |
+| ACTIVE | POST | `/tareas/<tarea_id>/enlaces/crear/` | `crear_enlace_tarea` |
+| ACTIVE | GET | `/tareas/enlace/<token>/` | `enlace_tarea` |
+| ACTIVE | POST | `/tareas/enlaces/<enlace_id>/revocar/` | `revocar_enlace_tarea` |
+| ACTIVE | GET | `/tareas/reuniones/` | `reunion_revision_lista` |
+| ACTIVE | GET/POST | `/tareas/reuniones/crear/` | `reunion_revision_crear` |
+| ACTIVE | GET | `/tareas/reuniones/<pk>/` | `reunion_revision_detalle` |
+| ACTIVE | GET/POST | `/tareas/reuniones/<pk>/editar/` | `reunion_revision_editar` |
+| ACTIVE | POST | `/tareas/reuniones/<pk>/accion/` | `reunion_revision_accion` |
+| DEFERRED | GET/POST | `/tareas/rondas/` y operaciones de cotización | contrato PRE-P2/local pendiente de superficie web estable |
+| OUT_OF_SCOPE | Cualquier ruta de integración ERP/legacy de Proveedor o Local | No existe | P2 ERP y P1 Local requieren contrato separado |
+
+Las rutas activas de esta matriz son la fuente de reconciliación con el enrutador actual;
+las tablas de rutas previstas más abajo permanecen como diseño histórico/futuro y no
+autorizan crear endpoints ausentes.
+
 ## Contratos por operación
 
 ### Listar — `GET /tareas/`

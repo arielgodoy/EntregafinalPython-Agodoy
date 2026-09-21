@@ -34,6 +34,16 @@ python manage.py check
 
 Resultado esperado: todos los tests de `tareas/tests/` pasan; `check` sin errores nuevos.
 
+### Estado de reconciliación de validación
+
+- `AUTOMATED_VALIDATED`: suite `tareas` y gates focalizados ejecutados con resultado verde.
+- `AUTOMATED_I18N_GATE=PASS`: `tareas.tests.test_i18n` ejecutado; las claves usadas por
+   código y templates de `tareas` están presentes y son simétricas en ambos catálogos.
+- `MANUAL_VALIDATION_PENDING`: queda pendiente la comprobación E1-E13 en navegador,
+   incluida la alternancia ES → EN → ES. La validación automática no sustituye esa revisión.
+- `MANUAL_ES_EN_REVIEW=PENDING`: la revisión visual manual de textos, enums, mensajes y
+   navegación en ambos idiomas no está cerrada documentalmente.
+
 ## Escenarios manuales end-to-end
 
 Levantar el servidor local (task "Django: Runserver (local)") y verificar:
@@ -87,10 +97,10 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 
 ## Validaciones del dominio por fases
 
-### E8. Correlativos y estados (Phase 1)
+### E8. Correlativos y estados (Phase 2)
 
-- Crear un borrador y comprobar correlativo `A*` único por empresa.
-- Publicar con responsable válido y comprobar conversión al correlativo `B*` sin nueva PK.
+- Crear un borrador y comprobar correlativo `B*` único por empresa.
+- Publicar con responsable válido y comprobar conversión al correlativo `A*` sin nueva PK.
 - Ejecutar transiciones permitidas y rechazar saltos de estado; verificar auditoría.
 - Al marcar 100%, comprobar `cierre_completado == True` y estado `PENDIENTE_APROBACION_CIERRE`.
 - Aprobar cierre y comprobar estado `CERRADA` con `cierre_completado == True`.
@@ -157,6 +167,9 @@ de aislamiento cross-company.
 Estado E13: EJECUTADO/VALIDADO mediante la regresión integrada de KPI,
 dashboards, T060, dashboard personal y metadata, manteniendo Local/Proveedor
 fuera de las dimensiones de drill-down.
+
+La validación anterior es automatizada. La verificación manual en navegador de E1-E13,
+incluida la revisión ES/EN, permanece `MANUAL_VALIDATION_PENDING`.
 
 ## Límites y bloqueos
 
