@@ -17,85 +17,107 @@ Ingresar Propietario
 {% endblock pagetitle %}
 
 {% block content %}
-<div class="main-content"> 
+<div class="main-content">
     <div class="page-content">
         <div class="container-fluid">
-            <div class="row justify-content-center">
-                <div class="col-lg-8">
-                    <div class="card shadow-lg p-4 mb-5 rounded">
-                        <h1 class="my-4 text-center">Ingresar Propietario</h1>
-                        <form method="post" class="needs-validation" novalidate>
-                            {% csrf_token %}
-
-                            <!-- Campo Nombre -->
-                            <div class="mb-3">
-                                <label for="id_nombre" class="form-label">{{ form.nombre.label }}</label>
-                                {{ form.nombre }}
-                                {% if form.nombre.errors %}
-                                    <div class="text-danger">
-                                        {% for error in form.nombre.errors %}
-                                            <small>{{ error }}</small>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Campo RUT -->
-                            <div class="mb-3">
-                                <label for="id_rut" class="form-label">RUT</label>
-                                <input data-inputingreso="camporut" maxlength="12" type="text" id="id_rut" name="rut" class="form-control" value="{{ form.rut.value|default:'' }}">
-                                {% if form.rut.errors %}
-                                    <div class="text-danger">
-                                        {% for error in form.rut.errors %}
-                                            <small>{{ error }}</small>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Campo Teléfono -->
-                            <div class="mb-3">
-                                <label for="id_telefono" class="form-label">{{ form.telefono.label }}</label>
-                                {{ form.telefono }}
-                                {% if form.telefono.errors %}
-                                    <div class="text-danger">
-                                        {% for error in form.telefono.errors %}
-                                            <small>{{ error }}</small>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Campo Rol -->
-                            <div class="mb-3">
-                                <label for="id_rol" class="form-label">{{ form.rol.label }}</label>
-                                {{ form.rol }}
-                                {% if form.rol.errors %}
-                                    <div class="text-danger">
-                                        {% for error in form.rol.errors %}
-                                            <small>{{ error }}</small>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-
-                            <!-- Botón Guardar -->
-                            <button type="submit" class="btn btn-primary w-100">Guardar</button>
-                        </form>
-                    </div>
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title mb-0">Datos del Propietario</h4>
                 </div>
+                <form method="post" class="needs-validation" novalidate id="propietario-form">
+                    {% csrf_token %}
+                    <div class="card-body">
+                        <div class="w-75 mx-auto">
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">
+                                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="id_nombre" class="form-label">{{ form.nombre.label }} <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text" aria-hidden="true"><i class="bi bi-person"></i></span>
+                                    {{ form.nombre }}
+                                </div>
+                                {% if form.nombre.errors %}<div class="invalid-feedback d-block">{% for error in form.nombre.errors %}{{ error }}{% endfor %}</div>{% endif %}
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_rut" class="form-label">RUT <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text" aria-hidden="true"><i class="bi bi-card-text"></i></span>
+                                    <input data-inputingreso="camporut" maxlength="12" type="text" id="id_rut" name="rut" class="form-control" value="{{ form.rut.value|default:'' }}" placeholder="12.345.678-9" required>
+                                </div>
+                                {% if form.rut.errors %}<div class="invalid-feedback d-block">{% for error in form.rut.errors %}{{ error }}{% endfor %}</div>{% endif %}
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_telefono" class="form-label">{{ form.telefono.label }} <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text" aria-hidden="true"><i class="bi bi-telephone"></i></span>
+                                    {{ form.telefono }}
+                                </div>
+                                {% if form.telefono.errors %}<div class="invalid-feedback d-block">{% for error in form.telefono.errors %}{{ error }}{% endfor %}</div>{% endif %}
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="id_rol" class="form-label">{{ form.rol.label }} <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text" aria-hidden="true"><i class="bi bi-building"></i></span>
+                                    {{ form.rol }}
+                                </div>
+                                {% if form.rol.errors %}<div class="invalid-feedback d-block">{% for error in form.rol.errors %}{{ error }}{% endfor %}</div>{% endif %}
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="w-75 mx-auto d-flex flex-wrap justify-content-end gap-2">
+                            <button type="button" class="btn btn-light" id="limpiar-propietario">
+                                <i class="bi bi-eraser me-1" aria-hidden="true"></i>Limpiar
+                            </button>
+                            <a href="{% url 'biblioteca:listar_propietarios' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary" id="guardar-propietario">
+                                <span class="guardar-label"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Guardar</span>
+                                <span class="guardar-spinner d-none" aria-hidden="true"><span class="spinner-border spinner-border-sm me-1"></span>Guardando...</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
-
-
 {% endblock content %}
 {% block extra_js %}
-<!-- 
-Agregar al input
-para Validar rut agregar al input : data-inputingreso="camporut" maxlength="12" placeholder="Ej: 12.345.678-9"
--->
 <script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
+<script>
+    (function () {
+        const form = document.getElementById("propietario-form");
+        const clearButton = document.getElementById("limpiar-propietario");
+        const submitButton = document.getElementById("guardar-propietario");
+        if (!form) return;
+
+        form.querySelector("#id_nombre")?.setAttribute("placeholder", "Nombre completo");
+        form.querySelector("#id_telefono")?.setAttribute("placeholder", "+56 9 1234 5678");
+
+        clearButton?.addEventListener("click", function () {
+            form.reset();
+            form.classList.remove("was-validated");
+            form.querySelectorAll(".is-invalid").forEach((field) => field.classList.remove("is-invalid"));
+        });
+
+        form.addEventListener("submit", function () {
+            form.classList.add("was-validated");
+            if (!form.checkValidity()) return;
+            submitButton.disabled = true;
+            submitButton.querySelector(".guardar-label")?.classList.add("d-none");
+            submitButton.querySelector(".guardar-spinner")?.classList.remove("d-none");
+        });
+    }());
+</script>
 
 {% endblock extra_js %}
