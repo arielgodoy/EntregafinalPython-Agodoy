@@ -1,9 +1,8 @@
 from django import forms
 import os
-from .models import CertificadoSII
+from .models import CertificadoSII, GestionDTEConnectionRole
 from .utils.maestro import get_maestroempresa_by_codigo
 from .services.rpetc import RPETCParameterError, validar_parametros_cesiones
-from .models import GestionDTEConnectionRole
 from .services.connection_roles import get_active_mysql_connection_catalog, get_system_database_catalog
 
 
@@ -94,15 +93,26 @@ class SincronizarCesionesRPETCForm(forms.Form):
 class GestionDTEConnectionRoleForm(forms.ModelForm):
     class Meta:
         model = GestionDTEConnectionRole
-        fields = ('source_type', 'django_alias', 'mysql_connection')
+        fields = ('source_type', 'django_alias', 'mysql_connection', 'database_name')
         widgets = {
             'source_type': forms.Select(attrs={'data-role-source-type': 'true'}),
             'django_alias': forms.Select(attrs={'data-role-django-alias': 'true'}),
             'mysql_connection': forms.Select(attrs={'data-role-mysql-connection': 'true'}),
+            'database_name': forms.TextInput(attrs={'data-role-database-name': 'true'}),
         }
 
     def __init__(self, *args, **kwargs):
+        self.role = kwargs.pop('role', None)
         super().__init__(*args, **kwargs)
+        self.role = self.role or self.instance.role
+        self.show_database_name = self.role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
+        if not self.show_database_name:
+            self.fields.pop('database_name')
+        elif not self.is_bound and not self.instance.database_name:
+            self.initial['database_name'] = {
+                'serverbasedte': 'gestiondte',
+                'serverauditoriagestiondte': 'gestiondte_auditoria',
+            }[self.role]
         django_alias_choices = [
             ('', 'Seleccione una conexión del sistema'),
             *[
@@ -138,12 +148,17 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
                 self.add_error('mysql_connection', 'No puede combinar ambas fuentes.')
             cleaned['django_alias'] = django_alias or None
             cleaned['mysql_connection'] = None
+            cleaned['database_name'] = None
+            self.instance.database_name = None
         elif source_type == 'MYSQL_CONFIG':
             if mysql_connection is None:
                 self.add_error('mysql_connection', 'Debe seleccionar una conexión MySQL activa.')
             if django_alias:
                 self.add_error('django_alias', 'No puede combinar ambas fuentes.')
             cleaned['django_alias'] = None
+            if self.role not in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES:
+                cleaned['database_name'] = None
+                self.instance.database_name = None
         else:
             self.add_error('source_type', 'Debe seleccionar el tipo de conexión.')
 

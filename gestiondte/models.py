@@ -1,7 +1,9 @@
 import uuid
+import re
 
 from django.db import models, transaction
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from access_control.models import Empresa
 from settings.models import SettingsMySQLConnection
@@ -11,6 +13,12 @@ def upload_to_certificado(instance, filename):
 
 
 class GestionDTEConnectionRole(models.Model):
+    DATABASE_CONFIGURABLE_ROLES = frozenset({
+        'serverbasedte',
+        'serverauditoriagestiondte',
+    })
+    DATABASE_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+
     ROLE_CHOICES = (
         ('serverbasedte', 'Base DTE'),
         ('serverauditoriagestiondte', 'Auditoría Gestión DTE'),
@@ -25,6 +33,7 @@ class GestionDTEConnectionRole(models.Model):
     role = models.CharField(max_length=40, choices=ROLE_CHOICES, unique=True)
     source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES)
     django_alias = models.CharField(max_length=100, null=True, blank=True)
+    database_name = models.CharField(max_length=64, null=True, blank=True)
     mysql_connection = models.ForeignKey(
         SettingsMySQLConnection,
         null=True,
@@ -58,11 +67,11 @@ class GestionDTEConnectionRole(models.Model):
         ]
 
     def clean(self):
-        from django.core.exceptions import ValidationError
         from gestiondte.services.connection_roles import get_system_database_catalog
 
         errors = {}
         alias = (self.django_alias or '').strip()
+        database_name = (self.database_name or '').strip()
         if self.source_type == 'DJANGO':
             if not alias:
                 errors['django_alias'] = 'Debe seleccionar un alias Django SYSTEM.'
@@ -71,6 +80,7 @@ class GestionDTEConnectionRole(models.Model):
             if self.mysql_connection_id is not None:
                 errors['mysql_connection'] = 'No puede combinar alias Django y conexión MySQL.'
             self.django_alias = alias or None
+            self.database_name = None
         elif self.source_type == 'MYSQL_CONFIG':
             if self.mysql_connection_id is None:
                 errors['mysql_connection'] = 'Debe seleccionar una conexión MySQL activa.'
@@ -79,6 +89,17 @@ class GestionDTEConnectionRole(models.Model):
             if alias:
                 errors['django_alias'] = 'No puede combinar conexión MySQL y alias Django.'
             self.django_alias = None
+            if self.role in self.DATABASE_CONFIGURABLE_ROLES:
+                if not database_name:
+                    errors['database_name'] = 'Debe indicar una base de datos MySQL.'
+                elif not self.DATABASE_NAME_PATTERN.fullmatch(database_name):
+                    errors['database_name'] = 'El nombre de base de datos no es válido.'
+                else:
+                    self.database_name = database_name
+            else:
+                if database_name:
+                    errors['database_name'] = 'Este rol no admite una base de datos por rol.'
+                self.database_name = None
         else:
             errors['source_type'] = 'Tipo de conexión inválido.'
 

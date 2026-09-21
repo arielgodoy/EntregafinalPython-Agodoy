@@ -111,7 +111,15 @@ def get_gestiondte_connection_status() -> dict[str, object]:
                 }
         elif config.source_type == 'MYSQL_CONFIG':
             connection = config.mysql_connection
-            if connection is None or not connection.is_active:
+            database_name = config.database_name
+            database_name_valid = (
+                config.role not in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
+                or bool(
+                    database_name
+                    and GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(database_name)
+                )
+            )
+            if connection is None or not connection.is_active or not database_name_valid:
                 item['status'] = 'invalid'
                 item['source_type'] = 'MYSQL_CONFIG'
                 invalid_roles.append(role)
@@ -121,6 +129,7 @@ def get_gestiondte_connection_status() -> dict[str, object]:
                 item['metadata'] = {
                     'empresa': f'{connection.empresa.codigo} - {connection.empresa.descripcion or "Sin descripción"}',
                     'nombre_logico': connection.nombre_logico,
+                    'database_name': config.database_name,
                     'is_active': connection.is_active,
                 }
         else:
@@ -166,6 +175,18 @@ def get_gestiondte_connection(role: str) -> dict[str, object]:
         raise GestionDTEConnectionInactiveError(
             f'La conexión MySQL del rol {role!r} está inactiva o no existe.'
         )
+    if (
+        role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
+        and (
+            not role_config.database_name
+            or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(
+                role_config.database_name
+            )
+        )
+    ):
+        raise GestionDTEConnectionSourceError(
+            f'El rol {role!r} no tiene una base de datos válida configurada.'
+        )
     return {
         'type': 'MYSQL_CONFIG',
         'connection_id': connection.pk,
@@ -173,6 +194,7 @@ def get_gestiondte_connection(role: str) -> dict[str, object]:
         'empresa_codigo': connection.empresa.codigo,
         'nombre_logico': connection.nombre_logico,
         'engine': connection.engine,
+        'database_name': role_config.database_name,
     }
 
 

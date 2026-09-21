@@ -11,6 +11,7 @@ from gestiondte.connection_views import GestionDTEConnectionRoleView
 from gestiondte.models import GestionDTEConnectionRole
 from gestiondte.services.connection_roles import (
     GestionDTEAliasUnavailableError,
+    GestionDTEConnectionSourceError,
     get_gestiondte_connection,
     get_gestiondte_connection_status,
     get_system_database_catalog,
@@ -153,6 +154,123 @@ class GestionDTEConnectionRoleTests(TestCase):
         self.assertIn(str(self.connection.pk), values)
         self.assertNotIn(str(inactive.pk), values)
 
+    def test_database_name_is_normalized_away_for_django(self):
+        role = GestionDTEConnectionRole(
+            role='serverbasedte',
+            source_type='DJANGO',
+            django_alias='default',
+            database_name='stale_database',
+        )
+
+        role.full_clean()
+
+        self.assertIsNone(role.database_name)
+
+    def test_configurable_mysql_roles_require_database_name(self):
+        for role_name in ('serverbasedte', 'serverauditoriagestiondte'):
+            with self.subTest(role=role_name):
+                role = GestionDTEConnectionRole(
+                    role=role_name,
+                    source_type='MYSQL_CONFIG',
+                    mysql_connection=self.connection,
+                )
+
+                with self.assertRaises(ValidationError) as raised:
+                    role.full_clean()
+
+                self.assertIn('database_name', raised.exception.message_dict)
+
+    def test_configurable_mysql_roles_accept_suggested_and_custom_names(self):
+        for role_name, database_name in (
+            ('serverbasedte', 'gestiondte'),
+            ('serverauditoriagestiondte', 'cliente01_dte'),
+        ):
+            with self.subTest(role=role_name):
+                role = GestionDTEConnectionRole(
+                    role=role_name,
+                    source_type='MYSQL_CONFIG',
+                    mysql_connection=self.connection,
+                    database_name=database_name,
+                )
+
+                role.full_clean()
+
+                self.assertEqual(role.database_name, database_name)
+
+    def test_accounting_roles_reject_database_name(self):
+        for role_name in ('servercontabilidad', 'serverauditoriacontabilidad'):
+            with self.subTest(role=role_name):
+                role = GestionDTEConnectionRole(
+                    role=role_name,
+                    source_type='MYSQL_CONFIG',
+                    mysql_connection=self.connection,
+                    database_name='gestiondte',
+                )
+
+                with self.assertRaises(ValidationError) as raised:
+                    role.full_clean()
+
+                self.assertIn('database_name', raised.exception.message_dict)
+
+    def test_database_name_rejects_invalid_identifiers(self):
+        for database_name in ('gestion-dte', 'gestion dte', 'gestion.dte', '`gestiondte`', 'gestiondte;', '1gestiondte', 'x' * 65):
+            with self.subTest(database_name=database_name):
+                role = GestionDTEConnectionRole(
+                    role='serverbasedte',
+                    source_type='MYSQL_CONFIG',
+                    mysql_connection=self.connection,
+                    database_name=database_name,
+                )
+
+                with self.assertRaises(ValidationError):
+                    role.full_clean()
+
+    def test_form_suggests_names_without_overwriting_custom_values(self):
+        base_form = GestionDTEConnectionRoleForm(
+            instance=GestionDTEConnectionRole(role='serverbasedte'),
+            role='serverbasedte',
+        )
+        audit_form = GestionDTEConnectionRoleForm(
+            instance=GestionDTEConnectionRole(role='serverauditoriagestiondte'),
+            role='serverauditoriagestiondte',
+        )
+        custom_form = GestionDTEConnectionRoleForm(
+            instance=GestionDTEConnectionRole(
+                role='serverbasedte', database_name='cliente01_dte'
+            ),
+            role='serverbasedte',
+        )
+
+        self.assertEqual(base_form.initial['database_name'], 'gestiondte')
+        self.assertEqual(audit_form.initial['database_name'], 'gestiondte_auditoria')
+        self.assertEqual(custom_form.initial['database_name'], 'cliente01_dte')
+        self.assertNotIn(
+            'database_name',
+            GestionDTEConnectionRoleForm(
+                instance=GestionDTEConnectionRole(role='servercontabilidad'),
+                role='servercontabilidad',
+            ).fields,
+        )
+
+    def test_form_switching_to_django_clears_database_name(self):
+        role = GestionDTEConnectionRole(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+            database_name='cliente01_dte',
+        )
+        role.save()
+        form = GestionDTEConnectionRoleForm(
+            data={'source_type': 'DJANGO', 'django_alias': 'default'},
+            instance=role,
+            role='serverbasedte',
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        updated = form.save()
+
+        self.assertIsNone(updated.database_name)
+
     @override_settings(DATABASES={'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}})
     def test_system_catalog_is_dynamic_and_classified(self):
         catalog = get_system_database_catalog()
@@ -171,6 +289,19 @@ class GestionDTEConnectionRoleTests(TestCase):
 
         self.assertNotIn('password', result)
         self.assertEqual(result['nombre_logico'], 'contabilidad')
+
+    def test_configurable_mysql_role_without_database_name_is_invalid(self):
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+        )
+
+        status = get_gestiondte_connection_status()
+
+        self.assertIn('serverbasedte', status['invalid_roles'])
+        with self.assertRaises(GestionDTEConnectionSourceError):
+            get_gestiondte_connection('serverbasedte')
 
     def test_missing_saved_alias_is_rejected(self):
         GestionDTEConnectionRole.objects.create(

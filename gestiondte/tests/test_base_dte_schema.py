@@ -51,6 +51,7 @@ class BaseDTESchemaInstallTests(TestCase):
             role='serverbasedte',
             source_type='MYSQL_CONFIG',
             mysql_connection=self.connection,
+            database_name='gestiondte',
         )
 
     def test_user_without_supervisor_cannot_execute(self):
@@ -61,6 +62,21 @@ class BaseDTESchemaInstallTests(TestCase):
         response = self.client.post(reverse('gestion_dte:base_dte_schema_install'))
 
         self.assertEqual(response.status_code, 403)
+
+    @patch('gestiondte.connection_views.install_base_dte_schema')
+    def test_incomplete_configuration_does_not_execute_ddl(self, install):
+        self._activate()
+        self._grant(ver=True, ingresar=True, supervisor=True)
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+        )
+
+        response = self.client.post(reverse('gestion_dte:base_dte_schema_install'))
+
+        self.assertEqual(response.status_code, 302)
+        install.assert_not_called()
 
     def test_button_is_visible_only_for_supervisor_and_mysql_config(self):
         self._activate()
@@ -80,6 +96,44 @@ class BaseDTESchemaInstallTests(TestCase):
         response_with_django = self.client.get(reverse('gestion_dte:connection_roles'))
         self.assertNotContains(response_with_django, 'Crear estructura Base DTE')
 
+    def test_button_is_hidden_without_database_name(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True, supervisor=True)
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+        )
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertNotContains(response, 'Crear estructura Base DTE')
+
+    def test_button_is_hidden_for_gestion_dte_audit_role(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True, supervisor=True)
+        GestionDTEConnectionRole.objects.create(
+            role='serverauditoriagestiondte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+            database_name='gestiondte_auditoria',
+        )
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertNotContains(response, 'Crear estructura Base DTE')
+
+    def test_button_render_contains_base_dte_database_name(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True, supervisor=True)
+        self._configure_mysql_role()
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Crear estructura Base DTE')
+        self.assertContains(response, "base 'gestiondte'")
+
     @patch('gestiondte.connection_views.install_base_dte_schema')
     @patch('gestiondte.connection_views.get_gestiondte_mysql_connection')
     @patch('gestiondte.connection_views.get_gestiondte_connection')
@@ -89,7 +143,10 @@ class BaseDTESchemaInstallTests(TestCase):
         self._activate()
         self._grant(ver=True, ingresar=True, supervisor=True)
         self._configure_mysql_role()
-        get_connection.return_value = {'type': 'MYSQL_CONFIG'}
+        get_connection.return_value = {
+            'type': 'MYSQL_CONFIG',
+            'database_name': 'gestiondte',
+        }
         get_mysql_connection.return_value = self.connection
 
         response = self.client.post(reverse('gestion_dte:base_dte_schema_install'))
@@ -97,7 +154,7 @@ class BaseDTESchemaInstallTests(TestCase):
         self.assertEqual(response.status_code, 302)
         get_connection.assert_called_once_with('serverbasedte')
         get_mysql_connection.assert_called_once_with('serverbasedte')
-        install.assert_called_once_with(self.connection)
+        install.assert_called_once_with(self.connection, database_name='gestiondte')
         self.assertFalse(get_connection.call_args_list[0].args[0] == 'servercontabilidad')
 
     @patch('gestiondte.connection_views.install_base_dte_schema')
@@ -142,6 +199,21 @@ class BaseDTESchemaInstallTests(TestCase):
         self.assertEqual(processed, 1)
         open_connection.assert_called_once_with(self.connection)
         cursor.execute.assert_called_once_with(_read_schema_statements()[0])
+
+    @patch('gestiondte.services.base_dte_schema.open_mysql_connection')
+    def test_install_passes_role_database_name_without_changing_config(self, open_connection):
+        connection = MagicMock()
+        cursor = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        open_connection.return_value.__enter__.return_value = connection
+
+        install_base_dte_schema(self.connection, database_name='gestiondte')
+
+        open_connection.assert_called_once_with(
+            self.connection,
+            database_name='gestiondte',
+        )
+        self.assertEqual(self.connection.db_name, 'base_dte')
 
     @patch('gestiondte.services.base_dte_schema.open_mysql_connection', side_effect=RuntimeError('password=hidden'))
     def test_install_sanitizes_connection_errors(self, _open_connection):

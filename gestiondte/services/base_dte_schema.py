@@ -32,15 +32,29 @@ def _read_schema_statements() -> list[str]:
     return statements
 
 
-def install_base_dte_schema(connection_config) -> int:
+def install_base_dte_schema(connection_config, database_name=None) -> int:
     statements = _read_schema_statements()
     try:
-        with open_mysql_connection(connection_config) as connection:
+        if database_name is None:
+            connection_context = open_mysql_connection(connection_config)
+        else:
+            connection_context = open_mysql_connection(
+                connection_config,
+                database_name=database_name,
+            )
+        with connection_context as connection:
             with connection.cursor() as cursor:
                 for statement in statements:
                     cursor.execute(statement)
-    except (BaseDTESchemaInstallError, MySQLConnectionOpenError):
+    except BaseDTESchemaInstallError:
         raise
+    except MySQLConnectionOpenError as exc:
+        effective_database = (
+            connection_config.db_name if database_name is None else database_name
+        )
+        raise BaseDTESchemaInstallError(
+            f'No se pudo abrir la base de datos {effective_database!r}.'
+        ) from exc
     except Exception as exc:
         raise BaseDTESchemaInstallError(
             'No se pudo crear la estructura Base DTE.'

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import re
 from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
@@ -30,6 +31,17 @@ def _normalize_nombre_logico(nombre_logico: str) -> str:
     if nombre_logico is None:
         return ""
     return nombre_logico.lower().strip()
+
+
+_DATABASE_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,63}$')
+
+
+def _resolve_database_name(connection_config: SettingsMySQLConnection, database_name: Optional[str]) -> str:
+    if database_name is None:
+        return connection_config.db_name
+    if not isinstance(database_name, str) or not _DATABASE_NAME_PATTERN.fullmatch(database_name):
+        raise MySQLConnectionOpenError('El nombre de base de datos no es válido.')
+    return database_name
 
 
 def get_mysql_connection_config(empresa_id: int, nombre_logico: str) -> Dict[str, Optional[object]]:
@@ -69,10 +81,15 @@ def get_mysql_connection_config_for_request(request: HttpRequest, nombre_logico:
 
 
 @contextmanager
-def open_mysql_connection(connection_config: SettingsMySQLConnection) -> Iterator[object]:
+def open_mysql_connection(
+    connection_config: SettingsMySQLConnection,
+    database_name: Optional[str] = None,
+) -> Iterator[object]:
     """Open one concrete MySQL configuration and close it on exit."""
     if not isinstance(connection_config, SettingsMySQLConnection):
         raise TypeError("connection_config debe ser SettingsMySQLConnection")
+
+    effective_database = _resolve_database_name(connection_config, database_name)
 
     engine = SettingsMySQLConnection.normalize_engine(connection_config.engine)
     if engine == SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL:
@@ -90,7 +107,7 @@ def open_mysql_connection(connection_config: SettingsMySQLConnection) -> Iterato
                     port=int(connection_config.port or 3306),
                     user=connection_config.user,
                     password=connection_config.password,
-                    database=connection_config.db_name,
+                    database=effective_database,
                     charset=charset,
                     connect_timeout=5,
                     read_timeout=10,
@@ -120,7 +137,7 @@ def open_mysql_connection(connection_config: SettingsMySQLConnection) -> Iterato
     base_config.update(
         {
             "ENGINE": SettingsMySQLConnection.ENGINE_DJANGO_MYSQL,
-            "NAME": connection_config.db_name,
+            "NAME": effective_database,
             "USER": connection_config.user,
             "PASSWORD": connection_config.password,
             "HOST": connection_config.host,

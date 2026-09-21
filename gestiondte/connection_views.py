@@ -44,6 +44,17 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
         vista = Vista.objects.filter(nombre=self.vista_nombre).first()
         empresa_id = self.request.session.get('empresa_id') if hasattr(self, 'request') else None
         roles = cast(list[dict[str, object]], status['roles'])
+        base_dte_status = next(
+            (item for item in roles if item['role'] == 'serverbasedte'),
+            None,
+        )
+        base_dte_database_name = (
+            base_dte_status.get('metadata', {}).get('database_name')
+            if base_dte_status
+            and base_dte_status['status'] == 'configured'
+            and base_dte_status['source_type'] == 'MYSQL_CONFIG'
+            else None
+        )
         can_install_base_dte = bool(
             vista
             and empresa_id
@@ -53,17 +64,13 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
                 vista=vista,
                 supervisor=True,
             ).exists()
-            and any(
-                item['role'] == 'serverbasedte'
-                and item['status'] == 'configured'
-                and item['source_type'] == 'MYSQL_CONFIG'
-                for item in roles
-            )
+            and base_dte_database_name
         )
         return {
             'role_forms': forms,
             'connection_status': status,
             'can_install_base_dte': can_install_base_dte,
+            'base_dte_database_name': base_dte_database_name,
             'vista_nombre': self.vista_nombre,
         }
 
@@ -74,6 +81,7 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
             form = GestionDTEConnectionRoleForm(
                 prefix=f'role-{role}',
                 instance=instance or GestionDTEConnectionRole(role=role),
+                role=role,
             )
             forms.append({'role': role, 'label': label, 'form': form})
         return render(request, self.template_name, self._context(forms))
@@ -86,6 +94,7 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
                 request.POST,
                 prefix=f'role-{role}',
                 instance=instance or GestionDTEConnectionRole(role=role),
+                role=role,
             )
             forms.append({'role': role, 'label': label, 'form': form})
 
@@ -115,8 +124,18 @@ class BaseDTESchemaInstallView(LoginRequiredMixin, View):
                 return redirect('gestion_dte:connection_roles')
 
             connection_config = get_gestiondte_mysql_connection('serverbasedte')
-            install_base_dte_schema(connection_config)
+            database_name = source.get('database_name')
+            if (
+                not database_name
+                or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(database_name)
+            ):
+                raise BaseDTESchemaInstallError(
+                    'La base de datos del rol Base DTE no está configurada o no es válida.'
+                )
+            install_base_dte_schema(connection_config, database_name=database_name)
             messages.success(request, 'Estructura Base DTE procesada correctamente.')
+        except BaseDTESchemaInstallError as exc:
+            messages.error(request, str(exc))
         except Exception:
             messages.error(request, 'No se pudo procesar la estructura Base DTE.')
         return redirect('gestion_dte:connection_roles')

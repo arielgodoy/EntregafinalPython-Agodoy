@@ -134,6 +134,46 @@ class MySQLConnectionServiceTests(TestCase):
 
         self.assertEqual(connect.call_args.kwargs['database'], 'db1')
 
+    @patch('pymysql.connect')
+    def test_open_mysql_connection_uses_valid_override_without_mutating_config(self, connect):
+        config = SettingsMySQLConnection.objects.get(empresa=self.empresa, nombre_logico='ventas')
+        config.engine = SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL
+        connection = MagicMock()
+        connect.return_value = connection
+
+        with open_mysql_connection(config, database_name='gestiondte'):
+            pass
+
+        self.assertEqual(connect.call_args.kwargs['database'], 'gestiondte')
+        self.assertEqual(config.db_name, 'db1')
+        connection.cursor.assert_not_called()
+
+    @patch('settings.services.mysql_connections.connections')
+    def test_django_mysql_override_sets_runtime_name_only(self, connections):
+        config = SettingsMySQLConnection.objects.get(empresa=self.empresa, nombre_logico='ventas')
+        django_connection = MagicMock()
+        connections.__getitem__.return_value = django_connection
+        connections.databases = {}
+
+        with open_mysql_connection(config, database_name='gestiondte'):
+            runtime_config = next(iter(connections.databases.values()))
+            self.assertEqual(runtime_config['NAME'], 'gestiondte')
+
+        self.assertEqual(config.db_name, 'db1')
+        self.assertEqual(connections.databases, {})
+
+    def test_open_mysql_connection_rejects_invalid_override_before_opening(self):
+        config = SettingsMySQLConnection.objects.get(empresa=self.empresa, nombre_logico='ventas')
+        config.engine = SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL
+
+        for database_name in ('gestion-dte', 'gestion dte', 'gestion.dte', '`gestiondte`', 'gestiondte;', '1gestiondte', 'x' * 65, ''):
+            with self.subTest(database_name=database_name):
+                with patch('pymysql.connect') as connect:
+                    with self.assertRaises(MySQLConnectionOpenError):
+                        with open_mysql_connection(config, database_name=database_name):
+                            pass
+                    connect.assert_not_called()
+
     @patch('settings.services.mysql_connections.connections')
     def test_open_mysql_connection_supports_django_mysql_and_cleans_alias(self, connections):
         config = SettingsMySQLConnection.objects.get(empresa=self.empresa, nombre_logico='ventas')
