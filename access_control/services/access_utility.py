@@ -28,6 +28,13 @@ ACCESS_UTILITY_SCOPE_VIEWS = {
         "Tareas - Documentos y evidencia",
         "Tareas - Dashboard personal",
     ),
+    "control_de_proyectos": (
+        "Control de Proyectos - Proyectos",
+        "Control de Proyectos - Tareas",
+        "Control de Proyectos - Clientes",
+        "Control de Proyectos - Profesionales",
+        "Control de Proyectos - Documentos de Tarea",
+    ),
 }
 
 

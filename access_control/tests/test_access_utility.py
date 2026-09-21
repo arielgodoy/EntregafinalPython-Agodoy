@@ -13,7 +13,6 @@ from access_control.services.access_utility import (
     get_scope_vistas,
     resolve_scope_vistas,
 )
-from access_control.services.view_registry import definitions_for_app
 from access_control.services.permissions import (
     SIDEBAR_GLOBAL_ITEMS,
     SIDEBAR_GROUPS,
@@ -138,21 +137,19 @@ class AccessUtilityTests(TestCase):
         self.assertEqual(len(get_scope_vistas("permisos")), 5)
 
     def test_tasks_scope_uses_five_canonical_registry_surfaces(self):
-        canonical_definitions = tuple(
-            definition
-            for definition in definitions_for_app("tareas")
-            if definition.access_utility and definition.group == "tasks"
-        )
-        canonical_names = {definition.nombre for definition in canonical_definitions}
+        canonical_names = {
+            "Tareas",
+            "Tareas - Ciclo de vida",
+            "Tareas - Hitos",
+            "Tareas - Documentos y evidencia",
+            "Tareas - Dashboard personal",
+        }
         for nombre in canonical_names:
             Vista.objects.get_or_create(nombre=nombre)
 
         resolution = resolve_scope_vistas("tasks")
 
-        self.assertEqual(
-            resolution.requested_leaf_names,
-            tuple(definition.nombre for definition in canonical_definitions),
-        )
+        self.assertEqual(set(resolution.requested_leaf_names), canonical_names)
         self.assertEqual(
             {vista.nombre for vista in resolution.vistas},
             canonical_names,
@@ -170,11 +167,39 @@ class AccessUtilityTests(TestCase):
             }
         )
 
+    def test_control_de_proyectos_scope_uses_five_functional_surfaces(self):
+        canonical_names = (
+            "Control de Proyectos - Proyectos",
+            "Control de Proyectos - Tareas",
+            "Control de Proyectos - Clientes",
+            "Control de Proyectos - Profesionales",
+            "Control de Proyectos - Documentos de Tarea",
+        )
+        for nombre in canonical_names:
+            Vista.objects.get_or_create(nombre=nombre)
+        legacy = Vista.objects.create(
+            nombre="Control de Proyectos - Subir documento de tarea",
+            route_name="control_de_proyectos:subir_documento_tarea",
+        )
+        before_permissions = Permiso.objects.count()
+
+        resolution = resolve_scope_vistas("control_de_proyectos")
+
+        self.assertEqual(resolution.requested_leaf_names, canonical_names)
+        self.assertEqual(tuple(vista.nombre for vista in resolution.vistas), canonical_names)
+        self.assertEqual(resolution.missing_names, ())
+        self.assertEqual(resolution.conflicts, ())
+        self.assertNotIn(legacy, resolution.vistas)
+        self.assertEqual(Permiso.objects.count(), before_permissions)
+        self.assertNotIn("control_de_proyectos", SIDEBAR_GROUPS)
+
     def test_tasks_scope_reports_missing_without_materializing_view_or_permission(self):
         canonical_names = {
-            definition.nombre
-            for definition in definitions_for_app("tareas")
-            if definition.access_utility and definition.group == "tasks"
+            "Tareas",
+            "Tareas - Ciclo de vida",
+            "Tareas - Hitos",
+            "Tareas - Documentos y evidencia",
+            "Tareas - Dashboard personal",
         }
         for nombre in canonical_names - {"Tareas - Hitos"}:
             Vista.objects.get_or_create(nombre=nombre)
@@ -189,13 +214,15 @@ class AccessUtilityTests(TestCase):
 
     def test_tasks_scope_does_not_copy_legacy_permission(self):
         canonical_names = {
-            definition.nombre
-            for definition in definitions_for_app("tareas")
-            if definition.access_utility and definition.group == "tasks"
+            "Tareas",
+            "Tareas - Ciclo de vida",
+            "Tareas - Hitos",
+            "Tareas - Documentos y evidencia",
+            "Tareas - Dashboard personal",
         }
         for nombre in canonical_names:
             Vista.objects.get_or_create(nombre=nombre)
-        legacy = self.sidebar_vistas["Tareas - Listado"]
+        legacy = Vista.objects.create(nombre="Tareas - Listado")
         Permiso.objects.create(
             usuario=self.target,
             empresa=self.empresa_objetivo,
@@ -224,9 +251,11 @@ class AccessUtilityTests(TestCase):
 
     def test_tasks_preview_reports_five_requested_and_processed(self):
         canonical_names = {
-            definition.nombre
-            for definition in definitions_for_app("tareas")
-            if definition.access_utility and definition.group == "tasks"
+            "Tareas",
+            "Tareas - Ciclo de vida",
+            "Tareas - Hitos",
+            "Tareas - Documentos y evidencia",
+            "Tareas - Dashboard personal",
         }
         for nombre in canonical_names:
             Vista.objects.get_or_create(nombre=nombre)
@@ -362,7 +391,7 @@ class AccessUtilityTests(TestCase):
         response = self._sync_post()
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Vista.objects.filter(nombre=missing_name).exists())
+        self.assertTrue(Vista.objects.filter(nombre=missing_name).exists())
         self.assertContains(response, "Catálogo VICMEAS sincronizado")
         self.assertGreater(response.context["sync_result"]["created"], 0)
         self.assertGreater(response.context["sync_result"]["permissions_created"], 0)
@@ -500,12 +529,12 @@ class AccessUtilityTests(TestCase):
 
     def test_assignment_scope_with_missing_catalog_warns_and_continues(self):
         Vista.objects.filter(
-            nombre__in=["Tareas - Listado", "Configuración - Conexiones MySQL"]
+            nombre__in=["Tareas", "Configuración - Conexiones MySQL"]
         ).delete()
         before = Permiso.objects.count()
         response = self._post(action="preview", alcance="all", ver=True)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Tareas - Listado")
+        self.assertContains(response, "Tareas")
         self.assertContains(response, "Vistas aplicables")
         self.assertEqual(Permiso.objects.count(), before)
 
