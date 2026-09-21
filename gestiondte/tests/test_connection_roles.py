@@ -54,10 +54,55 @@ class GestionDTEConnectionRoleTests(TestCase):
         data = {}
         for role, _label in GestionDTEConnectionRole.ROLE_CHOICES:
             prefix = f'role-{role}'
-            data[f'{prefix}-source_type'] = 'DJANGO'
-            data[f'{prefix}-django_alias'] = 'default'
-            data[f'{prefix}-mysql_connection'] = ''
+            if role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:
+                data[f'{prefix}-source_type'] = 'MYSQL_CONFIG'
+                data[f'{prefix}-mysql_connection'] = str(self.connection.pk)
+            else:
+                data[f'{prefix}-source_type'] = 'DJANGO'
+                data[f'{prefix}-django_alias'] = 'default'
+                data[f'{prefix}-mysql_connection'] = ''
         return data
+
+    def test_accounting_roles_require_mysql_config_at_model_boundary(self):
+        for role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:
+            with self.subTest(role=role):
+                django_role = GestionDTEConnectionRole(
+                    role=role,
+                    source_type='DJANGO',
+                    django_alias='default',
+                )
+                with self.assertRaises(ValidationError) as raised:
+                    django_role.full_clean()
+                self.assertIn('source_type', raised.exception.message_dict)
+
+                mysql_role = GestionDTEConnectionRole(
+                    role=role,
+                    source_type='MYSQL_CONFIG',
+                    mysql_connection=self.connection,
+                )
+                mysql_role.full_clean()
+
+    def test_accounting_form_only_offers_mysql_source(self):
+        for role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:
+            with self.subTest(role=role):
+                form = GestionDTEConnectionRoleForm(
+                    instance=GestionDTEConnectionRole(role=role),
+                    role=role,
+                )
+                self.assertEqual(
+                    [value for value, _label in form.fields['source_type'].choices],
+                    ['MYSQL_CONFIG'],
+                )
+
+        for role in ('serverbasedte', 'serverauditoriagestiondte'):
+            form = GestionDTEConnectionRoleForm(
+                instance=GestionDTEConnectionRole(role=role),
+                role=role,
+            )
+            self.assertEqual(
+                {value for value, _label in form.fields['source_type'].choices},
+                {'', 'DJANGO', 'MYSQL_CONFIG'},
+            )
 
     def test_get_requires_ingresar_and_post_requires_modificar(self):
         self._activate()

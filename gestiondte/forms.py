@@ -113,6 +113,11 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
                 'serverbasedte': 'gestiondte',
                 'serverauditoriagestiondte': 'gestiondte_auditoria',
             }[self.role]
+        if self.role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:
+            self.fields['source_type'].choices = (
+                ('MYSQL_CONFIG', 'Conexión MySQL'),
+            )
+            self.fields['source_type'].widget.choices = self.fields['source_type'].choices
         django_alias_choices = [
             ('', 'Seleccione una conexión del sistema'),
             *[
@@ -133,7 +138,9 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
             f"{connection.empresa.descripcion or 'Sin descripción'} / "
             f"{connection.nombre_logico}"
         )
-        self.fields['source_type'].required = False
+        self.fields['source_type'].required = (
+            self.role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES
+        )
 
     def clean(self):
         cleaned = super().clean()
@@ -142,6 +149,8 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
         mysql_connection = cleaned.get('mysql_connection')
 
         if source_type == 'DJANGO':
+            if self.role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:
+                self.add_error('source_type', 'Los roles contables requieren una conexión MYSQL_CONFIG.')
             if not django_alias:
                 self.add_error('django_alias', 'Debe seleccionar un alias Django SYSTEM.')
             if mysql_connection is not None:

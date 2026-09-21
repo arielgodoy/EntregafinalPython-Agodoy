@@ -13,6 +13,10 @@ def upload_to_certificado(instance, filename):
 
 
 class GestionDTEConnectionRole(models.Model):
+    LEGACY_MYSQL_ROLES = frozenset({
+        'servercontabilidad',
+        'serverauditoriacontabilidad',
+    })
     DATABASE_CONFIGURABLE_ROLES = frozenset({
         'serverbasedte',
         'serverauditoriagestiondte',
@@ -73,6 +77,9 @@ class GestionDTEConnectionRole(models.Model):
         alias = (self.django_alias or '').strip()
         database_name = (self.database_name or '').strip()
         if self.source_type == 'DJANGO':
+            if self.role in self.LEGACY_MYSQL_ROLES:
+                errors['source_type'] = 'Los roles contables requieren una conexión MYSQL_CONFIG.'
+                raise ValidationError(errors)
             if not alias:
                 errors['django_alias'] = 'Debe seleccionar un alias Django SYSTEM.'
             elif alias not in {item['alias'] for item in get_system_database_catalog()}:
