@@ -4,6 +4,11 @@ Antes de una tarea, consultar este indice y cargar unicamente la documentacion e
 
 Las reglas globales viven en `.github/copilot-instructions.md`.
 
+Para VICMEAS, la referencia arquitectónica es Biblioteca: una superficie funcional
+mantiene un único `vista_nombre`, sus operaciones cambian `permiso_requerido`, y las
+Views/FBV son la fuente visible de autorización. Las APPLICATION_APPS no modifican
+BASE/SYSTEM sin autorización expresa.
+
 `COPILOT/` contiene documentacion operativa vigente. `COPILOT/historico/` contiene analisis, implementaciones, diagnósticos, bugfixes y referencias historicas.
 
 No leer `COPILOT/historico/` por defecto.

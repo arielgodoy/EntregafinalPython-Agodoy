@@ -21,6 +21,9 @@ Sync Impact Report
   BOUNDARY, la reutilización obligatoria de infraestructura base, la prohibición de
   SHADOW INFRASTRUCTURE, la dependencia externa explícita y la validación física del
   scope mediante Git.
+- Enmienda 2026-09-20 (v1.4.0, MINOR): se formalizan la identidad funcional única
+  de VICMEAS, la autorización visible en View/FBV, la distinción entre superficies
+  y auxiliares, y la prohibición explícita de modificar BASE/SYSTEM sin autorización.
 -->
 
 # AppDocs Constitution
@@ -106,7 +109,42 @@ Django, las decisiones de permiso no dependen de textos traducidos ni se omiten 
 validaciones de pertenencia a la empresa activa.
 Rationale: son los mecanismos de seguridad y aislamiento vigentes del sistema.
 
-### VI. Cambios mínimos y focalizados
+### VI. Identidad funcional y autorización visible (NON-NEGOTIABLE)
+
+Una superficie funcional posee un único `vista_nombre` estable. Las operaciones
+CRUD reutilizan esa identidad y cambian únicamente `permiso_requerido` según la
+acción VICMEAS. No se crean Vistas por operación CRUD salvo evidencia de una
+superficie funcional independiente.
+
+La autorización efectiva debe ser visible en la View/FBV mediante
+`VerificarPermisoMixin` o `@verificar_permiso`, con `vista_nombre` y
+`permiso_requerido` explícitos. `V` controla navegación; `I/C/M/E/A/S` controlan
+acciones backend. `supervisor` no crea una identidad funcional nueva.
+
+No toda View, URL o función auxiliar constituye una superficie VICMEAS. Autocomplete,
+AJAX, lookups, previews, exportaciones y servicios internos pueden permanecer dentro
+de su APPLICATION_APP y, si requieren autorización de negocio, reutilizar la identidad
+de su superficie madre. No se crean Vistas artificiales para satisfacer conteos de URLs.
+
+Rationale: una identidad funcional visible y estable evita duplicación de permisos,
+ambigüedad histórica y divergencia entre código activo y metadatos secundarios.
+
+### VII. Propiedad de APPLICATION_APP y protección BASE/SYSTEM (NON-NEGOTIABLE)
+
+Una APPLICATION_APP puede organizar libremente sus propias Views, FBV, helpers,
+services, selectors, utils y tests, respetando los contratos existentes. No puede
+modificar sin autorización expresa `access_control` ni otra infraestructura BASE/SYSTEM,
+incluyendo mixins, decorators, login, middleware, sesiones, empresa activa,
+validadores globales, modelos centrales o servicios de permisos.
+
+Si una migración requiere modificar infraestructura BASE/SYSTEM, el trabajo debe
+detenerse e informar el archivo, componente, problema, impacto, cambio propuesto y
+alternativa local. Se prefiere siempre una solución dentro de la APPLICATION_APP.
+
+Rationale: la propiedad local y la detención ante dependencias externas preservan la
+estabilidad transversal y el aislamiento arquitectónico.
+
+### VIII. Cambios mínimos y focalizados
 
 Se prefieren cambios mínimos, focalizados y compatibles con la arquitectura
 existente. Se evitan refactors no solicitados, renombrados de URLs en uso y
@@ -115,7 +153,7 @@ infraestructura, Docker, Nginx, bases de datos o componentes transversales salvo
 la feature y una autorización vigente lo requieran expresamente.
 Rationale: minimizar el área de impacto protege un sistema en operación parcial.
 
-### VII. Tests y verificación de cierre
+### IX. Tests y verificación de cierre
 
 Toda implementación MUST incluir tests focalizados cuando corresponda y ejecutar las
 regresiones relacionadas (`python manage.py test --settings=AppDocs.settings_test`).
@@ -123,7 +161,7 @@ Antes del cierre se MUST ejecutar `git diff --check` y revisar el diff completo 
 alcance modificado. NO se hace commit ni push sin autorización expresa del usuario.
 Rationale: la verificación local es la única barrera antes de un sistema en uso real.
 
-### VIII. Specs orientadas al QUÉ
+### X. Specs orientadas al QUÉ
 
 Las especificaciones MUST describir QUÉ debe hacer la funcionalidad (comportamiento,
 criterios de aceptación, restricciones) antes de decidir CÓMO implementarla. El CÓMO
@@ -131,7 +169,7 @@ se define en el plan, adaptado a la arquitectura existente (Principio I).
 Rationale: separar QUÉ de CÓMO evita que decisiones técnicas prematuras contradigan
 el sistema vigente.
 
-### IX. Trazabilidad spec → plan → tasks
+### XI. Trazabilidad spec → plan → tasks
 
 `spec.md`, `plan.md` y `tasks.md` MUST mantener trazabilidad entre requerimientos,
 decisiones técnicas, implementación y pruebas. Cada requerimiento de la spec debe ser
@@ -158,4 +196,4 @@ especificado.
   MINOR: nuevo principio o sección; PATCH: aclaraciones sin cambio semántico) y
   actualización del Sync Impact Report al inicio de este archivo.
 
-**Version**: 1.3.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-16
+**Version**: 1.4.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-20

@@ -113,6 +113,24 @@ Los servicios, helpers, selectors y validators propios son válidos únicamente 
 implementan reglas específicas del dominio de la APPLICATION. El criterio es funcional,
 no el nombre del archivo o clase.
 
+### Contrato VICMEAS por APPLICATION_APP
+
+La fuente primaria de autorización de una superficie web es la metadata visible en su
+View/FBV activa: `vista_nombre` y `permiso_requerido`, usando el mixin o decorator
+oficial. Una superficie funcional conserva una identidad `vista_nombre` estable entre
+sus operaciones CRUD; las acciones cambian el permiso requerido, no crean Vistas nuevas.
+
+Un registry declarativo puede aportar metadata secundaria de navegación, catálogo,
+utilitario y reporting, pero no puede contradecir la metadata activa ni convertirse en
+una segunda autorización divergente. Las definiciones deben validarse contra las rutas
+activas y no repetir bindings innecesarios cuando puedan descubrirse genéricamente.
+
+No toda View, URL o función auxiliar es una superficie VICMEAS: autocomplete, AJAX,
+lookup, preview, exportación y servicios internos pueden reutilizar la identidad de su
+superficie madre.
+
+Esta regla desarrolla los principios VI y VII de `.specify/memory/constitution.md`.
+
 ### Dependencias externas y detención
 
 Si el contrato público existente no alcanza y la solución requiere modificar algo fuera
