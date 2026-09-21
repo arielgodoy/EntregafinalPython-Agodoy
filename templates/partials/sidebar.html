@@ -104,6 +104,9 @@
                             {% if "gestion_dte_certificados" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'gestion_dte:certificados' %}" class="nav-link" data-key="menu.gestion_dte.certificados">Certificados PFX-DTE</a>
                             </li>{% endif %}
+                            {% if "settings_gestion_dte_connections" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'gestion_dte:connection_roles' %}" class="nav-link" data-key="menu.gestion_dte.connections">Conexiones SQL</a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}
@@ -311,9 +314,6 @@
                             </li>{% endif %}
                             {% if "settings_mysql" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'mysql_connections_list' %}" class="nav-link" data-key="menu.settings.mysql_connections">Conexiones MySQL</a>
-                            </li>{% endif %}
-                            {% if "settings_gestion_dte_connections" in request.sidebar_visible_items %}<li class="nav-item">
-                                <a href="{% url 'gestion_dte:connection_roles' %}" class="nav-link" data-key="menu.settings.gestion_dte_connections">Conexiones Gestión DTE</a>
                             </li>{% endif %}
                         </ul>
                     </div>

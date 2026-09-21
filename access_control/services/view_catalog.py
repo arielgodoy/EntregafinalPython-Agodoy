@@ -299,7 +299,13 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
         seen_names[definition.nombre] = definition
 
         matches = by_name.get(definition.nombre, [])
-        if len(matches) > 1:
+        route_matches = [
+            vista
+            for vista in existing_rows
+            if definition.route_name is not None
+            and vista.route_name == definition.route_name
+        ]
+        if len(matches) > 1 or len(route_matches) > 1:
             conflicts.append(
                 CatalogConflict(
                     code="persistent_identity_conflict",
@@ -311,14 +317,7 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
             )
             continue
 
-        route_conflicts = [
-            vista
-            for vista in existing_rows
-            if definition.route_name is not None
-            and vista.route_name == definition.route_name
-            and vista.nombre != definition.nombre
-        ]
-        if route_conflicts:
+        if matches and route_matches and matches[0].id != route_matches[0].id:
             conflicts.append(
                 CatalogConflict(
                     code="route_identity_conflict",
@@ -327,19 +326,20 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
                     route_name=definition.route_name,
                     detail=(
                         "La ruta canónica ya pertenece a otra Vista: "
-                        + ", ".join(sorted({vista.nombre for vista in route_conflicts}))
+                        + ", ".join(sorted({vista.nombre for vista in route_matches}))
                     ),
                 )
             )
             continue
 
+        vista = matches[0] if matches else (route_matches[0] if route_matches else None)
         if not matches:
-            created_rows.append(_catalog_item(definition))
-            continue
+            if vista is None:
+                created_rows.append(_catalog_item(definition))
+                continue
 
-        vista = matches[0]
         existing_catalog_rows.append(_catalog_item(definition, vista.id))
-        if (
+        if vista.nombre != definition.nombre or (
             definition.route_name is not None
             and vista.route_name != definition.route_name
         ):
@@ -369,6 +369,7 @@ def ensure_declared_views_catalog(*, app="tareas", dry_run=False, definitions=No
                 )
             for item in updated_rows:
                 Vista.objects.filter(pk=item.vista_id).update(
+                    nombre=item.nombre,
                     route_name=item.route_name,
                 )
 

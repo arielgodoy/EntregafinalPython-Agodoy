@@ -1,6 +1,7 @@
 {% extends "partials/base.html" %}
+{% load static %}
 
-{% block title %}Conexiones Gestión DTE{% endblock title %}
+{% block title %}Gestion DTE - Conexiones SQL{% endblock title %}
 
 {% block pagetitle %}
 {% include "partials/page-title.html" with title_key="gestiondte.connection_roles.title" pagetitle_key="menu.settings" %}
@@ -11,15 +12,30 @@
   <div class="page-content">
     <div class="container-fluid">
       <div class="card p-4">
-        <h3 data-key="gestiondte.connection_roles.heading">Conexiones Gestión DTE</h3>
+        <h3 data-key="gestiondte.connection_roles.heading">Gestion DTE - Conexiones SQL</h3>
         <p data-key="gestiondte.connection_roles.description">
           Configuración global de los roles lógicos de conexión.
         </p>
         <form method="post">
           {% csrf_token %}
           {% for item in role_forms %}
-          <section class="border rounded p-3 mb-3">
+          <section class="border rounded p-3 mb-3" data-connection-role="{{ item.role }}">
             <h5 data-key="gestiondte.connection_roles.role.{{ item.role }}">{{ item.label }}</h5>
+            {% for status in connection_status.roles %}
+              {% if status.role == item.role %}
+                {% if status.status == 'configured' %}
+                  <span class="badge bg-success-subtle text-success" data-key="gestiondte.connection_roles.status.configured">CONFIGURADO</span>
+                {% elif status.status == 'invalid' %}
+                  <span class="badge bg-danger-subtle text-danger" data-key="gestiondte.connection_roles.status.invalid">CONFIGURACIÓN INVÁLIDA</span>
+                {% else %}
+                  <span class="badge bg-warning-subtle text-warning" data-key="gestiondte.connection_roles.status.missing">NO CONFIGURADO</span>
+                {% endif %}
+                {% if status.metadata.alias %}<span class="text-muted ms-2" data-key="gestiondte.connection_roles.metadata.alias">Alias: {{ status.metadata.alias }}</span>{% endif %}
+                {% if status.metadata.empresa %}<span class="text-muted ms-2" data-key="gestiondte.connection_roles.metadata.empresa">Empresa: {{ status.metadata.empresa }}</span>{% endif %}
+                {% if status.metadata.nombre_logico %}<span class="text-muted ms-2" data-key="gestiondte.connection_roles.metadata.logical_name">Conexión: {{ status.metadata.nombre_logico }}</span>{% endif %}
+                {% if status.metadata.vendor %}<span class="text-muted ms-2" data-key="gestiondte.connection_roles.metadata.vendor">Motor: {{ status.metadata.vendor }}</span>{% endif %}
+              {% endif %}
+            {% endfor %}
             {% for hidden in item.form.hidden_fields %}{{ hidden }}{% endfor %}
             {% if item.form.non_field_errors %}
               {% for error in item.form.non_field_errors %}
@@ -31,12 +47,12 @@
               {{ item.form.source_type }}
               {% for error in item.form.source_type.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
             </div>
-            <div class="mb-3">
+            <div class="mb-3" data-role-field-container="django_alias">
               <label class="form-label" data-key="gestiondte.connection_roles.django_alias">Conexión del sistema</label>
               {{ item.form.django_alias }}
               {% for error in item.form.django_alias.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
             </div>
-            <div class="mb-3">
+            <div class="mb-3" data-role-field-container="mysql_connection">
               <label class="form-label" data-key="gestiondte.connection_roles.mysql_connection">Conexión MySQL</label>
               {{ item.form.mysql_connection }}
               {% for error in item.form.mysql_connection.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
@@ -50,3 +66,7 @@
   </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'gestiondte/js/connection_roles.js' %}"></script>
+{% endblock extra_js %}

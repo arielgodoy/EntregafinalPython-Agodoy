@@ -7,10 +7,12 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from gestiondte.forms import GestionDTEConnectionRoleForm
+from gestiondte.connection_views import GestionDTEConnectionRoleView
 from gestiondte.models import GestionDTEConnectionRole
 from gestiondte.services.connection_roles import (
     GestionDTEAliasUnavailableError,
     get_gestiondte_connection,
+    get_gestiondte_connection_status,
     get_system_database_catalog,
 )
 from settings.models import SettingsMySQLConnection
@@ -21,7 +23,7 @@ class GestionDTEConnectionRoleTests(TestCase):
         self.user = User.objects.create_user(username='connection-role-user', password='pass')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa prueba')
         self.vista = Vista.objects.create(
-            nombre='Configuración - Conexiones Gestión DTE',
+            nombre='Gestion DTE - Conexiones SQL',
             route_name='gestion_dte:connection_roles',
         )
         self.connection = SettingsMySQLConnection.objects.create(
@@ -68,6 +70,45 @@ class GestionDTEConnectionRoleTests(TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(post_response.status_code, 403)
+
+    def test_final_view_name_and_all_roles_are_rendered(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True)
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertEqual(GestionDTEConnectionRoleView.vista_nombre, 'Gestion DTE - Conexiones SQL')
+        self.assertContains(response, 'Gestion DTE - Conexiones SQL')
+        for role, _label in GestionDTEConnectionRole.ROLE_CHOICES:
+            self.assertContains(response, f'gestiondte.connection_roles.role.{role}')
+
+    def test_system_database_options_are_rendered_in_role_selectors(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True)
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertContains(response, 'value="default"')
+        self.assertContains(response, 'value="DB_sistema"')
+
+    def test_template_contains_exclusive_selector_hooks(self):
+        self._activate()
+        self._grant(ver=True, ingresar=True)
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertContains(response, 'data-connection-role="serverbasedte"')
+        self.assertContains(response, 'data-role-source-type="true"')
+        self.assertContains(response, 'data-role-field-container="django_alias"')
+        self.assertContains(response, 'data-role-field-container="mysql_connection"')
+        self.assertContains(response, 'gestiondte/js/connection_roles.js')
+
+    def test_get_without_permission_is_rejected(self):
+        self._activate()
+
+        response = self.client.get(reverse('gestion_dte:connection_roles'))
+
+        self.assertEqual(response.status_code, 403)
 
     def test_post_is_allowed_with_modificar(self):
         self._activate()
@@ -151,6 +192,113 @@ class GestionDTEConnectionRoleTests(TestCase):
 
         with self.assertRaises(ValidationError):
             role.full_clean()
+
+    def test_status_reports_zero_to_four_configured_roles(self):
+        roles = [role for role, _label in GestionDTEConnectionRole.ROLE_CHOICES]
+
+        for configured_count in range(5):
+            with self.subTest(configured_count=configured_count):
+                GestionDTEConnectionRole.objects.all().delete()
+                for role in roles[:configured_count]:
+                    GestionDTEConnectionRole.objects.create(
+                        role=role,
+                        source_type='DJANGO',
+                        django_alias='default',
+                    )
+
+                status = get_gestiondte_connection_status()
+
+                self.assertEqual(len(status['roles']), 4)
+                self.assertEqual(len(status['missing_roles']), 4 - configured_count)
+                self.assertFalse(status['invalid_roles'])
+                self.assertEqual(status['configured'], configured_count == 4)
+
+    def test_status_detects_invalid_alias_and_inactive_mysql(self):
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='DJANGO',
+            django_alias='missing_system_alias',
+        )
+        self.connection.is_active = False
+        self.connection.save(update_fields=['is_active'])
+        GestionDTEConnectionRole.objects.create(
+            role='servercontabilidad',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+        )
+
+        status = get_gestiondte_connection_status()
+
+        self.assertEqual(
+            set(status['invalid_roles']),
+            {'serverbasedte', 'servercontabilidad'},
+        )
+        self.assertFalse(status['configured'])
+
+    def test_status_allows_one_source_to_be_shared_by_roles(self):
+        for role in ('servercontabilidad', 'serverauditoriacontabilidad'):
+            GestionDTEConnectionRole.objects.create(
+                role=role,
+                source_type='MYSQL_CONFIG',
+                mysql_connection=self.connection,
+            )
+
+        status = get_gestiondte_connection_status()
+
+        configured = {
+            item['role'] for item in status['roles'] if item['status'] == 'configured'
+        }
+        self.assertEqual(
+            configured,
+            {'servercontabilidad', 'serverauditoriacontabilidad'},
+        )
+
+    @patch(
+        'gestiondte.services.connection_roles.get_system_database_catalog',
+        return_value=({'alias': 'default', 'vendor': 'sqlite', 'classification': 'SYSTEM'},),
+    )
+    def test_status_rejects_legacy_and_unknown_django_aliases(self, _catalog):
+        for role, alias in (
+            ('serverbasedte', 'legacy'),
+            ('serverauditoriagestiondte', 'unknown'),
+        ):
+            GestionDTEConnectionRole.objects.create(
+                role=role,
+                source_type='DJANGO',
+                django_alias=alias,
+            )
+
+        status = get_gestiondte_connection_status()
+
+        self.assertEqual(
+            set(status['invalid_roles']),
+            {'serverbasedte', 'serverauditoriagestiondte'},
+        )
+
+    def test_status_allows_multiple_roles_to_share_django_alias(self):
+        for role in ('serverbasedte', 'serverauditoriagestiondte'):
+            GestionDTEConnectionRole.objects.create(
+                role=role,
+                source_type='DJANGO',
+                django_alias='default',
+            )
+
+        status = get_gestiondte_connection_status()
+
+        configured = {
+            item['role'] for item in status['roles'] if item['status'] == 'configured'
+        }
+        self.assertEqual(
+            configured,
+            {'serverbasedte', 'serverauditoriagestiondte'},
+        )
+
+    @patch('pymysql.connect')
+    def test_status_does_not_open_physical_connections(self, connect):
+        status = get_gestiondte_connection_status()
+
+        self.assertEqual(len(status['roles']), 4)
+        connect.assert_not_called()
 
 
 class GestionDTEConnectionRoleStaticTests(SimpleTestCase):

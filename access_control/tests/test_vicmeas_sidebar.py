@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
@@ -857,9 +858,32 @@ class VicmeasSidebarTests(TestCase):
         self.assertIn("account_email", get_sidebar_visible_items(self.user, self.empresa_a.id))
 
     def test_gestiondte_connection_roles_sidebar_requires_vicmeas_ver(self):
-        vista, _ = Vista.objects.get_or_create(
+        Vista.objects.create(
             nombre="Configuración - Conexiones Gestión DTE",
-            defaults={"route_name": "gestion_dte:connection_roles"},
+            route_name="gestion_dte:connection_roles",
+        )
+        call_command("seed_vistas")
+        vista = Vista.objects.get(route_name="gestion_dte:connection_roles")
+
+        self.assertEqual(vista.nombre, "Gestion DTE - Conexiones SQL")
+        self.assertEqual(
+            Vista.objects.filter(route_name="gestion_dte:connection_roles").count(),
+            1,
+        )
+        self.assertFalse(
+            Vista.objects.filter(nombre="Configuración - Conexiones Gestión DTE").exists()
+        )
+        self.assertEqual(
+            SIDEBAR_VIEW_NAMES["settings_gestion_dte_connections"],
+            "Gestion DTE - Conexiones SQL",
+        )
+        self.assertIn(
+            "settings_gestion_dte_connections",
+            SIDEBAR_GROUPS["gestion_dte"],
+        )
+        self.assertNotIn(
+            "settings_gestion_dte_connections",
+            SIDEBAR_GROUPS["settings"],
         )
 
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)

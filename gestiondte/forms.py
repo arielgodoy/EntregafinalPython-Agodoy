@@ -101,7 +101,7 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['django_alias'].choices = [
+        django_alias_choices = [
             ('', 'Seleccione una conexión del sistema'),
             *[
                 (
@@ -111,6 +111,8 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
                 for item in get_system_database_catalog()
             ],
         ]
+        self.fields['django_alias'].choices = django_alias_choices
+        self.fields['django_alias'].widget.choices = django_alias_choices
         self.fields['django_alias'].required = False
         self.fields['mysql_connection'].queryset = get_active_mysql_connection_catalog()
         self.fields['mysql_connection'].required = False

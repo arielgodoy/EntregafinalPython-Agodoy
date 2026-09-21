@@ -48,7 +48,10 @@ class AccessUtilityTests(TestCase):
         self.gestion_dte_vistas = [
             vista
             for vista in self.sidebar_vistas.values()
-            if vista.nombre.startswith("Gestión DTE -")
+            if vista.nombre in {
+                SIDEBAR_VIEW_NAMES[item_key]
+                for item_key in SIDEBAR_GROUPS["gestion_dte"]
+            }
         ]
         self.global_vista = Vista.objects.filter(nombre=SIDEBAR_VIEW_NAMES["account_email"]).first()
         self.actor_target_permission = Permiso.objects.create(

@@ -8,6 +8,9 @@ from common.database_classification import DatabaseClassification, get_database_
 from ..models import GestionDTEConnectionRole
 
 
+REQUIRED_CONNECTION_ROLES = tuple(role for role, _label in GestionDTEConnectionRole.ROLE_CHOICES)
+
+
 class GestionDTEConnectionError(RuntimeError):
     """Base exception for invalid or unavailable Gestión DTE connections."""
 
@@ -60,6 +63,74 @@ def get_active_mysql_connection_catalog():
         .select_related('empresa')
         .order_by('empresa__codigo', 'nombre_logico', 'pk')
     )
+
+
+def get_gestiondte_connection_status() -> dict[str, object]:
+    """Return the global role configuration status without opening connections."""
+    system_catalog = {item['alias']: item for item in get_system_database_catalog()}
+    configured_roles = {
+        item.role: item
+        for item in GestionDTEConnectionRole.objects.select_related(
+            'mysql_connection', 'mysql_connection__empresa'
+        ).filter(role__in=REQUIRED_CONNECTION_ROLES)
+    }
+    roles = []
+    missing_roles = []
+    invalid_roles = []
+
+    for role, label in GestionDTEConnectionRole.ROLE_CHOICES:
+        config = configured_roles.get(role)
+        item = {
+            'role': role,
+            'label': label,
+            'status': 'missing',
+            'source_type': None,
+            'metadata': {},
+        }
+        if config is None:
+            missing_roles.append(role)
+        elif config.source_type == 'DJANGO':
+            alias = (config.django_alias or '').strip()
+            metadata = system_catalog.get(alias)
+            if not alias or metadata is None:
+                item['status'] = 'invalid'
+                item['source_type'] = 'DJANGO'
+                item['metadata'] = {'alias': alias or None}
+                invalid_roles.append(role)
+            else:
+                item['status'] = 'configured'
+                item['source_type'] = 'DJANGO'
+                item['metadata'] = {
+                    'alias': metadata['alias'],
+                    'vendor': metadata['vendor'],
+                    'classification': metadata['classification'],
+                }
+        elif config.source_type == 'MYSQL_CONFIG':
+            connection = config.mysql_connection
+            if connection is None or not connection.is_active:
+                item['status'] = 'invalid'
+                item['source_type'] = 'MYSQL_CONFIG'
+                invalid_roles.append(role)
+            else:
+                item['status'] = 'configured'
+                item['source_type'] = 'MYSQL_CONFIG'
+                item['metadata'] = {
+                    'empresa': f'{connection.empresa.codigo} - {connection.empresa.descripcion or "Sin descripción"}',
+                    'nombre_logico': connection.nombre_logico,
+                    'is_active': connection.is_active,
+                }
+        else:
+            item['status'] = 'invalid'
+            item['source_type'] = config.source_type
+            invalid_roles.append(role)
+        roles.append(item)
+
+    return {
+        'configured': not missing_roles and not invalid_roles,
+        'roles': roles,
+        'missing_roles': missing_roles,
+        'invalid_roles': invalid_roles,
+    }
 
 
 def get_gestiondte_connection(role: str) -> dict[str, object]:

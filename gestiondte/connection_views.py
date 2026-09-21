@@ -11,11 +11,13 @@ from access_control.views import VerificarPermisoMixin
 
 from .forms import GestionDTEConnectionRoleForm
 from .models import GestionDTEConnectionRole
+from .services.connection_roles import get_gestiondte_connection_status
 
 
 class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = 'gestiondte/connection_roles.html'
-    vista_nombre = 'Configuración - Conexiones Gestión DTE'
+    vista_nombre = 'Gestion DTE - Conexiones SQL'
+    permiso_requerido = 'ingresar'
     verificar_vicmeas_en_dispatch = False
 
     def _role_instances(self):
@@ -33,6 +35,7 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
     def _context(self, forms):
         return {
             'role_forms': forms,
+            'connection_status': get_gestiondte_connection_status(),
             'vista_nombre': self.vista_nombre,
         }
 
@@ -64,5 +67,5 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
         with transaction.atomic():
             for item in forms:
                 item['form'].save()
-        messages.success(request, 'La configuración de conexiones Gestión DTE fue guardada.')
+        messages.success(request, 'La configuración de conexiones SQL fue guardada.')
         return redirect(reverse('gestion_dte:connection_roles'))

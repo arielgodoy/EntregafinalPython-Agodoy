@@ -197,7 +197,7 @@ SIDEBAR_VIEW_NAMES = {
     "settings_company": "Configuración - Configuracion de Empresa",
     "settings_email": "Configuración - Cuentas de Correo",
     "settings_mysql": "Configuración - Conexiones MySQL",
-    "settings_gestion_dte_connections": "Configuración - Conexiones Gestión DTE",
+    "settings_gestion_dte_connections": "Gestion DTE - Conexiones SQL",
     "database_manager_dashboard": "Gestión de Bases - Dashboard",
     "database_manager_compare": "Gestión de Bases - Comparar",
     "database_manager_preflight": "Gestión de Bases - Preflight",
@@ -209,7 +209,7 @@ SIDEBAR_DEFINITION_KEYS = {
 SIDEBAR_GROUPS = {
     "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
     "master_files": ("suppliers_master",),
-    "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados"),
+    "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados", "settings_gestion_dte_connections"),
     "evaluaciones": ("evaluaciones_import",),
     "projects": ("projects_list", "projects_create", "projects_clients", "projects_create_client", "projects_professionals", "projects_create_professional"),
     "operational": ("operational_dashboard", "operational_alerts"),
@@ -220,7 +220,7 @@ SIDEBAR_GROUPS = {
     "audit": ("audit_library", "audit_gestion_dte"),
     "access": tuple(_ACCESS_VIEW_NAMES),
     "apis": ("api_home",),
-    "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql", "settings_gestion_dte_connections"),
+    "settings": ("settings_system", "settings_company", "settings_email", "settings_mysql"),
     "database_manager": (
         "database_manager_dashboard",
         "database_manager_compare",
