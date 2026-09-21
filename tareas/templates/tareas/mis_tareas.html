@@ -87,7 +87,15 @@
                                         <td>{{ hito.cumplimiento }}%</td>
                                         <td>{{ hito.peso }}</td>
                                         <td>{% if hito.completado %}<span data-key="tareas.milestones.completed">Completado</span>{% else %}<span data-key="tareas.milestones.pending">Pendiente</span>{% endif %}</td>
-                                        <td><a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}" class="btn btn-sm btn-outline-primary">{% if hito.completado %}<span data-key="tareas.personal.actions.view_completion">Ver cumplimiento</span>{% else %}<span data-key="tareas.personal.actions.manage_milestone">Gestionar Hito</span>{% endif %}</a></td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}" class="btn btn-sm btn-outline-primary">{% if hito.completado %}<span data-key="tareas.personal.actions.view_completion">Ver cumplimiento</span>{% else %}<span data-key="tareas.personal.actions.manage_milestone">Gestionar Hito</span>{% endif %}</a>
+                                                {% if not hito.completado %}
+                                                <a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}?hito_id={{ hito.pk }}&amp;accion=cumplimiento_hito" class="btn btn-sm btn-primary"><span data-key="tareas.actions.update_progress">Actualizar avance</span></a>
+                                                <a href="{% url 'tareas:hitos_tarea' hito.tarea.pk %}?hito_id={{ hito.pk }}&amp;accion=completar_hito" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></a>
+                                                {% endif %}
+                                            </div>
+                                        </td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>

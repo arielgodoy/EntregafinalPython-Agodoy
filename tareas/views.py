@@ -699,7 +699,24 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
 
     def get(self, request, pk):
         tarea = self.get_tarea(pk)
-        return render(request, "tareas/tarea_hitos.html", self.get_context(tarea))
+        modal_context = {}
+        accion = request.GET.get("accion")
+        hito_id = request.GET.get("hito_id")
+        if accion in {"cumplimiento_hito", "completar_hito"} and hito_id:
+            try:
+                hito = tarea.hitos.get(pk=hito_id)
+            except (Hito.DoesNotExist, ValueError):
+                hito = None
+            if hito is not None:
+                modal_context = {
+                    "modal_abierto_hito_id": hito.pk,
+                    "modal_abierto_accion": accion,
+                }
+        return render(
+            request,
+            "tareas/tarea_hitos.html",
+            self.get_context(tarea, **modal_context),
+        )
 
     def post(self, request, pk):
         tarea = self.get_tarea(pk)

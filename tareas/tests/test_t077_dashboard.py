@@ -18,6 +18,7 @@ class T077DashboardTests(TestCase):
         cls.usuario = create_user("t077_usuario")
         cls.otro_usuario = create_user("t077_otro")
         assign_permission(cls.usuario, cls.empresa, "Tareas - Dashboard personal", ingresar=True)
+        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True)
         assign_permission(cls.otro_usuario, cls.empresa, "Tareas - Dashboard personal", ingresar=True)
         assign_permission(cls.usuario, cls.otra_empresa, "Tareas - Dashboard personal", ingresar=True)
 
@@ -130,7 +131,23 @@ class T077DashboardTests(TestCase):
         self.assertContains(response, reverse("tareas:detalle_tarea", args=[self.tarea_critica.pk]))
         self.assertContains(response, reverse("tareas:hitos_tarea", args=[self.tarea_urgente.pk]))
         self.assertContains(response, "Gestionar Hito")
+        self.assertContains(
+            response,
+            f"?hito_id={self.hito_pendiente.pk}&amp;accion=cumplimiento_hito",
+        )
+        self.assertContains(
+            response,
+            f"?hito_id={self.hito_pendiente.pk}&amp;accion=completar_hito",
+        )
         self.assertContains(response, "Ver cumplimiento")
+        self.assertNotContains(
+            response,
+            f"?hito_id={self.hito_completado.pk}&amp;accion=cumplimiento_hito",
+        )
+        self.assertNotContains(
+            response,
+            f"?hito_id={self.hito_completado.pk}&amp;accion=completar_hito",
+        )
         self.assertNotContains(response, "Reasignar")
         self.assertNotContains(response, "Editar Hito")
         self.assertNotIn("clasificacion", content.lower())
@@ -151,6 +168,29 @@ class T077DashboardTests(TestCase):
             response,
             '<span data-key="tareas.personal.title">Mis tareas y hitos</span>',
         )
+
+    def test_dashboard_action_links_open_the_canonical_milestone_modals(self):
+        base_url = reverse("tareas:hitos_tarea", args=[self.tarea_urgente.pk])
+
+        progress_response = self.client.get(
+            base_url,
+            {"hito_id": self.hito_pendiente.pk, "accion": "cumplimiento_hito"},
+        )
+        self.assertContains(
+            progress_response,
+            f'id="cumplimientoHitoModal-{self.hito_pendiente.pk}"',
+        )
+        self.assertContains(progress_response, 'style="display: block;"')
+
+        completion_response = self.client.get(
+            base_url,
+            {"hito_id": self.hito_pendiente.pk, "accion": "completar_hito"},
+        )
+        self.assertContains(
+            completion_response,
+            f'id="completarHitoModal-{self.hito_pendiente.pk}"',
+        )
+        self.assertContains(completion_response, 'style="display: block;"')
 
     def test_dashboard_vacio_muestra_mensajes(self):
         Hito.objects.filter(responsable=self.usuario).delete()

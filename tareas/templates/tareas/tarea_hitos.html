@@ -87,6 +87,7 @@
                                             <div class="d-flex flex-wrap gap-1">
                                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.edit">Editar</span></button>
                                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reasignarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.reassign">Reasignar</span></button>
+                                                {% if not hito.anulado %}<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#cumplimientoHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.update_progress">Actualizar avance</span></button>{% endif %}
                                                 {% if hito.puede_completar %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#completarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.complete_milestone">Completar Hito</span></button>{% endif %}
                                                 {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
                                                 <button type="submit" form="eliminar-{{ hito.pk }}" class="btn btn-sm btn-outline-danger"><span data-key="tareas.actions.delete">Eliminar</span></button>
@@ -145,7 +146,7 @@
                 </div></div>
             </div>
             {% endif %}
-            {% if hito.puede_actualizar and not hito.anulado and not hito.puede_gestionar %}
+            {% if hito.puede_actualizar and not hito.anulado and not hito.completado %}
             <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %} show d-block{% endif %}" id="cumplimientoHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="cumplimientoHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'cumplimiento_hito' %} style="display: block;"{% endif %}>
                 <div class="modal-dialog"><div class="modal-content">
                     <form method="post">
