@@ -339,8 +339,10 @@ LOGGING = {
 
 # ... other settings ...
 
+CLIENTE_SISTEMA = os.getenv('CLIENTE_SISTEMA', 'eltit_')
+
 CONFIGURACIONES = {
-    'CLIENTE_SISTEMA': 'eltit_',  # Example value
+    'CLIENTE_SISTEMA': CLIENTE_SISTEMA,
     'APLICACION': 'My Application',  # Example value
     # Add more configurations as needed
 }
