@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS `gestiondte_certificadosii` (
     `valido_hasta` DATETIME(6) NULL,
     `created_at` DATETIME(6) NOT NULL,
     `updated_at` DATETIME(6) NOT NULL,
+    `created_by_id` BIGINT NULL,
+    `created_by_username` VARCHAR(150) NULL,
+    `updated_by_id` BIGINT NULL,
+    `updated_by_username` VARCHAR(150) NULL,
     PRIMARY KEY (`id`),
-    KEY `gestiondte_cert_empresa_idx` (`empresa_codigo`)
+    KEY `gestiondte_cert_empresa_idx` (`empresa_codigo`),
+    KEY `gestiondte_cert_created_by_idx` (`created_by_id`),
+    KEY `gestiondte_cert_updated_by_idx` (`updated_by_id`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

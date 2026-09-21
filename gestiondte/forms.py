@@ -52,7 +52,9 @@ class CertificadoUploadForm(forms.ModelForm):
             instance.set_password(pwd)
         if user and not instance.pk:
             instance.created_by = user
+            instance.created_by_username = user.username
         instance.updated_by = user
+        instance.updated_by_username = user.username if user else None
         if commit:
             instance.save()
         return instance

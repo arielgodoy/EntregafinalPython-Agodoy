@@ -1337,7 +1337,9 @@ def certificados_cargar(request, codigoempresa=None):
                     instance = form.save(commit=False)
                     if request.user and not instance.pk:
                         instance.created_by = request.user
+                        instance.created_by_username = request.user.username
                     instance.updated_by = request.user
+                    instance.updated_by_username = request.user.username
                     instance.titular = cn
                     instance.emisor_certificado = issuer
                     instance.numero_serie = serial
@@ -1387,6 +1389,7 @@ def certificados_toggle_active(request, pk):
     before = {'activo': cert.activo}
     cert.activo = not cert.activo
     cert.updated_by = request.user
+    cert.updated_by_username = request.user.username
     cert.save()
     audit_log(
         request,

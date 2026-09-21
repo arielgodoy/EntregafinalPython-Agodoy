@@ -102,6 +102,8 @@ class CertificadoSII(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='certificados_creados')
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='certificados_actualizados')
+    created_by_username = models.CharField(max_length=150, null=True, blank=True)
+    updated_by_username = models.CharField(max_length=150, null=True, blank=True)
 
     class Meta:
         verbose_name = 'Certificado PFX'
