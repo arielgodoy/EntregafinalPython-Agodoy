@@ -9,10 +9,12 @@ from django.urls import reverse
 from access_control.models import Empresa, Permiso, Vista
 from auditoria.models import AuditoriaGestionDTEEvent, UserPresence
 from gestiondte.models import CertificadoSII
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class GestionDTESemanticAuditTests(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user = User.objects.create_user(username='semantic-auditor', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa test')
         self.vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Certificados PFX-DTE')

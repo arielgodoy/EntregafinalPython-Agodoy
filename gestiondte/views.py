@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from io import BytesIO
 from django.db import transaction
 from django.db.models import Avg, Count, Exists, Max, OuterRef, Sum
@@ -26,6 +26,7 @@ from .models import (
     LecturaAutomaticaConfig,
     LecturaAutomaticaEjecucion,
 )
+from .repositories.certificados import CertificadoSIIRepository
 from access_control.models import Empresa
 from access_control.models import Permiso, Vista
 from .forms import CertificadoUploadForm
@@ -1016,9 +1017,13 @@ def sincronizar_cesiones_rpetc(request):
         context['sync_error'] = 'Ya existe una sincronización en progreso para ese período.'
         return render(request, 'gestiondte/cesiones.html', context)
 
-    certificado = CertificadoSII.objects.filter(
-        empresa_codigo=empresa_activa.codigo, activo=True,
-    ).first()
+    certificado = next(
+        (
+            item for item in CertificadoSIIRepository().list_by_empresa(empresa_activa.codigo)
+            if item.activo
+        ),
+        None,
+    )
     if not certificado:
         context['sync_error'] = 'No existe un certificado SII activo para la empresa activa.'
         return render(request, 'gestiondte/cesiones.html', context)
@@ -1209,9 +1214,9 @@ def dashboard_resumen(request):
 def certificados_list(request):
     empresa_id = request.session.get('empresa_id')
     active_empresa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
-    certificados = CertificadoSII.objects.filter(
-        empresa_codigo=active_empresa.codigo,
-    ) if active_empresa else CertificadoSII.objects.none()
+    certificados = CertificadoSIIRepository().list_by_empresa(
+        active_empresa.codigo
+    ) if active_empresa else []
     # gather empresa info for codes present
     codigos = set(cert.empresa_codigo for cert in certificados)
     empresas_certificados = {c: get_maestroempresa_by_codigo(c) for c in codigos}
@@ -1243,10 +1248,13 @@ def certificados_eliminar(request, pk):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido.'}, status=405)
 
-    certificado = get_object_or_404(CertificadoSII, pk=pk)
     empresa_id = request.session.get('empresa_id')
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
-    if not empresa_activa or certificado.empresa_codigo != empresa_activa.codigo:
+    if not empresa_activa:
+        return JsonResponse({'success': False, 'error': 'No hay empresa activa.'}, status=403)
+    repository = CertificadoSIIRepository()
+    certificado = repository.get_by_pk_and_empresa(pk, empresa_activa.codigo)
+    if certificado is None:
         return JsonResponse({'success': False, 'error': 'El certificado no pertenece a la empresa activa.'}, status=403)
 
     before = {
@@ -1261,8 +1269,7 @@ def certificados_eliminar(request, pk):
     }
     archivo = certificado.archivo
     try:
-        with transaction.atomic():
-            certificado.delete()
+        repository.delete(pk, empresa_activa.codigo)
         if archivo and archivo.name:
             archivo.delete(save=False)
         audit_log(
@@ -1287,8 +1294,14 @@ def certificados_eliminar(request, pk):
 @login_required
 @verificar_permiso("Gestión DTE - Certificados PFX-DTE", "crear")
 def certificados_cargar(request, codigoempresa=None):
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa:
+        return render(request, 'gestiondte/certificados_cargar.html', {'form': CertificadoUploadForm(), 'codigoempresa': codigoempresa})
     if request.method == 'POST':
-        form = CertificadoUploadForm(request.POST, request.FILES)
+        data = request.POST.copy()
+        data['empresa_codigo'] = empresa_activa.codigo
+        form = CertificadoUploadForm(data, request.FILES)
         if form.is_valid():
             # Validate PKCS#12 before saving file
             uploaded = request.FILES.get('archivo')
@@ -1346,8 +1359,11 @@ def certificados_cargar(request, codigoempresa=None):
                     instance.rut_titular = rut
                     instance.valido_desde = valido_desde
                     instance.valido_hasta = valido_hasta
+                    uploaded.seek(0)
                     # finally save (this saves file to storage)
-                    instance.save()
+                    instance = CertificadoSIIRepository().create(
+                        instance, empresa_activa.codigo, request.user
+                    )
                     audit_log(
                         request,
                         'CREATE',
@@ -1363,13 +1379,7 @@ def certificados_cargar(request, codigoempresa=None):
                 form.add_error('archivo', f'Error al validar certificado: {e}')
     else:
         initial = {}
-        if codigoempresa:
-            initial['empresa_codigo'] = codigoempresa
-        else:
-            # preferir la empresa activa en sesión cuando exista
-            ses_codigo = request.session.get('empresa_codigo')
-            if ses_codigo:
-                initial['empresa_codigo'] = ses_codigo
+        initial['empresa_codigo'] = empresa_activa.codigo
         form = CertificadoUploadForm(initial=initial)
     return render(request, 'gestiondte/certificados_cargar.html', {'form': form, 'codigoempresa': codigoempresa})
 
@@ -1377,20 +1387,27 @@ def certificados_cargar(request, codigoempresa=None):
 @login_required
 @verificar_permiso("Gestión DTE - Certificados PFX-DTE", "ingresar")
 def certificados_detail(request, codigoempresa):
-    certificados = CertificadoSII.objects.filter(empresa_codigo=codigoempresa)
-    empresa = get_maestroempresa_by_codigo(codigoempresa)
-    return render(request, 'gestiondte/certificados_detail.html', {'certificados': certificados, 'codigoempresa': codigoempresa, 'empresa': empresa})
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa or codigoempresa != empresa_activa.codigo:
+        return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
+    certificados = CertificadoSIIRepository().list_by_empresa(empresa_activa.codigo)
+    empresa = get_maestroempresa_by_codigo(empresa_activa.codigo)
+    return render(request, 'gestiondte/certificados_detail.html', {'certificados': certificados, 'codigoempresa': empresa_activa.codigo, 'empresa': empresa})
 
 
 @login_required
 @verificar_permiso("Gestión DTE - Certificados PFX-DTE", "modificar")
 def certificados_toggle_active(request, pk):
-    cert = get_object_or_404(CertificadoSII, pk=pk)
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa:
+        return HttpResponseForbidden('No hay empresa activa.')
+    cert = CertificadoSIIRepository().get_by_pk_and_empresa(pk, empresa_activa.codigo)
+    if cert is None:
+        return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
     before = {'activo': cert.activo}
-    cert.activo = not cert.activo
-    cert.updated_by = request.user
-    cert.updated_by_username = request.user.username
-    cert.save()
+    cert = CertificadoSIIRepository().update_active(pk, empresa_activa.codigo, request.user)
     audit_log(
         request,
         'UPDATE',
@@ -1412,7 +1429,13 @@ def certificados_probar_conexion(request, pk):
     from .services.sii_auth import probar_autenticacion_sii, SiiAuthError
     from .utils.maestro import get_maestroempresa_by_codigo
 
-    cert = get_object_or_404(CertificadoSII, pk=pk)
+    empresa_id = request.session.get('empresa_id')
+    empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
+    if not empresa_activa:
+        return HttpResponseForbidden('No hay empresa activa.')
+    cert = CertificadoSIIRepository().get_by_pk_and_empresa(pk, empresa_activa.codigo)
+    if cert is None:
+        return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
     empresa = get_maestroempresa_by_codigo(cert.empresa_codigo)
 
     resultado = {

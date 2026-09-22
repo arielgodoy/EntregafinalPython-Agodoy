@@ -8,10 +8,12 @@ from django.urls import reverse
 from access_control.models import Empresa, Permiso, Vista
 from access_control.services.empresa_activa import get_user_navigable_vistas
 from gestiondte.models import CertificadoSII
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class DtePermissionGranularityTests(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user = User.objects.create_user(username="dte-granularity", password="pass")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 01")
         self.client = Client()

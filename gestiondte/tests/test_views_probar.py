@@ -8,9 +8,11 @@ from django.contrib.auth.models import User
 from access_control.models import Empresa, Permiso, Vista
 from auditoria.models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence
 from gestiondte.models import CertificadoSII
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 def _setup_user_with_permiso(modificar=True):
+    configure_serverbasedte_django()
     user = User.objects.create_user(username=f"u_probar_{modificar}", password="pass")
     empresa = Empresa.objects.create(codigo="09", descripcion="Test")
     vista, _ = Vista.objects.get_or_create(nombre="Gestión DTE - Certificados PFX-DTE")
@@ -52,6 +54,7 @@ class TestCertificadoProbarPermisos(TestCase):
 
 class TestCertificadoProbarAuditoria(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user, self.empresa = _setup_user_with_permiso(modificar=True)
         self.cert = CertificadoSII.objects.create(
             empresa_codigo=self.empresa.codigo,
@@ -64,8 +67,9 @@ class TestCertificadoProbarAuditoria(TestCase):
         session['empresa_id'] = self.empresa.id
         session.save()
 
+    @patch('gestiondte.utils.maestro.get_maestroempresa_by_codigo', return_value={'codigo': '09'})
     @patch('gestiondte.services.sii_auth.probar_autenticacion_sii')
-    def test_success_registra_execute_sin_view_ni_presence(self, probar):
+    def test_success_registra_execute_sin_view_ni_presence(self, probar, _maestro):
         probar.return_value = {
             'success': True,
             'token_obtenido': True,
@@ -91,8 +95,9 @@ class TestCertificadoProbarAuditoria(TestCase):
         self.assertEqual(AuditoriaBibliotecaEvent.objects.count(), 0)
         self.assertEqual(UserPresence.objects.get(user=self.user).path, '/gestiondte/certificados/')
 
+    @patch('gestiondte.utils.maestro.get_maestroempresa_by_codigo', return_value={'codigo': '09'})
     @patch('gestiondte.services.sii_auth.probar_autenticacion_sii')
-    def test_failure_registra_execute_failure_sin_secretos(self, probar):
+    def test_failure_registra_execute_failure_sin_secretos(self, probar, _maestro):
         from gestiondte.services.sii_auth import SiiAuthError
         probar.side_effect = SiiAuthError('password=SUPER_SECRET_TEST_VALUE', http_status=401)
 

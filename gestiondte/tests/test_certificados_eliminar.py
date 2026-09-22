@@ -7,10 +7,12 @@ from django.urls import reverse
 from access_control.models import Empresa, Permiso, Vista
 from auditoria.models import AuditoriaGestionDTEEvent
 from gestiondte.models import CertificadoSII
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class CertificadoEliminarViewTest(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user = User.objects.create_user(username='cert-delete', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa test')
         self.vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Certificados PFX-DTE')

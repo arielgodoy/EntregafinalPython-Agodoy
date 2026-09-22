@@ -17,10 +17,12 @@ from auditoria.models import AuditoriaGestionDTEEvent
 from gestiondte.views import _rpetc_request_filters
 from gestiondte.services.rpetc_contabilidad import ContabilidadLegacyError
 from settings.models import UserPreferences
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class SincronizarRPETCViewTest(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user = User.objects.create_user(username='sync-user', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa activa')
         self.otra_empresa = Empresa.objects.create(codigo='10', descripcion='Otra empresa')

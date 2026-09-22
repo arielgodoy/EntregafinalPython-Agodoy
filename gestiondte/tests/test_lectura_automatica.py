@@ -27,10 +27,12 @@ from gestiondte.services.lectura_automatica import (
 )
 from auditoria.models import AuditoriaGestionDTEEvent, UserPresence
 from access_control.models import Permiso, Vista
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class LecturaAutomaticaAuditViewTest(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.user = User.objects.create_user(username='lectura-auditor', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa')
         vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Lectura Automática de Cesiones')
@@ -128,6 +130,7 @@ class RangoLecturaAutomaticaTest(SimpleTestCase):
 
 class EmpresasElegiblesTest(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.now = timezone.now()
         self.empresa_vigente = Empresa.objects.create(codigo='09', descripcion='Vigente')
         self.empresa_vencida = Empresa.objects.create(codigo='10', descripcion='Vencida')
@@ -158,6 +161,7 @@ class EmpresasElegiblesTest(TestCase):
 
 class EjecucionLoteTest(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.empresa_a = Empresa.objects.create(codigo='09', descripcion='A')
         self.empresa_b = Empresa.objects.create(codigo='10', descripcion='B')
         expires = timezone.now() + timedelta(days=10)

@@ -16,6 +16,7 @@ from ..models import (
     LecturaAutomaticaEjecucion,
 )
 from ..utils.maestro import get_maestroempresa_by_codigo
+from ..repositories.certificados import CertificadoSIIRepository
 from .rpetc_importer import normalizar_rut
 
 logger = logging.getLogger(__name__)
@@ -99,13 +100,17 @@ def empresas_elegibles() -> list[tuple[Any, CertificadoSII]]:
     from access_control.models import Empresa
 
     ahora = timezone.now()
-    certificados = CertificadoSII.objects.filter(
-        activo=True,
-        valido_hasta__isnull=False,
-        valido_hasta__gte=ahora,
-    ).exclude(archivo="").order_by("empresa_codigo", "-valido_hasta", "-pk")
     elegibles = {}
-    for certificado in certificados:
+    repository = CertificadoSIIRepository()
+    from access_control.models import Empresa
+    certificados = []
+    for empresa in Empresa.objects.all().only("codigo"):
+        certificados.extend(
+            certificate for certificate in repository.list_by_empresa(empresa.codigo)
+            if certificate.activo and certificate.valido_hasta and certificate.valido_hasta >= ahora
+            and certificate.archivo and certificate.archivo.name
+        )
+    for certificado in sorted(certificados, key=lambda item: (item.empresa_codigo, item.valido_hasta, -item.id)):
         if certificado.empresa_codigo in elegibles or not _certificado_elegible(certificado, ahora):
             continue
         empresa = Empresa.objects.filter(codigo=certificado.empresa_codigo).first()
@@ -127,10 +132,13 @@ def sincronizar_empresa_rpetc(
     """Ejecuta una lectura DEUDOR reutilizando cliente, parser e importador."""
     maestro = maestro or get_maestroempresa_by_codigo(empresa.codigo)
     rut_empresa, dv_empresa = normalizar_rut((maestro or {}).get("rut"))
-    certificado = certificado or CertificadoSII.objects.filter(
-        empresa_codigo=empresa.codigo,
-        activo=True,
-    ).order_by("-valido_hasta", "-pk").first()
+    certificado = certificado or next(
+        (
+            item for item in CertificadoSIIRepository().list_by_empresa(empresa.codigo)
+            if item.activo
+        ),
+        None,
+    )
     if not maestro or not rut_empresa or not dv_empresa:
         raise LecturaAutomaticaError("No fue posible resolver el RUT de la empresa.")
     if not certificado or not certificado.activo or not certificado.archivo or not certificado.archivo.name:

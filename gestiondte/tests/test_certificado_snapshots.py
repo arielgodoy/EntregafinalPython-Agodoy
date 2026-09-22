@@ -8,10 +8,12 @@ from django.urls import reverse
 from access_control.models import Empresa, Permiso, Vista
 from gestiondte.forms import CertificadoUploadForm
 from gestiondte.models import CertificadoSII
+from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
 class CertificadoSiiSnapshotTests(TestCase):
     def setUp(self):
+        configure_serverbasedte_django()
         self.creator = User.objects.create_user(username='creator-user', password='pass')
         self.editor = User.objects.create_user(username='editor-user', password='pass')
         self.empresa = Empresa.objects.create(codigo='01', descripcion='Empresa prueba')
