@@ -39,7 +39,7 @@ Resultado esperado: todos los tests de `tareas/tests/` pasan; `check` sin errore
 - `AUTOMATED_VALIDATED`: suite `tareas` y gates focalizados ejecutados con resultado verde.
 - `AUTOMATED_I18N_GATE=PASS`: `tareas.tests.test_i18n` ejecutado; las claves usadas por
    código y templates de `tareas` están presentes y son simétricas en ambos catálogos.
-- `MANUAL_VALIDATION_PENDING`: queda pendiente la comprobación E1-E13 en navegador,
+- `MANUAL_VALIDATION_PENDING`: queda pendiente la comprobación E1-E14 en navegador,
    incluida la alternancia ES → EN → ES. La validación automática no sustituye esa revisión.
 - `MANUAL_ES_EN_REVIEW=PENDING`: la revisión visual manual de textos, enums, mensajes y
    navegación en ambos idiomas no está cerrada documentalmente.
@@ -168,7 +168,45 @@ Estado E13: EJECUTADO/VALIDADO mediante la regresión integrada de KPI,
 dashboards, T060, dashboard personal y metadata, manteniendo Local/Proveedor
 fuera de las dimensiones de drill-down.
 
-La validación anterior es automatizada. La verificación manual en navegador de E1-E13,
+### E14. Comentarios de Tarea (Phase 8; pendiente de implementación)
+
+Este escenario es contractual y todavía no se declara ejecutado. Cuando Phase 8 esté
+implementada, verificar:
+
+- La tarjeta aparece en el detalle de Tarea para usuarios autorizados y vinculados; un
+   usuario desvinculado pierde acceso derivado inmediatamente. Creador/responsable sin
+   vínculo no acceden; VICMEAS no crea permisos especiales.
+- Solo estados publicados operativos (`ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`)
+   admiten mutaciones. `CERRADA`, `BORRADOR` y anulada son lectura; reactivar un estado
+   operativo permite comentar otra vez y conserva cursor/versiones.
+- Crear, editar, ocultar y restaurar exige los permisos existentes; S oculta/restaura y
+   requiere motivo no vacío. El historial completo solo lo ven autor/S.
+- Texto y/o adjuntos son válidos; el sexto adjunto se rechaza. Reutilizar `DocumentoTarea`
+   de la misma Tarea, permitir captura móvil y comprobar que quitar el vínculo no elimina
+   el documento ni convierte el adjunto en evidencia formal.
+- La bitácora es lineal, sin filtros, buscador, threads ni aplicación/chat separados; la
+   carga inicial y cada página son de 20. Abrir la Tarea no marca Comentarios leídos.
+- Al expandir/cargar, solo los próximos 20 Comentarios cronológicos contiguos avanzan el
+   cursor; navegar a una página histórica/arbitraria no lo mueve ni salta pendientes. Sin
+   pendientes, el card muestra los 20 más recientes. Verificar contador
+   `1..9`/`9+`, foco en primer pendiente, propios ya leídos, ocultos pendientes conservados
+   hasta cargar su tombstone y edición/ocultar/restaurar sin incrementar el contador.
+- El cursor se guarda en la fila única `TareaLectura` usuario/Tarea; verificar alta tardía
+   con cero pendientes históricos y que los Comentarios de intervalos `is_active=False` no
+   se acumulen. No crear filas de lectura por Comentario ni recibos individuales.
+- Crear/editar/ocultar/restaurar notifica a participantes activos vinculados, excluye al
+   actor y deduplica; solo crear incrementa no leídos. `CRITICA` conserva email automático;
+   no se duplica `documento_agregado` por adjunto inline.
+- Comprobar que Comentarios no reemplaza motivos/justificaciones formales y que cada
+   escritura revalida en backend Empresa, vínculo, VICMEAS y estado justo antes de guardar.
+- Revisar UI y mensajes en ES/EN y ejecutar el gate i18n antes de declarar la superficie
+   completa.
+
+Estado E14: CONTRACT_READY / AUTOMATED_VALIDATION_PENDING / MANUAL_VALIDATION_PENDING.
+La ventana temporal debe cubrirse también con prueba focalizada, sin esperar una hora en
+la suite.
+
+La validación anterior es automatizada. La verificación manual en navegador de E1-E14,
 incluida la revisión ES/EN, permanece `MANUAL_VALIDATION_PENDING`.
 
 ## Límites y bloqueos

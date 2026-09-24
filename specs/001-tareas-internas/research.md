@@ -120,6 +120,14 @@ proveedores Django distintos vigentes sin sumar rondas.
 - **Rationale**: FR-K04 y reglas de autocontención.
 - **Alternatives considered**: subsistemas paralelos o editar `static/js/app.js`; rechazadas.
 
+### D13. Comentarios de Tarea
+
+- **Decision**: Comentarios permanece dentro de `tareas`. El modelo actual de `TareaLectura` (solo `leido` y `fecha_lectura`, único por Tarea/usuario) NO satisface lectura parcial, contador ni primer pendiente. Se reutiliza su fila y se amplía con cursor por Comentario; las pausas de inactividad son intervalos por lector/Tarea, no filas por Comentario. Carga cronológica en bloques de 20; ocultos pendientes conservan tombstone neutro. Adjuntos usan relaciones históricas a `DocumentoTarea`, sin copia física.
+- **Rationale**: `TareaLectura` y `mark_task_read` actuales solo expresan leído/no leído general de Tarea. El diseño preserva esa semántica y evita marcar al abrir el detalle. `DocumentoTarea` se protege de borrado normal mediante `DocumentoHistorial.PROTECT`; `update_document` puede mutar archivo/URL y solo registra acción/usuario/fecha, pero la FK histórica conserva la identidad del `DocumentoTarea`. No se requieren cambios externos ni subsistema de mensajería.
+- **Authorization**: `Tareas` + `ingresar` para leer; `modificar` para crear/editar/vincular/desvincular; `supervisor` (S de VICMEAS) para ocultar/restaurar. Todo acceso requiere vínculo vigente, usuario activo y Empresa activa; creador/responsable no tienen bypass y no se crean permisos nuevos.
+- **Notifications**: creación/edición/ocultación/restauración reutilizan T053/T054; notifican participantes actuales y activos, excluyen actor y deduplican. En `CRITICA` se mantienen in-app y email automático existentes. Solo creación incrementa no leídos; lectura y las otras mutaciones no lo hacen. Un adjunto no duplica el evento documental.
+- **Alternatives considered**: nueva app, almacenamiento de archivo duplicado, lectura por fila para cada Comentario, permisos/roles nuevos y chat independiente; rechazados o innecesarios frente al cursor y relaciones existentes.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.

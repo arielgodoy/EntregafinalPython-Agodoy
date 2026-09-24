@@ -362,7 +362,7 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 
 ## K. Notificaciones y Email
 
-- **FR-K01**: Notificación interna por: asignación, lectura, aceptación/rechazo (cuando aplique), comentarios, documentos, cambio de responsable, vencimientos, aprobaciones, rechazo de cierre, cierre, anulación, reactivación, cambios clave.
+- **FR-K01**: Notificación interna por: asignación, aceptación/rechazo (cuando aplique), creación/edición/ocultación/restauración de Comentarios, documentos, cambio de responsable, vencimientos, aprobaciones, rechazo de cierre, cierre, anulación, reactivación y cambios clave. Leer la Tarea o Comentarios no genera notificación.
 - **FR-K02**: Las tareas críticas MUST notificar por sistema Y por email.
 - **FR-K03**: Las notificaciones MUST soportar leídas/no leídas.
 - **FR-K04**: MUST reutilizar la infraestructura existente (`notificaciones`, email de `acounts`); MUST NOT crear un subsistema paralelo.
@@ -373,15 +373,19 @@ Para T054, las notificaciones in-app deben usar el adaptador local
 `purpose="notifications"`; no se debe usar el SMTP personal del actor ni
 interpretar `email_enabled` como opt-in u opt-out de este canal.
 
-### Contrato funcional T054 (`DEFERRED_BY_CONTRACT`)
+### Contrato funcional T054 (contrato cerrado; implementación pendiente)
 
 - Asignación o reasignación: notificar al nuevo responsable y a los participantes
 	afectados cuando el flujo real los incluya; el actor no se duplica como destinatario.
-- Lectura: solo registra `TareaLectura`; no genera notificación in-app ni email.
-- Comentarios: no existe todavía modelo, servicio ni UI funcional de comentarios en
-	`tareas`; el evento de notificación por comentario queda diferido hasta que exista
-		esa feature. Esta ausencia bloquea la implementación completa de T054 por contrato;
-	T054 queda `DEFERRED_BY_CONTRACT` y no debe crear la feature de comentarios.
+- Lectura general conserva `TareaLectura`; reconocer Comentarios solo mueve su cursor
+	`comentario_leido_hasta`. Ninguna lectura genera notificación in-app ni email.
+- Comentario creado, editado, ocultado o restaurado: emitir el evento correspondiente y
+	notificar a los usuarios activos con vínculo `TareaParticipante` vigente, excluyendo al
+	actor y deduplicando por usuario. Creador y responsable participan solo si tienen ese
+	vínculo vigente. Desvincular corta inmediatamente acceso y notificaciones futuras. Cada
+	mutación requiere su propio evento de negocio; editar/ocultar/restaurar no incrementa el
+	contador de comentarios nuevos. Tareas `CRITICA` usan los canales in-app y email
+	automático existentes. T054 no implementa ni crea el dominio de Comentarios.
 - Documento agregado: notificar al creador (`Tarea.creada_por`), responsable y
 	participantes, excluyendo al actor y duplicados.
 - Cambio relevante: se limita a responsable, `fecha_tope`, prioridad/clasificación,
@@ -752,6 +756,23 @@ lectura ni migración masiva de datos.
 
 ---
 
+## T. Comentarios de Tarea
+
+- **FR-T01**: Una Tarea puede tener cero o más Comentarios; cada Comentario pertenece a exactamente una Tarea, registra autor autenticado, fecha de creación y Empresa derivada de la Tarea. Es una entrada manual, nunca un evento automático del sistema. Debe contener texto no vacío y/o adjuntos. Un Comentario no sustituye una justificación formal exigida por una transición, cierre, anulación u otra operación, ni constituye evidencia formal.
+- **FR-T02**: La superficie usa únicamente `vista_nombre="Tareas"`: `ingresar` para leer, `modificar` para crear/editar y vincular/desvincular, y `supervisor` (S de VICMEAS) para ocultar/restaurar. No se crean Vistas, permisos ni roles especiales. Todo acceso derivado de participación requiere usuario activo, Empresa activa coincidente y vínculo `TareaParticipante` vigente; creador y responsable solo participan si tienen ese vínculo. S no elude empresa ni vínculo. Desvincular revoca inmediatamente el acceso derivado, sin borrar comentarios ni historial. El historial de versiones completo solo es visible al autor o a un usuario autorizado con S, siempre sujeto al acceso vigente a la Tarea.
+- **FR-T03**: La bitácora es lineal, cronológica y estable por `(created_at, pk)`, con páginas fijas de 20 Comentarios que permiten recorrer todo el historial. Las páginas históricas anteriores al cursor no lo mueven. No incluye filtros, buscador propio ni exportación de conversaciones.
+- **FR-T04**: Cada Comentario admite como máximo cinco adjuntos. Se reutilizan documentos existentes de `DocumentoTarea` y sus validaciones/almacenamiento; la UI también puede crear un `DocumentoTarea` desde archivo o captura de cámara móvil (`capture="environment"`) usando las mismas validaciones. Todo documento debe pertenecer a la misma Tarea. El adjunto de Comentario no es `EvidenciaCierre` ni `HitoEvidencia` y no satisface requisitos de evidencia formal. Retirar el vínculo del Comentario no elimina físicamente `DocumentoTarea`; no se duplican archivos.
+- **FR-T05**: Solo el autor puede editar texto y conjunto de adjuntos durante la primera hora desde el `created_at` original; las ediciones no reinician el plazo. Cada creación/edición conserva una versión inmutable del texto y de las referencias a `DocumentoTarea`, con actor y fecha/hora. Un Comentario oculto no es editable.
+- **FR-T06**: Ocultar/restaurar es lógico, no físico, y requiere S (`supervisor`) y un motivo obligatorio no vacío tras trim en cada operación. Se conserva actor, fecha/hora y motivo en el historial. El contenido y las versiones completas son visibles solo al autor o S; los demás usuarios vinculados reciben un tombstone neutro, sin contenido, adjuntos, actor, motivo ni versiones, que conserva posición cronológica y estado pendiente hasta cargarse. Ocultar por sí solo no borra ni marca leído el Comentario.
+- **FR-T07**: `TareaLectura` conserva su lectura general de Tarea y se amplía con un cursor de Comentarios por usuario/Tarea (`comentario_leido_hasta`), sin crear una fila por Comentario. El orden del cursor es `(created_at, pk)`. El contador consulta Comentarios posteriores al cursor, excluye los propios del lector y los creados durante períodos de inactividad registrados; incluye ocultos pendientes. La burbuja muestra `1..9` o `9+` y el card se posiciona en el primer Comentario pendiente. Abrir la Tarea no mueve el cursor. Si hay pendientes, la carga inicial entrega los próximos 20 desde el cursor; si no, muestra los 20 más recientes. Se puede navegar hacia páginas históricas anteriores sin mover el cursor. Solo se reconoce por POST la siguiente página contigua cargada después del cursor, nunca una página histórica/arbitraria, y el avance llega únicamente a su último registro. Un Comentario propio nace leído. Al vincular o volver a vincular a un participante, el cursor se inicializa al Comentario más reciente, sin pendientes anteriores. Se asegura una sola fila `TareaLectura` por lector/Tarea al vincular o en el primer evento de Comentario, no una por Comentario. Cambios de `User.is_active` se observan desde `tareas` y registran intervalos de inactividad por lector/Tarea; Comentarios dentro de esos intervalos no se acumulan como pendientes. Editar, ocultar y restaurar no mueven el cursor ni incrementan el contador. Leer no genera notificaciones ni recibos individuales.
+- **FR-T08**: Comentarios no crea estados ni transiciones. Solo se permiten nuevas mutaciones cuando la Tarea está publicada y operativa (`ACTIVA`, `GESTION` o `PENDIENTE_APROBACION_CIERRE`) y no está anulada efectivamente; `BORRADOR`, `CERRADA` y anulada efectivamente son de solo lectura. Reactivar conserva estado, Comentarios, versiones y cursor; una Tarea que retorna a un estado operativo admite nuevos Comentarios sin reiniciar el historial, mientras una Tarea `CERRADA` sigue siendo de solo lectura. Antes de persistir cada evento crítico, el backend revalida en la operación la Empresa activa, vínculo/usuario activo, VICMEAS y el estado vigente de la Tarea; no confía en estado previo de página o cliente.
+- **FR-T09**: Crear, editar, ocultar y restaurar emite respectivamente `comentario_agregado`, `comentario_editado`, `comentario_ocultado` y `comentario_restaurado` mediante T053/T054 y la infraestructura existente. Se notifica a participantes actualmente vinculados y activos, excluyendo al actor y deduplicando; prioridad `CRITICA` usa email automático con `purpose="notifications"`. Solo crear incrementa no leídos. Un documento creado como parte de Comentario no genera un aviso adicional `documento_agregado`; los fallos de notificación no revierten la operación persistida.
+- **FR-T10**: La UI es una tarjeta integrada al detalle de Tarea, con bitácora lineal y sin aplicación, chat independiente, threads, respuestas ni mensajería en tiempo real. Textos y mensajes pasan por el gate i18n vigente.
+
+**Key Entities — T**: `Comentario`, historial/versiones de Comentario y relación de adjuntos hacia `DocumentoTarea`.
+
+---
+
 ## O. Equipos / Máquinas
 
 - **FR-O01**: El código del equipo puede ser global.
@@ -898,6 +919,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - **SC-008**: Dashboards muestran los mismos KPI en todas las dimensiones con drill-down.
 - **SC-009**: Advertencia de similitud al publicar cuando coincidencia ≥ 80%.
 - **SC-010**: Correlativo borrador `B*` se convierte a activo `A*` al publicar, sin duplicar la tarea.
+- **SC-011**: Comentarios aplican pertenencia/VICMEAS, estados mutables, motivos S, cinco adjuntos, bloques de 20, historial/versiones, cursor parcial, contador `9+`, actividad propia, altas/desvínculos e inactividad sin alterar el lifecycle ni la evidencia formal.
 
 ## Assumptions
 
@@ -951,3 +973,4 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 | Q | Reglas de Cierre | FR-Q01…Q06 | P2 | Definido |
 | R | Exclusiones Actuales | FR-R01…R06 | — | Definido |
 | S | TO-DO y Origen Canónico | FR-S01…S12 | P2 | Definido (implementación futura) |
+| T | Comentarios de Tarea | FR-T01…T10 | — | Contrato definido; implementación pendiente en Phase 8 |

@@ -155,7 +155,7 @@ description: "Task list for the Tareas Internas master feature"
 **FR coverage**: FR-K01, FR-K02, FR-K03, FR-K04, FR-L01, FR-L02, FR-L03, FR-L04, FR-L05, FR-L06, FR-L07, FR-L08, FR-L09, FR-L10, FR-L11, FR-M01, FR-M02, FR-M03, FR-M04, FR-M05, FR-M06, FR-M07, FR-N01, FR-N02, FR-N03, FR-N04, FR-N05, FR-N06, FR-N07, FR-N08, FR-N09, FR-O01, FR-O02, FR-O03, FR-O04, FR-P03, FR-P04, FR-P05.
 
 - [x] T053 [US6] Implementar adaptadores locales en `tareas/services/notifications.py` para consumir `notificaciones` y email de `acounts`, sin modificar esas apps ni crear subsistema paralelo.
-- [ ] T054 [US6] [DEFERRED_BY_CONTRACT] Integrar notificaciones de asignación, lectura, comentarios, documentos, cambios, aprobación, anulación y reactivación en los servicios de `tareas/`. La notificación por comentarios queda diferida porque no existe modelo, servicio ni UI global de comentarios de Tarea; T054 no debe crear esa feature.
+- [ ] T054 [US6] [CONTRACT_READY / IMPLEMENTATION_PENDING] Integrar mediante adaptadores existentes eventos y notificaciones de Comentario creado/editado/ocultado/restaurado para participantes vinculados activos, excluyendo actor y duplicados; `CRITICA` conserva in-app/email automático. Solo creación incrementa el cursor/no leídos; leer no notifica. Depende de T095–T101; T054 sigue sin implementar.
  - [x] T092 [US6] Crear e implementar la APPLICATION_APP transversal `organizacion`, registrarla únicamente con autorización explícita en `app_classification.py` e `INSTALLED_APPS`, definir los modelos canónicos `Local` y `Departamento` con aislamiento obligatorio por Empresa, PK interna, código único por Empresa, baja lógica, timestamps, source y constraints aprobados, crear su migración inicial y añadir tests de modelos, unicidad, Empresa y ausencia de relación Departamento→Local. No incluir sincronización ERP, CRUD, vistas, sidebar, VICMEAS, cambios en Tarea, T055 ni integración con `api` legacy.
  - [x] T093 [US6] Incorporar en `Tarea` las dimensiones organizacionales canónicas `Local` y `Departamento` provistas por `organizacion`, implementando relación opcional y exclusiva por ámbito, validación de coherencia con Empresa, migración aditiva y tests de integridad, sincronización y compatibilidad con tareas históricas, dependiendo de T092. El ámbito deberá usar `tipo_ambito` (`LOCAL` o `DEPARTAMENTO`), una FK nullable a `organizacion.Local` y una FK nullable a `organizacion.Departamento`, con validación XOR, coherencia de Empresa y sin cruce multiempresa. Las tareas históricas podrán permanecer sin ámbito y no se inventará backfill; el ámbito obligatorio para nuevas tareas deberá quedar documentado en la implementación futura si el contrato vigente lo exige. No implementar reuniones, ERP, CRUD organizacional, sidebar ni nuevas vistas VICMEAS.
  > **Dependencia de T055**: T055 depende de T092 y T093; T055 no puede implementarse completamente antes de T093 porque `ReunionTarea` debe validar la homogeneidad contra las dimensiones reales de cada `Tarea`.
@@ -202,6 +202,23 @@ excepciones justificadas y registradas.
 
 - [x] T094 Ejecutar el gate permanente de i18n sobre templates, formularios, vistas, JavaScript y catálogos de `tareas`; cubrirlo con `tareas/tests/test_i18n.py`, validar manualmente las superficies principales ES/EN y registrar las métricas de cierre sin reabrir tasks históricas.
 
+## Phase 8: Task comments [US7]
+
+**Goal**: Incorporar Comentarios dentro de Tarea, con acceso VICMEAS y vínculo vigente, adjuntos reutilizados, historial versionado, ocultación/restauración moderada por S y cursor de lectura parcial.
+
+**Independent test criteria**: Solo Tareas publicadas operativas admiten mutación; cerradas/anuladas son lectura. Se validan acceso solo vinculado/VICMEAS, motivos S, cinco adjuntos, cámara, versiones, cursor/paginación de 20, `9+`, autoría/ventana de una hora, alta tardía, inactividad, ocultos pendientes y notificaciones por cada mutación sin incrementar no leídos salvo creación.
+
+**FR coverage**: FR-T01…FR-T10, FR-K01…K04.
+
+- [ ] T095 [US7] Implementar en `tareas/models.py` `Comentario`, `ComentarioVersion`, `ComentarioAdjunto` y `ComentarioVersionDocumento` con protección de documentos; ampliar `TareaLectura` con cursor nullable por Comentario y definir `ComentarioPausaLectura` por usuario/Tarea. Empresa se deriva de Tarea; no crear lectura por Comentario ni estados nuevos. **Depende de T038**.
+- [ ] T096 [US7] Crear migración aditiva para Comentarios, versiones, asociaciones, cursor e intervalos de inactividad, con unicidad/FK/índices y sin cambiar migraciones históricas ni otras apps. **Depende de T095**.
+- [ ] T097 [US7] Hacer `TareaParticipante` el único vínculo de acceso derivado; vincular/desvincular usuarios activos de la Empresa y crear el cursor en el Comentario más reciente al alta/rehabilitación, dejando cero pendientes anteriores. Creador/responsable no tienen bypass; desvincular corta acceso de inmediato y no borra historial. **Depende de T025 y T096**.
+- [ ] T098 [US7] Implementar servicios atómicos de crear/editar texto y adjuntos, ocultar/restaurar con motivo obligatorio y validar texto y/o adjuntos, máximo cinco, misma Tarea, autor/1 hora original y Comentario no oculto. Retirar solo relaciones, nunca borrar `DocumentoTarea`; revalidar Empresa, VICMEAS, vínculo, usuario activo y estado actual inmediatamente antes de guardar. Mutar solo en estados operativos no anulados; sin reemplazar justificaciones formales. **Depende de T095–T097 y T038**.
+- [ ] T099 [US7] Implementar contador/primer pendiente y reconocimiento contiguo por cursor en `TareaLectura`: solo los próximos 20 registros cronológicos efectivamente cargados pueden avanzar el cursor; páginas históricas/arbitrarias no lo saltan, y recorrer historia anterior no cambia el cursor. Asegurar una sola fila lectora por usuario/Tarea al vincular o en el primer evento para los participantes actuales, nunca una por Comentario. Propios nacen leídos, tombstone oculto mantiene pendiente hasta cargarse y edición/ocultación/restauración no incrementan. En `tareas/`, observar transiciones guardadas de `User.is_active` y abrir/cerrar `ComentarioPausaLectura`; excluir el intervalo sin filas por Comentario ni cambios a sesiones. **Depende de T025, T096 y T098**.
+- [ ] T100 [US7] Añadir forms, vistas y rutas server-side para leer/reconocer, crear, editar, ocultar/restaurar y vincular/desvincular. Usar `Tareas` + `ingresar` para lectura, `modificar` para edición/participantes y `supervisor` (S) para ocultar/restaurar; validar Empresa activa, vínculo y estado con respuestas controladas. **Depende de T097–T099**.
+- [ ] T101 [US7] Integrar la tarjeta en el detalle existente: bitácora lineal, cámara móvil, bloques de 20, burbuja `1..9`/`9+`, foco en primer pendiente, tombstone sin datos sensibles e historial detallado solo autor/S. Sin filtros, buscador, threads, app/chat independiente; i18n ES/EN vía T094. **Depende de T100 y T094**.
+- [ ] T102 [US7] Probar todas las reglas FR-T01…FR-T10: lifecycle/reactivación, permisos/membresía y S, motivos, texto/adjuntos/cámara/evidencia formal, versiones y protección documental, cursor/páginas/`9+`/ocultos/propios, alta tardía/inactividad, eventos y no-leídos, multiempresa e i18n. **Depende de T054 y T095–T101**.
+
 ## Success criteria traceability
 
 Esta matriz define qué tareas y escenarios deberán validar cada criterio. La presencia de
@@ -219,6 +236,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 | SC-008 | T059-T063 / E13 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING; Local deferred y Proveedor ERP deferred |
 | SC-009 | T056-T057, T061 / E12 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
 | SC-010 | T014-T015, T022 / E8 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
+| SC-011 | T095-T102 / E14 | CONTRACT_READY; AUTOMATED_VALIDATION_PENDING; MANUAL_VALIDATION_PENDING |
 
 ## Functional blocks to user stories matrix
 
@@ -242,6 +260,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 | P. Seguridad, multiempresa y enlaces | US1, US3, US6 | Phase 1, Phase 3, Phase 6 |
 | Q. Reglas de cierre | US2, US3, US4, US5 | Phase 2-5; P2 limita proveedor |
 | R. Exclusiones actuales | US1, US5, US6 | Phases 1, 5, 6; constraints |
+| T. Comentarios de Tarea | US7 | Phase 8; T054 notification dependency |
 
 ## KPI dimensions boundary
 
@@ -263,6 +282,8 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 - Phase 5: depende de Phase 4; se detiene antes de identidad real de proveedor.
 - Phase 6: depende de Phase 2 y de los servicios de cierre/consulta disponibles; Local/Proveedor permanecen bloqueados.
 - Phase 7: depende de las fases implementadas y autorizadas.
+- Phase 8: depende de T025/TareaParticipante, T038/DocumentoTarea y los adaptadores T053;
+    T054 queda pendiente hasta T095–T101 y las pruebas se cierran en T102.
 
 ### Parallel opportunities
 
@@ -274,12 +295,16 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 - T044–T046 pueden paralelizarse por ronda, cotización y cierre; T047 es el checkpoint obligatorio.
 - T053–T058 pueden paralelizarse por integración; T059–T060 dependen de los contratos de lectura.
 - T064–T066 son revisiones independientes antes del cierre T067–T069.
+- T095–T101 siguen la dependencia secuencial modelo → migración → acceso/servicios → lectura
+    → endpoints → UI; T054 se integra tras ese contrato y T102 valida el conjunto.
 
 ## Blocked tasks and authorization boundaries
 
 - No hay tareas de implementación para P1 Local.
 - No hay tareas de implementación para identidad externa o integración ERP de Proveedor fuera de T091; el maestro local se aborda en T082-T090.
 - T047–T052 conservan el cierre PRE-P2 histórico; T082–T091 contienen la evolución local y separan la integración ERP futura P2.
+- T054 deja de estar diferida por contrato, pero permanece sin implementar y depende de
+    T095–T101; no se marca completa hasta integrar notificaciones y cerrar T102.
 - Cualquier modificación futura adicional en `AppDocs/app_classification.py`, `AppDocs/settings.py` o `AppDocs/urls.py` requiere una tarea separada con autorización y scope explícitos; su alta inicial ya está resuelta y no es tarea pendiente.
 - Cualquier modificación futura de otras apps, templates globales, diccionarios i18n globales o infraestructura requiere autorización expresa y detención previa.
 
@@ -291,6 +316,8 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 4. Implementar cotizaciones PRE-P2 hasta T047 y evolucionarlas mediante T082–T091 sin hacer depender Django del ERP.
 5. Implementar colaboración, similitud, enlaces y KPI con mocks y aislamiento por empresa.
 6. Ejecutar Polish y regresión completa únicamente después de implementar fases autorizadas.
+7. Después de aprobar el contrato, implementar Phase 8 y cerrar T054/T102 sin modificar
+    apps externas ni marcar validaciones manuales antes de ejecutarlas.
 
 **Suggested MVP scope**: Phase 0 + Phase 1, preservando la funcionalidad MVP existente y entregando correlativos A/B, ciclo de vida auditable y compatibilidad multiempresa/ICMEAS.
 

@@ -65,6 +65,7 @@ identifica una ruta que no debe inventarse en esta feature.
 | ACTIVE | POST | `/tareas/<pk>/reactivar/` | `reactivar_tarea` |
 | ACTIVE | GET/POST | `/tareas/<pk>/hitos/` | `hitos_tarea` |
 | ACTIVE | GET/POST | `/tareas/<pk>/documentos/` | `documentos_tarea` |
+| DEFERRED | GET/POST | `/tareas/<pk>/comentarios/...` y gestión de participantes | Contrato T095–T102; no existe todavía en `tareas/urls.py` |
 | ACTIVE | GET | `/tareas/<tarea_id>/similitud/` | `similitud_tarea` |
 | ACTIVE | POST | `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/` | `confirmar_similitud` |
 | ACTIVE | POST | `/tareas/<tarea_id>/enlaces/crear/` | `crear_enlace_tarea` |
@@ -172,6 +173,43 @@ La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal 
 | 6 | Drill-down Departamento | GET | `/tareas/dashboard/general/empresa/<empresa_id>/departamento/<departamento_id>/` | Departamento directo de la Empresa; `tipo_ambito=DEPARTAMENTO` |
 | 6 | Drill-down Usuario | GET | `/tareas/dashboard/general/empresa/<empresa_id>/usuario/<usuario_id>/` | Agrupa por `Tarea.responsable`; no duplica participantes |
 | 6 | Drill-down Tarea | GET | `/tareas/<pk>/` | Reutiliza `detalle_tarea`; muestra contexto de una Tarea |
+
+### Comentarios de Tarea — Phase 8 (contrato; rutas aún no implementadas)
+
+La tarjeta vive en el detalle existente `GET /tareas/<pk>/`. Su feed usa páginas fijas de 20,
+orden `(created_at, pk)`, cursor por `TareaLectura` y navegación histórica antes del cursor
+sin avanzar lectura; cuando no hay pendientes muestra los 20 más recientes. El reconocimiento
+POST solo acepta el final de la siguiente página contigua efectivamente cargada. Abrir el
+detalle no mueve el cursor. Requiere
+`vista_nombre="Tareas"`, `ingresar`, Empresa activa y vínculo `TareaParticipante` vigente
+con usuario activo; creador/responsable solo acceden si están vinculados. Un enlace
+`EnlaceTarea` no crea participación ni habilita acciones de Comentarios.
+
+| Estado | Método | Ruta propuesta | Nombre sugerido | Autorización VICMEAS |
+|---|---|---|---|---|
+| DEFERRED | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; página 20, navegación histórica/cursor y primer pendiente |
+| DEFERRED | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar`; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend |
+| DEFERRED | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `modificar` |
+| DEFERRED | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar`; autor y hasta 1 hora |
+| DEFERRED | POST | `/tareas/<pk>/comentarios/<comentario_id>/ocultar/` | `ocultar_comentario` | `Tareas` + `supervisor` (S); motivo obligatorio |
+| DEFERRED | POST | `/tareas/<pk>/comentarios/<comentario_id>/restaurar/` | `restaurar_comentario` | `Tareas` + `supervisor` (S); motivo obligatorio |
+| DEFERRED | POST | `/tareas/<pk>/participantes/<usuario_id>/vincular/` | `vincular_participante` | `Tareas` + `modificar` |
+| DEFERRED | POST | `/tareas/<pk>/participantes/<usuario_id>/desvincular/` | `desvincular_participante` | `Tareas` + `modificar` |
+
+Todas las mutaciones revalidan en backend, inmediatamente antes de persistir, Empresa,
+VICMEAS, vínculo activo y estado vigente. Solo estados `ACTIVA`, `GESTION` y
+`PENDIENTE_APROBACION_CIERRE` no anulados admiten cambios; `BORRADOR`, `CERRADA` y anulada
+efectivamente son de solo lectura. Restaurar una Tarea conserva lifecycle e historial.
+Tarea, Comentario y documentos deben pertenecer a la Empresa activa y misma Tarea;
+`DocumentoTarea` mantiene sus validaciones y el límite es cinco. Retirar asociación no
+borra el documento físico. Los endpoints usan POST HTML/CSRF y respuestas controladas;
+no se añade API REST ni permisos nuevos.
+
+Crear, editar, ocultar y restaurar notifican a participantes vinculados y activos, excepto
+al actor, sin duplicados; `CRITICA` conserva email automático de sistema. Solo crear
+incrementa no leídos. La carga/expansión reconoce solo los registros de la siguiente página
+contigua de 20; leer no notifica. Ocultos pendientes se entregan como tombstone neutro, sin
+contenido/historial a quienes no son autor/S. Adjuntos inline no duplican `documento_agregado`.
 
 ### Dashboard y KPI — T059
 

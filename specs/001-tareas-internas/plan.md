@@ -184,8 +184,9 @@ No se agregan fechas nuevas ni se depende solo de información derivada.
 ### Phase 5 — Colaboración, notificaciones, reuniones, similitud y enlaces
 
 - Consumir `notificaciones` y email de `acounts`; no crear subsistema paralelo.
-- Cubrir asignación, lectura, comentarios, documentos, aprobación, anulación/reactivación
-    y criticidad según los canales de la spec.
+- Integrar T054 para asignación, lectura, documentos, aprobación,
+    anulación/reactivación y criticidad según la spec. Su cierre total, incluida la
+    notificación de Comentarios, depende del dominio, servicios y UI de Phase 8.
 - Modelar reuniones de revisión, agenda, modalidad, convocatoria y comentarios.
 - Modelar origen/derivación y similitud histórica incluyendo cerradas; advertir al publicar
     desde el umbral por empresa (default 80%), registrar confirmación y mantener la tarea nueva.
@@ -201,6 +202,33 @@ No se agregan fechas nuevas ni se depende solo de información derivada.
     Tarea. Local queda deferred por P1; Proveedor podrá incorporarse desde su maestro local.
 - Añadir índices y consultas paginadas por empresa; probar consistencia por nivel.
 - Completar `data-key`, ICMEAS, seguridad de enlaces, auditoría, regresión MVP y diff check.
+
+### Phase 8 — Comentarios de Tarea (T095–T102)
+
+Esta extensión se ejecuta después de la Phase 7 de validación transversal registrada
+en `tasks.md`; no reabre ni renumera fases históricas.
+
+- Mantener Comentarios dentro de `tareas/`, relacionados 1:N con `Tarea`, sin estado ni
+    transición propia.
+- Reutilizar `TareaParticipante` como único vínculo de acceso; VICMEAS usa `Tareas`:
+    `ingresar` para lectura, `modificar` para crear/editar/vincular y `supervisor` (S)
+    para ocultar/restaurar. Creador/responsable no tienen bypass del vínculo.
+- Reutilizar `DocumentoTarea` para un máximo de cinco adjuntos por Comentario; no duplicar
+    archivos ni emitir notificación `documento_agregado` adicional por una carga inline.
+- Conservar versiones inmutables del texto y conjunto de relaciones `DocumentoTarea`, con
+    `PROTECT`; no copiar archivos. Edición del autor hasta una hora desde creación original;
+    ocultar/restaurar requiere S y motivo obligatorio. Historial detallado solo autor/S.
+- Extender la fila única existente `TareaLectura` con cursor `(created_at, pk)`; páginas
+    cronológicas de 20 avanzan solo lo cargado. Registrar períodos de inactividad por lector/
+    Tarea desde `tareas` al observar `User.is_active`, sin filas por Comentario ni cambios
+    a sesiones. Los ocultos pendientes usan tombstone neutro en la bitácora.
+- Permitir mutaciones solo en estados publicados operativos; cerrada/anulada es lectura.
+    Revalidar en backend Empresa, vínculo, VICMEAS y lifecycle justo antes de persistir.
+- Integrar T054 para crear/editar/ocultar/restaurar; solo crear incrementa no leídos. Usar
+    notificaciones existentes y email automático para prioridad `CRITICA`.
+- La tarjeta server-rendered pagina 20, ofrece cámara móvil, burbuja `1..9`/`9+` y foco
+    inicial en primer pendiente. Sin filtros, búsqueda propia, threads, app o chat separados;
+    respeta i18n y FR-T01…FR-T10.
 
 ## Migration Strategy
 
@@ -230,7 +258,8 @@ ninguna migración de otra app.
 - Dominio: A/B, estados, auditoría, cascada, restauración, fechas pendientes, mini-tareas,
     hitos, documentos, reprogramación y cierres bloqueados.
 - Integraciones: mocks para notificaciones/email y adaptadores legacy; sin credenciales ni
-    llamadas externas reales.
+    llamadas externas reales. Comentarios reutiliza mocks T053/T054 y valida que lectura no
+    notifica y que adjuntos no duplican el evento de documento.
 - KPI/similitud: fixtures por empresa; ocho KPI por dimensión; 80% por defecto y cambios
     por empresa solo para evaluaciones nuevas.
 - Cada fase ejecuta tests focalizados y luego `python manage.py test --settings=AppDocs.settings_test`.
