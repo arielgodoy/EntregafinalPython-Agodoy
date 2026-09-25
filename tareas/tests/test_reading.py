@@ -32,11 +32,13 @@ class CommentReadingServiceTests(TestCase):
         cls.autor = create_user(username="reading-author")
         for user in (cls.lector, cls.otro_lector, cls.autor):
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
+        cls.admin = create_user(username="reading-participants-admin")
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
 
     def make_task(self, *, lector=None):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
-        add_participant(tarea, self.autor)
-        add_participant(tarea, lector or self.lector)
+        add_participant(tarea, self.autor, actor=self.admin)
+        add_participant(tarea, lector or self.lector, actor=self.admin)
         return tarea
 
     def make_comment(self, tarea, *, autor=None, created_at=None, oculto=False):
@@ -254,10 +256,10 @@ class CommentReadingServiceTests(TestCase):
     def test_relink_keeps_zero_historical_pending(self):
         tarea = self.make_task()
         self.make_comment(tarea)
-        remove_participant(tarea, self.lector)
+        remove_participant(tarea, self.lector, actor=self.admin)
         newest = self.make_comment(tarea)
 
-        add_participant(tarea, self.lector)
+        add_participant(tarea, self.lector, actor=self.admin)
 
         lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.lector)
         self.assertEqual(lectura.comentario_leido_hasta_id, newest.pk)

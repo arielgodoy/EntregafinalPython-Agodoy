@@ -5,7 +5,14 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.models import (
+    Comentario,
+    ComentarioPausaLectura,
+    Tarea,
+    TareaLectura,
+    TareaParticipante,
+    TareaReasignacion,
+)
 from tareas.services.assignment import (
     add_participant,
     assign_responsible,
@@ -41,6 +48,8 @@ class AssignmentPhase3Tests(TestCase):
         ]:
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
             assign_permission(cls.usuario_otra_empresa, cls.otra_empresa, "Tareas", ingresar=True)
+        cls.admin = create_user(username="p3_admin_participantes")
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
 
     def make_task(self, **kwargs):
         defaults = {
@@ -51,7 +60,7 @@ class AssignmentPhase3Tests(TestCase):
 
     def test_agregar_participante(self):
         tarea = self.make_task()
-        participante = add_participant(tarea, self.participante)
+        participante = add_participant(tarea, self.participante, actor=self.admin)
         self.assertEqual(participante.tarea, tarea)
         self.assertEqual(participante.usuario, self.participante)
         self.assertEqual(participante.rol, TareaParticipante.Rol.PARTICIPANTE)
@@ -72,7 +81,7 @@ class AssignmentPhase3Tests(TestCase):
             contenido="Comentario reciente",
         )
 
-        add_participant(tarea, self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
 
         lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.participante)
         self.assertEqual(lectura.comentario_leido_hasta, comentario_reciente)
@@ -87,7 +96,7 @@ class AssignmentPhase3Tests(TestCase):
             autor=self.creador,
             contenido="Comentario inicial",
         )
-        add_participant(tarea, self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
         lectura = mark_task_read(tarea, self.participante)
         comentario_nuevo = Comentario.objects.create(
             tarea=tarea,
@@ -95,8 +104,8 @@ class AssignmentPhase3Tests(TestCase):
             contenido="Comentario durante ausencia",
         )
 
-        remove_participant(tarea, self.participante)
-        add_participant(tarea, self.participante)
+        remove_participant(tarea, self.participante, actor=self.admin)
+        add_participant(tarea, self.participante, actor=self.admin)
 
         lectura.refresh_from_db()
         self.assertEqual(lectura.comentario_leido_hasta, comentario_nuevo)
@@ -109,13 +118,13 @@ class AssignmentPhase3Tests(TestCase):
 
     def test_desvincular_corta_acceso_sin_borrar_lectura(self):
         tarea = self.make_task()
-        add_participant(tarea, self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
         lectura_id = TareaLectura.objects.get(
             tarea=tarea,
             usuario=self.participante,
         ).pk
 
-        remove_participant(tarea, self.participante)
+        remove_participant(tarea, self.participante, actor=self.admin)
 
         self.assertFalse(
             TareaParticipante.objects.filter(
@@ -139,8 +148,8 @@ class AssignmentPhase3Tests(TestCase):
             contenido="Comentario de otra tarea",
         )
 
-        add_participant(tarea, self.participante)
-        add_participant(otra_tarea, self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
+        add_participant(otra_tarea, self.participante, actor=self.admin)
 
         lecturas = {
             lectura.tarea_id: lectura
@@ -168,24 +177,29 @@ class AssignmentPhase3Tests(TestCase):
             user = create_user(username=f"rol_user_{index}")
             assign_permission(user, self.empresa, "Tareas", ingresar=True)
             tarea = self.make_task(titulo=f"Tarea rol {index}")
-            participante = add_participant(tarea, user, rol)
+            participante = add_participant(tarea, user, rol, actor=self.admin)
             participante.refresh_from_db()
             self.assertEqual(participante.rol, rol)
 
     def test_multiples_participantes(self):
         tarea = self.make_task()
-        add_participant(tarea, self.participante)
-        add_participant(tarea, self.otro_participante, TareaParticipante.Rol.INVITADO_OBSERVADOR)
+        add_participant(tarea, self.participante, actor=self.admin)
+        add_participant(
+            tarea,
+            self.otro_participante,
+            TareaParticipante.Rol.INVITADO_OBSERVADOR,
+            actor=self.admin,
+        )
         self.assertEqual(tarea.participantes.count(), 2)
 
     def test_usuario_inactivo_rechazado_como_participante(self):
         tarea = self.make_task()
         with self.assertRaises(ValidationError):
-            add_participant(tarea, self.inactivo)
+            add_participant(tarea, self.inactivo, actor=self.admin)
 
     def test_participante_no_reemplaza_responsable(self):
         tarea = self.make_task()
-        add_participant(tarea, self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
         tarea.refresh_from_db()
         self.assertEqual(tarea.responsable, self.responsable)
 
@@ -205,7 +219,7 @@ class AssignmentPhase3Tests(TestCase):
     def test_participante_de_otra_empresa_rechazado(self):
         tarea = self.make_task()
         with self.assertRaises(ValidationError):
-            add_participant(tarea, self.usuario_otra_empresa)
+            add_participant(tarea, self.usuario_otra_empresa, actor=self.admin)
 
     def test_asignacion_uno_a_uno(self):
         tarea = create_tarea(self.empresa, self.creador)
@@ -370,3 +384,109 @@ class AssignmentPhase3Tests(TestCase):
             TareaReasignacion.objects.filter(tarea__in=tareas).values_list("fecha", flat=True)
         )
         self.assertEqual(fechas, [fecha, fecha])
+
+
+class ParticipantAdministrationServiceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.empresa = create_empresa(codigo="PA1", descripcion="Empresa administración")
+        cls.otra_empresa = create_empresa(codigo="PA2", descripcion="Otra empresa")
+        cls.creador = create_user(username="pa_creador")
+        cls.admin = create_user(username="pa_admin")
+        cls.sin_modificar = create_user(username="pa_sin_modificar")
+        cls.admin_ajeno = create_user(username="pa_admin_ajeno")
+        cls.admin_inactivo = create_user(username="pa_admin_inactivo")
+        cls.destino = create_user(username="pa_destino")
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.sin_modificar, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.admin_ajeno, cls.otra_empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.admin_inactivo, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.destino, cls.empresa, "Tareas", ingresar=True)
+        cls.admin_inactivo.is_active = False
+        cls.admin_inactivo.save(update_fields=["is_active"])
+
+    def make_task(self, estado=None, anulada=False):
+        tarea = create_tarea(self.empresa, self.creador, responsable=self.creador)
+        campos = []
+        if estado is not None:
+            tarea.estado = estado
+            campos.append("estado")
+        if anulada:
+            tarea.anulada = True
+            campos.append("anulada")
+        if campos:
+            tarea.save(update_fields=campos)
+        return tarea
+
+    def test_actor_is_mandatory(self):
+        tarea = self.make_task()
+        with self.assertRaises(TypeError):
+            add_participant(tarea, self.destino)
+        with self.assertRaises(TypeError):
+            remove_participant(tarea, self.destino)
+        with self.assertRaises(ValidationError):
+            add_participant(tarea, self.destino, actor=None)
+        self.assertFalse(tarea.participantes.exists())
+
+    def test_non_participant_admin_links_first_participant(self):
+        tarea = self.make_task(estado=Tarea.Estado.ACTIVA)
+        comentario = Comentario.objects.create(tarea=tarea, autor=self.creador, contenido="Previo")
+        self.assertEqual(tarea.participantes.count(), 0)
+
+        add_participant(tarea, self.destino, actor=self.admin)
+
+        self.assertEqual(list(tarea.participantes.values_list("usuario", flat=True)), [self.destino.pk])
+        self.assertFalse(tarea.participantes.filter(usuario=self.admin).exists())
+        lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.destino)
+        self.assertEqual(lectura.comentario_leido_hasta, comentario)
+
+    def test_actor_without_modificar_cannot_link_or_unlink(self):
+        tarea = self.make_task(estado=Tarea.Estado.ACTIVA)
+        with self.assertRaises(ValidationError):
+            add_participant(tarea, self.destino, actor=self.sin_modificar)
+        self.assertFalse(tarea.participantes.exists())
+
+        add_participant(tarea, self.destino, actor=self.admin)
+        with self.assertRaises(ValidationError):
+            remove_participant(tarea, self.destino, actor=self.sin_modificar)
+        self.assertTrue(tarea.participantes.filter(usuario=self.destino).exists())
+
+    def test_foreign_or_inactive_actor_cannot_link(self):
+        tarea = self.make_task(estado=Tarea.Estado.ACTIVA)
+        for actor in (self.admin_ajeno, self.admin_inactivo):
+            with self.subTest(actor=actor.username), self.assertRaises(ValidationError):
+                add_participant(tarea, self.destino, actor=actor)
+        self.assertFalse(tarea.participantes.exists())
+
+    def test_closed_or_annulled_task_blocks_participant_changes(self):
+        for tarea in (
+            self.make_task(estado=Tarea.Estado.CERRADA),
+            self.make_task(estado=Tarea.Estado.ACTIVA, anulada=True),
+        ):
+            with self.subTest(tarea=tarea.pk):
+                with self.assertRaises(ValidationError):
+                    add_participant(tarea, self.destino, actor=self.admin)
+                TareaParticipante.objects.create(tarea=tarea, usuario=self.destino)
+                with self.assertRaises(ValidationError):
+                    remove_participant(tarea, self.destino, actor=self.admin)
+                self.assertTrue(tarea.participantes.filter(usuario=self.destino).exists())
+
+    def test_draft_task_still_accepts_participants(self):
+        tarea = self.make_task()
+        self.assertEqual(tarea.estado, Tarea.Estado.BORRADOR)
+
+        add_participant(tarea, self.destino, actor=self.admin)
+
+        self.assertTrue(tarea.participantes.filter(usuario=self.destino).exists())
+
+    def test_non_participant_admin_unlinks_and_reading_is_preserved(self):
+        tarea = self.make_task(estado=Tarea.Estado.ACTIVA)
+        add_participant(tarea, self.destino, actor=self.admin)
+        lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.destino)
+
+        remove_participant(tarea, self.destino, actor=self.admin)
+
+        self.assertFalse(tarea.participantes.filter(usuario=self.destino).exists())
+        self.assertTrue(TareaLectura.objects.filter(pk=lectura.pk).exists())
+        self.assertFalse(ComentarioPausaLectura.objects.filter(lectura=lectura).exists())

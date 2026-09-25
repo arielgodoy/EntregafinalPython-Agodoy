@@ -8,8 +8,12 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from access_control.services.permissions import get_valid_users_for_empresa
+from access_control.services.permissions import (
+    get_valid_users_for_empresa,
+    user_has_permission_for_empresa,
+)
 from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.services.hierarchy import is_effectively_annulled
 from tareas.services.notifications import emit_task_event, task_recipients
 
 
@@ -24,9 +28,26 @@ def _validate_user_in_task_company(tarea, user):
         raise ValidationError("El usuario no pertenece al contexto de la empresa de la tarea.")
 
 
+def _lock_task_for_participant_admin(tarea, actor):
+    """Participant administration needs VICMEAS `modificar`, not being a participant."""
+    tarea_actual = Tarea.objects.select_for_update().get(pk=tarea.pk)
+    _validate_user_in_task_company(tarea_actual, actor)
+    if not user_has_permission_for_empresa(
+        user=actor,
+        empresa=tarea_actual.empresa,
+        vista_nombre="Tareas",
+        accion="modificar",
+    ):
+        raise ValidationError("El usuario no tiene autorización para administrar participantes.")
+    if tarea_actual.estado == Tarea.Estado.CERRADA or is_effectively_annulled(tarea_actual):
+        raise ValidationError("La tarea no admite cambios de participantes.")
+    return tarea_actual
+
+
 @transaction.atomic
-def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE):
+def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE, *, actor):
     """Add or update one task participant and initialize comment reading."""
+    tarea = _lock_task_for_participant_admin(tarea, actor)
     _validate_user_in_task_company(tarea, user)
     participante, created = TareaParticipante.objects.update_or_create(
         tarea=tarea,
@@ -50,8 +71,9 @@ def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE):
 
 
 @transaction.atomic
-def remove_participant(tarea, user):
+def remove_participant(tarea, user, *, actor):
     """Remove the derived access link without deleting reading or comment history."""
+    tarea = _lock_task_for_participant_admin(tarea, actor)
     return TareaParticipante.objects.filter(tarea=tarea, usuario=user).delete()
 
 

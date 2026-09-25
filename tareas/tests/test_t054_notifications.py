@@ -57,6 +57,12 @@ class T054NotificationTests(TestCase):
             cls.participant,
         ]:
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
+        cls.participants_admin = User.objects.create_user(
+            username="t54_participants_admin", password="x"
+        )
+        assign_permission(
+            cls.participants_admin, cls.empresa, "Tareas", ingresar=True, modificar=True
+        )
 
     def make_task(self, **kwargs):
         defaults = {
@@ -105,7 +111,7 @@ class T054NotificationTests(TestCase):
         self, notify_task_event, send_task_email
     ):
         task = self.make_task()
-        add_participant(task, self.participant)
+        add_participant(task, self.participant, actor=self.participants_admin)
 
         create_document(
             tarea=task,
@@ -125,9 +131,12 @@ class T054NotificationTests(TestCase):
     @patch("tareas.services.notifications.notify_task_event")
     def test_solicitud_cierre_solo_autorizadores_activos(self, notify_task_event, send_task_email):
         task = self.make_task()
-        add_participant(task, self.authorizer, TareaParticipante.Rol.AUTORIZADOR)
-        add_participant(task, self.second_authorizer, TareaParticipante.Rol.AUTORIZADOR)
-        add_participant(task, self.supervisor, TareaParticipante.Rol.SUPERVISOR)
+        admin = self.participants_admin
+        add_participant(task, self.authorizer, TareaParticipante.Rol.AUTORIZADOR, actor=admin)
+        add_participant(
+            task, self.second_authorizer, TareaParticipante.Rol.AUTORIZADOR, actor=admin
+        )
+        add_participant(task, self.supervisor, TareaParticipante.Rol.SUPERVISOR, actor=admin)
         self.start_task(task)
 
         complete_task(task, self.responsible)
@@ -210,7 +219,7 @@ class T054NotificationTests(TestCase):
     @patch("tareas.services.notifications.notify_task_event")
     def test_anulacion_y_reactivacion_notifican_participantes(self, notify_task_event, send_task_email):
         task = self.make_task()
-        add_participant(task, self.participant)
+        add_participant(task, self.participant, actor=self.participants_admin)
         self.start_task(task)
 
         annul_task(task, self.creator)

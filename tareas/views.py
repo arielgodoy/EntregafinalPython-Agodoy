@@ -12,8 +12,8 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
-from django.http import HttpResponseForbidden, JsonResponse
+from django.db.models import Prefetch, prefetch_related_objects
+from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils.dateparse import parse_datetime
@@ -33,6 +33,7 @@ from .forms import (
     AvanceManualForm,
     AvancePonderadoForm,
     CompletarHitoForm,
+    ComentarioForm,
     DocumentoForm,
     EvidenciaConfigForm,
     EvidenciaRegistroForm,
@@ -40,6 +41,9 @@ from .forms import (
     HitoCrearForm,
     HitoForm,
     HitoReasignacionForm,
+    MotivoComentarioForm,
+    ParticipanteTareaForm,
+    ReconocerComentariosForm,
     ReunionParticipanteForm,
     ReunionRevisionForm,
     ReunionTareaForm,
@@ -47,6 +51,7 @@ from .forms import (
 )
 from .models import (
     Avance,
+    Comentario,
     DocumentoHistorial,
     DocumentoTarea,
     EvaluacionSimilitud,
@@ -58,6 +63,16 @@ from .models import (
     TareaParticipante,
 )
 from .services.context import get_active_company_id
+from .services.assignment import add_participant, remove_participant
+from .services.comments import create_comment, edit_comment, hide_comment, restore_comment
+from .services.reading import (
+    COMMENT_PAGE_SIZE,
+    count_pending_comments,
+    get_first_pending_comment,
+    get_initial_comment_page,
+    get_previous_comment_page,
+    recognize_loaded_comments,
+)
 from .services.hierarchy import get_children, get_parent, is_effectively_annulled
 from .services.lifecycle import (
     annul_task,
@@ -121,6 +136,92 @@ logger = logging.getLogger(__name__)
 def _get_empresa_id(request):
     """Empresa activa desde la sesión (patrón vigente)."""
     return get_active_company_id(request)
+
+
+def _comment_error_response(status=400):
+    return JsonResponse(
+        {"success": False, "message_key": "tareas.messages.generic_error"},
+        status=status,
+    )
+
+
+def _comment_actor_is_linked(tarea, usuario):
+    return usuario.is_active and TareaParticipante.objects.filter(
+        tarea=tarea,
+        usuario=usuario,
+    ).exists()
+
+
+def _comment_actor_has_permission(tarea, usuario, accion):
+    return user_has_permission_for_empresa(
+        user=usuario,
+        empresa=tarea.empresa,
+        vista_nombre="Tareas",
+        accion=accion,
+    )
+
+
+def _comment_document_data(documento):
+    return {
+        "id": documento.pk,
+        "tipo": documento.tipo,
+        "formato_archivo": documento.formato_archivo,
+        "url": documento.url,
+        "archivo_url": documento.archivo.url if documento.archivo else "",
+    }
+
+
+def _comment_data(comentario, usuario, puede_supervisar):
+    es_autor = comentario.autor_id == usuario.pk
+    puede_ver_contenido = es_autor or puede_supervisar
+    if comentario.oculto and not puede_ver_contenido:
+        return {
+            "id": comentario.pk,
+            "created_at": comentario.created_at.isoformat(),
+            "oculto": True,
+            "tombstone": True,
+        }
+
+    adjuntos = []
+    for adjunto in comentario.adjuntos.all():
+        adjuntos.append(_comment_document_data(adjunto.documento))
+
+    historial = []
+    if puede_ver_contenido:
+        for version in comentario.versiones.all():
+            historial.append(
+                {
+                    "evento": version.evento,
+                    "numero_version": version.numero_version,
+                    "contenido": version.contenido,
+                    "actor": {
+                        "id": version.actor_id,
+                        "username": version.actor.username,
+                    },
+                    "fecha": version.fecha.isoformat(),
+                    "motivo": version.motivo,
+                    "adjuntos": [
+                        _comment_document_data(relacion.documento)
+                        for relacion in version.documentos.all()
+                    ],
+                }
+            )
+
+    return {
+        "id": comentario.pk,
+        "contenido": comentario.contenido,
+        "created_at": comentario.created_at.isoformat(),
+        "autor": {"id": comentario.autor_id, "username": comentario.autor.username},
+        "oculto": comentario.oculto,
+        "editado": any(
+            version.numero_version is not None and version.numero_version > 1
+            for version in comentario.versiones.all()
+        ),
+        "puede_ver_historial": puede_ver_contenido,
+        "historial": historial,
+        "tombstone": False,
+        "adjuntos": adjuntos,
+    }
 
 
 class TareaEmpresaQuerysetMixin:
@@ -335,6 +436,303 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
         return self.render_to_response(context)
+
+
+class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    crear_permiso_faltante = False
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except Http404:
+            raise
+        except ValidationError:
+            return _comment_error_response()
+        except Exception as error:
+            logger.error(
+                "Tareas comment endpoint failed (%s)",
+                type(error).__name__,
+            )
+            return _comment_error_response(status=500)
+
+    def get_tarea(self, request, tarea_id):
+        return get_object_or_404(
+            Tarea.objects.select_related("empresa"),
+            pk=tarea_id,
+            empresa_id=_get_empresa_id(request),
+        )
+
+
+class ListarComentariosView(TareaComentariosView):
+    permiso_requerido = "ingresar"
+
+    def get(self, request, tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        if not _comment_actor_is_linked(tarea, request.user):
+            return _comment_error_response(status=403)
+        before = request.GET.get("before")
+        if before:
+            try:
+                before_id = int(before)
+            except (TypeError, ValueError):
+                return _comment_error_response()
+            before_comment = get_object_or_404(
+                Comentario.objects.filter(tarea=tarea),
+                pk=before_id,
+            )
+            try:
+                comentarios = get_previous_comment_page(
+                    tarea=tarea,
+                    usuario=request.user,
+                    before_comment=before_comment,
+                )
+            except ValidationError:
+                return _comment_error_response()
+        else:
+            try:
+                comentarios = get_initial_comment_page(
+                    tarea=tarea,
+                    usuario=request.user,
+                )
+            except ValidationError:
+                return _comment_error_response()
+
+        try:
+            pendientes = count_pending_comments(tarea=tarea, usuario=request.user)
+            primer_pendiente = get_first_pending_comment(
+                tarea=tarea,
+                usuario=request.user,
+            )
+        except ValidationError:
+            return _comment_error_response()
+
+        prefetch_related_objects(
+            comentarios,
+            "autor",
+            "adjuntos__documento",
+            "versiones__actor",
+            "versiones__documentos__documento",
+        )
+
+        puede_supervisar = user_has_permission_for_empresa(
+            user=request.user,
+            empresa=tarea.empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "comentarios": [
+                    _comment_data(comentario, request.user, puede_supervisar)
+                    for comentario in comentarios
+                ],
+                "pendientes": pendientes,
+                "primer_pendiente_id": (
+                    primer_pendiente.pk if primer_pendiente is not None else None
+                ),
+                "page_size": COMMENT_PAGE_SIZE,
+                "before_comment_id": comentarios[0].pk if comentarios else None,
+            }
+        )
+
+
+class MarcarComentariosLeidosView(TareaComentariosView):
+    permiso_requerido = "ingresar"
+
+    def post(self, request, tarea_id):
+        # Personal reading state: allowed on closed/annulled tasks (FR-T08).
+        tarea = self.get_tarea(request, tarea_id)
+        if not _comment_actor_is_linked(tarea, request.user):
+            return _comment_error_response(status=403)
+        form = ReconocerComentariosForm(request.POST, tarea=tarea)
+        if not form.is_valid():
+            return _comment_error_response()
+        if not _comment_actor_has_permission(tarea, request.user, "ingresar"):
+            return _comment_error_response(status=403)
+        lectura = recognize_loaded_comments(
+            tarea=tarea,
+            usuario=request.user,
+            comentario_ids=form.cleaned_data["comentario_ids"],
+        )
+        pendientes = count_pending_comments(tarea=tarea, usuario=request.user)
+        return JsonResponse(
+            {
+                "success": True,
+                "comentario_leido_hasta_id": lectura.comentario_leido_hasta_id,
+                "pendientes": pendientes,
+            }
+        )
+
+
+class CrearComentarioView(TareaComentariosView):
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        if not _comment_actor_is_linked(tarea, request.user):
+            return _comment_error_response(status=403)
+        form = ComentarioForm(request.POST, request.FILES, tarea=tarea)
+        if not form.is_valid():
+            return _comment_error_response()
+        try:
+            comentario = create_comment(
+                tarea=tarea,
+                usuario=request.user,
+                contenido=form.cleaned_data.get("contenido", ""),
+                documentos=form.cleaned_data["documentos"],
+                documentos_nuevos=form.nuevos_documentos(),
+            )
+        except ValidationError:
+            return _comment_error_response()
+        puede_supervisar = user_has_permission_for_empresa(
+            user=request.user,
+            empresa=tarea.empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "comentario": _comment_data(comentario, request.user, puede_supervisar),
+            }
+        )
+
+
+class EditarComentarioView(TareaComentariosView):
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, comentario_id):
+        tarea = self.get_tarea(request, tarea_id)
+        if not _comment_actor_is_linked(tarea, request.user):
+            return _comment_error_response(status=403)
+        comentario = get_object_or_404(
+            Comentario.objects.select_related("autor"),
+            pk=comentario_id,
+            tarea=tarea,
+        )
+        if comentario.autor_id != request.user.pk:
+            return _comment_error_response(status=403)
+        form = ComentarioForm(request.POST, request.FILES, tarea=tarea)
+        if not form.is_valid():
+            return _comment_error_response()
+        cambios = {
+            "comentario": comentario,
+            "usuario": request.user,
+            "documentos_nuevos": form.nuevos_documentos(),
+        }
+        if "contenido" in request.POST:
+            cambios["contenido"] = form.cleaned_data.get("contenido", "")
+        if "documentos_modificados" in request.POST or "documentos" in request.POST:
+            cambios["documentos"] = form.cleaned_data["documentos"]
+        try:
+            comentario = edit_comment(**cambios)
+        except ValidationError:
+            return _comment_error_response()
+        puede_supervisar = user_has_permission_for_empresa(
+            user=request.user,
+            empresa=tarea.empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "comentario": _comment_data(comentario, request.user, puede_supervisar),
+            }
+        )
+
+
+class _CambiarVisibilidadComentarioView(TareaComentariosView):
+    permiso_requerido = "supervisor"
+    servicio = None
+
+    def post(self, request, tarea_id, comentario_id):
+        tarea = self.get_tarea(request, tarea_id)
+        if not _comment_actor_is_linked(tarea, request.user):
+            return _comment_error_response(status=403)
+        comentario = get_object_or_404(
+            Comentario.objects.select_related("autor"),
+            pk=comentario_id,
+            tarea=tarea,
+        )
+        form = MotivoComentarioForm(request.POST)
+        if not form.is_valid():
+            return _comment_error_response()
+        try:
+            comentario = self.servicio(
+                comentario=comentario,
+                usuario=request.user,
+                motivo=form.cleaned_data["motivo"],
+            )
+        except ValidationError:
+            return _comment_error_response()
+        return JsonResponse(
+            {
+                "success": True,
+                "comentario": _comment_data(comentario, request.user, True),
+            }
+        )
+
+
+class OcultarComentarioView(_CambiarVisibilidadComentarioView):
+    servicio = staticmethod(hide_comment)
+
+
+class RestaurarComentarioView(_CambiarVisibilidadComentarioView):
+    servicio = staticmethod(restore_comment)
+
+
+class VincularParticipanteView(TareaComentariosView):
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, usuario_id):
+        tarea = self.get_tarea(request, tarea_id)
+        form = ParticipanteTareaForm(
+            data={"usuario": usuario_id},
+            empresa=tarea.empresa,
+            active_only=True,
+        )
+        if not form.is_valid():
+            return _comment_error_response(status=404)
+        participante = form.cleaned_data["usuario"]
+        if tarea.participantes.filter(usuario=participante).exists():
+            return _comment_error_response(status=409)
+        add_participant(tarea, participante, actor=request.user)
+        return JsonResponse(
+            {
+                "success": True,
+                "participante": {
+                    "id": participante.pk,
+                    "username": participante.username,
+                },
+            }
+        )
+
+
+class DesvincularParticipanteView(TareaComentariosView):
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, usuario_id):
+        tarea = self.get_tarea(request, tarea_id)
+        form = ParticipanteTareaForm(
+            data={"usuario": usuario_id},
+            empresa=tarea.empresa,
+            active_only=False,
+        )
+        if not form.is_valid():
+            return _comment_error_response(status=404)
+        participante = form.cleaned_data["usuario"]
+        if not tarea.participantes.filter(usuario=participante).exists():
+            return _comment_error_response(status=404)
+        remove_participant(tarea, participante, actor=request.user)
+        return JsonResponse(
+            {
+                "success": True,
+                "participante_id": participante.pk,
+            }
+        )
 
 
 class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):

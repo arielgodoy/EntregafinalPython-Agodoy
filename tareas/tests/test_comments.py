@@ -42,17 +42,11 @@ class CommentServiceTests(TestCase):
         assign_permission(cls.foreign, cls.otra_empresa, "Tareas", modificar=True)
 
     def make_task(self, *, usuario=None, estado=Tarea.Estado.ACTIVA):
-        tarea = create_tarea(
-            self.empresa,
-            self.autor,
-            responsable=self.autor,
-            estado=estado,
-            fecha_publicacion=timezone.now(),
-        )
+        tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
+        add_participant(tarea, usuario or self.autor, actor=self.autor)
         tarea.estado = estado
         tarea.fecha_publicacion = timezone.now()
         tarea.save(update_fields=["estado", "fecha_publicacion"])
-        add_participant(tarea, usuario or self.autor)
         return tarea
 
     def make_document(self, tarea, usuario=None, suffix="one"):
@@ -136,7 +130,7 @@ class CommentServiceTests(TestCase):
         with self.assertRaises(ValidationError):
             create_comment(tarea=tarea, usuario=self.no_vinculado, contenido="Sin vínculo")
 
-        add_participant(tarea, self.editor)
+        add_participant(tarea, self.editor, actor=self.autor)
         comentario = create_comment(tarea=tarea, usuario=self.editor, contenido="Permitido")
         self.assertEqual(comentario.autor, self.editor)
 
@@ -159,14 +153,14 @@ class CommentServiceTests(TestCase):
         tarea_foreign.estado = Tarea.Estado.ACTIVA
         tarea_foreign.fecha_publicacion = timezone.now()
         tarea_foreign.save(update_fields=["estado", "fecha_publicacion"])
-        add_participant(tarea_foreign, self.foreign)
+        add_participant(tarea_foreign, self.foreign, actor=self.foreign)
         with self.assertRaises(ValidationError):
             create_comment(tarea=tarea_foreign, usuario=self.autor, contenido="Cross-company")
 
     def test_edit_requires_author_and_original_one_hour(self):
         tarea = self.make_task()
         comentario = create_comment(tarea=tarea, usuario=self.autor, contenido="Original")
-        add_participant(tarea, self.editor)
+        add_participant(tarea, self.editor, actor=self.autor)
 
         with self.assertRaises(ValidationError):
             edit_comment(comentario=comentario, usuario=self.editor, contenido="No autorizado")
@@ -211,7 +205,7 @@ class CommentServiceTests(TestCase):
 
     def test_hidden_comment_cannot_be_edited(self):
         tarea = self.make_task()
-        add_participant(tarea, self.supervisor)
+        add_participant(tarea, self.supervisor, actor=self.autor)
         comentario = create_comment(tarea=tarea, usuario=self.autor, contenido="Original")
         hide_comment(comentario=comentario, usuario=self.supervisor, motivo="Moderación")
 
@@ -220,7 +214,7 @@ class CommentServiceTests(TestCase):
 
     def test_hide_and_restore_require_supervisor_reason_and_preserve_content(self):
         tarea = self.make_task()
-        add_participant(tarea, self.supervisor)
+        add_participant(tarea, self.supervisor, actor=self.autor)
         comentario = create_comment(tarea=tarea, usuario=self.autor, contenido="Visible")
 
         with self.assertRaises(ValidationError):
