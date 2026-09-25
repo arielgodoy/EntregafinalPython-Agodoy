@@ -1115,6 +1115,19 @@ class TareaLectura(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name="lecturas_tareas")
     leido = models.BooleanField(default=False)
     fecha_lectura = models.DateTimeField(null=True, blank=True)
+    comentario_leido_hasta = models.ForeignKey(
+        "Comentario",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="lecturas_hasta_aqui",
+    )
+
+    def clean(self):
+        super().clean()
+        if self.tarea_id and self.comentario_leido_hasta_id:
+            if self.comentario_leido_hasta.tarea_id != self.tarea_id:
+                raise ValidationError({"comentario_leido_hasta": "El comentario no pertenece a la tarea."})
 
     class Meta:
         constraints = [
@@ -1124,6 +1137,99 @@ class TareaLectura(models.Model):
             ),
         ]
         indexes = [models.Index(fields=["tarea", "usuario", "leido"])]
+
+
+class Comentario(models.Model):
+    tarea = models.ForeignKey(Tarea, on_delete=models.PROTECT, related_name="comentarios")
+    autor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="comentarios_tareas")
+    contenido = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    oculto = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        indexes = [models.Index(fields=["tarea", "created_at", "id"])]
+
+
+class ComentarioAdjunto(models.Model):
+    comentario = models.ForeignKey(Comentario, on_delete=models.PROTECT, related_name="adjuntos")
+    documento = models.ForeignKey(DocumentoTarea, on_delete=models.PROTECT, related_name="adjuntos_comentarios")
+
+    def clean(self):
+        super().clean()
+        if self.comentario_id and self.documento_id:
+            if self.comentario.tarea_id != self.documento.tarea_id:
+                raise ValidationError({"documento": "El documento no pertenece a la tarea del comentario."})
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comentario", "documento"],
+                name="tareas_com_adjunto_unico",
+            ),
+        ]
+
+
+class ComentarioVersion(models.Model):
+    class Evento(models.TextChoices):
+        CREADO = "CREADO", "CREADO"
+        EDITADO = "EDITADO", "EDITADO"
+        OCULTADO = "OCULTADO", "OCULTADO"
+        RESTAURADO = "RESTAURADO", "RESTAURADO"
+
+    comentario = models.ForeignKey(Comentario, on_delete=models.PROTECT, related_name="versiones")
+    evento = models.CharField(max_length=10, choices=Evento.choices)
+    numero_version = models.PositiveIntegerField(null=True, blank=True)
+    contenido = models.TextField(blank=True, default="")
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="versiones_comentarios_tareas")
+    fecha = models.DateTimeField(default=timezone.now)
+    motivo = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["fecha", "pk"]
+        indexes = [models.Index(fields=["comentario", "fecha", "id"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comentario", "numero_version"],
+                name="tareas_com_version_unica",
+            ),
+        ]
+
+
+class ComentarioVersionDocumento(models.Model):
+    version = models.ForeignKey(ComentarioVersion, on_delete=models.PROTECT, related_name="documentos")
+    documento = models.ForeignKey(DocumentoTarea, on_delete=models.PROTECT, related_name="versiones_comentarios")
+
+    def clean(self):
+        super().clean()
+        if self.version_id and self.documento_id:
+            if self.version.comentario.tarea_id != self.documento.tarea_id:
+                raise ValidationError({"documento": "El documento no pertenece a la tarea del comentario."})
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["version", "documento"],
+                name="tareas_com_ver_doc_unico",
+            ),
+        ]
+
+
+class ComentarioPausaLectura(models.Model):
+    lectura = models.ForeignKey(TareaLectura, on_delete=models.PROTECT, related_name="pausas_comentarios")
+    desde = models.DateTimeField()
+    hasta = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["desde", "pk"]
+        indexes = [models.Index(fields=["lectura", "desde"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(hasta__isnull=True) | models.Q(hasta__gte=models.F("desde")),
+                name="tareas_com_pausa_intervalo",
+            ),
+        ]
 
 
 class EnlaceTarea(models.Model):

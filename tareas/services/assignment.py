@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
-from tareas.models import Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
 from tareas.services.notifications import emit_task_event, task_recipients
 
 
@@ -24,15 +24,35 @@ def _validate_user_in_task_company(tarea, user):
         raise ValidationError("El usuario no pertenece al contexto de la empresa de la tarea.")
 
 
+@transaction.atomic
 def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE):
-    """Add or update one task participant without changing the lead assignee."""
+    """Add or update one task participant and initialize comment reading."""
     _validate_user_in_task_company(tarea, user)
-    participante, _created = TareaParticipante.objects.update_or_create(
+    participante, created = TareaParticipante.objects.update_or_create(
         tarea=tarea,
         usuario=user,
         defaults={"rol": rol},
     )
+    comentario_reciente = (
+        Comentario.objects.filter(tarea=tarea)
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    lectura, lectura_created = TareaLectura.objects.get_or_create(
+        tarea=tarea,
+        usuario=user,
+        defaults={"comentario_leido_hasta": comentario_reciente},
+    )
+    if created and not lectura_created:
+        lectura.comentario_leido_hasta = comentario_reciente
+        lectura.save(update_fields=["comentario_leido_hasta"])
     return participante
+
+
+@transaction.atomic
+def remove_participant(tarea, user):
+    """Remove the derived access link without deleting reading or comment history."""
+    return TareaParticipante.objects.filter(tarea=tarea, usuario=user).delete()
 
 
 def mark_task_read(tarea, user, *, leido=True):

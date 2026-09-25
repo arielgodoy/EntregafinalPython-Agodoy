@@ -5,12 +5,13 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from tareas.models import Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
 from tareas.services.assignment import (
     add_participant,
     assign_responsible,
     create_independent_tasks_for_responsibles,
     mark_task_read,
+    remove_participant,
 )
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
@@ -54,6 +55,105 @@ class AssignmentPhase3Tests(TestCase):
         self.assertEqual(participante.tarea, tarea)
         self.assertEqual(participante.usuario, self.participante)
         self.assertEqual(participante.rol, TareaParticipante.Rol.PARTICIPANTE)
+        self.assertTrue(
+            TareaLectura.objects.filter(tarea=tarea, usuario=self.participante).exists()
+        )
+
+    def test_vincular_inicializa_cursor_en_comentario_mas_reciente(self):
+        tarea = self.make_task()
+        comentario_antiguo = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario antiguo",
+        )
+        comentario_reciente = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario reciente",
+        )
+
+        add_participant(tarea, self.participante)
+
+        lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.participante)
+        self.assertEqual(lectura.comentario_leido_hasta, comentario_reciente)
+        self.assertNotEqual(lectura.comentario_leido_hasta, comentario_antiguo)
+        self.assertFalse(lectura.leido)
+        self.assertIsNone(lectura.fecha_lectura)
+
+    def test_revincular_reinicia_solo_cursor_y_preserva_lectura_general(self):
+        tarea = self.make_task()
+        Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario inicial",
+        )
+        add_participant(tarea, self.participante)
+        lectura = mark_task_read(tarea, self.participante)
+        comentario_nuevo = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario durante ausencia",
+        )
+
+        remove_participant(tarea, self.participante)
+        add_participant(tarea, self.participante)
+
+        lectura.refresh_from_db()
+        self.assertEqual(lectura.comentario_leido_hasta, comentario_nuevo)
+        self.assertTrue(lectura.leido)
+        self.assertIsNotNone(lectura.fecha_lectura)
+        self.assertEqual(
+            TareaLectura.objects.filter(tarea=tarea, usuario=self.participante).count(),
+            1,
+        )
+
+    def test_desvincular_corta_acceso_sin_borrar_lectura(self):
+        tarea = self.make_task()
+        add_participant(tarea, self.participante)
+        lectura_id = TareaLectura.objects.get(
+            tarea=tarea,
+            usuario=self.participante,
+        ).pk
+
+        remove_participant(tarea, self.participante)
+
+        self.assertFalse(
+            TareaParticipante.objects.filter(
+                tarea=tarea,
+                usuario=self.participante,
+            ).exists()
+        )
+        self.assertTrue(TareaLectura.objects.filter(pk=lectura_id).exists())
+
+    def test_cursor_se_aisla_por_tarea(self):
+        tarea = self.make_task()
+        otra_tarea = self.make_task(titulo="Otra tarea")
+        comentario_tarea = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario de una tarea",
+        )
+        comentario_otra_tarea = Comentario.objects.create(
+            tarea=otra_tarea,
+            autor=self.creador,
+            contenido="Comentario de otra tarea",
+        )
+
+        add_participant(tarea, self.participante)
+        add_participant(otra_tarea, self.participante)
+
+        lecturas = {
+            lectura.tarea_id: lectura
+            for lectura in TareaLectura.objects.filter(usuario=self.participante)
+        }
+        self.assertEqual(
+            lecturas[tarea.pk].comentario_leido_hasta_id,
+            comentario_tarea.pk,
+        )
+        self.assertEqual(
+            lecturas[otra_tarea.pk].comentario_leido_hasta_id,
+            comentario_otra_tarea.pk,
+        )
 
     def test_persistencia_de_roles_canonicos(self):
         roles = [

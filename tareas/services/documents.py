@@ -32,6 +32,7 @@ def create_document(
     fecha_documento=None,
     fecha_vencimiento=None,
     estado="",
+    emit_notification=True,
 ):
     with transaction.atomic():
         _validate_user_in_task_company(tarea, usuario)
@@ -51,20 +52,21 @@ def create_document(
         documento.full_clean()
         documento.save()
         DocumentoHistorial.objects.create(**_history_data(documento, usuario, "CREADO"))
-    emit_task_event(
-        tarea=tarea,
-        event="documento_agregado",
-        recipients=task_recipients(
-            tarea,
+    if emit_notification:
+        emit_task_event(
+            tarea=tarea,
+            event="documento_agregado",
+            recipients=task_recipients(
+                tarea,
+                actor=usuario,
+                include_creator=True,
+                include_responsible=True,
+                participant_roles=list(TareaParticipante.Rol),
+            ),
+            title="Documento agregado a la tarea",
+            body="Se agregó un documento a la tarea.",
             actor=usuario,
-            include_creator=True,
-            include_responsible=True,
-            participant_roles=list(TareaParticipante.Rol),
-        ),
-        title="Documento agregado a la tarea",
-        body="Se agregó un documento a la tarea.",
-        actor=usuario,
-    )
+        )
     return documento
 
 
