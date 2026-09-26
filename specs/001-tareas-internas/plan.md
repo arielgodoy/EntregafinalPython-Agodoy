@@ -210,8 +210,9 @@ en `tasks.md`; no reabre ni renumera fases históricas.
 
 - Mantener Comentarios dentro de `tareas/`, relacionados 1:N con `Tarea`, sin estado ni
     transición propia.
-- Usar la participación funcional efectiva `Tarea.responsable OR TareaParticipante` para
-    comentarios y seguimiento, sin materializar ni sincronizar filas. VICMEAS usa
+- Usar la participación funcional efectiva `Tarea.responsable OR TareaParticipante OR
+    Hito.responsable` para Hitos de la Tarea con `anulado=False`, para comentarios y
+    seguimiento, sin materializar ni sincronizar filas. VICMEAS usa
     `Tareas`: `ingresar` para lectura, `modificar` para crear/editar/vincular y
     `supervisor` (S) para ocultar/restaurar. Creador/responsable no tienen bypass de
     VICMEAS, lifecycle o Empresa; el creador tampoco es participante implícito.
@@ -231,6 +232,10 @@ en `tasks.md`; no reabre ni renumera fases históricas.
     de persistir.
 - Integrar T054 para crear/editar/ocultar/restaurar; solo crear incrementa no leídos. Usar
     notificaciones existentes y email automático para prioridad `CRITICA`.
+- Mantener una sincronización visual incremental opcional del feed mediante polling AJAX
+    cada 10 segundos mientras el Detalle de Tarea está visible; usar `after_id`, no mover
+    lectura/unread y suspender al ocultar la pestaña. Esta primera versión solo incorpora
+    Comentarios nuevos.
 - La tarjeta server-rendered pagina 20, ofrece cámara móvil, burbuja `1..9`/`9+` y foco
     inicial en primer pendiente. Sin filtros, búsqueda propia, threads, app o chat separados;
     respeta i18n y FR-T01…FR-T10.

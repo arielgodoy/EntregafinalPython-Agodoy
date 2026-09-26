@@ -21,6 +21,29 @@
         return textFor(root, key, fallback);
     }
 
+    function commentDate(comment) {
+        return new Date(comment.created_at);
+    }
+
+    function commentDateKey(comment) {
+        return commentDate(comment).toLocaleDateString();
+    }
+
+    function initialsFor(comment) {
+        var username = comment.autor && comment.autor.username ? comment.autor.username.trim() : "?";
+        var parts = username.split(/\s+/).filter(Boolean);
+        if (parts.length > 1) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return username.slice(0, 2).toUpperCase();
+    }
+
+    function renderDateSeparator(comment) {
+        var separator = document.createElement("div");
+        separator.className = "task-comments__date-separator";
+        separator.dataset.commentDate = commentDateKey(comment);
+        separator.textContent = commentDate(comment).toLocaleDateString();
+        return separator;
+    }
+
     function pendingFiles(form) {
         if (!form._pendingCommentFiles) form._pendingCommentFiles = [];
         return form._pendingCommentFiles;
@@ -61,9 +84,9 @@
                 image.addEventListener("load", function () { URL.revokeObjectURL(image.src); }, { once: true });
                 item.appendChild(image);
             } else {
-                var icon = document.createElement("span");
+                var icon = document.createElement("i");
+                icon.className = "ri-file-line";
                 icon.setAttribute("aria-hidden", "true");
-                icon.textContent = "[file]";
                 item.appendChild(icon);
             }
             var name = document.createElement("span");
@@ -116,18 +139,34 @@
 
     function renderAttachment(root, attachment) {
         var link = document.createElement("a");
-        link.className = "badge text-bg-light text-decoration-none me-1";
+        link.className = "badge border text-body text-decoration-none me-1";
         link.href = attachment.archivo_url || attachment.url || "#";
         link.target = "_blank";
         link.rel = "noopener";
-        link.textContent = attachment.tipo || textFor(root, "tareas.comments.attachment", "Adjunto");
+        var icon = document.createElement("i");
+        var format = String(attachment.formato_archivo || "").toUpperCase();
+        icon.className = format === "PDF" ? "ri-file-pdf-2-line me-1" : format.indexOf("JPG") >= 0 || format === "PNG" ? "ri-image-line me-1" : format.indexOf("XLS") >= 0 ? "ri-file-excel-2-line me-1" : "ri-file-line me-1";
+        icon.setAttribute("aria-hidden", "true");
+        link.appendChild(icon);
+        var filename = attachment.nombre_archivo || attachment.tipo || textFor(root, "tareas.comments.attachment", "Adjunto");
+        link.title = attachment.nombre_archivo || filename;
+        link.appendChild(document.createTextNode(filename));
+        if (attachment.nombre_archivo && attachment.tipo) {
+            var type = document.createElement("small");
+            type.className = "ms-1 text-muted";
+            type.textContent = "· " + attachment.tipo;
+            link.appendChild(type);
+        }
         return link;
     }
 
     function renderHistory(root, comment, container) {
-        if (!comment.puede_ver_historial || !comment.historial || !comment.historial.length) return;
+        var hasEditHistory = comment.historial && comment.historial.some(function (version) {
+            return version.evento === "EDITADO";
+        });
+        if (!comment.puede_ver_historial || !hasEditHistory) return;
         var details = document.createElement("details");
-        details.className = "mt-2 small";
+        details.className = "task-comments__history small";
         var summary = document.createElement("summary");
         summary.textContent = textFor(root, "tareas.comments.history", "Historial");
         details.appendChild(summary);
@@ -150,28 +189,57 @@
         if (!root._commentMap) root._commentMap = new Map();
         root._commentMap.set(String(comment.id), comment);
         var article = document.createElement("article");
-        article.className = "border rounded p-3";
+        var isOwn = String(comment.autor && comment.autor.id) === root.dataset.currentUserId;
+        article.className = "task-comments__message" + (isOwn ? " task-comments__message--own" : " task-comments__message--other");
         article.dataset.commentId = comment.id;
+        article.dataset.commentDate = commentDateKey(comment);
         if (comment.tombstone) {
-            article.classList.add("bg-light");
+            article.classList.add("task-comments__message--tombstone");
+            var tombstoneBubble = document.createElement("div");
+            tombstoneBubble.className = "task-comments__bubble";
             var tombstone = document.createElement("span");
             tombstone.className = "text-muted fst-italic";
             tombstone.textContent = textFor(root, "tareas.comments.hidden", "Este comentario fue ocultado.");
-            article.appendChild(tombstone);
+            tombstoneBubble.appendChild(tombstone);
+            article.appendChild(tombstoneBubble);
             return article;
         }
+        var bubble = document.createElement("div");
+        bubble.className = "task-comments__bubble";
+        var avatar = document.createElement("span");
+        avatar.className = "task-comments__avatar";
+        var avatarUrl = comment.autor && comment.autor.avatar_url;
+        if (avatarUrl && /^\/(?!\/)|^https?:\/\//.test(avatarUrl)) {
+            var avatarImage = document.createElement("img");
+            avatarImage.src = avatarUrl;
+            avatarImage.alt = comment.autor ? comment.autor.username : "";
+            avatarImage.addEventListener("error", function () {
+                avatarImage.remove();
+                avatar.textContent = initialsFor(comment);
+            }, { once: true });
+            avatar.appendChild(avatarImage);
+        } else {
+            avatar.textContent = initialsFor(comment);
+        }
+        avatar.title = comment.autor ? comment.autor.username : "";
+        avatar.setAttribute("aria-label", comment.autor ? comment.autor.username : "");
+        article.appendChild(avatar);
+        article.appendChild(bubble);
         var header = document.createElement("div");
-        header.className = "d-flex flex-wrap justify-content-between gap-2 small text-muted";
+        header.className = "d-flex flex-wrap justify-content-between gap-2 task-comments__meta";
         var author = document.createElement("strong");
-        author.className = "text-body";
+        author.className = "task-comments__author";
         author.textContent = comment.autor ? comment.autor.username : "";
         var date = document.createElement("span");
-        date.textContent = new Date(comment.created_at).toLocaleString();
+        date.className = "task-comments__date";
+        date.textContent = commentDate(comment).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        date.title = commentDate(comment).toLocaleString();
+        date.setAttribute("aria-label", commentDate(comment).toLocaleString());
         header.appendChild(author);
         header.appendChild(date);
-        article.appendChild(header);
+        bubble.appendChild(header);
         var body = document.createElement("p");
-        body.className = "mb-2 mt-2 comment-content";
+        body.className = "task-comments__body comment-content";
         var content = comment.contenido || "";
         if (content.length > 500) {
             var preview = document.createElement("span");
@@ -195,7 +263,7 @@
         } else {
             body.textContent = content;
         }
-        article.appendChild(body);
+        bubble.appendChild(body);
         if (comment.editado) {
             var edited = document.createElement("span");
             edited.className = "small text-muted me-2";
@@ -203,35 +271,159 @@
             body.appendChild(document.createTextNode(" "));
             body.appendChild(edited);
         }
+        if (comment.oculto) {
+            var hidden = document.createElement("span");
+            hidden.className = "small text-muted me-2";
+            hidden.textContent = "(" + textFor(root, "tareas.comments.hidden_state", "oculto") + ")";
+            body.appendChild(document.createTextNode(" "));
+            body.appendChild(hidden);
+        }
         if (comment.adjuntos && comment.adjuntos.length) {
             var attachments = document.createElement("div");
-            comment.adjuntos.forEach(function (attachment) { attachments.appendChild(renderAttachment(root, attachment)); });
-            article.appendChild(attachments);
+            attachments.className = "task-comments__attachment-list";
+            comment.adjuntos.forEach(function (attachment) {
+                var link = renderAttachment(root, attachment);
+                link.classList.add("task-comments__attachment");
+                attachments.appendChild(link);
+            });
+            bubble.appendChild(attachments);
         }
-        renderHistory(root, comment, article);
+        renderHistory(root, comment, bubble);
         var actions = document.createElement("div");
-        actions.className = "d-flex gap-2 mt-2";
+        actions.className = "task-comments__actions";
+        var menu = document.createElement("div");
+        menu.className = "dropdown-menu dropdown-menu-end";
         if (String(comment.autor && comment.autor.id) === root.dataset.currentUserId && root.dataset.canModify === "true") {
             var edit = document.createElement("button");
             edit.type = "button";
-            edit.className = "btn btn-sm btn-outline-secondary";
+            edit.className = "dropdown-item";
             edit.dataset.commentAction = "edit";
             edit.dataset.commentId = comment.id;
             edit.dataset.commentContent = comment.contenido || "";
             edit.textContent = textFor(root, "tareas.comments.edit", "Editar");
-            actions.appendChild(edit);
+            menu.appendChild(edit);
         }
         if (root.dataset.canSupervise === "true") {
             var visibility = document.createElement("button");
             visibility.type = "button";
-            visibility.className = "btn btn-sm btn-outline-secondary";
+            visibility.className = "dropdown-item";
             visibility.dataset.commentAction = comment.oculto ? "restore" : "hide";
             visibility.dataset.commentId = comment.id;
             visibility.textContent = textFor(root, comment.oculto ? "tareas.comments.restore" : "tareas.comments.hide", comment.oculto ? "Restaurar" : "Ocultar");
-            actions.appendChild(visibility);
+            menu.appendChild(visibility);
         }
-        if (actions.childNodes.length) article.appendChild(actions);
+        if (menu.childNodes.length) {
+            var menuToggle = document.createElement("button");
+            menuToggle.type = "button";
+            menuToggle.className = "btn btn-sm task-comments__more";
+            menuToggle.setAttribute("data-bs-toggle", "dropdown");
+            menuToggle.setAttribute("aria-expanded", "false");
+            menuToggle.setAttribute("aria-label", textFor(root, "tareas.comments.actions", "Acciones"));
+            menuToggle.innerHTML = '<i class="ri-more-2-fill" aria-hidden="true"></i>';
+            actions.appendChild(menuToggle);
+            actions.appendChild(menu);
+            bubble.appendChild(actions);
+        }
         return article;
+    }
+
+    function syncComment(root, comment) {
+        var feed = root.querySelector("[data-comments-feed]");
+        var current = feed.querySelector('[data-comment-id="' + comment.id + '"]');
+        var replacement = renderComment(root, comment);
+        if (current) current.replaceWith(replacement);
+    }
+
+    function appendComment(root, comment) {
+        var feed = root.querySelector("[data-comments-feed]");
+        if (feed.querySelector('[data-comment-id="' + comment.id + '"]')) return false;
+        var previousComments = feed.querySelectorAll("[data-comment-id]");
+        var previous = previousComments.length ? previousComments[previousComments.length - 1] : null;
+        if (previous && previous.dataset.commentDate !== commentDateKey(comment)) {
+            feed.appendChild(renderDateSeparator(comment));
+        }
+        feed.appendChild(renderComment(root, comment));
+        var loadedIds = new Set((root.dataset.loadedIds || "").split(",").filter(Boolean));
+        loadedIds.add(String(comment.id));
+        root.dataset.loadedIds = Array.from(loadedIds).join(",");
+        root.querySelector("[data-comments-empty]").classList.add("d-none");
+        return true;
+    }
+
+    function getLatestKnownCommentId(root) {
+        var latestId = 0;
+        if (root._commentMap) {
+            root._commentMap.forEach(function (comment) {
+                latestId = Math.max(latestId, Number(comment.id) || 0);
+            });
+        }
+        return latestId;
+    }
+
+    function isNearBottom() {
+        var feed = document.querySelector("[data-comments-feed]");
+        return feed && feed.scrollHeight - feed.scrollTop - feed.clientHeight < 160;
+    }
+
+    function appendPolledComments(root, comments) {
+        var feed = root.querySelector("[data-comments-feed]");
+        var wasNearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 160;
+        comments.slice().sort(function (left, right) {
+            var byDate = new Date(left.created_at) - new Date(right.created_at);
+            return byDate || Number(left.id) - Number(right.id);
+        }).forEach(function (comment) { appendComment(root, comment); });
+        if (wasNearBottom && comments.length) {
+            feed.scrollTop = feed.scrollHeight;
+        }
+    }
+
+    function scheduleCommentsPoll(root) {
+        if (root._commentsPollingStopped || document.hidden || !document.body.contains(root)) return;
+        window.clearTimeout(root._commentsPollingTimer);
+        root._commentsPollingTimer = window.setTimeout(function () {
+            pollComments(root);
+        }, 10000);
+    }
+
+    function pollComments(root) {
+        if (root._commentsPollingInFlight || root._commentsPollingStopped || document.hidden) return;
+        root._commentsPollingInFlight = true;
+        var afterId = getLatestKnownCommentId(root);
+        var url = root.dataset.feedUrl + "?after_id=" + encodeURIComponent(afterId);
+        fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then(function (response) {
+                if (response.status === 401 || response.status === 403) {
+                    root._commentsPollingStopped = true;
+                }
+                return response.json().then(function (data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function (result) {
+                if (!result.ok || !result.data.success || root._commentsPollingStopped) return;
+                appendPolledComments(root, result.data.comentarios || []);
+            })
+            .catch(function () {
+                // A transient poll failure leaves the current feed untouched.
+            })
+            .finally(function () {
+                root._commentsPollingInFlight = false;
+                scheduleCommentsPoll(root);
+            });
+    }
+
+    function startCommentsPolling(root) {
+        root._commentsPollingInFlight = false;
+        root._commentsPollingStopped = false;
+        root._commentsVisibilityHandler = function () {
+            if (document.hidden) {
+                window.clearTimeout(root._commentsPollingTimer);
+                return;
+            }
+            pollComments(root);
+        };
+        document.addEventListener("visibilitychange", root._commentsVisibilityHandler);
+        scheduleCommentsPoll(root);
     }
 
     function postForm(url, form) {
@@ -253,7 +445,12 @@
             return true;
         });
         var fragment = document.createDocumentFragment();
+        var previousDateKey = "";
         comments.forEach(function (comment) {
+            if (!prepend && previousDateKey !== commentDateKey(comment)) {
+                fragment.appendChild(renderDateSeparator(comment));
+            }
+            previousDateKey = commentDateKey(comment);
             var item = renderComment(root, comment);
             if (!prepend && data.primer_pendiente_id === comment.id) {
                 var marker = root.querySelector("[data-comments-new-marker]").cloneNode(true);
@@ -266,15 +463,18 @@
         });
         if (prepend) {
             var beforeHeight = feed.scrollHeight;
+            var beforeTop = feed.scrollTop;
             feed.prepend(fragment);
             root.dataset.beforeCommentId = data.before_comment_id || "";
-            window.scrollBy(0, feed.scrollHeight - beforeHeight);
+            feed.scrollTop = beforeTop + feed.scrollHeight - beforeHeight;
         } else {
             feed.replaceChildren(fragment);
             root.dataset.beforeCommentId = data.before_comment_id || "";
             if (data.primer_pendiente_id) {
                 var pending = feed.querySelector('[data-comment-id="' + data.primer_pendiente_id + '"]');
-                if (pending) pending.scrollIntoView({ block: "center", behavior: "smooth" });
+                if (pending) feed.scrollTop = Math.max(0, pending.offsetTop - feed.clientHeight / 3);
+            } else {
+                feed.scrollTop = feed.scrollHeight;
             }
         }
         root.dataset.loadedIds = Array.from(known).join(",");
@@ -306,6 +506,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("[data-comments-card]").forEach(function (root) {
             loadComments(root, root.dataset.feedUrl);
+            startCommentsPolling(root);
             root.querySelector("[data-comments-previous]").addEventListener("click", function () {
                 if (root.dataset.beforeCommentId) loadComments(root, root.dataset.feedUrl + "?before=" + root.dataset.beforeCommentId, true);
             });
@@ -326,7 +527,10 @@
                     form.reset();
                     pendingFiles(form).splice(0);
                     renderFilePreviews(root, form, "[data-comments-preview]", "[data-comments-file-summary]");
-                    return loadComments(root, root.dataset.feedUrl);
+                    if (appendComment(root, result.data.comentario)) {
+                        var feed = root.querySelector("[data-comments-feed]");
+                        feed.scrollTop = feed.scrollHeight;
+                    }
                 }).catch(function () {
                     showFeedback(root, "tareas.comments.save_error", "No fue posible guardar el comentario.");
                 }).finally(function () {
@@ -384,7 +588,11 @@
                 submit.disabled = true;
                 postForm(escapePath(root.dataset.editUrlTemplate, form.dataset.commentId), form).then(function (result) {
                     if (!result.ok || !result.data.success) throw new Error("edit");
-                    bootstrap.Modal.getInstance(form.closest(".modal")).hide(); loadComments(root, root.dataset.feedUrl);
+                    syncComment(root, result.data.comentario);
+                    bootstrap.Modal.getInstance(form.closest(".modal")).hide();
+                    form.reset();
+                    pendingFiles(form).splice(0);
+                    renderFilePreviews(root, form, "[data-comments-edit-preview]");
                 }).catch(function () {
                     showFeedback(root, "tareas.comments.save_error", "No fue posible guardar el comentario.");
                 }).finally(function () {
@@ -402,7 +610,8 @@
                 var endpoint = form.dataset.action === "hide" ? root.dataset.hideUrlTemplate : root.dataset.restoreUrlTemplate;
                 postForm(escapePath(endpoint, form.dataset.commentId), form).then(function (result) {
                     if (!result.ok || !result.data.success) throw new Error("visibility");
-                    bootstrap.Modal.getInstance(form.closest(".modal")).hide(); form.reset(); loadComments(root, root.dataset.feedUrl);
+                    syncComment(root, result.data.comentario);
+                    bootstrap.Modal.getInstance(form.closest(".modal")).hide(); form.reset();
                 }).catch(function () {
                     showFeedback(root, "tareas.comments.save_error", "No fue posible guardar el comentario.");
                 }).finally(function () {

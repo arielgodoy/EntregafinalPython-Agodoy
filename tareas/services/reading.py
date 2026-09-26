@@ -156,7 +156,9 @@ def handle_user_activity_transition(*, usuario, was_active, at=None):
             close_inactivity_pause(lectura=lectura, at=transition_at)
         return
     readings = TareaLectura.objects.filter(usuario=usuario).filter(
-        Q(tarea__responsable=usuario) | Q(tarea__participantes__usuario=usuario)
+        Q(tarea__responsable=usuario)
+        | Q(tarea__participantes__usuario=usuario)
+        | Q(tarea__hitos__responsable=usuario, tarea__hitos__anulado=False)
     ).distinct()
     for lectura in readings:
         open_inactivity_pause(lectura=lectura, at=transition_at)

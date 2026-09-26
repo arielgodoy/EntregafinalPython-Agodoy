@@ -7,6 +7,7 @@ Patrones vigentes reutilizados:
 """
 
 import logging
+from urllib.parse import urlparse
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -21,6 +22,7 @@ from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
 
+from acounts.models import Avatar
 from access_control.models import Empresa
 from access_control.decorators import verificar_permiso
 from access_control.services.permissions import (
@@ -172,16 +174,22 @@ def _unlinked_comment_page(*, tarea, before_comment=None):
 
 
 def _comment_document_data(documento):
+    archivo_nombre = ""
+    if documento.archivo:
+        archivo_nombre = documento.archivo.name.replace("\\", "/").rsplit("/", 1)[-1]
+    elif documento.url:
+        archivo_nombre = urlparse(documento.url).path.rstrip("/").rsplit("/", 1)[-1]
     return {
         "id": documento.pk,
         "tipo": documento.tipo,
         "formato_archivo": documento.formato_archivo,
         "url": documento.url,
         "archivo_url": documento.archivo.url if documento.archivo else "",
+        "nombre_archivo": archivo_nombre,
     }
 
 
-def _comment_data(comentario, usuario, puede_supervisar):
+def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
     es_autor = comentario.autor_id == usuario.pk
     puede_ver_contenido = es_autor or puede_supervisar
     if comentario.oculto and not puede_ver_contenido:
@@ -217,11 +225,28 @@ def _comment_data(comentario, usuario, puede_supervisar):
                 }
             )
 
+    if avatar_url is None:
+        avatar_url = ""
+        avatar = getattr(comentario.autor, "avatar", None)
+        if (
+            avatar is not None
+            and avatar.imagen
+            and avatar.imagen.name
+        ):
+            try:
+                avatar_url = avatar.imagen.url
+            except (OSError, ValueError):
+                avatar_url = ""
+
     return {
         "id": comentario.pk,
         "contenido": comentario.contenido,
         "created_at": comentario.created_at.isoformat(),
-        "autor": {"id": comentario.autor_id, "username": comentario.autor.username},
+        "autor": {
+            "id": comentario.autor_id,
+            "username": comentario.autor.username,
+            "avatar_url": avatar_url,
+        },
         "oculto": comentario.oculto,
         "editado": any(
             version.numero_version is not None and version.numero_version > 1
@@ -511,6 +536,45 @@ class ListarComentariosView(TareaComentariosView):
 
     def get(self, request, tarea_id):
         tarea = self.get_tarea(request, tarea_id)
+        after_id = request.GET.get("after_id")
+        if after_id is not None:
+            try:
+                after_id = int(after_id)
+            except (TypeError, ValueError):
+                return _comment_error_response()
+            if after_id < 0:
+                return _comment_error_response()
+            comentarios = list(
+                Comentario.objects.filter(tarea=tarea, pk__gt=after_id).order_by(
+                    "created_at", "pk"
+                )
+            )
+            prefetch_related_objects(
+                comentarios,
+                "autor__avatar",
+                "adjuntos__documento",
+                "versiones__actor",
+                "versiones__documentos__documento",
+            )
+            puede_supervisar = user_has_permission_for_empresa(
+                user=request.user,
+                empresa=tarea.empresa,
+                vista_nombre="Tareas",
+                accion="supervisor",
+            )
+            return JsonResponse(
+                {
+                    "success": True,
+                    "comentarios": [
+                        _comment_data(comentario, request.user, puede_supervisar)
+                        for comentario in comentarios
+                    ],
+                    "pendientes": 0,
+                    "primer_pendiente_id": None,
+                    "page_size": len(comentarios),
+                    "before_comment_id": None,
+                }
+            )
         comentarios_vinculado = _comment_actor_is_linked(tarea, request.user)
         before = request.GET.get("before")
         if before:
@@ -563,7 +627,7 @@ class ListarComentariosView(TareaComentariosView):
 
         prefetch_related_objects(
             comentarios,
-            "autor",
+            "autor__avatar",
             "adjuntos__documento",
             "versiones__actor",
             "versiones__documentos__documento",
@@ -640,16 +704,31 @@ class CrearComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
+        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
+        avatar = Avatar.objects.filter(user_id=request.user.pk).first()
+        request.user.avatar = avatar
+        comentario.autor = request.user
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
             empresa=tarea.empresa,
             vista_nombre="Tareas",
             accion="supervisor",
         )
+        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,
-                "comentario": _comment_data(comentario, request.user, puede_supervisar),
+                "comentario": _comment_data(
+                    comentario,
+                    request.user,
+                    puede_supervisar,
+                    avatar_url=(
+                        avatar.imagen.url
+                        if avatar is not None
+                        and avatar.imagen
+                        else ""
+                    ),
+                ),
             }
         )
 
@@ -684,12 +763,14 @@ class EditarComentarioView(TareaComentariosView):
             comentario = edit_comment(**cambios)
         except ValidationError:
             return _comment_error_response()
+        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
             empresa=tarea.empresa,
             vista_nombre="Tareas",
             accion="supervisor",
         )
+        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,
@@ -722,6 +803,8 @@ class _CambiarVisibilidadComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
+        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
+        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,

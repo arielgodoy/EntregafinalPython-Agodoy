@@ -7,7 +7,7 @@ from django.test import override_settings
 from django.urls import resolve, reverse
 from django.utils import timezone
 
-from tareas.models import DocumentoTarea, Tarea, TareaLectura, TareaParticipante
+from tareas.models import DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
 from tareas.services.assignment import add_participant
 from tareas.services.comments import create_comment, edit_comment, hide_comment
 from tareas.services.documents import create_document
@@ -72,11 +72,19 @@ class CommentReadViewTests(TestCase):
         cls.sin_vinculo = create_user(username="reading-web-unlinked")
         cls.sin_permiso = create_user(username="reading-web-no-permission")
         cls.nuevo_participante = create_user(username="reading-web-new-participant")
+        cls.hito_responsable = create_user(username="reading-web-hito-responsible")
         for user in (cls.lector, cls.autor):
             assign_permission(user, cls.empresa, "Tareas", ingresar=True, modificar=True)
         assign_permission(cls.supervisor, cls.empresa, "Tareas", ingresar=True, supervisor=True)
         assign_permission(cls.sin_vinculo, cls.empresa, "Tareas", ingresar=True)
         assign_permission(cls.nuevo_participante, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(
+            cls.hito_responsable,
+            cls.empresa,
+            "Tareas",
+            ingresar=True,
+            modificar=True,
+        )
         cls.admin_participantes = create_user(username="reading-web-participants-admin")
         assign_permission(
             cls.admin_participantes, cls.empresa, "Tareas", ingresar=True, modificar=True
@@ -138,6 +146,130 @@ class CommentReadViewTests(TestCase):
         lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
         self.assertIsNone(lectura.comentario_leido_hasta_id)
 
+    def test_incremental_get_returns_only_new_comments_without_moving_cursor(self):
+        first = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Inicial")
+        lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
+        self.assertIsNone(lectura.comentario_leido_hasta_id)
+
+        no_new = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": first.pk},
+        )
+
+        self.assertEqual(no_new.status_code, 200)
+        self.assertEqual(no_new.json()["comentarios"], [])
+        lectura.refresh_from_db()
+        self.assertIsNone(lectura.comentario_leido_hasta_id)
+
+        second = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Segundo")
+        third = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Tercero")
+        incremental = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": first.pk},
+        )
+
+        self.assertEqual(incremental.status_code, 200)
+        payload = incremental.json()
+        self.assertEqual([item["id"] for item in payload["comentarios"]], [second.pk, third.pk])
+        self.assertEqual(payload["pendientes"], 0)
+        lectura.refresh_from_db()
+        self.assertIsNone(lectura.comentario_leido_hasta_id)
+
+    def test_incremental_get_for_unlinked_reader_has_no_reading_side_effect(self):
+        comentario = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Visible")
+        self.login_as(self.sin_vinculo)
+        self.assertFalse(TareaLectura.objects.filter(tarea=self.tarea, usuario=self.sin_vinculo).exists())
+
+        response = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()["comentarios"]], [comentario.pk])
+        self.assertFalse(TareaLectura.objects.filter(tarea=self.tarea, usuario=self.sin_vinculo).exists())
+
+    def test_comment_payload_includes_existing_avatar_for_normal_incremental_and_create(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self.autor.avatar.imagen = SimpleUploadedFile(
+                "autor.png",
+                b"image-data",
+                content_type="image/png",
+            )
+            self.autor.avatar.save(update_fields=["imagen"])
+            comentario = create_comment(
+                tarea=self.tarea,
+                usuario=self.autor,
+                contenido="Con avatar",
+            )
+
+            normal = self.client.get(
+                reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+            ).json()["comentarios"][-1]
+            self.assertTrue(normal["autor"]["avatar_url"].endswith("autor.png"))
+
+            incremental = self.client.get(
+                reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+                {"after_id": comentario.pk - 1},
+            ).json()["comentarios"][-1]
+            self.assertEqual(incremental["autor"]["avatar_url"], normal["autor"]["avatar_url"])
+
+            self.login_as(self.autor)
+            created = self.client.post(
+                reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+                {"contenido": "Nuevo con avatar"},
+            ).json()["comentario"]
+            self.assertEqual(created["autor"]["avatar_url"], normal["autor"]["avatar_url"])
+
+    def test_comment_payload_without_existing_avatar_uses_empty_url(self):
+        self.autor.avatar.imagen = ""
+        self.autor.avatar.save(update_fields=["imagen"])
+        comentario = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Sin foto")
+
+        item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        ).json()["comentarios"][-1]
+
+        self.assertEqual(item["autor"]["avatar_url"], "")
+
+    def test_comment_avatar_matches_topbar_contract_for_default_image(self):
+        comentario = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Avatar default")
+        topbar_url = self.autor.avatar.imagen.url
+
+        item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        ).json()["comentarios"][-1]
+
+        self.assertEqual(topbar_url, "/media/avatares/default.jpg")
+        self.assertEqual(item["autor"]["avatar_url"], topbar_url)
+
+    def test_comment_attachment_payload_exposes_safe_real_filename(self):
+        documento = create_document(
+            tarea=self.tarea,
+            usuario=self.autor,
+            tipo=DocumentoTarea.Tipo.OTRO,
+            formato_archivo=DocumentoTarea.FormatoArchivo.PDF,
+            url="https://example.com/cotizacion_jc_morales.pdf",
+        )
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Adjunto",
+            documentos=[documento],
+        )
+
+        item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        ).json()["comentarios"][-1]
+
+        attachment = item["adjuntos"][0]
+        self.assertEqual(attachment["nombre_archivo"], "cotizacion_jc_morales.pdf")
+        self.assertEqual(attachment["tipo"], DocumentoTarea.Tipo.OTRO)
+        self.assertEqual(attachment["url"], "https://example.com/cotizacion_jc_morales.pdf")
+
     def test_create_post_delegates_comment_creation_and_returns_controlled_payload(self):
         response = self.client.post(
             reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
@@ -149,6 +281,62 @@ class CommentReadViewTests(TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["comentario"]["contenido"], "Comentario desde formulario")
         self.assertEqual(self.tarea.comentarios.count(), 1)
+
+    def test_create_post_keeps_existing_feed_contract(self):
+        existing = [
+            create_comment(tarea=self.tarea, usuario=self.autor, contenido=f"Previo {index}")
+            for index in range(2)
+        ]
+
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+            {"contenido": "Comentario nuevo"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        created_id = response.json()["comentario"]["id"]
+        feed = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        ).json()["comentarios"]
+        self.assertEqual([item["id"] for item in feed], [item.pk for item in existing] + [created_id])
+
+    def test_hito_responsible_gets_composer_and_can_create_comment(self):
+        tarea = self.make_active_task()
+        Hito.objects.create(
+            tarea=tarea,
+            nombre="Hito activo",
+            responsable=self.hito_responsable,
+            peso=1,
+        )
+        self.login_as(self.hito_responsable)
+
+        detail = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
+        self.assertContains(detail, "data-comments-composer")
+
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": tarea.pk}),
+            {"contenido": "Comentario del responsable de Hito"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_anulled_hito_does_not_grant_comment_participation(self):
+        tarea = self.make_active_task()
+        Hito.objects.create(
+            tarea=tarea,
+            nombre="Hito anulado",
+            responsable=self.hito_responsable,
+            peso=1,
+            anulado=True,
+        )
+        self.login_as(self.hito_responsable)
+
+        detail = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
+        self.assertNotContains(detail, "data-comments-composer")
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": tarea.pk}),
+            {"contenido": "No permitido"},
+        )
+        self.assertEqual(response.status_code, 403)
 
     @patch("tareas.views.create_comment", side_effect=RuntimeError("internal details"))
     def test_unexpected_service_error_returns_only_generic_response(self, _create_comment):
@@ -227,6 +415,43 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(comentario.contenido, "Después")
         self.assertEqual(comentario.versiones.count(), 2)
 
+    def test_edit_post_and_feed_return_current_history(self):
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Versión inicial",
+        )
+        self.login_as(self.autor)
+
+        edit_response = self.client.post(
+            reverse(
+                "tareas:editar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comentario.pk},
+            ),
+            {"contenido": "Versión editada"},
+        )
+
+        self.assertEqual(edit_response.status_code, 200)
+        edit_item = edit_response.json()["comentario"]
+        self.assertTrue(edit_item["editado"])
+        self.assertEqual(
+            [version["contenido"] for version in edit_item["historial"]],
+            ["Versión inicial", "Versión editada"],
+        )
+
+        feed_response = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        )
+
+        self.assertEqual(feed_response.status_code, 200)
+        feed_item = feed_response.json()["comentarios"][-1]
+        self.assertEqual(feed_item["contenido"], "Versión editada")
+        self.assertTrue(feed_item["editado"])
+        self.assertEqual(
+            [version["contenido"] for version in feed_item["historial"]],
+            ["Versión inicial", "Versión editada"],
+        )
+
     def test_edit_post_allows_implicit_responsible_without_participant_row(self):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
         tarea.estado = Tarea.Estado.ACTIVA
@@ -268,6 +493,7 @@ class CommentReadViewTests(TestCase):
         )
         self.assertEqual(ocultar.status_code, 200)
         self.assertTrue(ocultar.json()["comentario"]["oculto"])
+        self.assertFalse(ocultar.json()["comentario"]["editado"])
 
         restaurar = self.client.post(
             reverse(
@@ -278,12 +504,53 @@ class CommentReadViewTests(TestCase):
         )
         self.assertEqual(restaurar.status_code, 200)
         self.assertFalse(restaurar.json()["comentario"]["oculto"])
+        self.assertFalse(restaurar.json()["comentario"]["editado"])
         comentario.refresh_from_db()
         self.assertEqual(comentario.versiones.count(), 3)
         self.assertEqual(
             comentario.versiones.get(evento="OCULTADO").motivo,
             "Moderación",
         )
+
+    def test_edit_hide_restore_payload_preserves_independent_states(self):
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Contenido original",
+        )
+        self.login_as(self.autor)
+        edit_response = self.client.post(
+            reverse(
+                "tareas:editar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comentario.pk},
+            ),
+            {"contenido": "Contenido editado"},
+        )
+        self.assertTrue(edit_response.json()["comentario"]["editado"])
+
+        add_participant(self.tarea, self.supervisor, actor=self.autor)
+        self.login_as(self.supervisor)
+        hide_response = self.client.post(
+            reverse(
+                "tareas:ocultar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comentario.pk},
+            ),
+            {"motivo": "Moderación"},
+        )
+        hidden_item = hide_response.json()["comentario"]
+        self.assertTrue(hidden_item["oculto"])
+        self.assertTrue(hidden_item["editado"])
+
+        restore_response = self.client.post(
+            reverse(
+                "tareas:restaurar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comentario.pk},
+            ),
+            {"motivo": "Revisión completada"},
+        )
+        restored_item = restore_response.json()["comentario"]
+        self.assertFalse(restored_item["oculto"])
+        self.assertTrue(restored_item["editado"])
 
     def test_hidden_comment_is_a_redacted_tombstone_for_other_participants(self):
         comentario = create_comment(

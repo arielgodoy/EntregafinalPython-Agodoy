@@ -10,6 +10,7 @@ from tareas.models import (
     ComentarioVersion,
     ComentarioVersionDocumento,
     DocumentoTarea,
+    Hito,
     Tarea,
 )
 from tareas.services.assignment import add_participant
@@ -20,6 +21,7 @@ from tareas.services.comments import (
     restore_comment,
 )
 from tareas.services.documents import create_document
+from tareas.services.participants import effective_participant_ids, is_effective_participant
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
 
@@ -148,6 +150,45 @@ class CommentServiceTests(TestCase):
 
         self.assertEqual(comentario.autor_id, self.editor.pk)
         self.assertFalse(tarea.participantes.filter(usuario=self.editor).exists())
+
+    def test_active_hito_responsible_is_effective_and_reassignment_is_dynamic(self):
+        tarea = self.make_task()
+        first = Hito.objects.create(
+            tarea=tarea,
+            nombre="Hito A",
+            responsable=self.editor,
+            peso=1,
+        )
+        second = Hito.objects.create(
+            tarea=tarea,
+            nombre="Hito B",
+            responsable=self.editor,
+            peso=1,
+        )
+
+        self.assertTrue(is_effective_participant(tarea, self.editor))
+        first.responsable = self.supervisor
+        first.save(update_fields=["responsable"])
+        self.assertTrue(is_effective_participant(tarea, self.editor))
+        self.assertTrue(is_effective_participant(tarea, self.supervisor))
+
+        second.anulado = True
+        second.save(update_fields=["anulado"])
+        self.assertFalse(is_effective_participant(tarea, self.editor))
+        self.assertTrue(is_effective_participant(tarea, self.supervisor))
+
+    def test_effective_participant_ids_deduplicate_task_and_hito_roles(self):
+        tarea = self.make_task()
+        Hito.objects.create(
+            tarea=tarea,
+            nombre="Hito del responsable",
+            responsable=self.autor,
+            peso=1,
+        )
+
+        participant_ids = effective_participant_ids(tarea)
+
+        self.assertEqual(participant_ids, {self.autor.pk})
 
     def test_create_rejects_inactive_foreign_and_non_operational_users(self):
         tarea = self.make_task()

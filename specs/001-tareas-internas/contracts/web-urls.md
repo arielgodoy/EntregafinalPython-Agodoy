@@ -189,7 +189,7 @@ ni habilita acciones de Comentarios.
 
 | Estado | Método | Ruta propuesta | Nombre sugerido | Autorización VICMEAS |
 |---|---|---|---|---|
-| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados |
+| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados. `after_id` opcional devuelve solo Comentarios posteriores sin mover lectura/unread |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar` + participación funcional; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend; permitido también en Tarea cerrada/anulada (estado personal de lectura) |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `modificar` + participación funcional |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar` + participación funcional; autor y hasta 1 hora |

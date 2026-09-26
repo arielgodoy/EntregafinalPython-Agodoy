@@ -1,6 +1,6 @@
 <section
     id="tarea-comentarios"
-    class="card shadow-sm rounded mt-4"
+    class="card shadow-sm rounded task-comments"
     data-comments-card
     data-task-id="{{ tarea.pk }}"
     data-current-user-id="{{ request.user.pk }}"
@@ -14,7 +14,7 @@
     data-can-supervise="{% if comentarios_mutables and comentarios_puede_supervisar %}true{% else %}false{% endif %}"
     data-can-comment="{{ comentarios_mutables|yesno:'true,false' }}"
 >
-    <div class="card-header d-flex align-items-center justify-content-between gap-2">
+    <div class="card-header d-flex align-items-center justify-content-between gap-2 task-comments__header">
         <h5 class="card-title mb-0">
             <span data-key="tareas.comments.title">Comentarios</span>
             <span class="badge bg-primary-subtle text-primary d-none" data-comments-unread aria-live="polite"></span>
@@ -31,6 +31,7 @@
         <span data-key="tareas.comments.unread">comentarios sin leer</span>
         <span data-key="tareas.comments.new">Nuevos comentarios</span>
         <span data-key="tareas.comments.hidden">Este comentario fue ocultado.</span>
+        <span data-key="tareas.comments.hidden_state">oculto</span>
         <span data-key="tareas.comments.edited">editado</span>
         <span data-key="tareas.comments.history">Historial</span>
         <span data-key="tareas.comments.hide">Ocultar</span>
@@ -50,8 +51,9 @@
             <span class="small text-primary text-nowrap" data-comments-new-label></span>
             <hr class="flex-grow-1 my-0">
         </div>
-        <div class="d-flex flex-column gap-3" data-comments-feed aria-live="polite"></div>
+        <div class="d-flex flex-column gap-3 task-comments__feed" data-comments-feed aria-live="polite"></div>
         <p class="text-muted mb-0 d-none" data-comments-empty>
+            <i class="ri-chat-3-line me-1" aria-hidden="true"></i>
             <span data-key="tareas.comments.empty">No hay comentarios.</span>
         </p>
         <div class="d-none mt-3" data-comments-read-controls>
@@ -60,20 +62,21 @@
             </button>
         </div>
         {% if comentarios_mutables %}
-        <form class="border-top mt-4 pt-3" data-comments-composer enctype="multipart/form-data">
+        <form class="border-top mt-4 pt-3 task-comments__composer" data-comments-composer enctype="multipart/form-data">
             {% csrf_token %}
             <label class="visually-hidden" for="comentario-contenido-{{ tarea.pk }}">
                 <span data-key="tareas.comments.content">Comentario</span>
             </label>
             <textarea id="comentario-contenido-{{ tarea.pk }}" name="contenido" class="form-control" rows="3" maxlength="10000"></textarea>
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-2 task-comments__composer-toolbar">
                 <label class="btn btn-outline-secondary btn-sm mb-0" for="comentario-archivos-{{ tarea.pk }}">
-                    <span aria-hidden="true">&#128206;</span>
+                    <i class="ri-attachment-2" aria-hidden="true"></i>
                     <span data-key="tareas.comments.attach">Adjuntar</span>
                 </label>
                 <input id="comentario-archivos-{{ tarea.pk }}" class="d-none" type="file" name="archivos" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" capture="environment" data-comments-files>
                 <span class="small text-muted" data-comments-file-summary></span>
                 <button type="submit" class="btn btn-primary ms-auto" data-comments-submit>
+                    <i class="ri-send-plane-2-line" aria-hidden="true"></i>
                     <span data-key="tareas.comments.send">Enviar</span>
                 </button>
             </div>

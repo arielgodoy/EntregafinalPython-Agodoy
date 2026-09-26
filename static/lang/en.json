@@ -1315,6 +1315,7 @@
     "tareas.documents.url": "URL",
     "tareas.evidence.add": "Add closure evidence",
     "tareas.evidence.configuration": "Closure configuration",
+    "tareas.details.dates": "Dates",
     "tareas.evidence.date": "Date",
     "tareas.evidence.empty": "No evidence registered.",
     "tareas.evidence.file": "File",
@@ -1461,6 +1462,7 @@
     "tareas.comments.unread": "unread comments",
     "tareas.comments.new": "New comments",
     "tareas.comments.hidden": "This comment was hidden.",
+    "tareas.comments.hidden_state": "hidden",
     "tareas.comments.edited": "edited",
     "tareas.comments.history": "History",
     "tareas.comments.hide": "Hide",
@@ -1482,4 +1484,5 @@
     ,"tareas.comments.more": "View more"
     ,"tareas.comments.less": "View less"
     ,"tareas.comments.close": "Close"
+    ,"tareas.comments.actions": "Comment actions"
 }

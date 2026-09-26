@@ -14,7 +14,9 @@
 
 ### Session 2026-09-25
 
-- La participación funcional efectiva es `Tarea.responsable OR TareaParticipante`.
+- La participación funcional efectiva para Comentarios es `Tarea.responsable OR
+	TareaParticipante OR Hito.responsable` cuando el Hito pertenece a la Tarea y
+	`anulado=False`.
 	El responsable no se materializa como `TareaParticipante`, no hay backfill ni
 	migración para esta regla.
 - El creador no obtiene participación implícita por ser creador. La relación efectiva
@@ -27,6 +29,11 @@
 - Retirar el vínculo explícito del responsable no elimina su participación efectiva.
 	Responsable y participante explícito se deduplican por usuario en lecturas, pausas y
 	notificaciones. La inactividad no genera unread retroactivo al reactivarse.
+- T101 usa polling AJAX incremental cada 10 segundos únicamente mientras el Detalle de
+	Tarea está visible: consulta solo Comentarios posteriores por ID, agrega sin reemplazar
+	el feed, no equivale a lectura ni mueve cursor/unread, se suspende con la pestaña oculta
+	y no sincroniza todavía ediciones, ocultaciones o restauraciones remotas de Comentarios
+	existentes.
 
 ### Session 2026-09-07
 
