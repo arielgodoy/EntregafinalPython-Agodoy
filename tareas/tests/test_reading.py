@@ -59,6 +59,22 @@ class CommentReadingServiceTests(TestCase):
         self.assertEqual(count_pending_comments(tarea=tarea, usuario=self.lector), 0)
         self.assertIsNone(get_first_pending_comment(tarea=tarea, usuario=self.lector))
 
+    def test_responsible_without_explicit_participant_tracks_new_comments(self):
+        tarea = create_tarea(self.empresa, self.autor, responsable=self.lector)
+        comentario = self.make_comment(tarea)
+
+        self.assertEqual(count_pending_comments(tarea=tarea, usuario=self.lector), 1)
+        self.assertEqual(
+            get_first_pending_comment(tarea=tarea, usuario=self.lector),
+            comentario,
+        )
+        self.assertFalse(
+            TareaParticipante.objects.filter(
+                tarea=tarea,
+                usuario=self.lector,
+            ).exists()
+        )
+
     def test_counter_excludes_own_and_includes_hidden(self):
         tarea = self.make_task()
         own = self.make_comment(tarea, autor=self.lector)

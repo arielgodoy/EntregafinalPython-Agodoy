@@ -134,6 +134,21 @@ class CommentServiceTests(TestCase):
         comentario = create_comment(tarea=tarea, usuario=self.editor, contenido="Permitido")
         self.assertEqual(comentario.autor, self.editor)
 
+    def test_responsible_without_explicit_participant_can_create_comment(self):
+        tarea = create_tarea(self.empresa, self.autor, responsable=self.editor)
+        tarea.estado = Tarea.Estado.ACTIVA
+        tarea.fecha_publicacion = timezone.now()
+        tarea.save(update_fields=["estado", "fecha_publicacion"])
+
+        comentario = create_comment(
+            tarea=tarea,
+            usuario=self.editor,
+            contenido="Comentario del responsable",
+        )
+
+        self.assertEqual(comentario.autor_id, self.editor.pk)
+        self.assertFalse(tarea.participantes.filter(usuario=self.editor).exists())
+
     def test_create_rejects_inactive_foreign_and_non_operational_users(self):
         tarea = self.make_task()
         with self.assertRaises(ValidationError):

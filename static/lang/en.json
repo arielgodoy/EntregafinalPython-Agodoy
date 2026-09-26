@@ -1448,5 +1448,38 @@
     "tareas.links.created": "Link created successfully.",
     "tareas.links.revoked": "Link revoked successfully.",
     "tareas.links.revoke_error": "The link could not be revoked.",
-    "tareas.messages.generic_error": "The operation could not be completed."
+    "tareas.messages.generic_error": "The operation could not be completed.",
+    "tareas.comments.title": "Comments",
+    "tareas.comments.previous": "View previous comments",
+    "tareas.comments.empty": "No comments.",
+    "tareas.comments.mark_read": "Mark loaded comments as read",
+    "tareas.comments.content": "Comment",
+    "tareas.comments.attach": "Attach",
+    "tareas.comments.send": "Send",
+    "tareas.comments.read_only": "This task is read-only.",
+    "tareas.comments.participation_required": "You must be linked as a participant to comment.",
+    "tareas.comments.unread": "unread comments",
+    "tareas.comments.new": "New comments",
+    "tareas.comments.hidden": "This comment was hidden.",
+    "tareas.comments.edited": "edited",
+    "tareas.comments.history": "History",
+    "tareas.comments.hide": "Hide",
+    "tareas.comments.restore": "Restore",
+    "tareas.comments.attachment": "Attachment",
+    "tareas.comments.loading": "Loading...",
+    "tareas.comments.load_error": "Comments could not be loaded."
+    ,"tareas.comments.edit": "Edit"
+    ,"tareas.comments.edit_title": "Edit comment"
+    ,"tareas.comments.cancel": "Cancel"
+    ,"tareas.comments.save": "Save"
+    ,"tareas.comments.reason": "Reason"
+    ,"tareas.comments.hide_title": "Hide comment"
+    ,"tareas.comments.restore_title": "Restore comment"
+    ,"tareas.comments.save_error": "The comment could not be saved."
+    ,"tareas.comments.files_count": "files"
+    ,"tareas.comments.max_files": "Maximum five attachments."
+    ,"tareas.comments.remove_file": "Remove file"
+    ,"tareas.comments.more": "View more"
+    ,"tareas.comments.less": "View less"
+    ,"tareas.comments.close": "Close"
 }

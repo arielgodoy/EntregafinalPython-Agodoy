@@ -210,20 +210,25 @@ en `tasks.md`; no reabre ni renumera fases históricas.
 
 - Mantener Comentarios dentro de `tareas/`, relacionados 1:N con `Tarea`, sin estado ni
     transición propia.
-- Reutilizar `TareaParticipante` como único vínculo de acceso; VICMEAS usa `Tareas`:
-    `ingresar` para lectura, `modificar` para crear/editar/vincular y `supervisor` (S)
-    para ocultar/restaurar. Creador/responsable no tienen bypass del vínculo.
+- Usar la participación funcional efectiva `Tarea.responsable OR TareaParticipante` para
+    comentarios y seguimiento, sin materializar ni sincronizar filas. VICMEAS usa
+    `Tareas`: `ingresar` para lectura, `modificar` para crear/editar/vincular y
+    `supervisor` (S) para ocultar/restaurar. Creador/responsable no tienen bypass de
+    VICMEAS, lifecycle o Empresa; el creador tampoco es participante implícito.
 - Reutilizar `DocumentoTarea` para un máximo de cinco adjuntos por Comentario; no duplicar
     archivos ni emitir notificación `documento_agregado` adicional por una carga inline.
 - Conservar versiones inmutables del texto y conjunto de relaciones `DocumentoTarea`, con
     `PROTECT`; no copiar archivos. Edición del autor hasta una hora desde creación original;
     ocultar/restaurar requiere S y motivo obligatorio. Historial detallado solo autor/S.
 - Extender la fila única existente `TareaLectura` con cursor `(created_at, pk)`; páginas
-    cronológicas de 20 avanzan solo lo cargado. Registrar períodos de inactividad por lector/
-    Tarea desde `tareas` al observar `User.is_active`, sin filas por Comentario ni cambios
-    a sesiones. Los ocultos pendientes usan tombstone neutro en la bitácora.
+    cronológicas de 20 avanzan solo lo cargado. El responsable nuevo inicia en el último
+    Comentario, mientras un participante explícito conserva su cursor. Registrar períodos
+    de inactividad por lector/Tarea desde `tareas` al observar `User.is_active`, deduplicando
+    responsable y participante, sin filas por Comentario ni cambios a sesiones. Los ocultos
+    pendientes usan tombstone neutro en la bitácora.
 - Permitir mutaciones solo en estados publicados operativos; cerrada/anulada es lectura.
-    Revalidar en backend Empresa, vínculo, VICMEAS y lifecycle justo antes de persistir.
+    Revalidar en backend Empresa, participación funcional, VICMEAS y lifecycle justo antes
+    de persistir.
 - Integrar T054 para crear/editar/ocultar/restaurar; solo crear incrementa no leídos. Usar
     notificaciones existentes y email automático para prioridad `CRITICA`.
 - La tarjeta server-rendered pagina 20, ofrece cámara móvil, burbuja `1..9`/`9+` y foco

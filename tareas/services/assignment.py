@@ -64,7 +64,7 @@ def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE, *, acto
         usuario=user,
         defaults={"comentario_leido_hasta": comentario_reciente},
     )
-    if created and not lectura_created:
+    if created and not lectura_created and tarea.responsable_id != user.pk:
         lectura.comentario_leido_hasta = comentario_reciente
         lectura.save(update_fields=["comentario_leido_hasta"])
     return participante
@@ -103,6 +103,16 @@ def assign_responsible(tarea, new_responsible, changed_by, motivo=""):
         tarea.responsable = new_responsible
         tarea.full_clean()
         tarea.save(update_fields=["responsable"])
+        comentario_reciente = (
+            Comentario.objects.filter(tarea=tarea)
+            .order_by("-created_at", "-pk")
+            .first()
+        )
+        TareaLectura.objects.get_or_create(
+            tarea=tarea,
+            usuario=new_responsible,
+            defaults={"comentario_leido_hasta": comentario_reciente},
+        )
         reasignacion = TareaReasignacion.objects.create(
             tarea=tarea,
             responsable_anterior=anterior,

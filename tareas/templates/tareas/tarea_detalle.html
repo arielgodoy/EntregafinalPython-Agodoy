@@ -180,6 +180,9 @@ Detalle de tarea
                             </div>
                         </div>
                     </div>
+                    {% if comentarios_puede_ver %}
+                        {% include "tareas/_tarea_comentarios.html" %}
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -189,4 +192,5 @@ Detalle de tarea
 
 {% block extra_js %}
 <script src="{% static 'tareas/js/task_links.js' %}"></script>
+<script src="{% static 'tareas/js/task_comments.js' %}"></script>
 {% endblock extra_js %}

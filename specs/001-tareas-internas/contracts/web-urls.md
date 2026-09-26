@@ -177,35 +177,39 @@ La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal 
 ### Comentarios de Tarea — Phase 8 (rutas T100; integración visual T101 pendiente)
 
 La tarjeta se integrará en el detalle existente `GET /tareas/<pk>/` en T101. El feed usa páginas fijas de 20,
-orden `(created_at, pk)`, cursor por `TareaLectura` y navegación histórica antes del cursor
-sin avanzar lectura; cuando no hay pendientes muestra los 20 más recientes. El reconocimiento
-POST solo acepta el final de la siguiente página contigua efectivamente cargada. Abrir el
-detalle no mueve el cursor. Requiere
-`vista_nombre="Tareas"`, `ingresar`, Empresa activa y vínculo `TareaParticipante` vigente
-con usuario activo; creador/responsable solo acceden si están vinculados. Un enlace
-`EnlaceTarea` no crea participación ni habilita acciones de Comentarios.
+orden `(created_at, pk)`, cursor por `TareaLectura` para participantes funcionales efectivos
+(`Tarea.responsable` o `TareaParticipante`) y navegación histórica antes del cursor
+sin avanzar lectura; cuando no hay pendientes muestra los 20 más recientes. Un lector con `ingresar`, Empresa activa,
+usuario activo y acceso válido a la Tarea puede consultar el feed sin vínculo `TareaParticipante`; en ese caso no se
+crea ni usa cursor, unread, badge o reconocimiento de Comentarios y la tarjeta no muestra composer. El reconocimiento
+POST solo acepta el final de la siguiente página contigua efectivamente cargada y requiere participación funcional.
+Abrir el detalle no mueve el cursor. La lectura usa `vista_nombre="Tareas"` e `ingresar`; las mutaciones requieren
+además el vínculo vigente y el permiso VICMEAS/lifecycle correspondiente. Un enlace `EnlaceTarea` no crea participación
+ni habilita acciones de Comentarios.
 
 | Estado | Método | Ruta propuesta | Nombre sugerido | Autorización VICMEAS |
 |---|---|---|---|---|
-| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; página 20, navegación histórica/cursor, primer pendiente e historial solo autor/S |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar`; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend; permitido también en Tarea cerrada/anulada (estado personal de lectura) |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `modificar` |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar`; autor y hasta 1 hora |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/ocultar/` | `ocultar_comentario` | `Tareas` + `supervisor` (S); motivo obligatorio |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/restaurar/` | `restaurar_comentario` | `Tareas` + `supervisor` (S); motivo obligatorio |
+| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar` + participación funcional; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend; permitido también en Tarea cerrada/anulada (estado personal de lectura) |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `modificar` + participación funcional |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar` + participación funcional; autor y hasta 1 hora |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/ocultar/` | `ocultar_comentario` | `Tareas` + `supervisor` (S) + participación funcional; motivo obligatorio |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/restaurar/` | `restaurar_comentario` | `Tareas` + `supervisor` (S) + participación funcional; motivo obligatorio |
 | ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/vincular/` | `vincular_participante` | `Tareas` + `modificar`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
 | ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/desvincular/` | `desvincular_participante` | `Tareas` + `modificar`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
 
 La administración de `TareaParticipante` requiere VICMEAS `modificar`, pero no requiere que el
 actor administrador sea él mismo participante; así una Tarea puede comenzar con cero
-participantes y recibir su primer vínculo explícito, sin auto-vincular creador, responsable
-ni actor. `add_participant`/`remove_participant` reciben el actor y revalidan en dominio
+participantes y recibir su primer vínculo explícito, sin auto-vincular creador ni actor.
+El responsable es participante funcional sin crear una fila explícita. `add_participant`/
+`remove_participant` reciben el actor y revalidan en dominio
 Empresa, usuario activo, `modificar` y lifecycle: `CERRADA` y anulada efectivamente bloquean
-cambios de participantes; `BORRADOR` los admite. La participación formal sí continúa siendo
-requisito para interactuar en la bitácora de Comentarios.
+cambios de participantes; `BORRADOR` los admite. Para Comentarios, la participación funcional
+efectiva es el responsable actual o un vínculo explícito; el creador no obtiene participación
+por sí solo.
 
 Las mutaciones de Comentarios revalidan en backend, inmediatamente antes de persistir, Empresa,
-VICMEAS, vínculo activo y estado vigente. Solo estados `ACTIVA`, `GESTION` y
+VICMEAS, participación funcional y estado vigente. Solo estados `ACTIVA`, `GESTION` y
 `PENDIENTE_APROBACION_CIERRE` no anulados admiten cambios; `BORRADOR`, `CERRADA` y anulada
 efectivamente son de solo lectura. Cerrar/anular congela las mutaciones del contenido de
 Comentarios, pero no impide actualizar el estado personal de lectura
@@ -215,8 +219,8 @@ Tarea, Comentario y documentos deben pertenecer a la Empresa activa y misma Tare
 borra el documento físico. Los endpoints usan POST HTML/CSRF y respuestas controladas;
 no se añade API REST ni permisos nuevos.
 
-Crear, editar, ocultar y restaurar notifican a participantes vinculados y activos, excepto
-al actor, sin duplicados; `CRITICA` conserva email automático de sistema. Solo crear
+Crear, editar, ocultar y restaurar notifican a participantes funcionales efectivos y activos,
+excepto al actor, sin duplicados por usuario; `CRITICA` conserva email automático de sistema. Solo crear
 incrementa no leídos. La carga/expansión reconoce solo los registros de la siguiente página
 contigua de 20; leer no notifica. Ocultos pendientes se entregan como tombstone neutro, sin
 contenido/historial a quienes no son autor/S. Adjuntos inline no duplican `documento_agregado`.

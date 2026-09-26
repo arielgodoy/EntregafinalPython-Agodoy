@@ -227,6 +227,29 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(comentario.contenido, "Después")
         self.assertEqual(comentario.versiones.count(), 2)
 
+    def test_edit_post_allows_implicit_responsible_without_participant_row(self):
+        tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
+        tarea.estado = Tarea.Estado.ACTIVA
+        tarea.fecha_publicacion = timezone.now()
+        tarea.save(update_fields=["estado", "fecha_publicacion"])
+        comentario = create_comment(tarea=tarea, usuario=self.autor, contenido="Antes")
+        self.login_as(self.autor)
+
+        response = self.client.post(
+            reverse(
+                "tareas:editar_comentario",
+                kwargs={"tarea_id": tarea.pk, "comentario_id": comentario.pk},
+            ),
+            {"contenido": "Después", "documentos_modificados": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertFalse(tarea.participantes.filter(usuario=self.autor).exists())
+        comentario.refresh_from_db()
+        self.assertEqual(comentario.contenido, "Después")
+        self.assertEqual(comentario.versiones.count(), 2)
+
     def test_supervisor_routes_hide_and_restore_with_motives(self):
         comentario = create_comment(
             tarea=self.tarea,
@@ -383,12 +406,16 @@ class CommentReadViewTests(TestCase):
         lectura.refresh_from_db()
         self.assertEqual(lectura.comentario_leido_hasta_id, comentario.pk)
 
-    def test_unlinked_user_and_foreign_company_task_are_not_readable(self):
+    def test_unlinked_user_can_read_comments_but_foreign_company_task_is_not_readable(self):
+        create_comment(tarea=self.tarea, usuario=self.autor, contenido="Visible para lector VICMEAS")
         self.login_as(self.sin_vinculo)
         response = self.client.get(
             reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["comentarios"]), 1)
+        self.assertEqual(response.json()["pendientes"], 0)
+        self.assertFalse(TareaLectura.objects.filter(tarea=self.tarea, usuario=self.sin_vinculo).exists())
 
         otra_empresa = create_empresa(codigo="C100X", descripcion="Empresa ajena")
         tarea_ajena = create_tarea(otra_empresa, self.autor, responsable=self.autor)
@@ -453,6 +480,12 @@ class CommentReadViewTests(TestCase):
         self.assertFalse(tarea.participantes.exists())
         self.login_as(self.admin_participantes)
 
+        crear_sin_vinculo = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": tarea.pk}),
+            {"contenido": "Administrador sin vínculo"},
+        )
+        self.assertEqual(crear_sin_vinculo.status_code, 403)
+
         response = self.client.post(self.link_url(tarea, self.lector))
 
         self.assertEqual(response.status_code, 200)
@@ -460,11 +493,6 @@ class CommentReadViewTests(TestCase):
             list(tarea.participantes.values_list("usuario", flat=True)),
             [self.lector.pk],
         )
-        crear = self.client.post(
-            reverse("tareas:crear_comentario", kwargs={"tarea_id": tarea.pk}),
-            {"contenido": "Administrador sin vínculo"},
-        )
-        self.assertEqual(crear.status_code, 403)
         self.assertFalse(tarea.comentarios.exists())
 
     def test_link_requires_modificar_permission(self):
@@ -524,7 +552,7 @@ class CommentReadViewTests(TestCase):
             reverse("tareas:marcar_comentarios_leidos", kwargs={"tarea_id": self.tarea.pk}),
             {"comentario_ids": [comentario.pk]},
         )
-        self.assertEqual((listar.status_code, crear.status_code, leer.status_code), (403, 403, 403))
+        self.assertEqual((listar.status_code, crear.status_code, leer.status_code), (200, 403, 403))
         self.assertEqual(self.tarea.comentarios.count(), 1)
 
     def test_edit_by_non_author_is_rejected(self):

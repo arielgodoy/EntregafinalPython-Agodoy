@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch, prefetch_related_objects
+from django.db.models import Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -89,6 +89,7 @@ from .services.documents import (
     register_closure_evidence,
 )
 from .services.notifications import emit_task_event, task_recipients
+from .services.participants import is_effective_participant
 from .services.similarity import (
     confirm_similarity,
     evaluate_task_similarity,
@@ -146,10 +147,7 @@ def _comment_error_response(status=400):
 
 
 def _comment_actor_is_linked(tarea, usuario):
-    return usuario.is_active and TareaParticipante.objects.filter(
-        tarea=tarea,
-        usuario=usuario,
-    ).exists()
+    return usuario.is_active and is_effective_participant(tarea, usuario)
 
 
 def _comment_actor_has_permission(tarea, usuario, accion):
@@ -159,6 +157,18 @@ def _comment_actor_has_permission(tarea, usuario, accion):
         vista_nombre="Tareas",
         accion=accion,
     )
+
+
+def _unlinked_comment_page(*, tarea, before_comment=None):
+    queryset = Comentario.objects.filter(tarea=tarea)
+    if before_comment is not None:
+        queryset = queryset.filter(
+            Q(created_at__lt=before_comment.created_at)
+            | Q(created_at=before_comment.created_at, pk__lt=before_comment.pk)
+        )
+    comentarios = list(queryset.order_by("-created_at", "-pk")[:COMMENT_PAGE_SIZE])
+    comentarios.reverse()
+    return comentarios
 
 
 def _comment_document_data(documento):
@@ -388,6 +398,38 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             empresa_id=self.object.empresa_id
         )
         context["tarea_anulada_efectivamente"] = is_effectively_annulled(self.object)
+        comentarios_vinculado = _comment_actor_is_linked(self.object, self.request.user)
+        comentarios_puede_ver = self.request.user.is_active and _comment_actor_has_permission(
+            self.object,
+            self.request.user,
+            "ingresar",
+        )
+        comentarios_puede_modificar = comentarios_vinculado and user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas",
+            accion="modificar",
+        )
+        comentarios_puede_supervisar = comentarios_vinculado and user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+        context["comentarios_puede_ver"] = comentarios_puede_ver
+        context["comentarios_vinculado"] = comentarios_vinculado
+        context["comentarios_puede_modificar"] = comentarios_puede_modificar
+        context["comentarios_puede_supervisar"] = comentarios_puede_supervisar
+        context["comentarios_mutables"] = (
+            comentarios_puede_modificar
+            and self.object.estado
+            in {
+                Tarea.Estado.ACTIVA,
+                Tarea.Estado.GESTION,
+                Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+            }
+            and not context["tarea_anulada_efectivamente"]
+        )
         context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
             user=self.request.user,
             empresa=self.object.empresa,
@@ -469,8 +511,7 @@ class ListarComentariosView(TareaComentariosView):
 
     def get(self, request, tarea_id):
         tarea = self.get_tarea(request, tarea_id)
-        if not _comment_actor_is_linked(tarea, request.user):
-            return _comment_error_response(status=403)
+        comentarios_vinculado = _comment_actor_is_linked(tarea, request.user)
         before = request.GET.get("before")
         if before:
             try:
@@ -481,31 +522,44 @@ class ListarComentariosView(TareaComentariosView):
                 Comentario.objects.filter(tarea=tarea),
                 pk=before_id,
             )
+            if comentarios_vinculado:
+                try:
+                    comentarios = get_previous_comment_page(
+                        tarea=tarea,
+                        usuario=request.user,
+                        before_comment=before_comment,
+                    )
+                except ValidationError:
+                    return _comment_error_response()
+            else:
+                comentarios = _unlinked_comment_page(
+                    tarea=tarea,
+                    before_comment=before_comment,
+                )
+        else:
+            if comentarios_vinculado:
+                try:
+                    comentarios = get_initial_comment_page(
+                        tarea=tarea,
+                        usuario=request.user,
+                    )
+                except ValidationError:
+                    return _comment_error_response()
+            else:
+                comentarios = _unlinked_comment_page(tarea=tarea)
+
+        if comentarios_vinculado:
             try:
-                comentarios = get_previous_comment_page(
+                pendientes = count_pending_comments(tarea=tarea, usuario=request.user)
+                primer_pendiente = get_first_pending_comment(
                     tarea=tarea,
                     usuario=request.user,
-                    before_comment=before_comment,
                 )
             except ValidationError:
                 return _comment_error_response()
         else:
-            try:
-                comentarios = get_initial_comment_page(
-                    tarea=tarea,
-                    usuario=request.user,
-                )
-            except ValidationError:
-                return _comment_error_response()
-
-        try:
-            pendientes = count_pending_comments(tarea=tarea, usuario=request.user)
-            primer_pendiente = get_first_pending_comment(
-                tarea=tarea,
-                usuario=request.user,
-            )
-        except ValidationError:
-            return _comment_error_response()
+            pendientes = 0
+            primer_pendiente = None
 
         prefetch_related_objects(
             comentarios,

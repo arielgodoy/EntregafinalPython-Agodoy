@@ -1410,5 +1410,38 @@
     "tareas.links.created": "Enlace creado correctamente.",
     "tareas.links.revoked": "Enlace revocado correctamente.",
     "tareas.links.revoke_error": "No fue posible revocar el enlace.",
-    "tareas.messages.generic_error": "No fue posible completar la operación."
+    "tareas.messages.generic_error": "No fue posible completar la operación.",
+    "tareas.comments.title": "Comentarios",
+    "tareas.comments.previous": "Ver comentarios anteriores",
+    "tareas.comments.empty": "No hay comentarios.",
+    "tareas.comments.mark_read": "Marcar comentarios cargados como leídos",
+    "tareas.comments.content": "Comentario",
+    "tareas.comments.attach": "Adjuntar",
+    "tareas.comments.send": "Enviar",
+    "tareas.comments.read_only": "Esta tarea está en modo de solo lectura.",
+    "tareas.comments.participation_required": "Debe estar vinculado como participante para comentar.",
+    "tareas.comments.unread": "comentarios sin leer",
+    "tareas.comments.new": "Nuevos comentarios",
+    "tareas.comments.hidden": "Este comentario fue ocultado.",
+    "tareas.comments.edited": "editado",
+    "tareas.comments.history": "Historial",
+    "tareas.comments.hide": "Ocultar",
+    "tareas.comments.restore": "Restaurar",
+    "tareas.comments.attachment": "Adjunto",
+    "tareas.comments.loading": "Cargando...",
+    "tareas.comments.load_error": "No fue posible cargar los comentarios."
+    ,"tareas.comments.edit": "Editar"
+    ,"tareas.comments.edit_title": "Editar comentario"
+    ,"tareas.comments.cancel": "Cancelar"
+    ,"tareas.comments.save": "Guardar"
+    ,"tareas.comments.reason": "Motivo"
+    ,"tareas.comments.hide_title": "Ocultar comentario"
+    ,"tareas.comments.restore_title": "Restaurar comentario"
+    ,"tareas.comments.save_error": "No fue posible guardar el comentario."
+    ,"tareas.comments.files_count": "archivos"
+    ,"tareas.comments.max_files": "Máximo cinco adjuntos."
+    ,"tareas.comments.remove_file": "Quitar archivo"
+    ,"tareas.comments.more": "Ver más"
+    ,"tareas.comments.less": "Ver menos"
+    ,"tareas.comments.close": "Cerrar"
 }

@@ -1,6 +1,7 @@
 """Comment reading, cursor and inactivity services (T099)."""
 
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
@@ -9,9 +10,9 @@ from tareas.models import (
     Comentario,
     ComentarioPausaLectura,
     TareaLectura,
-    TareaParticipante,
 )
 from tareas.services.assignment import _validate_user_in_task_company
+from tareas.services.participants import effective_participant_ids, is_effective_participant
 
 
 COMMENT_PAGE_SIZE = 20
@@ -43,8 +44,8 @@ def _pending_comments(lectura):
 
 def _get_linked_reading(*, tarea, usuario, lock=False):
     _validate_user_in_task_company(tarea, usuario)
-    if not TareaParticipante.objects.filter(tarea=tarea, usuario=usuario).exists():
-        raise ValidationError("El usuario no está vinculado a la tarea.")
+    if not is_effective_participant(tarea, usuario):
+        raise ValidationError("El usuario no participa funcionalmente en la tarea.")
     latest = Comentario.objects.filter(tarea=tarea).order_by("-created_at", "-pk").first()
     queryset = TareaLectura.objects.select_related("comentario_leido_hasta")
     if lock:
@@ -154,9 +155,8 @@ def handle_user_activity_transition(*, usuario, was_active, at=None):
         for lectura in readings:
             close_inactivity_pause(lectura=lectura, at=transition_at)
         return
-    readings = TareaLectura.objects.filter(
-        usuario=usuario,
-        tarea__participantes__usuario=usuario,
+    readings = TareaLectura.objects.filter(usuario=usuario).filter(
+        Q(tarea__responsable=usuario) | Q(tarea__participantes__usuario=usuario)
     ).distinct()
     for lectura in readings:
         open_inactivity_pause(lectura=lectura, at=transition_at)
@@ -173,14 +173,16 @@ def ensure_readings_for_comment(*, comentario):
         .order_by("-created_at", "-pk")
         .first()
     )
-    participants = TareaParticipante.objects.filter(
-        tarea_id=comentario.tarea_id
-    ).select_related("usuario")
-    for participant in participants:
+    user_model = get_user_model()
+    users = user_model.objects.in_bulk(effective_participant_ids(comentario.tarea))
+    for usuario_id in effective_participant_ids(comentario.tarea):
+        usuario = users.get(usuario_id)
+        if usuario is None:
+            continue
         lectura, created = TareaLectura.objects.get_or_create(
             tarea_id=comentario.tarea_id,
-            usuario_id=participant.usuario_id,
+            usuario_id=usuario_id,
             defaults={"comentario_leido_hasta": predecessor},
         )
-        if created and not participant.usuario.is_active:
+        if created and not usuario.is_active:
             open_inactivity_pause(lectura=lectura, at=comentario.created_at)

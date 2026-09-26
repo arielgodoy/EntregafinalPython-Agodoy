@@ -235,6 +235,46 @@ class AssignmentPhase3Tests(TestCase):
         tarea.refresh_from_db()
         self.assertEqual(tarea.responsable, self.nuevo_responsable)
 
+    def test_reasignar_inicializa_cursor_del_responsable_sin_historial_retroactivo(self):
+        tarea = self.make_task()
+        comentario = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario histórico",
+        )
+
+        assign_responsible(tarea, self.nuevo_responsable, self.creador, "Cambio")
+
+        lectura = TareaLectura.objects.get(
+            tarea=tarea,
+            usuario=self.nuevo_responsable,
+        )
+        self.assertEqual(lectura.comentario_leido_hasta_id, comentario.pk)
+        self.assertFalse(
+            TareaParticipante.objects.filter(
+                tarea=tarea,
+                usuario=self.nuevo_responsable,
+            ).exists()
+        )
+
+    def test_agregar_responsable_como_participante_no_reinicia_cursor(self):
+        tarea = self.make_task(responsable=self.nuevo_responsable)
+        lectura = TareaLectura.objects.create(
+            tarea=tarea,
+            usuario=self.nuevo_responsable,
+            comentario_leido_hasta=None,
+        )
+        Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario posterior",
+        )
+
+        add_participant(tarea, self.nuevo_responsable, actor=self.admin)
+
+        lectura.refresh_from_db()
+        self.assertIsNone(lectura.comentario_leido_hasta_id)
+
     def test_reasignacion_mismo_responsable_noop(self):
         tarea = self.make_task()
         resultado = assign_responsible(tarea, self.responsable, self.creador, "Sin cambio")

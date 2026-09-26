@@ -19,6 +19,7 @@ from tareas.models import (
 from tareas.services.assignment import _validate_user_in_task_company
 from tareas.services.documents import create_document
 from tareas.services.hierarchy import is_effectively_annulled
+from tareas.services.participants import is_effective_participant
 
 
 _UNSET = object()
@@ -42,8 +43,8 @@ def _current_task(tarea_id):
 
 def _validate_actor(tarea, usuario, accion):
     _validate_user_in_task_company(tarea, usuario)
-    if not tarea.participantes.filter(usuario=usuario).exists():
-        raise ValidationError("El usuario no está vinculado a la tarea.")
+    if not is_effective_participant(tarea, usuario):
+        raise ValidationError("El usuario no participa funcionalmente en la tarea.")
     if not user_has_permission_for_empresa(
         user=usuario,
         empresa=tarea.empresa,

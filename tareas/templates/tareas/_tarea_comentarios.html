@@ -1,0 +1,138 @@
+<section
+    id="tarea-comentarios"
+    class="card shadow-sm rounded mt-4"
+    data-comments-card
+    data-task-id="{{ tarea.pk }}"
+    data-current-user-id="{{ request.user.pk }}"
+    data-feed-url="{% url 'tareas:listar_comentarios' tarea.pk %}"
+    data-read-url="{% url 'tareas:marcar_comentarios_leidos' tarea.pk %}"
+    data-create-url="{% url 'tareas:crear_comentario' tarea.pk %}"
+    data-edit-url-template="{% url 'tareas:editar_comentario' tarea.pk 0 %}"
+    data-hide-url-template="{% url 'tareas:ocultar_comentario' tarea.pk 0 %}"
+    data-restore-url-template="{% url 'tareas:restaurar_comentario' tarea.pk 0 %}"
+    data-can-modify="{{ comentarios_mutables|yesno:'true,false' }}"
+    data-can-supervise="{% if comentarios_mutables and comentarios_puede_supervisar %}true{% else %}false{% endif %}"
+    data-can-comment="{{ comentarios_mutables|yesno:'true,false' }}"
+>
+    <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <h5 class="card-title mb-0">
+            <span data-key="tareas.comments.title">Comentarios</span>
+            <span class="badge bg-primary-subtle text-primary d-none" data-comments-unread aria-live="polite"></span>
+        </h5>
+        <span class="small text-muted" data-comments-status aria-live="polite"></span>
+    </div>
+    <div class="d-none" data-comments-i18n>
+        <span data-key="tareas.comments.files_count">archivos</span>
+        <span data-key="tareas.comments.max_files">Máximo cinco adjuntos.</span>
+        <span data-key="tareas.comments.remove_file">Quitar archivo</span>
+        <span data-key="tareas.comments.more">Ver más</span>
+        <span data-key="tareas.comments.less">Ver menos</span>
+        <span data-key="tareas.comments.close">Cerrar</span>
+        <span data-key="tareas.comments.unread">comentarios sin leer</span>
+        <span data-key="tareas.comments.new">Nuevos comentarios</span>
+        <span data-key="tareas.comments.hidden">Este comentario fue ocultado.</span>
+        <span data-key="tareas.comments.edited">editado</span>
+        <span data-key="tareas.comments.history">Historial</span>
+        <span data-key="tareas.comments.hide">Ocultar</span>
+        <span data-key="tareas.comments.restore">Restaurar</span>
+        <span data-key="tareas.comments.attachment">Adjunto</span>
+        <span data-key="tareas.comments.loading">Cargando...</span>
+        <span data-key="tareas.comments.load_error">No fue posible cargar los comentarios.</span>
+    </div>
+    <form class="d-none" data-comments-csrf>{% csrf_token %}</form>
+    <div class="card-body">
+        <div class="alert alert-danger d-none" role="alert" data-comments-feedback></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary d-none mb-3" data-comments-previous>
+            <span data-key="tareas.comments.previous">Ver comentarios anteriores</span>
+        </button>
+        <div class="d-none align-items-center gap-2 mb-3" data-comments-new-marker>
+            <hr class="flex-grow-1 my-0">
+            <span class="small text-primary text-nowrap" data-comments-new-label></span>
+            <hr class="flex-grow-1 my-0">
+        </div>
+        <div class="d-flex flex-column gap-3" data-comments-feed aria-live="polite"></div>
+        <p class="text-muted mb-0 d-none" data-comments-empty>
+            <span data-key="tareas.comments.empty">No hay comentarios.</span>
+        </p>
+        <div class="d-none mt-3" data-comments-read-controls>
+            <button type="button" class="btn btn-sm btn-outline-primary" data-comments-mark-read>
+                <span data-key="tareas.comments.mark_read">Marcar comentarios cargados como leídos</span>
+            </button>
+        </div>
+        {% if comentarios_mutables %}
+        <form class="border-top mt-4 pt-3" data-comments-composer enctype="multipart/form-data">
+            {% csrf_token %}
+            <label class="visually-hidden" for="comentario-contenido-{{ tarea.pk }}">
+                <span data-key="tareas.comments.content">Comentario</span>
+            </label>
+            <textarea id="comentario-contenido-{{ tarea.pk }}" name="contenido" class="form-control" rows="3" maxlength="10000"></textarea>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <label class="btn btn-outline-secondary btn-sm mb-0" for="comentario-archivos-{{ tarea.pk }}">
+                    <span aria-hidden="true">&#128206;</span>
+                    <span data-key="tareas.comments.attach">Adjuntar</span>
+                </label>
+                <input id="comentario-archivos-{{ tarea.pk }}" class="d-none" type="file" name="archivos" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" capture="environment" data-comments-files>
+                <span class="small text-muted" data-comments-file-summary></span>
+                <button type="submit" class="btn btn-primary ms-auto" data-comments-submit>
+                    <span data-key="tareas.comments.send">Enviar</span>
+                </button>
+            </div>
+            <div class="small text-muted mt-2" data-comments-preview aria-live="polite"></div>
+        </form>
+        {% else %}
+        <p class="border-top mt-4 pt-3 mb-0 text-muted">
+            {% if comentarios_vinculado %}
+            <span data-key="tareas.comments.read_only">Esta tarea está en modo de solo lectura.</span>
+            {% else %}
+            <span data-key="tareas.comments.participation_required">Debe estar vinculado como participante para comentar.</span>
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+</section>
+<div class="modal fade" id="tareaComentarioEditModal-{{ tarea.pk }}" tabindex="-1" aria-labelledby="tareaComentarioEditLabel-{{ tarea.pk }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form data-comments-edit-form>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tareaComentarioEditLabel-{{ tarea.pk }}" data-key="tareas.comments.edit_title">Editar comentario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea class="form-control" name="contenido" rows="4" maxlength="10000" data-comments-edit-content></textarea>
+                            <input type="hidden" name="documentos_modificados" value="1">
+                            <div class="small mt-2" data-comments-edit-documents></div>
+                            <label class="btn btn-outline-secondary btn-sm mt-2 mb-0" for="comentario-editar-archivos-{{ tarea.pk }}" data-key="tareas.comments.attach">Adjuntar</label>
+                            <input id="comentario-editar-archivos-{{ tarea.pk }}" class="d-none" type="file" name="archivos" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" data-comments-edit-files>
+                            <div class="small text-muted mt-2" data-comments-edit-preview aria-live="polite"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="tareas.comments.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" data-key="tareas.comments.save">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="tareaComentarioReasonModal-{{ tarea.pk }}" tabindex="-1" aria-labelledby="tareaComentarioReasonLabel-{{ tarea.pk }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form data-comments-reason-form>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tareaComentarioReasonLabel-{{ tarea.pk }}" data-comments-reason-title></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="tarea-comentario-motivo-{{ tarea.pk }}" data-key="tareas.comments.reason">Motivo</label>
+                    <textarea id="tarea-comentario-motivo-{{ tarea.pk }}" class="form-control" name="motivo" rows="3" required></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="tareas.comments.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" data-comments-reason-submit></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
