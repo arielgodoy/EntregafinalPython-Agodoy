@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
@@ -19,7 +20,8 @@ from tareas.models import (
 from tareas.services.assignment import _validate_user_in_task_company
 from tareas.services.documents import create_document
 from tareas.services.hierarchy import is_effectively_annulled
-from tareas.services.participants import is_effective_participant
+from tareas.services.notifications import emit_task_event
+from tareas.services.participants import effective_participant_ids, is_effective_participant
 
 
 _UNSET = object()
@@ -131,6 +133,30 @@ def _next_content_version(comentario):
     return (current or 0) + 1
 
 
+def _schedule_comment_event(*, tarea, event, actor):
+    recipient_ids = effective_participant_ids(tarea)
+    recipients = list(
+        User.objects.filter(pk__in=recipient_ids, is_active=True).exclude(pk=actor.pk)
+    )
+    titles = {
+        "comentario_agregado": "Nuevo comentario en la tarea",
+        "comentario_editado": "Comentario editado en la tarea",
+        "comentario_ocultado": "Comentario ocultado en la tarea",
+        "comentario_restaurado": "Comentario restaurado en la tarea",
+    }
+    body = titles[event]
+    transaction.on_commit(
+        lambda: emit_task_event(
+            tarea=tarea,
+            event=event,
+            recipients=recipients,
+            title=titles[event],
+            body=body,
+            actor=actor,
+        )
+    )
+
+
 @transaction.atomic
 def create_comment(*, tarea, usuario, contenido="", documentos=None, documentos_nuevos=None):
     tarea_actual = _current_task(tarea.pk)
@@ -158,6 +184,11 @@ def create_comment(*, tarea, usuario, contenido="", documentos=None, documentos_
         motivo="",
         documentos=documentos_finales,
         numero=1,
+    )
+    _schedule_comment_event(
+        tarea=tarea_actual,
+        event="comentario_agregado",
+        actor=usuario,
     )
     return comentario
 
@@ -206,6 +237,11 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
         motivo="",
         documentos=documentos_finales,
         numero=_next_content_version(comentario_actual),
+    )
+    _schedule_comment_event(
+        tarea=tarea_actual,
+        event="comentario_editado",
+        actor=usuario,
     )
     return comentario_actual
 
@@ -263,5 +299,10 @@ def _set_visibility(*, comentario, usuario, motivo, evento, oculto):
         motivo=motivo_limpio,
         documentos=documentos,
         numero=None,
+    )
+    _schedule_comment_event(
+        tarea=tarea_actual,
+        event=("comentario_ocultado" if oculto else "comentario_restaurado"),
+        actor=usuario,
     )
     return comentario_actual
