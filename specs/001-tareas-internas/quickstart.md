@@ -60,6 +60,15 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 1. Editar el borrador: cambiar descripción/prioridad/responsable → Guardar.
 2. **Esperado**: sigue en "Borrador", sin fecha de publicación; sin límite de tiempo.
 
+### E2 bis. Administrar responsable desde el detalle (FR-D11)
+
+1. Abrir el detalle de un borrador y seleccionar un usuario activo válido como responsable.
+2. Guardar la administración del responsable desde el bloque de participantes.
+3. **Esperado**: el responsable queda visible en el detalle sin crear una fila
+   `TareaParticipante`; quitarlo vuelve a ser posible mientras la tarea siga en borrador.
+4. Publicar la tarea y comprobar que el selector ya no permite dejar el responsable vacío;
+   una reasignación válida conserva el registro de reasignación.
+
 ### E3. Publicación bloqueada sin responsable (FR-007)
 
 1. Quitar el responsable del borrador → intentar Publicar.
@@ -179,8 +188,9 @@ implementada, verificar:
 - Solo estados publicados operativos (`ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`)
    admiten mutaciones. `CERRADA`, `BORRADOR` y anulada son lectura; reactivar un estado
    operativo permite comentar otra vez y conserva cursor/versiones.
-- Crear, editar, ocultar y restaurar exige los permisos existentes; S oculta/restaura y
-   requiere motivo no vacío. El historial completo solo lo ven autor/S.
+- Crear exige VICMEAS `crear` y participación funcional; editar exige `modificar`, ser
+   autor y participación funcional; ocultar/restaurar exige S (`supervisor`), participación
+   funcional y motivo no vacío. El historial completo solo lo ven autor/S.
 - Texto y/o adjuntos son válidos; el sexto adjunto se rechaza. Reutilizar `DocumentoTarea`
    de la misma Tarea, permitir captura móvil y comprobar que quitar el vínculo no elimina
    el documento ni convierte el adjunto en evidencia formal.
@@ -199,10 +209,15 @@ implementada, verificar:
    no se duplica `documento_agregado` por adjunto inline.
 - Comprobar que Comentarios no reemplaza motivos/justificaciones formales y que cada
    escritura revalida en backend Empresa, vínculo, VICMEAS y estado justo antes de guardar.
+- Verificar por separado la autorización contextual administrativa de `tareas`: creador con
+   `modificar` y `supervisor` pueden editar datos generales y administrar responsable o
+   participantes/invitados; un actor `M-only` no creador, aunque sea responsable o participante,
+   recibe 403 y no muta la Tarea. Un creador sin `modificar` también recibe 403. Esta regla no
+   concede ni revoca la capacidad independiente de comentar.
 - Revisar UI y mensajes en ES/EN y ejecutar el gate i18n antes de declarar la superficie
    completa.
 
-Estado E14: CONTRACT_READY / AUTOMATED_VALIDATION_PENDING / MANUAL_VALIDATION_PENDING.
+Estado E14: CONTRACT_READY / AUTOMATED_VALIDATED / MANUAL_VALIDATION_PENDING.
 La ventana temporal debe cubrirse también con prueba focalizada, sin esperar una hora en
 la suite.
 

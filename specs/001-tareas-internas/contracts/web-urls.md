@@ -35,6 +35,7 @@ este contrato salvo clasificación explícita.
 | GET/POST | `/tareas/crear/` | `crear_tarea` | `CrearTareaView` | `Tareas - Crear tarea` | `crear` |
 | GET/POST | `/tareas/<pk>/editar/` | `editar_tarea` | `EditarTareaView` | `Tareas - Editar tarea` | `modificar` |
 | POST | `/tareas/<pk>/publicar/` | `publicar_tarea` | `PublicarTareaView` | `Tareas - Publicar tarea` | `modificar` |
+| POST | `/tareas/<tarea_id>/responsable/` | `administrar_responsable_detalle` | `AdministrarResponsableDetalleView` | `Tareas - Detalle` | `modificar` |
 | GET | `/tareas/<tarea_id>/similitud/` | `similitud_tarea` | Vista de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
 | POST | `/tareas/<tarea_id>/similitud/<evaluacion_id>/confirmar/` | `confirmar_similitud` | Acción de similitud T060 | `Tareas - Ciclo de vida` | `modificar` |
 
@@ -57,6 +58,7 @@ identifica una ruta que no debe inventarse en esta feature.
 | ACTIVE | GET/POST | `/tareas/crear/` | `crear_tarea` |
 | ACTIVE | GET/POST | `/tareas/<pk>/editar/` | `editar_tarea` |
 | ACTIVE | POST | `/tareas/<pk>/publicar/` | `publicar_tarea` |
+| ACTIVE | POST | `/tareas/<tarea_id>/responsable/` | `administrar_responsable_detalle` |
 | ACTIVE | POST | `/tareas/<pk>/gestionar/` | `gestionar_tarea` |
 | ACTIVE | POST | `/tareas/<pk>/completar/` | `completar_tarea` |
 | ACTIVE | POST | `/tareas/<pk>/aprobar-cierre/` | `aprobar_cierre` |
@@ -107,6 +109,9 @@ autorizan crear endpoints ausentes.
 ### Editar — `POST /tareas/<pk>/editar/`
 
 - **Request (form)**: `titulo`, `descripcion`, `prioridad`, `responsable`.
+- **Permiso**: `Tareas` + `modificar` y, además, el actor debe ser el creador de la Tarea
+  o tener autoridad VICMEAS `supervisor`; la Empresa activa y el aislamiento multiempresa
+  son obligatorios.
 - **Reglas**: en `PUBLICADA`, `responsable` MUST ser válido/activo; `estado` no es editable
   por formulario (la transición ocurre solo vía publicar); `fecha_publicacion` inmutable.
 - **404**: tarea de otra empresa.
@@ -125,6 +130,18 @@ autorizan crear endpoints ausentes.
 - **Rechazo (responsable ausente o inválido)**: la tarea permanece en `BORRADOR`; se informa
   el motivo (mensaje de error en la vista, patrón `messages` / JSON controlado según canal).
 - **Publicación irreversible**: no existe ruta ni operación de retorno a borrador (Q2).
+
+### Administrar responsable desde detalle — `POST /tareas/<tarea_id>/responsable/`
+
+- **Permiso**: `Tareas` + `modificar`, con Empresa activa y tarea perteneciente a ella;
+  además, el actor debe ser el creador de la Tarea o tener autoridad VICMEAS `supervisor`.
+- **Request (form)**: `responsable` con el ID de un usuario activo válido para la Empresa;
+  puede quedar vacío únicamente mientras la tarea está en `BORRADOR`.
+- **Reglas**: usa `assign_responsible`; en `BORRADOR` permite limpiar el responsable sin
+  crear historial con valor nulo. En tareas publicadas/operativas exige un responsable y
+  solo permite reasignar a otro usuario válido. No crea `TareaParticipante`.
+- **Response 302**: redirect al detalle con resultado controlado e historial de reasignación
+  cuando corresponde.
 
 ### Similitud — T060
 
@@ -191,22 +208,24 @@ ni habilita acciones de Comentarios.
 |---|---|---|---|---|
 | ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados. `after_id` opcional devuelve solo Comentarios posteriores sin mover lectura/unread |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar` + participación funcional; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend; permitido también en Tarea cerrada/anulada (estado personal de lectura) |
-| ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `modificar` + participación funcional |
+| ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `crear` + participación funcional |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar` + participación funcional; autor y hasta 1 hora |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/ocultar/` | `ocultar_comentario` | `Tareas` + `supervisor` (S) + participación funcional; motivo obligatorio |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/restaurar/` | `restaurar_comentario` | `Tareas` + `supervisor` (S) + participación funcional; motivo obligatorio |
-| ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/vincular/` | `vincular_participante` | `Tareas` + `modificar`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
-| ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/desvincular/` | `desvincular_participante` | `Tareas` + `modificar`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
+| ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/vincular/` | `vincular_participante` | `Tareas` + `modificar` y creador o `supervisor`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
+| ACTIVE | POST | `/tareas/<pk>/participantes/<usuario_id>/desvincular/` | `desvincular_participante` | `Tareas` + `modificar` y creador o `supervisor`; el actor no necesita ser participante; bloqueado en `CERRADA`/anulada efectivamente |
 
 La administración de `TareaParticipante` requiere VICMEAS `modificar`, pero no requiere que el
 actor administrador sea él mismo participante; así una Tarea puede comenzar con cero
-participantes y recibir su primer vínculo explícito, sin auto-vincular creador ni actor.
-El responsable es participante funcional sin crear una fila explícita. `add_participant`/
+participantes explícitos y recibir su primer vínculo sin crear filas artificiales para creador
+o responsable. El detalle permite seleccionar únicamente los roles `PARTICIPANTE` e
+`INVITADO_OBSERVADOR`. El responsable y el creador son participantes funcionales implícitos
+sin fila explícita. `add_participant`/
 `remove_participant` reciben el actor y revalidan en dominio
 Empresa, usuario activo, `modificar` y lifecycle: `CERRADA` y anulada efectivamente bloquean
 cambios de participantes; `BORRADOR` los admite. Para Comentarios, la participación funcional
-efectiva es el responsable actual o un vínculo explícito; el creador no obtiene participación
-por sí solo.
+efectiva incluye creador, responsable, vínculo explícito y responsable de Hito vigente/no
+anulado, deduplicados por usuario.
 
 Las mutaciones de Comentarios revalidan en backend, inmediatamente antes de persistir, Empresa,
 VICMEAS, participación funcional y estado vigente. Solo estados `ACTIVA`, `GESTION` y

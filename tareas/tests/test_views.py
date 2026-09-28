@@ -58,7 +58,7 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self._login()
         response = self.client.post(
             reverse("tareas:crear_tarea"),
-            {"titulo": "Nueva tarea"},  # solo título
+            {"titulo": "Nueva tarea", "fecha_tope": "2026-09-20"},
             follow=True,
         )
         tarea = Tarea.objects.get(titulo="Nueva tarea")
@@ -80,7 +80,11 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         self._login()
         self.client.post(
             reverse("tareas:editar_tarea", args=[tarea.pk]),
-            {"titulo": "Editada", "prioridad": Tarea.Prioridad.URGENTE},
+            {
+                "titulo": "Editada",
+                "prioridad": Tarea.Prioridad.URGENTE,
+                "fecha_tope": "2026-09-20",
+            },
         )
         tarea.refresh_from_db()
         self.assertEqual(tarea.titulo, "Editada")
@@ -89,12 +93,15 @@ class CrearEditarBorradoresTests(TareasViewsBase):
     def test_crear_borrador_sin_fecha_tope_y_con_fecha_tope(self):
         self._permiso(self.vista_tareas, crear=True, ingresar=True)
         self._login()
-        self.client.post(reverse("tareas:crear_tarea"), {"titulo": "Sin fecha"})
+        response = self.client.post(
+            reverse("tareas:crear_tarea"), {"titulo": "Sin fecha"}
+        )
         self.client.post(
             reverse("tareas:crear_tarea"),
             {"titulo": "Con fecha", "fecha_tope": "2026-09-20"},
         )
-        self.assertIsNone(Tarea.objects.get(titulo="Sin fecha").fecha_tope)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Tarea.objects.filter(titulo="Sin fecha").exists())
         self.assertEqual(Tarea.objects.get(titulo="Con fecha").fecha_tope, date(2026, 9, 20))
 
     def test_editar_borrador_conserva_y_modifica_fecha_tope(self):

@@ -210,12 +210,13 @@ en `tasks.md`; no reabre ni renumera fases históricas.
 
 - Mantener Comentarios dentro de `tareas/`, relacionados 1:N con `Tarea`, sin estado ni
     transición propia.
-- Usar la participación funcional efectiva `Tarea.responsable OR TareaParticipante OR
-    Hito.responsable` para Hitos de la Tarea con `anulado=False`, para comentarios y
+- Usar la participación funcional efectiva `Tarea.creada_por OR Tarea.responsable OR
+    TareaParticipante OR Hito.responsable` para Hitos de la Tarea con `anulado=False`, para comentarios y
     seguimiento, sin materializar ni sincronizar filas. VICMEAS usa
     `Tareas`: `ingresar` para lectura, `modificar` para crear/editar/vincular y
     `supervisor` (S) para ocultar/restaurar. Creador/responsable no tienen bypass de
-    VICMEAS, lifecycle o Empresa; el creador tampoco es participante implícito.
+    VICMEAS, lifecycle o Empresa. Desde el detalle solo se administran los roles
+    `PARTICIPANTE` e `INVITADO_OBSERVADOR`.
 - Reutilizar `DocumentoTarea` para un máximo de cinco adjuntos por Comentario; no duplicar
     archivos ni emitir notificación `documento_agregado` adicional por una carga inline.
 - Conservar versiones inmutables del texto y conjunto de relaciones `DocumentoTarea`, con

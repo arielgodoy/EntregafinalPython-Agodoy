@@ -72,7 +72,7 @@
                                         <div class="col-md-4">
                                             <label for="{{ form.fecha_tope.id_for_label }}" class="form-label"><span data-key="tareas.fields.fecha_tope">Fecha tope</span></label>
                                             {{ form.fecha_tope }}
-                                            <div class="form-text"><span data-key="tareas.form.due_date_publish_help">Puede definirse posteriormente, pero será obligatoria al publicar.</span></div>
+                                            <div class="form-text"><span data-key="tareas.form.due_date_required_help">La fecha tope es obligatoria al crear la tarea.</span></div>
                                             {% for error in form.fecha_tope.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                             {% if object and object.estado != "BORRADOR" %}<div class="form-text"><span data-key="tareas.fields.fecha_tope_readonly">La fecha tope se modifica mediante reprogramación.</span></div>{% endif %}
                                         </div>

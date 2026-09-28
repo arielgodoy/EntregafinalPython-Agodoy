@@ -54,6 +54,21 @@ class CommentWebUrlTests(SimpleTestCase):
                 {"tarea_id": 123, "usuario_id": 789},
                 "/tareas/123/participantes/789/desvincular/",
             ),
+            (
+                "vincular_participante_detalle",
+                {"tarea_id": 123},
+                "/tareas/123/participantes/vincular/",
+            ),
+            (
+                "desvincular_participante_detalle",
+                {"tarea_id": 123, "usuario_id": 789},
+                "/tareas/123/participantes/789/desvincular-detalle/",
+            ),
+            (
+                "administrar_responsable_detalle",
+                {"tarea_id": 123},
+                "/tareas/123/responsable/",
+            ),
         ]
         for name, kwargs, expected_url in rutas:
             with self.subTest(name=name):
@@ -72,26 +87,37 @@ class CommentReadViewTests(TestCase):
         cls.sin_vinculo = create_user(username="reading-web-unlinked")
         cls.sin_permiso = create_user(username="reading-web-no-permission")
         cls.nuevo_participante = create_user(username="reading-web-new-participant")
+        cls.creador = create_user(username="reading-web-creator-only")
+        cls.modificador = create_user(username="reading-web-modifier-only")
         cls.hito_responsable = create_user(username="reading-web-hito-responsible")
         for user in (cls.lector, cls.autor):
-            assign_permission(user, cls.empresa, "Tareas", ingresar=True, modificar=True)
+            assign_permission(
+                user, cls.empresa, "Tareas", ingresar=True, crear=True, modificar=True
+            )
         assign_permission(cls.supervisor, cls.empresa, "Tareas", ingresar=True, supervisor=True)
         assign_permission(cls.sin_vinculo, cls.empresa, "Tareas", ingresar=True)
-        assign_permission(cls.nuevo_participante, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.nuevo_participante, cls.empresa, "Tareas", ingresar=True, crear=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True, crear=True)
+        assign_permission(cls.modificador, cls.empresa, "Tareas", ingresar=True, modificar=True)
         assign_permission(
             cls.hito_responsable,
             cls.empresa,
             "Tareas",
             ingresar=True,
+            crear=True,
             modificar=True,
         )
         cls.admin_participantes = create_user(username="reading-web-participants-admin")
         assign_permission(
-            cls.admin_participantes, cls.empresa, "Tareas", ingresar=True, modificar=True
+            cls.admin_participantes, cls.empresa, "Tareas", ingresar=True, supervisor=True
         )
         cls.otra_empresa = create_empresa(codigo="C100Y", descripcion="Empresa externa")
         cls.usuario_ajeno = create_user(username="reading-web-foreign-user")
         assign_permission(cls.usuario_ajeno, cls.otra_empresa, "Tareas", ingresar=True)
+        cls.usuario_inactivo = create_user(username="reading-web-inactive-user")
+        cls.usuario_inactivo.is_active = False
+        cls.usuario_inactivo.save(update_fields=["is_active"])
+        assign_permission(cls.usuario_inactivo, cls.empresa, "Tareas", ingresar=True)
 
     def setUp(self):
         self.tarea = self.make_active_task()
@@ -174,6 +200,42 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(payload["pendientes"], 0)
         lectura.refresh_from_db()
         self.assertIsNone(lectura.comentario_leido_hasta_id)
+
+    def test_incremental_order_is_stable_for_equal_timestamps(self):
+        fixed_timestamp = timezone.now()
+        comentarios = [
+            create_comment(tarea=self.tarea, usuario=self.autor, contenido=f"Empate {index}")
+            for index in range(3)
+        ]
+        for comentario in comentarios:
+            comentario.created_at = fixed_timestamp
+            comentario.save(update_fields=["created_at"])
+
+        initial = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        ).json()
+        incremental = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentarios[0].pk},
+        ).json()
+
+        self.assertEqual(
+            [item["id"] for item in initial["comentarios"]],
+            [comentario.pk for comentario in comentarios],
+        )
+        self.assertEqual(
+            [item["id"] for item in incremental["comentarios"]],
+            [comentario.pk for comentario in comentarios[1:]],
+        )
+        self.assertEqual(
+            len({item["id"] for item in initial["comentarios"] + incremental["comentarios"]}),
+            len(comentarios),
+        )
+        self.assertEqual(incremental["pendientes"], 0)
+        self.assertIsNone(incremental["primer_pendiente_id"])
+        self.assertIsNone(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id
+        )
 
     def test_incremental_get_for_unlinked_reader_has_no_reading_side_effect(self):
         comentario = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Visible")
@@ -281,6 +343,29 @@ class CommentReadViewTests(TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["comentario"]["contenido"], "Comentario desde formulario")
         self.assertEqual(self.tarea.comentarios.count(), 1)
+
+    def test_create_post_allows_effective_participant_with_crear_only(self):
+        add_participant(self.tarea, self.creador, actor=self.autor)
+        self.login_as(self.creador)
+
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+            {"contenido": "Comentario con crear"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["comentario"]["contenido"], "Comentario con crear")
+
+    def test_create_post_denies_effective_participant_with_modificar_only(self):
+        add_participant(self.tarea, self.modificador, actor=self.autor)
+        self.login_as(self.modificador)
+
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+            {"contenido": "No permitido"},
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_create_post_keeps_existing_feed_contract(self):
         existing = [
@@ -644,6 +729,7 @@ class CommentReadViewTests(TestCase):
             usuario=self.autor,
             contenido="Anterior al vínculo",
         )
+        self.login_as(self.admin_participantes)
 
         response = self.client.post(
             reverse(
@@ -672,6 +758,57 @@ class CommentReadViewTests(TestCase):
         )
         lectura.refresh_from_db()
         self.assertEqual(lectura.comentario_leido_hasta_id, comentario.pk)
+
+    def test_m_only_non_creator_cannot_administer_task(self):
+        response = self.client.post(
+            self.link_url(self.tarea, self.nuevo_participante)
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            self.tarea.participantes.filter(usuario=self.nuevo_participante).exists()
+        )
+
+        response = self.client.post(
+            reverse("tareas:editar_tarea", kwargs={"pk": self.tarea.pk}),
+            {
+                "titulo": "No autorizado",
+                "prioridad": self.tarea.prioridad,
+                "responsable": self.autor.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.tarea.refresh_from_db()
+        self.assertNotEqual(self.tarea.titulo, "No autorizado")
+
+    def test_supervisor_can_administer_task_without_being_creator(self):
+        self.login_as(self.supervisor)
+        response = self.client.post(
+            self.link_url(self.tarea, self.nuevo_participante)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            self.tarea.participantes.filter(usuario=self.nuevo_participante).exists()
+        )
+
+    def test_creator_without_modificar_cannot_edit_task(self):
+        tarea = create_tarea(self.empresa, self.sin_vinculo, responsable=self.sin_vinculo)
+        self.login_as(self.sin_vinculo)
+
+        response = self.client.post(
+            reverse("tareas:editar_tarea", kwargs={"pk": tarea.pk}),
+            {
+                "titulo": "Creador sin modificar",
+                "prioridad": tarea.prioridad,
+                "responsable": self.sin_vinculo.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        tarea.refresh_from_db()
+        self.assertNotEqual(tarea.titulo, "Creador sin modificar")
 
     def test_unlinked_user_can_read_comments_but_foreign_company_task_is_not_readable(self):
         create_comment(tarea=self.tarea, usuario=self.autor, contenido="Visible para lector VICMEAS")
@@ -761,6 +898,146 @@ class CommentReadViewTests(TestCase):
             [self.lector.pk],
         )
         self.assertFalse(tarea.comentarios.exists())
+
+    def test_detail_endpoint_adds_invited_observer(self):
+        tarea = self.make_active_task()
+        self.login_as(self.admin_participantes)
+
+        response = self.client.post(
+            reverse("tareas:vincular_participante_detalle", kwargs={"tarea_id": tarea.pk}),
+            {"usuario": self.nuevo_participante.pk, "rol": TareaParticipante.Rol.INVITADO_OBSERVADOR},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            tarea.participantes.get(usuario=self.nuevo_participante).rol,
+            TareaParticipante.Rol.INVITADO_OBSERVADOR,
+        )
+
+    def test_invited_observer_create_unlink_relink_flow(self):
+        tarea = self.make_active_task()
+        self.login_as(self.admin_participantes)
+        link_url = reverse(
+            "tareas:vincular_participante_detalle", kwargs={"tarea_id": tarea.pk}
+        )
+        unlink_url = reverse(
+            "tareas:desvincular_participante_detalle",
+            kwargs={"tarea_id": tarea.pk, "usuario_id": self.nuevo_participante.pk},
+        )
+
+        response = self.client.post(
+            link_url,
+            {"usuario": self.nuevo_participante.pk, "rol": TareaParticipante.Rol.INVITADO_OBSERVADOR},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.login_as(self.nuevo_participante)
+        create_url = reverse("tareas:crear_comentario", kwargs={"tarea_id": tarea.pk})
+        self.assertEqual(self.client.post(create_url, {"contenido": "Primero"}).status_code, 200)
+
+        self.login_as(self.admin_participantes)
+        self.assertEqual(self.client.post(unlink_url).status_code, 302)
+        self.login_as(self.nuevo_participante)
+        self.assertEqual(self.client.post(create_url, {"contenido": "Bloqueado"}).status_code, 403)
+
+        self.login_as(self.admin_participantes)
+        self.assertEqual(
+            self.client.post(
+                link_url,
+                {
+                    "usuario": self.nuevo_participante.pk,
+                    "rol": TareaParticipante.Rol.INVITADO_OBSERVADOR,
+                },
+            ).status_code,
+            302,
+        )
+        self.login_as(self.nuevo_participante)
+        self.assertEqual(self.client.post(create_url, {"contenido": "Después"}).status_code, 200)
+
+    def test_detail_endpoint_requires_modificar_and_rejects_invalid_role(self):
+        tarea = self.make_active_task()
+        self.login_as(self.sin_vinculo)
+        response = self.client.post(
+            reverse("tareas:vincular_participante_detalle", kwargs={"tarea_id": tarea.pk}),
+            {"usuario": self.nuevo_participante.pk, "rol": "SUPERVISOR"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(tarea.participantes.filter(usuario=self.nuevo_participante).exists())
+
+    def test_detail_endpoint_unlinks_explicit_participant(self):
+        tarea = self.make_active_task()
+        add_participant(tarea, self.nuevo_participante, actor=self.autor)
+        self.login_as(self.admin_participantes)
+
+        response = self.client.post(
+            reverse(
+                "tareas:desvincular_participante_detalle",
+                kwargs={"tarea_id": tarea.pk, "usuario_id": self.nuevo_participante.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(tarea.participantes.filter(usuario=self.nuevo_participante).exists())
+
+    def test_detail_endpoint_assigns_changes_and_clears_draft_responsible(self):
+        tarea = self.make_active_task()
+        tarea.estado = Tarea.Estado.BORRADOR
+        tarea.fecha_publicacion = None
+        tarea.fecha_asignacion = None
+        tarea.save(update_fields=["estado", "fecha_publicacion", "fecha_asignacion"])
+        self.login_as(self.admin_participantes)
+        url = reverse("tareas:administrar_responsable_detalle", kwargs={"tarea_id": tarea.pk})
+
+        asignar = self.client.post(
+            url,
+            {"responsable": self.nuevo_participante.pk},
+            follow=True,
+        )
+        tarea.refresh_from_db()
+        self.assertEqual(asignar.redirect_chain[-1][1], 302)
+        self.assertEqual(asignar.status_code, 200)
+        self.assertContains(
+            asignar,
+            "Participante o responsable asignado correctamente.",
+        )
+        self.assertNotContains(asignar, "No fue posible completar la operación.")
+        self.assertEqual(tarea.responsable_id, self.nuevo_participante.pk)
+
+        cambiar = self.client.post(url, {"responsable": self.autor.pk})
+        tarea.refresh_from_db()
+        self.assertEqual(cambiar.status_code, 302)
+        self.assertEqual(tarea.responsable_id, self.autor.pk)
+
+        quitar = self.client.post(url, {"responsable": ""})
+        tarea.refresh_from_db()
+        self.assertEqual(quitar.status_code, 302)
+        self.assertIsNone(tarea.responsable_id)
+
+    def test_detail_endpoint_rejects_empty_responsible_after_publication(self):
+        tarea = self.make_active_task()
+        self.login_as(self.admin_participantes)
+
+        response = self.client.post(
+            reverse("tareas:administrar_responsable_detalle", kwargs={"tarea_id": tarea.pk}),
+            {"responsable": ""},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.responsable_id, self.autor.pk)
+
+    def test_detail_endpoint_rejects_inactive_foreign_and_missing_users(self):
+        tarea = self.make_active_task()
+        self.login_as(self.admin_participantes)
+        url = reverse("tareas:administrar_responsable_detalle", kwargs={"tarea_id": tarea.pk})
+
+        for user_id in (self.usuario_inactivo.pk, self.usuario_ajeno.pk, 999999):
+            with self.subTest(user_id=user_id):
+                response = self.client.post(url, {"responsable": user_id})
+                self.assertEqual(response.status_code, 302)
+                tarea.refresh_from_db()
+                self.assertEqual(tarea.responsable_id, self.autor.pk)
 
     def test_link_requires_modificar_permission(self):
         tarea = self.make_active_task()

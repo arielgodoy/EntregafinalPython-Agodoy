@@ -56,11 +56,15 @@ class T054NotificationTests(TestCase):
             cls.participant,
         ]:
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
-        assign_permission(cls.participant, cls.empresa, "Tareas", modificar=True)
+        assign_permission(
+            cls.creator, cls.empresa, "Tareas", ingresar=True, crear=True, modificar=True
+        )
+        assign_permission(cls.participant, cls.empresa, "Tareas", crear=True, modificar=True)
         assign_permission(
             cls.supervisor,
             cls.empresa,
             "Tareas",
+            crear=True,
             modificar=True,
             supervisor=True,
         )
@@ -68,7 +72,7 @@ class T054NotificationTests(TestCase):
             username="t54_participants_admin", password="x"
         )
         assign_permission(
-            cls.participants_admin, cls.empresa, "Tareas", ingresar=True, modificar=True
+            cls.participants_admin, cls.empresa, "Tareas", ingresar=True, supervisor=True
         )
 
     def make_task(self, **kwargs):
@@ -136,7 +140,12 @@ class T054NotificationTests(TestCase):
 
         self.assertEqual(
             self._recipient_ids(notify_task_event),
-            {self.responsible.pk, self.supervisor.pk, self.new_responsible.pk},
+            {
+                self.creator.pk,
+                self.responsible.pk,
+                self.supervisor.pk,
+                self.new_responsible.pk,
+            },
         )
         self.assertEqual(
             {call.kwargs["dedupe_key"].split(":")[2] for call in notify_task_event.call_args_list},
@@ -302,14 +311,14 @@ class T054NotificationTests(TestCase):
                 contenido="comentario con participación duplicada",
             )
 
-        self.assertEqual(notify_task_event.call_count, 1)
+        self.assertEqual(notify_task_event.call_count, 2)
         self.assertEqual(
-            [call.kwargs["destinatario"] for call in notify_task_event.call_args_list],
-            [self.participant],
+            {call.kwargs["destinatario"] for call in notify_task_event.call_args_list},
+            {self.participant, self.creator},
         )
         self.assertEqual(
-            [call.kwargs["dedupe_key"].split(":")[2] for call in notify_task_event.call_args_list],
-            ["comentario_agregado"],
+            {call.kwargs["dedupe_key"].split(":")[2] for call in notify_task_event.call_args_list},
+            {"comentario_agregado"},
         )
         self.assertNotIn(
             self.supervisor,
@@ -345,7 +354,7 @@ class T054NotificationTests(TestCase):
         self.assertTrue(
             Comentario.objects.filter(pk=comentario.pk, adjuntos__documento=documento).exists()
         )
-        self.assertEqual(notify_task_event.call_count, 3)
+        self.assertEqual(notify_task_event.call_count, 4)
         self.assertEqual(
             {call.kwargs["dedupe_key"].split(":")[2] for call in notify_task_event.call_args_list},
             {"comentario_agregado"},
@@ -401,7 +410,7 @@ class T054NotificationTests(TestCase):
                 adjuntos__documento__url="https://example.test/t054-edit-new.pdf",
             ).exists()
         )
-        self.assertEqual(notify_task_event.call_count, 3)
+        self.assertEqual(notify_task_event.call_count, 4)
         self.assertEqual(
             {call.kwargs["dedupe_key"].split(":")[2] for call in notify_task_event.call_args_list},
             {"comentario_editado"},
@@ -434,7 +443,7 @@ class T054NotificationTests(TestCase):
 
                 self.assertTrue(notify_task_event.called)
                 if prioridad == Tarea.Prioridad.CRITICA:
-                    self.assertEqual(send_email_for_purpose.call_count, 3)
+                    self.assertEqual(send_email_for_purpose.call_count, 4)
                     self.assertEqual(
                         {call.kwargs["purpose"] for call in send_email_for_purpose.call_args_list},
                         {"notifications"},

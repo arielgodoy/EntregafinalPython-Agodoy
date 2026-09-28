@@ -10,7 +10,10 @@ from tareas.models import (
     ComentarioVersion,
     ComentarioVersionDocumento,
     DocumentoTarea,
+    EvidenciaCierre,
     Hito,
+    HitoEvidencia,
+    TareaLectura,
     Tarea,
 )
 from tareas.services.assignment import add_participant
@@ -21,7 +24,9 @@ from tareas.services.comments import (
     restore_comment,
 )
 from tareas.services.documents import create_document
+from tareas.services.lifecycle import annul_task, reactivate_task
 from tareas.services.participants import effective_participant_ids, is_effective_participant
+from tareas.services.reading import recognize_loaded_comments
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
 
@@ -39,9 +44,9 @@ class CommentServiceTests(TestCase):
         cls.inactivo.save(update_fields=["is_active"])
         cls.foreign = create_user(username="comment-foreign")
         for user in (cls.autor, cls.editor, cls.supervisor, cls.no_vinculado, cls.inactivo):
-            assign_permission(user, cls.empresa, "Tareas", modificar=True)
+            assign_permission(user, cls.empresa, "Tareas", crear=True, modificar=True)
         assign_permission(cls.supervisor, cls.empresa, "Tareas", supervisor=True)
-        assign_permission(cls.foreign, cls.otra_empresa, "Tareas", modificar=True)
+        assign_permission(cls.foreign, cls.otra_empresa, "Tareas", crear=True, modificar=True)
 
     def make_task(self, *, usuario=None, estado=Tarea.Estado.ACTIVA):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
@@ -73,6 +78,25 @@ class CommentServiceTests(TestCase):
         self.assertEqual(comentario.versiones.get().numero_version, 1)
         self.assertFalse(ComentarioAdjunto.objects.filter(comentario=comentario).exists())
 
+    def test_creador_es_participante_efectivo_sin_fila_explicita(self):
+        tarea = create_tarea(
+            self.empresa,
+            self.autor,
+            responsable=self.editor,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
+        )
+
+        comentario = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Comentario del creador",
+        )
+
+        self.assertEqual(comentario.autor, self.autor)
+        self.assertFalse(tarea.participantes.filter(usuario=self.autor).exists())
+        self.assertEqual(list(effective_participant_ids(tarea)).count(self.autor.pk), 1)
+
     def test_create_with_existing_documents_and_only_documents(self):
         tarea = self.make_task()
         documento = self.make_document(tarea)
@@ -89,6 +113,57 @@ class CommentServiceTests(TestCase):
             list(comentario.versiones.get().documentos.values_list("documento_id", flat=True)),
             [documento.pk],
         )
+
+    def test_reactivation_preserves_comment_history_documents_and_cursor(self):
+        tarea = self.make_task(estado=Tarea.Estado.GESTION)
+        add_participant(tarea, self.editor, actor=self.autor)
+        documento = self.make_document(tarea, suffix="reactivation")
+        comentario = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Comentario previo",
+            documentos=[documento],
+        )
+        edit_comment(comentario=comentario, usuario=self.autor, contenido="Comentario versionado")
+        recognize_loaded_comments(
+            tarea=tarea,
+            usuario=self.editor,
+            comentario_ids=[comentario.pk],
+        )
+        cursor_before = TareaLectura.objects.get(tarea=tarea, usuario=self.editor).comentario_leido_hasta_id
+
+        annul_task(tarea, self.supervisor, motivo="Pausa operativa")
+        with self.assertRaises(ValidationError):
+            create_comment(tarea=tarea, usuario=self.autor, contenido="Bloqueado")
+
+        reactivate_task(tarea, self.supervisor, motivo="Retomar operación")
+        tarea.refresh_from_db()
+        comentario.refresh_from_db()
+
+        self.assertFalse(tarea.anulada)
+        self.assertEqual(TareaLectura.objects.get(tarea=tarea, usuario=self.editor).comentario_leido_hasta_id, cursor_before)
+        self.assertEqual(comentario.versiones.count(), 2)
+        self.assertTrue(ComentarioAdjunto.objects.filter(comentario=comentario, documento=documento).exists())
+        nuevo = create_comment(tarea=tarea, usuario=self.autor, contenido="Comentario posterior")
+        self.assertEqual(Comentario.objects.filter(tarea=tarea).count(), 2)
+        self.assertEqual(nuevo.versiones.get().numero_version, 1)
+        self.assertEqual(comentario.contenido, "Comentario versionado")
+
+    def test_comment_attachment_is_not_formal_evidence(self):
+        tarea = self.make_task()
+        documento = self.make_document(tarea, suffix="comment-attachment")
+
+        comentario = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Adjunto informativo",
+            documentos=[documento],
+        )
+
+        self.assertTrue(ComentarioAdjunto.objects.filter(comentario=comentario, documento=documento).exists())
+        self.assertFalse(EvidenciaCierre.objects.filter(tarea=tarea).exists())
+        self.assertFalse(HitoEvidencia.objects.filter(hito__tarea=tarea).exists())
+        self.assertFalse(tarea.requiere_evidencia_cierre)
 
     def test_create_rejects_empty_and_more_than_five_documents(self):
         tarea = self.make_task()
@@ -135,6 +210,41 @@ class CommentServiceTests(TestCase):
         add_participant(tarea, self.editor, actor=self.autor)
         comentario = create_comment(tarea=tarea, usuario=self.editor, contenido="Permitido")
         self.assertEqual(comentario.autor, self.editor)
+
+    def test_create_requires_crear_not_modificar(self):
+        tarea = self.make_task()
+        creator = create_user(username="comment-creator-only")
+        modifier = create_user(username="comment-modifier-only")
+        assign_permission(creator, self.empresa, "Tareas", crear=True)
+        assign_permission(modifier, self.empresa, "Tareas", modificar=True)
+        add_participant(tarea, creator, actor=self.autor)
+        add_participant(tarea, modifier, actor=self.autor)
+
+        comentario = create_comment(tarea=tarea, usuario=creator, contenido="Solo crear")
+        self.assertEqual(comentario.autor, creator)
+        with self.assertRaises(ValidationError):
+            create_comment(tarea=tarea, usuario=modifier, contenido="Solo modificar")
+
+    def test_edit_requires_modificar_even_when_creator_has_crear(self):
+        tarea = self.make_task()
+        creator = create_user(username="comment-edit-creator-only")
+        assign_permission(creator, self.empresa, "Tareas", crear=True)
+        add_participant(tarea, creator, actor=self.autor)
+        comentario = create_comment(tarea=tarea, usuario=creator, contenido="Inicial")
+
+        with self.assertRaises(ValidationError):
+            edit_comment(comentario=comentario, usuario=creator, contenido="Editado")
+
+    def test_creator_can_attach_existing_document_without_modificar(self):
+        tarea = self.make_task()
+        creator = create_user(username="comment-attachment-creator")
+        assign_permission(creator, self.empresa, "Tareas", crear=True)
+        add_participant(tarea, creator, actor=self.autor)
+        documento = self.make_document(tarea, usuario=creator, suffix="creator-only")
+
+        comentario = create_comment(tarea=tarea, usuario=creator, documentos=[documento])
+
+        self.assertEqual(comentario.adjuntos.get().documento_id, documento.pk)
 
     def test_responsible_without_explicit_participant_can_create_comment(self):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.editor)

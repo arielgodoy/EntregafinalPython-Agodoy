@@ -13,6 +13,7 @@ from access_control.services.permissions import (
     user_has_permission_for_empresa,
 )
 from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
+from tareas.services.authorization import can_manage_task
 from tareas.services.hierarchy import is_effectively_annulled
 from tareas.services.notifications import emit_task_event, task_recipients
 
@@ -39,6 +40,8 @@ def _lock_task_for_participant_admin(tarea, actor):
         accion="modificar",
     ):
         raise ValidationError("El usuario no tiene autorización para administrar participantes.")
+    if not can_manage_task(tarea=tarea_actual, actor=actor):
+        raise ValidationError("El usuario no puede administrar esta tarea.")
     if tarea_actual.estado == Tarea.Estado.CERRADA or is_effectively_annulled(tarea_actual):
         raise ValidationError("La tarea no admite cambios de participantes.")
     return tarea_actual
@@ -93,8 +96,18 @@ def mark_task_read(tarea, user, *, leido=True):
 
 def assign_responsible(tarea, new_responsible, changed_by, motivo=""):
     """Assign/reassign the task's lead responsible user with history."""
-    _validate_user_in_task_company(tarea, new_responsible)
     _validate_user_in_task_company(tarea, changed_by)
+    if not can_manage_task(tarea=tarea, actor=changed_by):
+        raise ValidationError("El usuario no puede administrar esta tarea.")
+    if new_responsible is None:
+        if tarea.estado != Tarea.Estado.BORRADOR:
+            raise ValidationError("Una tarea publicada debe conservar un responsable.")
+        if tarea.responsable_id is None:
+            return None
+        tarea.responsable = None
+        tarea.save(update_fields=["responsable"])
+        return None
+    _validate_user_in_task_company(tarea, new_responsible)
     anterior = tarea.responsable
     if anterior_id := getattr(anterior, "pk", None):
         if anterior_id == new_responsible.pk:

@@ -19,6 +19,7 @@ from .models import (
     ReunionRevision,
     ReunionTarea,
     Tarea,
+    TareaParticipante,
 )
 
 
@@ -256,6 +257,36 @@ class ParticipanteTareaForm(forms.Form):
             )
 
 
+class ParticipanteTareaAdminForm(ParticipanteTareaForm):
+    rol = forms.ChoiceField(
+        choices=(
+            (TareaParticipante.Rol.PARTICIPANTE, "PARTICIPANTE"),
+            (TareaParticipante.Rol.INVITADO_OBSERVADOR, "INVITADO_OBSERVADOR"),
+        )
+    )
+
+
+class ResponsableTareaForm(forms.Form):
+    responsable = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+    )
+
+    def __init__(self, *args, tarea=None, empresa=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if empresa is None and tarea is not None:
+            empresa = tarea.empresa
+        if empresa is not None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(
+                empresa,
+                active_only=True,
+            )
+        if tarea is not None:
+            self.initial["responsable"] = tarea.responsable_id
+            if tarea.estado != Tarea.Estado.BORRADOR:
+                self.fields["responsable"].required = True
+
+
 class EvidenciaConfigForm(forms.Form):
     requiere_evidencia_cierre = forms.BooleanField(required=False)
 
@@ -296,6 +327,7 @@ class TareaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["fecha_tope"].required = True
         widget_classes = {
             "titulo": "form-control w-100",
             "descripcion": "form-control w-100",

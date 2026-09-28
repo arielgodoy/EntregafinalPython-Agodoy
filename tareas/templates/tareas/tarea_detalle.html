@@ -124,6 +124,38 @@ Detalle de tarea
                                 </div>
                             </section>
 
+                            <section class="task-detail__participants p-3 mt-4" aria-labelledby="tareas-participantes-titulo">
+                                <h5 id="tareas-participantes-titulo" class="task-detail__section-heading h6"><i class="ri-team-line" aria-hidden="true"></i><span data-key="tareas.participants.title">Participantes</span></h5>
+                                <p class="small text-muted"><span data-key="tareas.participants.implicit_help">El creador y el responsable participan automáticamente.</span></p>
+                                {% if puede_administrar_participantes %}
+                                <form method="post" action="{% url 'tareas:administrar_responsable_detalle' tarea.pk %}" class="row g-2 align-items-end mb-3">
+                                    {% csrf_token %}
+                                    <div class="col-md-8"><label class="form-label" for="{{ responsable_form.responsable.id_for_label }}"><span data-key="tareas.fields.responsable">Responsable</span></label><select name="responsable" id="{{ responsable_form.responsable.id_for_label }}" class="form-select"{% if tarea.estado != "BORRADOR" %} required{% endif %}>{% if tarea.estado == "BORRADOR" %}<option value="">—</option>{% endif %}{% for responsable in responsables_validos %}<option value="{{ responsable.pk }}"{% if responsable.pk == tarea.responsable_id %} selected{% endif %}>{{ responsable.username }}</option>{% endfor %}</select><div class="form-text"><span data-key="tareas.form.assignee_draft_help">Puede dejarse sin responsable mientras la tarea permanezca en borrador.</span></div></div>
+                                    <div class="col-md-4"><button type="submit" class="btn btn-outline-primary"><i class="ri-user-settings-line" aria-hidden="true"></i><span data-key="tareas.actions.reassign">Reasignar</span></button></div>
+                                </form>
+                                {% endif %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead><tr><th><span data-key="tareas.participants.user">Usuario</span></th><th><span data-key="tareas.participants.role">Rol</span></th><th><span data-key="tareas.participants.action">Acción</span></th></tr></thead>
+                                        <tbody>
+                                            <tr><td>{{ tarea.creada_por.username }}</td><td><span data-key="tareas.participants.creator">CREADOR</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>
+                                            {% if tarea.responsable and tarea.responsable_id != tarea.creada_por_id %}<tr><td>{{ tarea.responsable.username }}</td><td><span data-key="tareas.participants.responsible">RESPONSABLE</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>{% endif %}
+                                            {% for participante in participantes_explicitos %}
+                                            <tr><td>{{ participante.usuario.username }}</td><td>{% if participante.rol == "INVITADO_OBSERVADOR" %}<span data-key="tareas.participants.guest">INVITADO_OBSERVADOR</span>{% else %}<span data-key="tareas.participants.member">PARTICIPANTE</span>{% endif %}</td><td>{% if puede_administrar_participantes %}<form method="post" action="{% url 'tareas:desvincular_participante_detalle' tarea.pk participante.usuario_id %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-user-unfollow-line" aria-hidden="true"></i><span data-key="tareas.participants.remove">Desvincular</span></button></form>{% else %}<span data-key="tareas.participants.no_action">Sin acción</span>{% endif %}</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% if puede_administrar_participantes and participantes_elegibles %}
+                                <form method="post" action="{% url 'tareas:vincular_participante_detalle' tarea.pk %}" class="row g-2 align-items-end mt-2">
+                                    {% csrf_token %}
+                                    <div class="col-md-5"><label class="form-label" for="{{ participante_form.usuario.id_for_label }}"><span data-key="tareas.participants.add_user">Añadir usuario</span></label>{{ participante_form.usuario }}</div>
+                                    <div class="col-md-5"><label class="form-label" for="{{ participante_form.rol.id_for_label }}"><span data-key="tareas.participants.role">Rol</span></label>{{ participante_form.rol }}</div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-outline-primary"><i class="ri-user-add-line" aria-hidden="true"></i><span data-key="tareas.participants.add">Añadir</span></button></div>
+                                </form>
+                                {% elif puede_administrar_participantes %}<p class="small text-muted"><span data-key="tareas.participants.no_eligible">No hay usuarios elegibles.</span></p>{% endif %}
+                            </section>
+
                             {% if puede_configurar_evidencia %}
                             <section class="task-detail__links p-3 mt-4" aria-labelledby="tareas-enlaces-titulo">
                                 <h5 id="tareas-enlaces-titulo" class="task-detail__section-heading h6"><i class="ri-share-line" aria-hidden="true"></i><span data-key="tareas.links.title">Enlaces compartidos</span></h5>
@@ -145,7 +177,7 @@ Detalle de tarea
 
                             <div class="task-detail__actions mt-4">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><i class="ri-arrow-left-line" aria-hidden="true"></i><span data-key="tareas.actions.volver">Volver</span></a>
-                                <a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>
+                                {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}
                                 <a href="{% url 'tareas:hitos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-flag-line" aria-hidden="true"></i><span data-key="tareas.actions.hitos">Hitos y avance</span></a>
                                 <a href="{% url 'tareas:documentos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-folder-line" aria-hidden="true"></i><span data-key="tareas.actions.documentos">Documentos y evidencia</span></a>
                                 {% if tarea.estado == "BORRADOR" %}

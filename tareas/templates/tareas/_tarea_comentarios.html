@@ -10,8 +10,8 @@
     data-edit-url-template="{% url 'tareas:editar_comentario' tarea.pk 0 %}"
     data-hide-url-template="{% url 'tareas:ocultar_comentario' tarea.pk 0 %}"
     data-restore-url-template="{% url 'tareas:restaurar_comentario' tarea.pk 0 %}"
-    data-can-modify="{{ comentarios_mutables|yesno:'true,false' }}"
-    data-can-supervise="{% if comentarios_mutables and comentarios_puede_supervisar %}true{% else %}false{% endif %}"
+    data-can-modify="{{ comentarios_editables|yesno:'true,false' }}"
+    data-can-supervise="{% if comentarios_lifecycle_interactivo and comentarios_puede_supervisar %}true{% else %}false{% endif %}"
     data-can-comment="{{ comentarios_mutables|yesno:'true,false' }}"
 >
     <div class="card-header d-flex align-items-center justify-content-between gap-2 task-comments__header">

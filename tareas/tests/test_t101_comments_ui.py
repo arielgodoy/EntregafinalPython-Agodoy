@@ -15,16 +15,28 @@ class T101CommentsUiTests(TestCase):
         cls.participante = create_user(username="t101-participante")
         cls.no_vinculado = create_user(username="t101-no-vinculado")
         cls.solo_lectura = create_user(username="t101-lector")
+        cls.creador = create_user(username="t101-creador")
+        cls.modificador = create_user(username="t101-modificador")
         cls.admin = create_user(username="t101-admin")
         cls.sin_ingresar = create_user(username="t101-sin-ingresar")
-        assign_permission(cls.participante, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(
+            cls.participante,
+            cls.empresa,
+            "Tareas",
+            ingresar=True,
+            crear=True,
+            modificar=True,
+        )
         assign_permission(cls.solo_lectura, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True, crear=True)
+        assign_permission(cls.modificador, cls.empresa, "Tareas", ingresar=True, modificar=True)
         assign_permission(cls.no_vinculado, cls.empresa, "Tareas", ingresar=True)
         assign_permission(
             cls.admin,
             cls.empresa,
             "Tareas",
             ingresar=True,
+            crear=True,
             modificar=True,
             supervisor=True,
         )
@@ -95,6 +107,26 @@ class T101CommentsUiTests(TestCase):
         self.assertContains(response, 'data-can-comment="false"')
         self.assertNotContains(response, 'data-comments-composer')
         self.assertContains(response, 'data-comments-csrf')
+
+    def test_creator_only_participant_gets_composer_but_not_edit_controls(self):
+        tarea = self.make_task()
+        add_participant(tarea, self.creador, actor=self.participante)
+
+        response = self.get_detail(tarea, self.creador)
+
+        self.assertContains(response, 'data-can-comment="true"')
+        self.assertContains(response, 'data-can-modify="false"')
+        self.assertContains(response, 'data-comments-composer')
+
+    def test_modifier_only_participant_cannot_create_comment(self):
+        tarea = self.make_task()
+        add_participant(tarea, self.modificador, actor=self.participante)
+
+        response = self.get_detail(tarea, self.modificador)
+
+        self.assertContains(response, 'data-can-comment="false"')
+        self.assertContains(response, 'data-can-modify="true"')
+        self.assertNotContains(response, 'data-comments-composer')
 
     def test_creator_responsible_with_permissions_gets_mutable_card_without_row(self):
         tarea = create_tarea(

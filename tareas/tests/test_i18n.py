@@ -79,6 +79,24 @@ class TareasI18nTests(SimpleTestCase):
         self.assertNotIn("tareas.validation.unknown_future_code", rendered_error)
         self.assertIn('data-key="tareas.messages.generic_error"', rendered_error)
 
+    def test_participant_messages_have_explicit_rendered_branches(self):
+        added = render_to_string(
+            "tareas/_i18n_message.html",
+            {"message": SimpleNamespace(message="tareas.messages.participant_added")},
+        )
+        invalid = render_to_string(
+            "tareas/_i18n_message.html",
+            {"message": SimpleNamespace(message="tareas.messages.participant_invalid")},
+        )
+
+        self.assertIn("Participante o responsable asignado correctamente.", added)
+        self.assertNotIn('data-key="tareas.messages.generic_error"', added)
+        self.assertIn(
+            "No fue posible asignar o actualizar el participante o responsable.",
+            invalid,
+        )
+        self.assertNotIn('data-key="tareas.messages.generic_error"', invalid)
+
     def test_message_keys_are_catalogued_and_never_rendered_directly(self):
         sources = [ROOT / "tareas/forms.py", ROOT / "tareas/views.py"]
         sources += list((ROOT / "tareas/templates/tareas").rglob("*.html"))

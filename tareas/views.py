@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -44,7 +44,9 @@ from .forms import (
     HitoForm,
     HitoReasignacionForm,
     MotivoComentarioForm,
+    ParticipanteTareaAdminForm,
     ParticipanteTareaForm,
+    ResponsableTareaForm,
     ReconocerComentariosForm,
     ReunionParticipanteForm,
     ReunionRevisionForm,
@@ -65,7 +67,8 @@ from .models import (
     TareaParticipante,
 )
 from .services.context import get_active_company_id
-from .services.assignment import add_participant, remove_participant
+from .services.assignment import assign_responsible, add_participant, remove_participant
+from .services.authorization import can_manage_task
 from .services.comments import create_comment, edit_comment, hide_comment, restore_comment
 from .services.reading import (
     COMMENT_PAGE_SIZE,
@@ -159,6 +162,11 @@ def _comment_actor_has_permission(tarea, usuario, accion):
         vista_nombre="Tareas",
         accion=accion,
     )
+
+
+def _require_task_administration(tarea, actor):
+    if not can_manage_task(tarea=tarea, actor=actor):
+        raise PermissionDenied("No tienes autorización para administrar esta tarea.")
 
 
 def _unlinked_comment_page(*, tarea, before_comment=None):
@@ -429,6 +437,12 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             self.request.user,
             "ingresar",
         )
+        comentarios_puede_crear = comentarios_vinculado and user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas",
+            accion="crear",
+        )
         comentarios_puede_modificar = comentarios_vinculado and user_has_permission_for_empresa(
             user=self.request.user,
             empresa=self.object.empresa,
@@ -443,17 +457,30 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         )
         context["comentarios_puede_ver"] = comentarios_puede_ver
         context["comentarios_vinculado"] = comentarios_vinculado
+        context["comentarios_puede_crear"] = comentarios_puede_crear
         context["comentarios_puede_modificar"] = comentarios_puede_modificar
         context["comentarios_puede_supervisar"] = comentarios_puede_supervisar
-        context["comentarios_mutables"] = (
-            comentarios_puede_modificar
-            and self.object.estado
+        comentarios_lifecycle_interactivo = (
+            self.object.estado
             in {
                 Tarea.Estado.ACTIVA,
                 Tarea.Estado.GESTION,
                 Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
             }
             and not context["tarea_anulada_efectivamente"]
+        )
+        context["comentarios_lifecycle_interactivo"] = comentarios_lifecycle_interactivo
+        context["comentarios_mutables"] = (
+            comentarios_puede_crear
+            and comentarios_lifecycle_interactivo
+        )
+        context["comentarios_editables"] = (
+            comentarios_puede_modificar
+            and comentarios_lifecycle_interactivo
+        )
+        context["puede_administrar_tarea"] = can_manage_task(
+            tarea=self.object,
+            actor=self.request.user,
         )
         context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
             user=self.request.user,
@@ -486,6 +513,28 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context["destinatarios_enlace"] = get_valid_users_for_empresa(
             self.object.empresa, active_only=True
         ).exclude(pk=self.request.user.pk)
+        participantes_explicitos = list(
+            self.object.participantes.select_related("usuario").order_by("usuario__username")
+        )
+        context["participantes_explicitos"] = participantes_explicitos
+        implicit_ids = {self.object.creada_por_id, self.object.responsable_id}
+        explicit_ids = {item.usuario_id for item in participantes_explicitos}
+        context["participantes_elegibles"] = get_valid_users_for_empresa(
+            self.object.empresa, active_only=True
+        ).exclude(pk__in=implicit_ids | explicit_ids)
+        context["puede_administrar_participantes"] = context["puede_administrar_tarea"]
+        context["participante_form"] = kwargs.get(
+            "participante_form",
+            ParticipanteTareaAdminForm(empresa=self.object.empresa, active_only=True),
+        )
+        context["responsable_form"] = kwargs.get(
+            "responsable_form",
+            ResponsableTareaForm(tarea=self.object),
+        )
+        context["responsables_validos"] = get_valid_users_for_empresa(
+            self.object.empresa,
+            active_only=True,
+        )
         return context
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
@@ -685,7 +734,7 @@ class MarcarComentariosLeidosView(TareaComentariosView):
 
 
 class CrearComentarioView(TareaComentariosView):
-    permiso_requerido = "modificar"
+    permiso_requerido = "crear"
 
     def post(self, request, tarea_id):
         tarea = self.get_tarea(request, tarea_id)
@@ -826,6 +875,8 @@ class VincularParticipanteView(TareaComentariosView):
 
     def post(self, request, tarea_id, usuario_id):
         tarea = self.get_tarea(request, tarea_id)
+        if not can_manage_task(tarea=tarea, actor=request.user):
+            return _comment_error_response(status=403)
         form = ParticipanteTareaForm(
             data={"usuario": usuario_id},
             empresa=tarea.empresa,
@@ -853,6 +904,8 @@ class DesvincularParticipanteView(TareaComentariosView):
 
     def post(self, request, tarea_id, usuario_id):
         tarea = self.get_tarea(request, tarea_id)
+        if not can_manage_task(tarea=tarea, actor=request.user):
+            return _comment_error_response(status=403)
         form = ParticipanteTareaForm(
             data={"usuario": usuario_id},
             empresa=tarea.empresa,
@@ -870,6 +923,99 @@ class DesvincularParticipanteView(TareaComentariosView):
                 "participante_id": participante.pk,
             }
         )
+
+
+class VincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id):
+        tarea = get_object_or_404(
+            Tarea.objects.select_related("empresa"),
+            pk=tarea_id,
+            empresa_id=_get_empresa_id(request),
+        )
+        _require_task_administration(tarea, request.user)
+        form = ParticipanteTareaAdminForm(
+            data=request.POST,
+            empresa=tarea.empresa,
+            active_only=True,
+        )
+        if not form.is_valid():
+            messages.error(request, "tareas.messages.participant_invalid")
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        participante = form.cleaned_data["usuario"]
+        if tarea.participantes.filter(usuario=participante).exists():
+            messages.error(request, "tareas.messages.participant_exists")
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        try:
+            add_participant(
+                tarea,
+                participante,
+                rol=form.cleaned_data["rol"],
+                actor=request.user,
+            )
+        except ValidationError:
+            messages.error(request, "tareas.messages.participant_invalid")
+        else:
+            messages.success(request, "tareas.messages.participant_added")
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+
+class DesvincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, usuario_id):
+        tarea = get_object_or_404(
+            Tarea.objects.select_related("empresa"),
+            pk=tarea_id,
+            empresa_id=_get_empresa_id(request),
+        )
+        _require_task_administration(tarea, request.user)
+        participante = get_object_or_404(
+            get_valid_users_for_empresa(tarea.empresa, active_only=False),
+            pk=usuario_id,
+        )
+        if not tarea.participantes.filter(usuario=participante).exists():
+            messages.error(request, "tareas.messages.participant_missing")
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        try:
+            remove_participant(tarea, participante, actor=request.user)
+        except ValidationError:
+            messages.error(request, "tareas.messages.participant_invalid")
+        else:
+            messages.success(request, "tareas.messages.participant_removed")
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+
+class AdministrarResponsableDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id):
+        tarea = get_object_or_404(
+            Tarea.objects.select_related("empresa"),
+            pk=tarea_id,
+            empresa_id=_get_empresa_id(request),
+        )
+        _require_task_administration(tarea, request.user)
+        form = ResponsableTareaForm(data=request.POST, tarea=tarea)
+        if not form.is_valid():
+            messages.error(request, "tareas.messages.participant_invalid")
+            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        try:
+            assign_responsible(
+                tarea,
+                form.cleaned_data["responsable"],
+                request.user,
+                motivo="Administración desde el detalle",
+            )
+        except ValidationError:
+            messages.error(request, "tareas.messages.participant_invalid")
+        else:
+            messages.success(request, "tareas.messages.participant_added")
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
 class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -993,6 +1139,10 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQue
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+
+    def dispatch(self, request, *args, **kwargs):
+        _require_task_administration(self.get_object(), request.user)
+        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         campos_relevantes = {"responsable", "fecha_tope", "prioridad"}

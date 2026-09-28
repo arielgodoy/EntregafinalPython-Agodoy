@@ -33,7 +33,7 @@ class CommentReadingServiceTests(TestCase):
         for user in (cls.lector, cls.otro_lector, cls.autor):
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
         cls.admin = create_user(username="reading-participants-admin")
-        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, supervisor=True)
 
     def make_task(self, *, lector=None):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)

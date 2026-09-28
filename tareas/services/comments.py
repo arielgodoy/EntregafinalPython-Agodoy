@@ -160,7 +160,7 @@ def _schedule_comment_event(*, tarea, event, actor):
 @transaction.atomic
 def create_comment(*, tarea, usuario, contenido="", documentos=None, documentos_nuevos=None):
     tarea_actual = _current_task(tarea.pk)
-    _validate_actor(tarea_actual, usuario, "modificar")
+    _validate_actor(tarea_actual, usuario, "crear")
     _validate_operational_task(tarea_actual)
     documentos_finales = _resolve_documents(
         tarea=tarea_actual,

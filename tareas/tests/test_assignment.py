@@ -20,6 +20,7 @@ from tareas.services.assignment import (
     mark_task_read,
     remove_participant,
 )
+from tareas.services.participants import is_effective_participant
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
 
@@ -48,8 +49,9 @@ class AssignmentPhase3Tests(TestCase):
         ]:
             assign_permission(user, cls.empresa, "Tareas", ingresar=True)
             assign_permission(cls.usuario_otra_empresa, cls.otra_empresa, "Tareas", ingresar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True, modificar=True)
         cls.admin = create_user(username="p3_admin_participantes")
-        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, supervisor=True)
 
     def make_task(self, **kwargs):
         defaults = {
@@ -67,6 +69,35 @@ class AssignmentPhase3Tests(TestCase):
         self.assertTrue(
             TareaLectura.objects.filter(tarea=tarea, usuario=self.participante).exists()
         )
+
+    def test_invitado_observador_se_puede_agregar_tardiamente(self):
+        tarea = self.make_task()
+        comentario = Comentario.objects.create(
+            tarea=tarea,
+            autor=self.creador,
+            contenido="Comentario previo",
+        )
+
+        participante = add_participant(
+            tarea,
+            self.participante,
+            TareaParticipante.Rol.INVITADO_OBSERVADOR,
+            actor=self.admin,
+        )
+
+        self.assertEqual(participante.rol, TareaParticipante.Rol.INVITADO_OBSERVADOR)
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=tarea, usuario=self.participante).comentario_leido_hasta,
+            comentario,
+        )
+
+    def test_desvincular_no_elimina_participacion_efectiva_responsable(self):
+        tarea = self.make_task(responsable=self.participante)
+        add_participant(tarea, self.participante, actor=self.admin)
+
+        remove_participant(tarea, self.participante, actor=self.admin)
+
+        self.assertTrue(is_effective_participant(tarea, self.participante))
 
     def test_vincular_inicializa_cursor_en_comentario_mas_reciente(self):
         tarea = self.make_task()
@@ -228,6 +259,24 @@ class AssignmentPhase3Tests(TestCase):
         self.assertEqual(tarea.responsable, self.responsable)
         self.assertIsNone(reasignacion.responsable_anterior)
         self.assertEqual(reasignacion.responsable_nuevo, self.responsable)
+
+    def test_borrador_puede_quedar_sin_responsable(self):
+        tarea = self.make_task()
+
+        assign_responsible(tarea, None, self.creador, "Quitar responsable")
+
+        tarea.refresh_from_db()
+        self.assertIsNone(tarea.responsable)
+
+    def test_tarea_publicada_no_puede_quedar_sin_responsable(self):
+        tarea = self.make_task(fecha_tope=timezone.localdate())
+        tarea.publicar(self.creador)
+
+        with self.assertRaises(ValidationError):
+            assign_responsible(tarea, None, self.creador)
+
+        tarea.refresh_from_db()
+        self.assertEqual(tarea.responsable, self.responsable)
 
     def test_reasignacion_valida(self):
         tarea = self.make_task()
@@ -437,8 +486,8 @@ class ParticipantAdministrationServiceTests(TestCase):
         cls.admin_ajeno = create_user(username="pa_admin_ajeno")
         cls.admin_inactivo = create_user(username="pa_admin_inactivo")
         cls.destino = create_user(username="pa_destino")
-        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
-        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        assign_permission(cls.admin, cls.empresa, "Tareas", ingresar=True, supervisor=True)
         assign_permission(cls.sin_modificar, cls.empresa, "Tareas", ingresar=True)
         assign_permission(cls.admin_ajeno, cls.otra_empresa, "Tareas", ingresar=True, modificar=True)
         assign_permission(cls.admin_inactivo, cls.empresa, "Tareas", ingresar=True, modificar=True)

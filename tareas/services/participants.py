@@ -1,4 +1,4 @@
-"""Functional task participation without materializing implicit responsibility."""
+"""Functional task participation without materializing implicit roles."""
 
 from tareas.models import Hito, TareaParticipante
 
@@ -7,6 +7,8 @@ def is_effective_participant(tarea, usuario):
     """Return whether the user has an active functional role on the task."""
     if usuario is None:
         return False
+    if tarea.creada_por_id == usuario.pk:
+        return True
     if tarea.responsable_id == usuario.pk:
         return True
     if TareaParticipante.objects.filter(
@@ -28,6 +30,8 @@ def effective_participant_ids(tarea):
             "usuario_id", flat=True
         )
     )
+    if tarea.creada_por_id is not None:
+        participant_ids.add(tarea.creada_por_id)
     if tarea.responsable_id is not None:
         participant_ids.add(tarea.responsable_id)
     participant_ids.update(

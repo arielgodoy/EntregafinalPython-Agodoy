@@ -14,13 +14,22 @@
 
 ### Session 2026-09-25
 
-- La participación funcional efectiva para Comentarios es `Tarea.responsable OR
-	TareaParticipante OR Hito.responsable` cuando el Hito pertenece a la Tarea y
-	`anulado=False`.
+- La participación funcional efectiva para Comentarios es `Tarea.creada_por OR
+	Tarea.responsable OR TareaParticipante OR Hito.responsable` cuando el Hito
+	pertenece a la Tarea y `anulado=False`. Las relaciones implícitas se deduplican
+	por usuario y no se materializan como filas `TareaParticipante`.
 	El responsable no se materializa como `TareaParticipante`, no hay backfill ni
 	migración para esta regla.
-- El creador no obtiene participación implícita por ser creador. La relación efectiva
+- El creador obtiene participación implícita por ser creador. La relación efectiva
 	no concede VICMEAS, supervisor, autoría ni bypass de lifecycle o multiempresa.
+- La autorización contextual para administrar una Tarea pertenece exclusivamente a
+	`tareas` y conserva VICMEAS: para editar datos generales, asignar/quitar/reasignar
+	`responsable` o vincular/desvincular `PARTICIPANTE`/`INVITADO_OBSERVADOR`, el actor
+	debe tener VICMEAS `modificar` y ser `Tarea.creada_por`, o tener autoridad VICMEAS
+	`supervisor`. Ser creador no sustituye `modificar`; ser responsable, participante o
+	invitado/observador no concede propiedad administrativa. Esta regla no se aplica a
+	comentarios, lifecycle, hitos, progreso, documentos, evidencia, reuniones,
+	reprogramación ni T054.
 - Un responsable nuevo inicia seguimiento desde el Comentario más reciente; no recibe
 	unread ni notificaciones retroactivas. Si ya era participante explícito, conserva su
 	cursor y unread existentes.
@@ -179,6 +188,17 @@ posteriores de reprogramación.
 - **FR-D08**: MUST existir reasignación de responsable con registro (quién, cuándo).
 - **FR-D09**: Permisos por rol integrados con VICMEAS (sin sistema paralelo).
 - **FR-D10**: Confirmación de lectura para participantes/invitados cuando corresponda.
+- **FR-D11**: El detalle de la Tarea MUST permitir administrar `Tarea.responsable` con
+	permiso `modificar`, usando únicamente usuarios activos y válidos para la Empresa
+	activa. En `BORRADOR` el responsable puede quedar vacío; publicar exige uno válido.
+	Después de publicar solo se permite reasignar a otro usuario válido y el cambio MUST
+	reutilizar la auditoría de reasignación existente. El responsable sigue siendo una
+	relación implícita y no crea una fila `TareaParticipante`.
+- **FR-D12**: Para las operaciones administrativas de edición general, responsable y
+	participantes/invitados, además de `Tareas` + `modificar` y la Empresa activa, el
+	actor MUST ser el creador de la Tarea o tener autoridad `supervisor` en VICMEAS.
+	Esta regla contextual vive solo en `tareas`; no convierte la participación efectiva
+	en autorización administrativa ni altera la política de Comentarios o lifecycle.
 
 **Nota UX pendiente**: cada Tarea mantiene un único `responsable` principal,
 mientras el trabajo en equipo puede incluir múltiples participantes. El contrato
@@ -265,7 +285,7 @@ participantes en múltiples responsables y no requiere implementación ahora.
 
 ## G. Fechas, Atrasos y Reprogramación
 
-- **FR-G01**: Toda Tarea formal MUST tener `fecha_tope` para poder publicarse o activarse. `fecha_tope` puede ser NULL técnicamente mientras el registro permanece en `BORRADOR` durante su edición, pero la publicación MUST rechazar una Tarea sin fecha. Una necesidad todavía no formalizada y sin fecha corresponde a TO-DO, no a una Tarea publicada. Con `fecha_tope`, empieza a estar atrasada cuando la fecha de referencia supera dicha fecha; `fecha_tope` es el dato funcional principal.
+- **FR-G01**: Toda Tarea nueva MUST tener `fecha_tope` desde su creación. La capa pública de alta MUST rechazar una Tarea nueva sin fecha antes de persistirla. El campo puede conservar nulabilidad técnica para datos históricos y compatibilidad, pero la publicación MUST mantener además la validación defensiva contra fecha ausente. Una necesidad todavía no formalizada y sin fecha corresponde a TO-DO, no a una Tarea. Con `fecha_tope`, empieza a estar atrasada cuando la fecha de referencia supera dicha fecha; `fecha_tope` es el dato funcional principal.
 - **FR-G02**: MUST calcularse `dias_atraso` de forma derivada, sin almacenarlo si puede calcularse. Toda Tarea publicada tiene `fecha_tope`; mientras no esté cumplida, si `fecha_referencia > fecha_tope`, el atraso es la diferencia entre ambas fechas. `fecha_cumplimiento` MUST registrar la fecha/hora real en que se completa la última acción operativa necesaria y, al pasar a `PENDIENTE_APROBACION_CIERRE`, MUST ser el corte del atraso: la aprobación administrativa posterior no suma días. Si el cierre es rechazado y vuelve a `GESTION`, `fecha_cumplimiento` MUST volver a NULL y el intento anterior MUST quedar auditado en `TareaTransicion`; al completarse nuevamente se fija una nueva fecha. La fecha de asignación/publicación MUST conservarse como referencia histórica original y una reasignación no la cambia ni modifica `fecha_tope`.
 - **FR-G03**: MUST soportarse múltiples causas de atraso por cada reprogramación. La lista inicial incluye únicamente: imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas. La relación `Reprogramacion` ↔ `CausaAtraso` MUST ser M:N y conservar el contexto histórico de cada operación.
 - **FR-G04**: La justificación MUST ser obligatoria para reprogramar.
@@ -403,10 +423,11 @@ interpretar `email_enabled` como opt-in u opt-out de este canal.
 - Lectura general conserva `TareaLectura`; reconocer Comentarios solo mueve su cursor
 	`comentario_leido_hasta`. Ninguna lectura genera notificación in-app ni email.
 - Comentario creado, editado, ocultado o restaurado: emitir el evento correspondiente y
-	notificar a los usuarios activos con vínculo `TareaParticipante` vigente, excluyendo al
-	actor y deduplicando por usuario. Creador y responsable participan solo si tienen ese
-	vínculo vigente. Desvincular corta inmediatamente acceso y notificaciones futuras. Cada
-	mutación requiere su propio evento de negocio; editar/ocultar/restaurar no incrementa el
+	notificar a los usuarios activos con participación funcional efectiva, excluyendo al
+	actor y deduplicando por usuario. El creador y el responsable participan por su relación
+	implícita, mientras que un participante explícito desvinculado deja de recibir eventos.
+	Desvincular corta inmediatamente acceso y notificaciones futuras salvo que permanezca otra
+	relación efectiva. Cada mutación requiere su propio evento de negocio; editar/ocultar/restaurar no incrementa el
 	contador de comentarios nuevos. Tareas `CRITICA` usan los canales in-app y email
 	automático existentes. T054 no implementa ni crea el dominio de Comentarios.
 - Documento agregado: notificar al creador (`Tarea.creada_por`), responsable y
@@ -773,7 +794,7 @@ lectura ni migración masiva de datos.
 - **FR-S09**: Una Tarea MUST tener como máximo un origen canónico: `todo_origen`, `tarea_origen` o ninguno. MUST existir una restricción de exclusión que impida ambos orígenes simultáneamente.
 - **FR-S10**: Las referencias históricas, evaluaciones de similitud, jerarquía `TareaRelacion`, clonación y trabajo en equipo son conceptos distintos del origen canónico y no lo reemplazan.
 - **FR-S11**: No se usará `GenericForeignKey` para el origen salvo necesidad arquitectónica real; se prefieren FK explícitas a TO-DO y Tarea.
-- **FR-S12**: Una Tarea formal puede permanecer técnicamente sin `fecha_tope` solo mientras está en `BORRADOR` y en edición. La publicación/activación MUST exigir `fecha_tope`; una entidad sin fecha que aún no se formaliza como Tarea debe permanecer como TO-DO. TO-DO y Tarea son entidades separadas, y un TO-DO puede generar múltiples Tareas sin transformarse en ninguna de ellas.
+- **FR-S12**: Toda Tarea formal nueva MUST tener `fecha_tope` desde el alta pública, incluso si nace como `BORRADOR`; la capa pública MUST rechazarla sin fecha antes de persistirla. La nulabilidad técnica solo conserva compatibilidad con históricos y la publicación/activación mantiene su validación defensiva. Una entidad sin fecha que aún no se formaliza como Tarea debe permanecer como TO-DO. TO-DO y Tarea son entidades separadas, y un TO-DO puede generar múltiples Tareas sin transformarse en ninguna de ellas.
 
 **Key Entities — S**: TO-DO, CorrelativoTodoEmpresa, OrigenTodoTarea, OrigenTareaTarea y auditoría de TO-DO.
 
@@ -782,7 +803,7 @@ lectura ni migración masiva de datos.
 ## T. Comentarios de Tarea
 
 - **FR-T01**: Una Tarea puede tener cero o más Comentarios; cada Comentario pertenece a exactamente una Tarea, registra autor autenticado, fecha de creación y Empresa derivada de la Tarea. Es una entrada manual, nunca un evento automático del sistema. Debe contener texto no vacío y/o adjuntos. Un Comentario no sustituye una justificación formal exigida por una transición, cierre, anulación u otra operación, ni constituye evidencia formal.
-- **FR-T02**: La superficie usa únicamente `vista_nombre="Tareas"`: `ingresar` para leer, `modificar` para crear/editar y vincular/desvincular, y `supervisor` (S de VICMEAS) para ocultar/restaurar. No se crean Vistas, permisos ni roles especiales. La lectura del feed requiere usuario autenticado y activo, Empresa activa coincidente, VICMEAS `ingresar` y acceso válido a la Tarea, pero no requiere participación funcional; creador, responsable y otros usuarios autorizados pueden leer sin auto-vincularse. Para mutaciones, reconocimiento y seguimiento, la participación funcional es `Tarea.responsable OR TareaParticipante`; el creador no es participante implícito. Esta relación no sustituye VICMEAS, Empresa, usuario activo ni lifecycle. Desvincular revoca la participación explícita, sin borrar comentarios ni historial; el responsable conserva participación mientras siga asignado. El historial de versiones completo solo es visible al autor o a un usuario autorizado con S, siempre sujeto al acceso vigente a la Tarea. La administración de `TareaParticipante` requiere VICMEAS `modificar`, pero no requiere que el actor administrador sea él mismo participante. Cambiar participantes se bloquea en `CERRADA` y anulada efectivamente.
+- **FR-T02**: La superficie usa únicamente `vista_nombre="Tareas"`: `ingresar` para leer, `crear` para crear comentarios, `modificar` para editar comentarios y vincular/desvincular, y `supervisor` (S de VICMEAS) para ocultar/restaurar. No se crean Vistas, permisos ni roles especiales. La lectura del feed requiere usuario autenticado y activo, Empresa activa coincidente, VICMEAS `ingresar` y acceso válido a la Tarea, pero no requiere participación funcional; creador, responsable y otros usuarios autorizados pueden leer sin auto-vincularse. Para mutaciones, reconocimiento y seguimiento, la participación funcional es `Tarea.creada_por OR Tarea.responsable OR TareaParticipante OR Hito.responsable` cuando corresponda. Esta relación no sustituye VICMEAS, Empresa, usuario activo ni lifecycle. Desvincular revoca la participación explícita, sin borrar comentarios ni historial; el responsable y creador conservan participación mientras mantengan su relación implícita. El historial de versiones completo solo es visible al autor o a un usuario autorizado con S, siempre sujeto al acceso vigente a la Tarea. La administración de `TareaParticipante` requiere VICMEAS `modificar`, permite desde el detalle los roles `PARTICIPANTE` e `INVITADO_OBSERVADOR`, y no requiere que el actor administrador sea él mismo participante. Cambiar participantes se bloquea en `CERRADA` y anulada efectivamente.
 - **FR-T03**: La bitácora es lineal, cronológica y estable por `(created_at, pk)`, con páginas fijas de 20 Comentarios que permiten recorrer todo el historial. Las páginas históricas anteriores al cursor no lo mueven. No incluye filtros, buscador propio ni exportación de conversaciones.
 - **FR-T04**: Cada Comentario admite como máximo cinco adjuntos. Se reutilizan documentos existentes de `DocumentoTarea` y sus validaciones/almacenamiento; la UI también puede crear un `DocumentoTarea` desde archivo o captura de cámara móvil (`capture="environment"`) usando las mismas validaciones. Todo documento debe pertenecer a la misma Tarea. El adjunto de Comentario no es `EvidenciaCierre` ni `HitoEvidencia` y no satisface requisitos de evidencia formal. Retirar el vínculo del Comentario no elimina físicamente `DocumentoTarea`; no se duplican archivos.
 - **FR-T05**: Solo el autor puede editar texto y conjunto de adjuntos durante la primera hora desde el `created_at` original; las ediciones no reinician el plazo. Cada creación/edición conserva una versión inmutable del texto y de las referencias a `DocumentoTarea`, con actor y fecha/hora. Un Comentario oculto no es editable.
