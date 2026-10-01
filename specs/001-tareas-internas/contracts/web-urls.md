@@ -191,7 +191,7 @@ La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal 
 | 6 | Drill-down Usuario | GET | `/tareas/dashboard/general/empresa/<empresa_id>/usuario/<usuario_id>/` | Agrupa por `Tarea.responsable`; no duplica participantes |
 | 6 | Drill-down Tarea | GET | `/tareas/<pk>/` | Reutiliza `detalle_tarea`; muestra contexto de una Tarea |
 
-### Comentarios de Tarea — Phase 8 (rutas T100 y UI T101 integradas; validación T102 pendiente)
+### Comentarios de Tarea — Phase 8 (rutas T100 y UI T101 integradas; validación T102 completada, E14 PASS)
 
 La tarjeta está integrada en el detalle existente `GET /tareas/<pk>/`. El feed usa páginas fijas de 20,
 orden `(created_at, pk)`, cursor por `TareaLectura` para participantes funcionales efectivos

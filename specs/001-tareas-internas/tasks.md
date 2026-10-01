@@ -217,7 +217,7 @@ excepciones justificadas y registradas.
 - [x] T099 [US7] Implementar contador/primer pendiente y reconocimiento contiguo por cursor en `TareaLectura`: solo los próximos 20 registros cronológicos efectivamente cargados pueden avanzar el cursor; páginas históricas/arbitrarias no lo saltan, y recorrer historia anterior no cambia el cursor. Asegurar una sola fila lectora por usuario/Tarea al vincular explícitamente, incorporar un responsable nuevo o procesar el primer evento para participantes funcionales efectivos, nunca una por Comentario. Propios nacen leídos, tombstone oculto mantiene pendiente hasta cargarse y edición/ocultación/restauración no incrementan. En `tareas/`, observar transiciones guardadas de `User.is_active` y abrir/cerrar `ComentarioPausaLectura` mediante operaciones transaccionales seguras, garantizando como máximo una pausa abierta por `TareaLectura` y protección frente a concurrencia; excluir el intervalo sin filas por Comentario ni cambios a sesiones. **Depende de T025, T096 y T098**.
 - [x] T100 [US7] Añadir forms, vistas y rutas server-side para leer/reconocer, crear, editar, ocultar/restaurar y vincular/desvincular. Usar `Tareas` + `ingresar` para el feed de lectura sin exigir participación, participación funcional + `ingresar` para reconocer, `crear` + participación funcional para crear, `modificar` + participación funcional para editar y `supervisor` + participación funcional para ocultar/restaurar; validar Empresa activa, relación efectiva donde corresponda y estado con respuestas controladas. La administración desde detalle permite únicamente `PARTICIPANTE` e `INVITADO_OBSERVADOR`. **Depende de T097–T099**.
 - [x] T101 [US7] Integrar la tarjeta en el detalle existente: bitácora lineal, cámara móvil, bloques de 20, burbuja `1..9`/`9+`, foco en primer pendiente, tombstone sin datos sensibles e historial detallado solo para comentarios visibles del autor o para S. El polling sincroniza nuevos y actualizaciones existentes mediante cursor `(updated_at, pk)` sin mover lectura/unread. Sin filtros, buscador, threads, app/chat independiente; i18n ES/EN vía T094. **Depende de T100 y T094**.
-- [ ] T102 [US7] Probar todas las reglas FR-T01…FR-T10: lifecycle/reactivación, permisos/membresía y S, motivos, texto/adjuntos/cámara/evidencia formal, versiones y protección documental, cursor/páginas/`9+`/ocultos/propios, alta tardía/inactividad, eventos y no-leídos, multiempresa e i18n. **Depende de T054 y T095–T101**.
+- [x] T102 [US7] Probar todas las reglas FR-T01…FR-T10: lifecycle/reactivación, permisos/membresía y S, motivos, texto/adjuntos/cámara/evidencia formal, versiones y protección documental, cursor/páginas/`9+`/ocultos/propios, alta tardía/inactividad, eventos y no-leídos, multiempresa e i18n. **Depende de T054 y T095–T101**.
 
 ## Success criteria traceability
 
@@ -236,7 +236,7 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 | SC-008 | T059-T063 / E13 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING; Local deferred y Proveedor ERP deferred |
 | SC-009 | T056-T057, T061 / E12 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
 | SC-010 | T014-T015, T022 / E8 | AUTOMATED_VALIDATED; MANUAL_VALIDATION_PENDING |
-| SC-011 | T095-T102 / E14 | CONTRACT_READY; AUTOMATED_VALIDATION_PENDING; MANUAL_VALIDATION_PENDING |
+| SC-011 | T095-T102 / E14 | CONTRACT_READY; AUTOMATED_VALIDATED; MANUAL_VALIDATION_PASS |
 
 ## Functional blocks to user stories matrix
 
@@ -303,8 +303,9 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 - No hay tareas de implementación para P1 Local.
 - No hay tareas de implementación para identidad externa o integración ERP de Proveedor fuera de T091; el maestro local se aborda en T082-T090.
 - T047–T052 conservan el cierre PRE-P2 histórico; T082–T091 contienen la evolución local y separan la integración ERP futura P2.
-- T054 queda completada tras integrar las notificaciones; T102 permanece pendiente para
-    validar el conjunto completo de reglas de Comentarios.
+- T054 queda completada tras integrar las notificaciones; T102 se cerró tras validar el
+    conjunto completo de reglas de Comentarios. Los resultados y la evidencia manual E14
+    están registrados en `quickstart.md`.
 - Cualquier modificación futura adicional en `AppDocs/app_classification.py`, `AppDocs/settings.py` o `AppDocs/urls.py` requiere una tarea separada con autorización y scope explícitos; su alta inicial ya está resuelta y no es tarea pendiente.
 - Cualquier modificación futura de otras apps, templates globales, diccionarios i18n globales o infraestructura requiere autorización expresa y detención previa.
 

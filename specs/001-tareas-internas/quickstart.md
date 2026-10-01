@@ -39,10 +39,10 @@ Resultado esperado: todos los tests de `tareas/tests/` pasan; `check` sin errore
 - `AUTOMATED_VALIDATED`: suite `tareas` y gates focalizados ejecutados con resultado verde.
 - `AUTOMATED_I18N_GATE=PASS`: `tareas.tests.test_i18n` ejecutado; las claves usadas por
    código y templates de `tareas` están presentes y son simétricas en ambos catálogos.
-- `MANUAL_VALIDATION_PENDING`: queda pendiente la comprobación E1-E14 en navegador,
-   incluida la alternancia ES → EN → ES. La validación automática no sustituye esa revisión.
-- `MANUAL_ES_EN_REVIEW=PENDING`: la revisión visual manual de textos, enums, mensajes y
-   navegación en ambos idiomas no está cerrada documentalmente.
+- `MANUAL_VALIDATION_PENDING`: permanece para los escenarios fuera de E14 que conservan
+   ese estado; E14 se cierra como PASS con la evidencia aceptada que se registra abajo.
+- `MANUAL_ES_EN_REVIEW=PENDING`: permanece para las superficies fuera de E14 que sigan
+   pendientes. La revisión manual ES/EN de Comentarios E14 está en PASS.
 
 ## Escenarios manuales end-to-end
 
@@ -177,11 +177,11 @@ Estado E13: EJECUTADO/VALIDADO mediante la regresión integrada de KPI,
 dashboards, T060, dashboard personal y metadata, manteniendo Local/Proveedor
 fuera de las dimensiones de drill-down.
 
-### E14. Comentarios de Tarea (Phase 8 implementada; T102 y validación manual pendientes)
+### E14. Comentarios de Tarea (Phase 8 completada; T102 y validación manual PASS)
 
-Phase 8 está implementada y tiene cobertura automatizada, pero T102 permanece abierto
-hasta validar el conjunto completo de reglas. Los gaps 1–4 reproducidos en esta
-intervención no sustituyen esa validación integral. Verificar:
+Phase 8 está implementada. T102 se cerró el 2026-10-01 tras completar la regresión
+automatizada y los gates, y aceptar la evidencia manual del Product Owner registrada al
+final de esta sección. Criterios de aceptación cubiertos:
 
 - La tarjeta aparece en el detalle para usuarios autorizados a leer el feed. La participación
    funcional efectiva (creador, responsable, participante explícito o responsable de Hito
@@ -204,32 +204,47 @@ intervención no sustituyen esa validación integral. Verificar:
    carga inicial y cada página son de 20. Abrir la Tarea no marca Comentarios leídos.
 - Al expandir/cargar, solo los próximos 20 Comentarios cronológicos contiguos avanzan el
    cursor; navegar a una página histórica/arbitraria no lo mueve ni salta pendientes. Sin
-   pendientes, el card muestra los 20 más recientes. Verificar contador
-   `1..9`/`9+`, foco en primer pendiente, propios ya leídos, ocultos pendientes conservados
-   hasta cargar su tombstone y edición/ocultar/restaurar sin incrementar el contador.
-- El cursor se guarda en la fila única `TareaLectura` usuario/Tarea; verificar alta tardía
-   con cero pendientes históricos y que los Comentarios de intervalos `is_active=False` no
-   se acumulen. No crear filas de lectura por Comentario ni recibos individuales.
+   pendientes, el card muestra los 20 más recientes. El contador muestra `1..9`/`9+`, enfoca
+   el primer pendiente, considera leídos los Comentarios propios, conserva ocultos pendientes
+   hasta cargar su tombstone y no incrementa por edición/ocultar/restaurar.
+- El cursor se guarda en la fila única `TareaLectura` usuario/Tarea; el alta tardía inicia
+   en el Comentario más reciente, sin pendientes históricos, y los Comentarios de intervalos
+   `is_active=False` no se acumulan. No se crean filas de lectura por Comentario ni recibos
+   individuales.
 - Crear/editar/ocultar/restaurar notifica a participantes activos vinculados, excluye al
    actor y deduplica; solo crear incrementa no leídos. `CRITICA` conserva email automático;
    no se duplica `documento_agregado` por adjunto inline.
-- Comprobar que Comentarios no reemplaza motivos/justificaciones formales y que cada
-   escritura revalida en backend Empresa, vínculo, VICMEAS y estado justo antes de guardar.
-- Verificar por separado la autorización contextual administrativa de `tareas`: creador con
+- Comentarios no reemplaza motivos/justificaciones formales; cada escritura revalida en
+   backend Empresa, vínculo, VICMEAS y estado justo antes de guardar.
+- La autorización contextual administrativa de `tareas` se validó por separado: creador con
    `modificar` y `supervisor` pueden editar datos generales y administrar responsable o
    participantes/invitados; un actor `M-only` no creador, aunque sea responsable o participante,
    recibe 403 y no muta la Tarea. Un creador sin `modificar` también recibe 403. Esta regla no
    concede ni revoca la capacidad independiente de comentar.
-- Revisar UI y mensajes en ES/EN y ejecutar el gate i18n antes de declarar la superficie
-   completa.
+- La UI y los mensajes de Comentarios se revisaron en ES/EN y el gate i18n está PASS; el
+   detalle de la evidencia manual final se registra abajo.
 
-Estado E14: CONTRACT_READY / T102_PENDING / MANUAL_VALIDATION_PENDING. Los gaps 1–4
-cuentan con pruebas automatizadas focalizadas; no se declara completa la cobertura de T102.
-La ventana temporal debe cubrirse también con prueba focalizada, sin esperar una hora en
-la suite.
+Estado E14: PASS / COMPLETADO.
+Estado T102: [x] CLOSED.
+Estado de validación Phase 8: CLOSED.
 
-La cobertura automatizada no sustituye la verificación manual en navegador de E1-E14,
-incluida la revisión ES/EN, que permanece `MANUAL_VALIDATION_PENDING`.
+Regresión final del 2026-10-01: 542 tests de `tareas` PASS; `manage.py check` sin errores
+(warning conocido `ckeditor.W001`); `compileall tareas` PASS; JSON de `sp.json` y `en.json`
+válido; gate automatizado `tareas.tests.test_i18n` PASS. El workaround de migraciones para
+`gestiondte` se aplicó solo en runtime y no se persistió. No hubo cambio de schema ni
+migraciones nuevas.
+
+Evidencia manual aceptada del Product Owner (A–N): A creador implícito; B `fecha_tope`;
+C responsable y reasignación; D invitado/observador y revinculación; E polling; F unread y
+cursor; G paginación; H inactividad; I notificaciones y deduplicación; J adjuntos y máximo
+cinco; K captura real con cámara en iPhone; L lifecycle; M edición e historial; N
+ocultar/restaurar con S y separación entre autor y S.
+
+Validación manual final E14 del Product Owner: cambio ES → EN → ES correcto; las etiquetas
+generales del módulo de Comentarios y la etiqueta dinámica del tipo de adjunto se traducen
+en ambos sentidos; no se detectaron problemas funcionales. `MANUAL_ES_EN_REVIEW` para E14
+es PASS. La evidencia física de cámara FR-T04 se conserva como PASS reportado por el
+Product Owner y no se repitió durante este cierre.
 
 ## Límites y bloqueos
 

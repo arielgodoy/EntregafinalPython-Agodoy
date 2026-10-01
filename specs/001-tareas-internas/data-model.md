@@ -509,7 +509,7 @@ disponga de la dimensión organizacional correspondiente.
 Las notificaciones se refieren a la infraestructura existente de `notificaciones` y email de
 `acounts`; no se duplica su modelo.
 
-## Comentarios de Tarea (contrato vigente; validación integral T102 y manual pendientes)
+## Comentarios de Tarea (contrato vigente; validación integral T102 completada, E14 PASS)
 
 `Comentario` pertenece a una única `Tarea`; su Empresa se deriva de `comentario.tarea.empresa` y no se duplica. La relación permite cero o más Comentarios por Tarea.
 
