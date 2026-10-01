@@ -258,9 +258,19 @@ class T101CommentsUiTests(TestCase):
         self.assertIn("visibilitychange", script)
         self.assertIn("document.hidden", script)
         self.assertIn("after_id=", script)
+        self.assertIn("updated_after=", script)
+        self.assertIn("updated_after_id=", script)
         self.assertIn("_commentsPollingInFlight", script)
         self.assertIn("appendPolledComments", script)
+        self.assertIn("syncComment(root, comment)", script)
         self.assertIn("if (feed.querySelector('[data-comment-id=\"' + comment.id + '\"]')) return false;", script)
+        self.assertIn("function ensurePollingCursor(root)", script)
+        self.assertIn("updatePollingCursor(root, Array.from(root._commentMap.values()));", script)
+        poll_start = script.index("function pollComments(root)")
+        self.assertLess(
+            script.index("ensurePollingCursor(root);", poll_start),
+            script.index('var params = "?after_id="', poll_start),
+        )
 
     def test_dynamic_action_contract_matches_rendered_markup(self):
         tarea = self.make_task()

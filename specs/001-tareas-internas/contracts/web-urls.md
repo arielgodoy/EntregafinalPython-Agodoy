@@ -206,7 +206,7 @@ ni habilita acciones de Comentarios.
 
 | Estado | Método | Ruta propuesta | Nombre sugerido | Autorización VICMEAS |
 |---|---|---|---|---|
-| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados. `after_id` opcional devuelve solo Comentarios posteriores sin mover lectura/unread |
+| ACTIVE | GET | `/tareas/<pk>/comentarios/` | `listar_comentarios` | `Tareas` + `ingresar`; Empresa/usuario activos y acceso válido a Tarea; vínculo no requerido para feed, sin cursor/unread para no vinculados. `after_id` devuelve Comentarios nuevos y puede combinarse con `updated_after`/`updated_after_id` para sincronizar cambios existentes sin mover lectura/unread. El cursor de actualización usa `(updated_at, pk)` |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/leer/` | `marcar_comentarios_leidos` | `Tareas` + `ingresar` + participación funcional; reconocer solo el final de la siguiente página contigua cargada, revalidado por backend; permitido también en Tarea cerrada/anulada (estado personal de lectura) |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/crear/` | `crear_comentario` | `Tareas` + `crear` + participación funcional |
 | ACTIVE | POST | `/tareas/<pk>/comentarios/<comentario_id>/editar/` | `editar_comentario` | `Tareas` + `modificar` + participación funcional; autor y hasta 1 hora |
@@ -242,7 +242,7 @@ Crear, editar, ocultar y restaurar notifican a participantes funcionales efectiv
 excepto al actor, sin duplicados por usuario; `CRITICA` conserva email automático de sistema. Solo crear
 incrementa no leídos. La carga/expansión reconoce solo los registros de la siguiente página
 contigua de 20; leer no notifica. Ocultos pendientes se entregan como tombstone neutro, sin
-contenido/historial a quienes no son autor/S. Adjuntos inline no duplican `documento_agregado`.
+contenido/historial a quienes no son S; el autor no-S recibe el mismo tombstone que cualquier otro no-S. Adjuntos inline no duplican `documento_agregado`.
 
 ### Dashboard y KPI — T059
 

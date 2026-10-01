@@ -25,6 +25,10 @@
         return new Date(comment.created_at);
     }
 
+    function commentUpdatedDate(comment) {
+        return new Date(comment.updated_at || comment.created_at);
+    }
+
     function commentDateKey(comment) {
         return commentDate(comment).toLocaleDateString();
     }
@@ -371,10 +375,33 @@
         comments.slice().sort(function (left, right) {
             var byDate = new Date(left.created_at) - new Date(right.created_at);
             return byDate || Number(left.id) - Number(right.id);
-        }).forEach(function (comment) { appendComment(root, comment); });
+        }).forEach(function (comment) {
+            if (feed.querySelector('[data-comment-id="' + comment.id + '"]')) {
+                syncComment(root, comment);
+            } else {
+                appendComment(root, comment);
+            }
+        });
         if (wasNearBottom && comments.length) {
             feed.scrollTop = feed.scrollHeight;
         }
+    }
+
+    function updatePollingCursor(root, comments) {
+        comments.forEach(function (comment) {
+            var updatedAt = commentUpdatedDate(comment);
+            var currentAt = root._commentsUpdatedAt ? new Date(root._commentsUpdatedAt) : null;
+            var currentId = Number(root._commentsUpdatedId || 0);
+            if (!currentAt || updatedAt > currentAt || (updatedAt.getTime() === currentAt.getTime() && Number(comment.id) > currentId)) {
+                root._commentsUpdatedAt = updatedAt.toISOString();
+                root._commentsUpdatedId = String(comment.id);
+            }
+        });
+    }
+
+    function ensurePollingCursor(root) {
+        if (root._commentsUpdatedAt || !root._commentMap) return;
+        updatePollingCursor(root, Array.from(root._commentMap.values()));
     }
 
     function scheduleCommentsPoll(root) {
@@ -388,8 +415,14 @@
     function pollComments(root) {
         if (root._commentsPollingInFlight || root._commentsPollingStopped || document.hidden) return;
         root._commentsPollingInFlight = true;
+        ensurePollingCursor(root);
         var afterId = getLatestKnownCommentId(root);
-        var url = root.dataset.feedUrl + "?after_id=" + encodeURIComponent(afterId);
+        var params = "?after_id=" + encodeURIComponent(afterId);
+        if (root._commentsUpdatedAt) {
+            params += "&updated_after=" + encodeURIComponent(root._commentsUpdatedAt);
+            params += "&updated_after_id=" + encodeURIComponent(root._commentsUpdatedId || "0");
+        }
+        var url = root.dataset.feedUrl + params;
         fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
             .then(function (response) {
                 if (response.status === 401 || response.status === 403) {
@@ -401,7 +434,9 @@
             })
             .then(function (result) {
                 if (!result.ok || !result.data.success || root._commentsPollingStopped) return;
-                appendPolledComments(root, result.data.comentarios || []);
+                var comments = result.data.comentarios || [];
+                appendPolledComments(root, comments);
+                updatePollingCursor(root, comments);
             })
             .catch(function () {
                 // A transient poll failure leaves the current feed untouched.
@@ -495,6 +530,11 @@
             .then(function (result) {
                 if (!result.ok || !result.data.success) throw new Error("comments");
                 renderPage(root, result.data, Boolean(prepend));
+                if (!prepend) {
+                    root._commentsUpdatedAt = null;
+                    root._commentsUpdatedId = "0";
+                    updatePollingCursor(root, result.data.comentarios || []);
+                }
                 status.textContent = "";
                 return result.data;
             })

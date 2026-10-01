@@ -190,7 +190,8 @@ implementada, verificar:
    operativo permite comentar otra vez y conserva cursor/versiones.
 - Crear exige VICMEAS `crear` y participación funcional; editar exige `modificar`, ser
    autor y participación funcional; ocultar/restaurar exige S (`supervisor`), participación
-   funcional y motivo no vacío. El historial completo solo lo ven autor/S.
+   funcional y motivo no vacío. El historial de comentarios visibles lo ve el autor; el
+   historial y contenido de comentarios ocultos solo los ve S. El autor no-S recibe tombstone.
 - Texto y/o adjuntos son válidos; el sexto adjunto se rechaza. Reutilizar `DocumentoTarea`
    de la misma Tarea, permitir captura móvil y comprobar que quitar el vínculo no elimina
    el documento ni convierte el adjunto en evidencia formal.

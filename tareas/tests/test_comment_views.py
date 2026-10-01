@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from tareas.models import DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
 from tareas.services.assignment import add_participant
-from tareas.services.comments import create_comment, edit_comment, hide_comment
+from tareas.services.comments import create_comment, edit_comment, hide_comment, restore_comment
 from tareas.services.documents import create_document
 from tareas.tests.factories import (
     assign_permission,
@@ -658,6 +658,103 @@ class CommentReadViewTests(TestCase):
         self.assertNotIn("autor", item)
         self.assertNotIn("adjuntos", item)
         self.assertNotIn("historial", item)
+
+    def test_hidden_comment_is_a_redacted_tombstone_for_author_without_supervisor(self):
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Contenido privado",
+        )
+        edit_comment(comentario=comentario, usuario=self.autor, contenido="Contenido editado")
+        add_participant(self.tarea, self.supervisor, actor=self.autor)
+        hide_comment(comentario=comentario, usuario=self.supervisor, motivo="Moderación")
+
+        self.login_as(self.autor)
+        response = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        )
+
+        item = response.json()["comentarios"][-1]
+        self.assertTrue(item["tombstone"])
+        self.assertNotIn("contenido", item)
+        self.assertNotIn("autor", item)
+        self.assertNotIn("adjuntos", item)
+        self.assertNotIn("historial", item)
+
+    def test_hidden_comment_attachment_and_history_are_only_returned_to_supervisor(self):
+        documento = create_document(
+            tarea=self.tarea,
+            usuario=self.autor,
+            tipo=DocumentoTarea.Tipo.OTRO,
+            formato_archivo=DocumentoTarea.FormatoArchivo.PDF,
+            url="https://example.com/oculto.pdf",
+        )
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Contenido con adjunto",
+            documentos=[documento],
+        )
+        edit_comment(comentario=comentario, usuario=self.autor, contenido="Contenido versionado")
+        add_participant(self.tarea, self.supervisor, actor=self.autor)
+        hide_comment(comentario=comentario, usuario=self.supervisor, motivo="Auditoría")
+
+        self.login_as(self.autor)
+        autor_item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        ).json()["comentarios"][-1]
+        self.assertTrue(autor_item["tombstone"])
+        self.assertNotIn("contenido", autor_item)
+        self.assertNotIn("adjuntos", autor_item)
+        self.assertNotIn("historial", autor_item)
+
+        self.login_as(self.supervisor)
+        supervisor_item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        ).json()["comentarios"][-1]
+        self.assertEqual(supervisor_item["contenido"], "Contenido versionado")
+        self.assertEqual(supervisor_item["adjuntos"][0]["url"], "https://example.com/oculto.pdf")
+        self.assertEqual(
+            [version["contenido"] for version in supervisor_item["historial"]],
+            ["Contenido con adjunto", "Contenido versionado", "Contenido versionado"],
+        )
+
+    def test_polling_cursor_returns_hidden_and_restored_existing_comment(self):
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Visible antes de moderación",
+        )
+        inicial = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        ).json()["comentarios"][-1]
+        add_participant(self.tarea, self.supervisor, actor=self.autor)
+        hide_comment(comentario=comentario, usuario=self.supervisor, motivo="Ocultar")
+
+        oculto = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {
+                "after_id": comentario.pk,
+                "updated_after": inicial["updated_at"],
+                "updated_after_id": comentario.pk,
+            },
+        ).json()["comentarios"][-1]
+        self.assertTrue(oculto["tombstone"])
+
+        comentario.refresh_from_db()
+        cursor_oculto = oculto["updated_at"]
+        restore_comment(comentario=comentario, usuario=self.supervisor, motivo="Restaurar")
+        restaurado = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {
+                "after_id": comentario.pk,
+                "updated_after": cursor_oculto,
+                "updated_after_id": comentario.pk,
+            },
+        ).json()["comentarios"][-1]
+        self.assertEqual(restaurado["contenido"], "Visible antes de moderación")
+        self.assertFalse(restaurado["tombstone"])
 
     def test_only_author_receives_version_history(self):
         comentario = create_comment(

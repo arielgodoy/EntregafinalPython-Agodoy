@@ -199,11 +199,13 @@ def _comment_document_data(documento):
 
 def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
     es_autor = comentario.autor_id == usuario.pk
-    puede_ver_contenido = es_autor or puede_supervisar
+    puede_ver_contenido = puede_supervisar or not comentario.oculto
+    puede_ver_historial = puede_supervisar or (es_autor and not comentario.oculto)
     if comentario.oculto and not puede_ver_contenido:
         return {
             "id": comentario.pk,
             "created_at": comentario.created_at.isoformat(),
+            "updated_at": comentario.updated_at.isoformat(),
             "oculto": True,
             "tombstone": True,
         }
@@ -213,7 +215,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
         adjuntos.append(_comment_document_data(adjunto.documento))
 
     historial = []
-    if puede_ver_contenido:
+    if puede_ver_historial:
         for version in comentario.versiones.all():
             historial.append(
                 {
@@ -250,6 +252,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
         "id": comentario.pk,
         "contenido": comentario.contenido,
         "created_at": comentario.created_at.isoformat(),
+        "updated_at": comentario.updated_at.isoformat(),
         "autor": {
             "id": comentario.autor_id,
             "username": comentario.autor.username,
@@ -260,7 +263,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
             version.numero_version is not None and version.numero_version > 1
             for version in comentario.versiones.all()
         ),
-        "puede_ver_historial": puede_ver_contenido,
+        "puede_ver_historial": puede_ver_historial,
         "historial": historial,
         "tombstone": False,
         "adjuntos": adjuntos,
@@ -586,6 +589,19 @@ class ListarComentariosView(TareaComentariosView):
     def get(self, request, tarea_id):
         tarea = self.get_tarea(request, tarea_id)
         after_id = request.GET.get("after_id")
+        updated_after = request.GET.get("updated_after")
+        updated_after_id = request.GET.get("updated_after_id", "0")
+        updated_cursor = None
+        if updated_after:
+            updated_cursor = parse_datetime(updated_after)
+            if updated_cursor is None:
+                return _comment_error_response()
+            try:
+                updated_after_id = int(updated_after_id)
+            except (TypeError, ValueError):
+                return _comment_error_response()
+            if updated_after_id < 0:
+                return _comment_error_response()
         if after_id is not None:
             try:
                 after_id = int(after_id)
@@ -593,11 +609,16 @@ class ListarComentariosView(TareaComentariosView):
                 return _comment_error_response()
             if after_id < 0:
                 return _comment_error_response()
-            comentarios = list(
-                Comentario.objects.filter(tarea=tarea, pk__gt=after_id).order_by(
-                    "created_at", "pk"
+            queryset = Comentario.objects.filter(tarea=tarea)
+            if updated_cursor is not None:
+                queryset = queryset.filter(
+                    Q(pk__gt=after_id)
+                    | Q(updated_at__gt=updated_cursor)
+                    | Q(updated_at=updated_cursor, pk__gt=updated_after_id)
                 )
-            )
+            else:
+                queryset = queryset.filter(pk__gt=after_id)
+            comentarios = list(queryset.order_by("created_at", "pk"))
             prefetch_related_objects(
                 comentarios,
                 "autor__avatar",
