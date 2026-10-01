@@ -262,7 +262,15 @@ class T101CommentsUiTests(TestCase):
         self.assertNotIn("return loadComments(root, root.dataset.feedUrl);", create_handler)
         self.assertIn("feed.appendChild(renderComment(root, comment));", script)
         self.assertIn("nombre_archivo", script)
-        self.assertIn("attachment.nombre_archivo || attachment.tipo", script)
+        self.assertIn("var filename = attachment.nombre_archivo;", script)
+
+    def test_comment_document_type_uses_i18n_in_attachment_and_edit_renderers(self):
+        script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+
+        self.assertIn("appendDocumentTypeLabel(root, label, attachment);", script)
+        self.assertIn("appendDocumentTypeLabel(root, link, attachment);", script)
+        self.assertIn("appendDocumentTypeLabel(root, type, attachment);", script)
+        self.assertNotIn("attachment.tipo ||", script)
 
     def test_incremental_polling_contract_is_visibility_aware_and_idempotent(self):
         script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")

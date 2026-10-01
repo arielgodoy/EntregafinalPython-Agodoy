@@ -389,6 +389,33 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(attachment["tipo"], DocumentoTarea.Tipo.OTRO)
         self.assertEqual(attachment["url"], "https://example.com/cotizacion_jc_morales.pdf")
 
+    def test_comment_attachment_payload_includes_document_type_translation_key(self):
+        documento = create_document(
+            tarea=self.tarea,
+            usuario=self.autor,
+            tipo=DocumentoTarea.Tipo.INFORME,
+            formato_archivo=DocumentoTarea.FormatoArchivo.PDF,
+            url="https://example.com/informe.pdf",
+        )
+        comentario = create_comment(
+            tarea=self.tarea,
+            usuario=self.autor,
+            contenido="Adjunto localizado",
+            documentos=[documento],
+        )
+
+        item = self.client.get(
+            reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+            {"after_id": comentario.pk - 1},
+        ).json()["comentarios"][-1]
+        attachment = item["adjuntos"][0]
+
+        self.assertEqual(attachment["tipo"], DocumentoTarea.Tipo.INFORME)
+        self.assertEqual(
+            attachment.get("tipo_i18n_key"),
+            "tareas.documents.type.informe",
+        )
+
     def test_create_post_delegates_comment_creation_and_returns_controlled_payload(self):
         response = self.client.post(
             reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),

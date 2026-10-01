@@ -9,6 +9,21 @@
         return element ? element.textContent : fallback;
     }
 
+    function documentTypeLabel(root, attachment) {
+        var fallback = textFor(root, "tareas.comments.attachment", "Adjunto");
+        return attachment.tipo_i18n_key
+            ? textFor(root, attachment.tipo_i18n_key, fallback)
+            : fallback;
+    }
+
+    function appendDocumentTypeLabel(root, container, attachment) {
+        var label = document.createElement("span");
+        var key = attachment.tipo_i18n_key;
+        if (key) label.setAttribute("data-key", key);
+        label.textContent = documentTypeLabel(root, attachment);
+        container.appendChild(label);
+    }
+
     function escapePath(template, id) {
         return template.replace("/0/", "/" + id + "/");
     }
@@ -136,7 +151,7 @@
             checkbox.checked = true;
             checkbox.className = "form-check-input me-1";
             label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(attachment.tipo || textFor(root, "tareas.comments.attachment", "Adjunto")));
+            appendDocumentTypeLabel(root, label, attachment);
             container.appendChild(label);
         });
     }
@@ -152,13 +167,18 @@
         icon.className = format === "PDF" ? "ri-file-pdf-2-line me-1" : format.indexOf("JPG") >= 0 || format === "PNG" ? "ri-image-line me-1" : format.indexOf("XLS") >= 0 ? "ri-file-excel-2-line me-1" : "ri-file-line me-1";
         icon.setAttribute("aria-hidden", "true");
         link.appendChild(icon);
-        var filename = attachment.nombre_archivo || attachment.tipo || textFor(root, "tareas.comments.attachment", "Adjunto");
-        link.title = attachment.nombre_archivo || filename;
-        link.appendChild(document.createTextNode(filename));
-        if (attachment.nombre_archivo && attachment.tipo) {
+        var filename = attachment.nombre_archivo;
+        if (filename) {
+            link.title = filename;
+            link.appendChild(document.createTextNode(filename));
+        } else {
+            appendDocumentTypeLabel(root, link, attachment);
+        }
+        if (filename && attachment.tipo_i18n_key) {
             var type = document.createElement("small");
             type.className = "ms-1 text-muted";
-            type.textContent = "· " + attachment.tipo;
+            type.appendChild(document.createTextNode("· "));
+            appendDocumentTypeLabel(root, type, attachment);
             link.appendChild(type);
         }
         return link;

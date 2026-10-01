@@ -7,6 +7,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
 from tareas.forms import CompletarHitoForm, DocumentoForm, EvidenciaRegistroForm
+from tareas.models import DocumentoTarea
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,21 @@ CATALOGS = {
 
 
 class TareasI18nTests(SimpleTestCase):
+    def test_comment_document_types_use_cataloged_dynamic_i18n_keys(self):
+        template = (ROOT / "tareas/templates/tareas/_tarea_comentarios.html").read_text(encoding="utf-8")
+        script = (ROOT / "tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+
+        for value, _label in DocumentoTarea.Tipo.choices:
+            key = f"tareas.documents.type.{value.lower()}"
+            self.assertIn(key, CATALOGS["sp"], key)
+            self.assertIn(key, CATALOGS["en"], key)
+            self.assertIn(f'data-key="{key}"', template)
+
+        self.assertIn("function documentTypeLabel(root, attachment)", script)
+        self.assertIn("function appendDocumentTypeLabel(root, container, attachment)", script)
+        self.assertIn('label.setAttribute("data-key", key)', script)
+        self.assertNotIn("attachment.tipo || textFor", script)
+
     def test_literal_data_keys_are_catalogued_and_not_dynamic(self):
         keys = set()
         dynamic = []

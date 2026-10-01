@@ -190,6 +190,7 @@ def _comment_document_data(documento):
     return {
         "id": documento.pk,
         "tipo": documento.tipo,
+        "tipo_i18n_key": f"tareas.documents.type.{documento.tipo.lower()}",
         "formato_archivo": documento.formato_archivo,
         "url": documento.url,
         "archivo_url": documento.archivo.url if documento.archivo else "",
