@@ -234,9 +234,9 @@ en `tasks.md`; no reabre ni renumera fases históricas.
 - Integrar T054 para crear/editar/ocultar/restaurar; solo crear incrementa no leídos. Usar
     notificaciones existentes y email automático para prioridad `CRITICA`.
 - Mantener una sincronización visual incremental opcional del feed mediante polling AJAX
-    cada 10 segundos mientras el Detalle de Tarea está visible; usar `after_id`, no mover
-    lectura/unread y suspender al ocultar la pestaña. Esta primera versión solo incorpora
-    Comentarios nuevos.
+    cada 10 segundos mientras el Detalle de Tarea está visible; usar `after_id` para
+    Comentarios nuevos y `(updated_at, pk)` para sincronizar cambios existentes, sin mover
+    el cursor de lectura/unread y suspender al ocultar la pestaña.
 - La tarjeta server-rendered pagina 20, ofrece cámara móvil, burbuja `1..9`/`9+` y foco
     inicial en primer pendiente. Sin filtros, búsqueda propia, threads, app o chat separados;
     respeta i18n y FR-T01…FR-T10.

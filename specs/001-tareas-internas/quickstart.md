@@ -177,14 +177,19 @@ Estado E13: EJECUTADO/VALIDADO mediante la regresión integrada de KPI,
 dashboards, T060, dashboard personal y metadata, manteniendo Local/Proveedor
 fuera de las dimensiones de drill-down.
 
-### E14. Comentarios de Tarea (Phase 8; pendiente de implementación)
+### E14. Comentarios de Tarea (Phase 8 implementada; T102 y validación manual pendientes)
 
-Este escenario es contractual y todavía no se declara ejecutado. Cuando Phase 8 esté
-implementada, verificar:
+Phase 8 está implementada y tiene cobertura automatizada, pero T102 permanece abierto
+hasta validar el conjunto completo de reglas. Los gaps 1–4 reproducidos en esta
+intervención no sustituyen esa validación integral. Verificar:
 
-- La tarjeta aparece en el detalle de Tarea para usuarios autorizados y vinculados; un
-   usuario desvinculado pierde acceso derivado inmediatamente. Creador/responsable sin
-   vínculo no acceden; VICMEAS no crea permisos especiales.
+- La tarjeta aparece en el detalle para usuarios autorizados a leer el feed. La participación
+   funcional efectiva (creador, responsable, participante explícito o responsable de Hito
+   vigente) habilita cursor y reconocimiento según el contrato. Un lector sin vínculo
+   funcional puede consultar el feed con `ingresar`, Empresa activa y acceso válido a la
+   Tarea, pero no obtiene composer, cursor, unread, badge ni reconocimiento. Desvincular
+   elimina la participación explícita salvo que conserve otro vínculo funcional; VICMEAS
+   no crea permisos especiales.
 - Solo estados publicados operativos (`ACTIVA`, `GESTION`, `PENDIENTE_APROBACION_CIERRE`)
    admiten mutaciones. `CERRADA`, `BORRADOR` y anulada son lectura; reactivar un estado
    operativo permite comentar otra vez y conserva cursor/versiones.
@@ -218,12 +223,13 @@ implementada, verificar:
 - Revisar UI y mensajes en ES/EN y ejecutar el gate i18n antes de declarar la superficie
    completa.
 
-Estado E14: CONTRACT_READY / AUTOMATED_VALIDATED / MANUAL_VALIDATION_PENDING.
+Estado E14: CONTRACT_READY / T102_PENDING / MANUAL_VALIDATION_PENDING. Los gaps 1–4
+cuentan con pruebas automatizadas focalizadas; no se declara completa la cobertura de T102.
 La ventana temporal debe cubrirse también con prueba focalizada, sin esperar una hora en
 la suite.
 
-La validación anterior es automatizada. La verificación manual en navegador de E1-E14,
-incluida la revisión ES/EN, permanece `MANUAL_VALIDATION_PENDING`.
+La cobertura automatizada no sustituye la verificación manual en navegador de E1-E14,
+incluida la revisión ES/EN, que permanece `MANUAL_VALIDATION_PENDING`.
 
 ## Límites y bloqueos
 

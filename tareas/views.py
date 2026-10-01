@@ -626,25 +626,48 @@ class ListarComentariosView(TareaComentariosView):
                 "versiones__actor",
                 "versiones__documentos__documento",
             )
+            comentarios_vinculado = _comment_actor_is_linked(tarea, request.user)
+            pendientes = 0
+            primer_pendiente = None
+            comentarios_reconocibles = []
+            if comentarios and comentarios_vinculado:
+                try:
+                    pendientes = count_pending_comments(tarea=tarea, usuario=request.user)
+                    primer_pendiente = get_first_pending_comment(
+                        tarea=tarea,
+                        usuario=request.user,
+                    )
+                    if primer_pendiente is not None:
+                        comentarios_reconocibles = get_initial_comment_page(
+                            tarea=tarea,
+                            usuario=request.user,
+                        )
+                except ValidationError:
+                    return _comment_error_response()
             puede_supervisar = user_has_permission_for_empresa(
                 user=request.user,
                 empresa=tarea.empresa,
                 vista_nombre="Tareas",
                 accion="supervisor",
             )
-            return JsonResponse(
-                {
-                    "success": True,
-                    "comentarios": [
-                        _comment_data(comentario, request.user, puede_supervisar)
-                        for comentario in comentarios
-                    ],
-                    "pendientes": 0,
-                    "primer_pendiente_id": None,
-                    "page_size": len(comentarios),
-                    "before_comment_id": None,
-                }
-            )
+            payload = {
+                "success": True,
+                "comentarios": [
+                    _comment_data(comentario, request.user, puede_supervisar)
+                    for comentario in comentarios
+                ],
+                "pendientes": pendientes,
+                "primer_pendiente_id": (
+                    primer_pendiente.pk if primer_pendiente is not None else None
+                ),
+                "page_size": len(comentarios),
+                "before_comment_id": None,
+            }
+            if comentarios:
+                payload["comentarios_reconocibles_ids"] = [
+                    comentario.pk for comentario in comentarios_reconocibles
+                ]
+            return JsonResponse(payload)
         comentarios_vinculado = _comment_actor_is_linked(tarea, request.user)
         before = request.GET.get("before")
         if before:
@@ -689,11 +712,17 @@ class ListarComentariosView(TareaComentariosView):
                     tarea=tarea,
                     usuario=request.user,
                 )
+                comentarios_reconocibles = (
+                    get_initial_comment_page(tarea=tarea, usuario=request.user)
+                    if primer_pendiente is not None
+                    else []
+                )
             except ValidationError:
                 return _comment_error_response()
         else:
             pendientes = 0
             primer_pendiente = None
+            comentarios_reconocibles = []
 
         prefetch_related_objects(
             comentarios,
@@ -720,6 +749,9 @@ class ListarComentariosView(TareaComentariosView):
                 "primer_pendiente_id": (
                     primer_pendiente.pk if primer_pendiente is not None else None
                 ),
+                "comentarios_reconocibles_ids": [
+                    comentario.pk for comentario in comentarios_reconocibles
+                ],
                 "page_size": COMMENT_PAGE_SIZE,
                 "before_comment_id": comentarios[0].pk if comentarios else None,
             }

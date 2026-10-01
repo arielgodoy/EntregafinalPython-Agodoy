@@ -7,10 +7,13 @@ from django.utils import timezone
 from tareas.models import (
     Comentario,
     ComentarioPausaLectura,
+    Hito,
+    Tarea,
     TareaLectura,
     TareaParticipante,
 )
 from tareas.services.assignment import add_participant, remove_participant
+from tareas.services.comments import create_comment
 from tareas.services.reading import (
     close_inactivity_pause,
     count_pending_comments,
@@ -256,6 +259,70 @@ class CommentReadingServiceTests(TestCase):
         self.assertEqual(get_first_pending_comment(tarea=tarea, usuario=self.lector), previous)
         self.assertNotEqual(previous, during)
         self.assertNotEqual(during, after)
+
+    def test_creator_only_user_gets_one_inactivity_pause_and_excludes_its_comments(self):
+        assign_permission(self.autor, self.empresa, "Tareas", ingresar=True, crear=True)
+        tarea = create_tarea(self.empresa, self.lector, responsable=self.autor)
+        tarea.estado = Tarea.Estado.ACTIVA
+        tarea.fecha_publicacion = timezone.now()
+        tarea.save(update_fields=["estado", "fecha_publicacion"])
+        self.assertFalse(
+            TareaParticipante.objects.filter(tarea=tarea, usuario=self.lector).exists()
+        )
+        self.assertFalse(Hito.objects.filter(tarea=tarea, responsable=self.lector).exists())
+
+        baseline = create_comment(tarea=tarea, usuario=self.autor, contenido="Cursor inicial")
+        lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.lector)
+        lectura.comentario_leido_hasta = baseline
+        lectura.save(update_fields=["comentario_leido_hasta"])
+        previous_pending = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Pendiente previo",
+        )
+
+        self.lector.refresh_from_db()
+        self.lector.is_active = False
+        self.lector.save(update_fields=["is_active"])
+        lectura.refresh_from_db()
+        open_pauses = ComentarioPausaLectura.objects.filter(
+            lectura=lectura,
+            hasta__isnull=True,
+        )
+        self.assertEqual(open_pauses.count(), 1)
+        pause = open_pauses.get()
+
+        self.lector.save(update_fields=["is_active"])
+        self.assertEqual(
+            ComentarioPausaLectura.objects.filter(lectura=lectura, hasta__isnull=True).count(),
+            1,
+        )
+        during_pause = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Durante la pausa",
+        )
+
+        self.lector.is_active = True
+        self.lector.save(update_fields=["is_active"])
+        pause.refresh_from_db()
+        self.assertIsNotNone(pause.hasta)
+        after_pause = create_comment(
+            tarea=tarea,
+            usuario=self.autor,
+            contenido="Después de la pausa",
+        )
+
+        self.assertEqual(ComentarioPausaLectura.objects.filter(lectura=lectura).count(), 1)
+        self.assertEqual(count_pending_comments(tarea=tarea, usuario=self.lector), 2)
+        self.assertEqual(
+            get_first_pending_comment(tarea=tarea, usuario=self.lector),
+            previous_pending,
+        )
+        self.assertNotEqual(previous_pending, during_pause)
+        self.assertNotEqual(during_pause, after_pause)
+        lectura.refresh_from_db()
+        self.assertEqual(lectura.comentario_leido_hasta_id, baseline.pk)
 
     def test_first_comment_event_creates_single_reader_for_existing_participant(self):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)

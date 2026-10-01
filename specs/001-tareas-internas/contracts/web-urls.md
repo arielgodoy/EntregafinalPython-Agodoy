@@ -191,11 +191,12 @@ La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal 
 | 6 | Drill-down Usuario | GET | `/tareas/dashboard/general/empresa/<empresa_id>/usuario/<usuario_id>/` | Agrupa por `Tarea.responsable`; no duplica participantes |
 | 6 | Drill-down Tarea | GET | `/tareas/<pk>/` | Reutiliza `detalle_tarea`; muestra contexto de una Tarea |
 
-### Comentarios de Tarea — Phase 8 (rutas T100; integración visual T101 pendiente)
+### Comentarios de Tarea — Phase 8 (rutas T100 y UI T101 integradas; validación T102 pendiente)
 
-La tarjeta se integrará en el detalle existente `GET /tareas/<pk>/` en T101. El feed usa páginas fijas de 20,
+La tarjeta está integrada en el detalle existente `GET /tareas/<pk>/`. El feed usa páginas fijas de 20,
 orden `(created_at, pk)`, cursor por `TareaLectura` para participantes funcionales efectivos
-(`Tarea.responsable` o `TareaParticipante`) y navegación histórica antes del cursor
+(`Tarea.creada_por`, `Tarea.responsable`, `TareaParticipante` o responsable de Hito de la Tarea
+con `anulado=False`) y navegación histórica antes del cursor
 sin avanzar lectura; cuando no hay pendientes muestra los 20 más recientes. Un lector con `ingresar`, Empresa activa,
 usuario activo y acceso válido a la Tarea puede consultar el feed sin vínculo `TareaParticipante`; en ese caso no se
 crea ni usa cursor, unread, badge o reconocimiento de Comentarios y la tarjeta no muestra composer. El reconocimiento

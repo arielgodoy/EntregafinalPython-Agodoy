@@ -190,6 +190,20 @@ class T101CommentsUiTests(TestCase):
         self.assertIn("data-comments-csrf", script)
         self.assertNotIn("form.innerHTML", script)
 
+    def test_mark_read_submits_only_the_contiguous_page_after_history_prepend(self):
+        script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+        mark_read_start = script.index('root.querySelector("[data-comments-mark-read]")')
+        mark_read_end = script.index('root.addEventListener("click"', mark_read_start)
+        mark_read_handler = script[mark_read_start:mark_read_end]
+        render_start = script.index("function renderPage(root, data, prepend)")
+        render_end = script.index("function loadComments(root, url, prepend)", render_start)
+        render_page = script[render_start:render_end]
+
+        self.assertIn('root.dataset.recognizableIds.split(",")', mark_read_handler)
+        self.assertNotIn('root.dataset.loadedIds.split(",")', mark_read_handler)
+        self.assertIn("root.dataset.recognizableIds = data.comentarios.map", render_page)
+        self.assertIn("if (prepend)", render_page)
+
     def test_conversational_renderer_preserves_scoped_visual_contract(self):
         script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
         stylesheet = Path("tareas/static/tareas/css/task_comments.css").read_text(encoding="utf-8")
@@ -271,6 +285,33 @@ class T101CommentsUiTests(TestCase):
             script.index("ensurePollingCursor(root);", poll_start),
             script.index('var params = "?after_id="', poll_start),
         )
+
+    def test_incremental_polling_applies_unread_metadata_without_marking_read(self):
+        script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+        poll_start = script.index("function pollComments(root)")
+        poll_end = script.index("function startCommentsPolling(root)", poll_start)
+        poll_handler = script[poll_start:poll_end]
+
+        self.assertIn("function updateUnreadState(root, data)", script)
+        self.assertIn("updateUnreadState(root, result.data)", poll_handler)
+        self.assertLess(
+            poll_handler.index("appendPolledComments(root, comments)"),
+            poll_handler.index("updateUnreadState(root, result.data)"),
+        )
+        self.assertIn("feed.insertBefore(marker, pendingComment)", script)
+        self.assertIn('root.querySelector("[data-comments-read-controls]")', script)
+        self.assertNotIn("postForm(", poll_handler)
+        self.assertNotIn("root.dataset.readUrl", poll_handler)
+
+    def test_prepend_renders_date_separators_across_page_boundaries(self):
+        script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+        render_start = script.index("function renderPage(root, data, prepend)")
+        render_end = script.index("function loadComments(root, url, prepend)", render_start)
+        render_page = script[render_start:render_end]
+
+        self.assertIn("if (previousDateKey !== commentDateKey(comment))", render_page)
+        self.assertIn("firstExistingDateKey", render_page)
+        self.assertIn("feed.scrollTop = beforeTop + feed.scrollHeight - beforeHeight", render_page)
 
     def test_dynamic_action_contract_matches_rendered_markup(self):
         tarea = self.make_task()

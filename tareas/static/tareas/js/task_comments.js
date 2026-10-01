@@ -338,9 +338,24 @@
         if (current) current.replaceWith(replacement);
     }
 
+    function appendRecognizableComment(root, comment) {
+        var recognizableIds = (root.dataset.recognizableIds || "").split(",").filter(Boolean);
+        var pageSize = Number(root._commentPageSize) || 20;
+        if (!recognizableIds.length || recognizableIds.length >= pageSize) return;
+        var lastComment = root._commentMap && root._commentMap.get(recognizableIds[recognizableIds.length - 1]);
+        if (!lastComment) return;
+        var commentTimestamp = new Date(comment.created_at).getTime();
+        var lastTimestamp = new Date(lastComment.created_at).getTime();
+        if (isNaN(commentTimestamp) || isNaN(lastTimestamp)) return;
+        if (commentTimestamp < lastTimestamp || (commentTimestamp === lastTimestamp && Number(comment.id) <= Number(lastComment.id))) return;
+        recognizableIds.push(String(comment.id));
+        root.dataset.recognizableIds = recognizableIds.join(",");
+    }
+
     function appendComment(root, comment) {
         var feed = root.querySelector("[data-comments-feed]");
         if (feed.querySelector('[data-comment-id="' + comment.id + '"]')) return false;
+        appendRecognizableComment(root, comment);
         var previousComments = feed.querySelectorAll("[data-comment-id]");
         var previous = previousComments.length ? previousComments[previousComments.length - 1] : null;
         if (previous && previous.dataset.commentDate !== commentDateKey(comment)) {
@@ -412,6 +427,42 @@
         }, 10000);
     }
 
+    function updateUnreadState(root, data) {
+        var feed = root.querySelector("[data-comments-feed]");
+        var pendingCount = Number(data.pendientes) || 0;
+        var firstPendingId = data.primer_pendiente_id == null ? "" : String(data.primer_pendiente_id);
+        var recognizableIds = Array.isArray(data.comentarios_reconocibles_ids)
+            ? data.comentarios_reconocibles_ids.map(String)
+            : [];
+        var loadedIds = new Set((root.dataset.loadedIds || "").split(",").filter(Boolean));
+        var recognizableLoaded = recognizableIds.length > 0 && recognizableIds.every(function (id) {
+            return loadedIds.has(id);
+        });
+        root.dataset.recognizableIds = recognizableLoaded ? recognizableIds.join(",") : "";
+
+        var unread = root.querySelector("[data-comments-unread]");
+        unread.textContent = pendingCount ? unreadLabel(root, pendingCount) : "";
+        unread.title = pendingCount ? pendingCount + " " + textFor(root, "tareas.comments.unread", "comentarios sin leer") : "";
+        unread.classList.toggle("d-none", !pendingCount);
+
+        var currentMarker = feed.querySelector("[data-comments-new-marker]");
+        if (currentMarker) currentMarker.remove();
+        if (firstPendingId) {
+            var pendingComment = feed.querySelector('[data-comment-id="' + firstPendingId + '"]');
+            if (pendingComment) {
+                var marker = root.querySelector("[data-comments-new-marker]").cloneNode(true);
+                marker.classList.remove("d-none");
+                marker.classList.add("d-flex");
+                marker.querySelector("[data-comments-new-label]").textContent = textFor(root, "tareas.comments.new", "Nuevos comentarios");
+                feed.insertBefore(marker, pendingComment);
+            }
+        }
+        root.querySelector("[data-comments-read-controls]").classList.toggle(
+            "d-none",
+            !pendingCount || !recognizableLoaded,
+        );
+    }
+
     function pollComments(root) {
         if (root._commentsPollingInFlight || root._commentsPollingStopped || document.hidden) return;
         root._commentsPollingInFlight = true;
@@ -436,6 +487,9 @@
                 if (!result.ok || !result.data.success || root._commentsPollingStopped) return;
                 var comments = result.data.comentarios || [];
                 appendPolledComments(root, comments);
+                if (Object.prototype.hasOwnProperty.call(result.data, "comentarios_reconocibles_ids")) {
+                    updateUnreadState(root, result.data);
+                }
                 updatePollingCursor(root, comments);
             })
             .catch(function () {
@@ -473,7 +527,8 @@
 
     function renderPage(root, data, prepend) {
         var feed = root.querySelector("[data-comments-feed]");
-        var known = new Set((root.dataset.loadedIds || "").split(",").filter(Boolean));
+        var known = new Set(prepend ? (root.dataset.loadedIds || "").split(",").filter(Boolean) : []);
+        root._commentPageSize = Number(data.page_size) || 20;
         var comments = data.comentarios.filter(function (comment) {
             if (known.has(String(comment.id))) return false;
             known.add(String(comment.id));
@@ -482,44 +537,51 @@
         var fragment = document.createDocumentFragment();
         var previousDateKey = "";
         comments.forEach(function (comment) {
-            if (!prepend && previousDateKey !== commentDateKey(comment)) {
+            if (previousDateKey !== commentDateKey(comment)) {
                 fragment.appendChild(renderDateSeparator(comment));
             }
             previousDateKey = commentDateKey(comment);
             var item = renderComment(root, comment);
-            if (!prepend && data.primer_pendiente_id === comment.id) {
-                var marker = root.querySelector("[data-comments-new-marker]").cloneNode(true);
-                marker.classList.remove("d-none");
-                marker.classList.add("d-flex");
-                marker.querySelector("[data-comments-new-label]").textContent = textFor(root, "tareas.comments.new", "Nuevos comentarios");
-                fragment.appendChild(marker);
-            }
             fragment.appendChild(item);
         });
         if (prepend) {
             var beforeHeight = feed.scrollHeight;
             var beforeTop = feed.scrollTop;
+            var firstExistingComment = feed.querySelector("[data-comment-id]");
+            var firstExistingDateKey = firstExistingComment ? firstExistingComment.dataset.commentDate : "";
+            var existingDateSeparator = firstExistingComment ? firstExistingComment.previousElementSibling : null;
+            while (existingDateSeparator && !existingDateSeparator.classList.contains("task-comments__date-separator")) {
+                existingDateSeparator = existingDateSeparator.previousElementSibling;
+            }
             feed.prepend(fragment);
+            var lastHistoricalComment = comments.length ? comments[comments.length - 1] : null;
+            if (
+                existingDateSeparator
+                && lastHistoricalComment
+                && commentDateKey(lastHistoricalComment) === firstExistingDateKey
+            ) {
+                existingDateSeparator.remove();
+            }
             root.dataset.beforeCommentId = data.before_comment_id || "";
             feed.scrollTop = beforeTop + feed.scrollHeight - beforeHeight;
         } else {
             feed.replaceChildren(fragment);
             root.dataset.beforeCommentId = data.before_comment_id || "";
             if (data.primer_pendiente_id) {
+                root.dataset.recognizableIds = data.comentarios.map(function (comment) {
+                    return String(comment.id);
+                }).join(",");
                 var pending = feed.querySelector('[data-comment-id="' + data.primer_pendiente_id + '"]');
                 if (pending) feed.scrollTop = Math.max(0, pending.offsetTop - feed.clientHeight / 3);
             } else {
+                root.dataset.recognizableIds = "";
                 feed.scrollTop = feed.scrollHeight;
             }
         }
         root.dataset.loadedIds = Array.from(known).join(",");
         root.querySelector("[data-comments-empty]").classList.toggle("d-none", known.size > 0);
         root.querySelector("[data-comments-previous]").classList.toggle("d-none", !data.before_comment_id || data.comentarios.length < data.page_size);
-        var unread = root.querySelector("[data-comments-unread]");
-        unread.textContent = data.pendientes ? unreadLabel(root, data.pendientes) : "";
-        unread.title = data.pendientes ? data.pendientes + " " + textFor(root, "tareas.comments.unread", "comentarios sin leer") : "";
-        unread.classList.toggle("d-none", !data.pendientes);
-        root.querySelector("[data-comments-read-controls]").classList.toggle("d-none", !known.size || !data.primer_pendiente_id);
+        updateUnreadState(root, data);
     }
 
     function loadComments(root, url, prepend) {
@@ -587,7 +649,7 @@
                 token.name = "csrfmiddlewaretoken";
                 token.value = csrfToken(root);
                 form.appendChild(token);
-                root.dataset.loadedIds.split(",").filter(Boolean).forEach(function (id) {
+                root.dataset.recognizableIds.split(",").filter(Boolean).forEach(function (id) {
                     var input = document.createElement("input"); input.name = "comentario_ids"; input.value = id; form.appendChild(input);
                 });
                 postForm(root.dataset.readUrl, form).then(function (result) {

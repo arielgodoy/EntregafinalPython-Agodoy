@@ -1,3 +1,4 @@
+from datetime import timedelta
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -7,7 +8,7 @@ from django.test import override_settings
 from django.urls import resolve, reverse
 from django.utils import timezone
 
-from tareas.models import DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
+from tareas.models import Comentario, DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
 from tareas.services.assignment import add_participant
 from tareas.services.comments import create_comment, edit_comment, hide_comment, restore_comment
 from tareas.services.documents import create_document
@@ -169,6 +170,10 @@ class CommentReadViewTests(TestCase):
         )
         self.assertEqual(payload["pendientes"], 22)
         self.assertEqual(payload["primer_pendiente_id"], comentarios[0].pk)
+        self.assertEqual(
+            payload["comentarios_reconocibles_ids"],
+            [comentario.pk for comentario in comentarios[:20]],
+        )
         lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
         self.assertIsNone(lectura.comentario_leido_hasta_id)
 
@@ -197,9 +202,56 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(incremental.status_code, 200)
         payload = incremental.json()
         self.assertEqual([item["id"] for item in payload["comentarios"]], [second.pk, third.pk])
-        self.assertEqual(payload["pendientes"], 0)
+        self.assertEqual(payload["pendientes"], 3)
+        self.assertEqual(payload["primer_pendiente_id"], first.pk)
+        self.assertEqual(payload["comentarios_reconocibles_ids"], [first.pk, second.pk, third.pk])
         lectura.refresh_from_db()
         self.assertIsNone(lectura.comentario_leido_hasta_id)
+
+    def test_incremental_polling_returns_cursor_derived_unread_state_without_advancing_cursor(self):
+        first = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Cursor actual")
+        lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
+        lectura.comentario_leido_hasta = first
+        lectura.save(update_fields=["comentario_leido_hasta"])
+        second = create_comment(tarea=self.tarea, usuario=self.autor, contenido="Nuevo comentario")
+        url = reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+
+        incremental = self.client.get(
+            url,
+            {
+                "after_id": first.pk,
+                "updated_after": first.updated_at.isoformat(),
+                "updated_after_id": first.pk,
+            },
+        )
+
+        self.assertEqual(incremental.status_code, 200)
+        payload = incremental.json()
+        self.assertEqual([item["id"] for item in payload["comentarios"]], [second.pk])
+        self.assertEqual(payload["pendientes"], 1)
+        self.assertEqual(payload["primer_pendiente_id"], second.pk)
+        self.assertEqual(payload["comentarios_reconocibles_ids"], [second.pk])
+        lectura.refresh_from_db()
+        self.assertEqual(lectura.comentario_leido_hasta_id, first.pk)
+
+        own = create_comment(tarea=self.tarea, usuario=self.lector, contenido="Mi comentario")
+        own_poll = self.client.get(
+            url,
+            {
+                "after_id": second.pk,
+                "updated_after": second.updated_at.isoformat(),
+                "updated_after_id": second.pk,
+            },
+        )
+
+        self.assertEqual(own_poll.status_code, 200)
+        own_payload = own_poll.json()
+        self.assertEqual([item["id"] for item in own_payload["comentarios"]], [own.pk])
+        self.assertEqual(own_payload["pendientes"], 1)
+        self.assertEqual(own_payload["primer_pendiente_id"], second.pk)
+        self.assertEqual(own_payload["comentarios_reconocibles_ids"], [second.pk, own.pk])
+        lectura.refresh_from_db()
+        self.assertEqual(lectura.comentario_leido_hasta_id, first.pk)
 
     def test_incremental_order_is_stable_for_equal_timestamps(self):
         fixed_timestamp = timezone.now()
@@ -231,8 +283,9 @@ class CommentReadViewTests(TestCase):
             len({item["id"] for item in initial["comentarios"] + incremental["comentarios"]}),
             len(comentarios),
         )
-        self.assertEqual(incremental["pendientes"], 0)
-        self.assertIsNone(incremental["primer_pendiente_id"])
+        self.assertEqual(incremental["pendientes"], 3)
+        self.assertEqual(incremental["primer_pendiente_id"], comentarios[0].pk)
+        self.assertEqual(incremental["comentarios_reconocibles_ids"], [item.pk for item in comentarios])
         self.assertIsNone(
             TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id
         )
@@ -248,7 +301,11 @@ class CommentReadViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([item["id"] for item in response.json()["comentarios"]], [comentario.pk])
+        payload = response.json()
+        self.assertEqual([item["id"] for item in payload["comentarios"]], [comentario.pk])
+        self.assertEqual(payload["pendientes"], 0)
+        self.assertIsNone(payload["primer_pendiente_id"])
+        self.assertEqual(payload["comentarios_reconocibles_ids"], [])
         self.assertFalse(TareaLectura.objects.filter(tarea=self.tarea, usuario=self.sin_vinculo).exists())
 
     def test_comment_payload_includes_existing_avatar_for_normal_incremental_and_create(self):
@@ -732,29 +789,37 @@ class CommentReadViewTests(TestCase):
         add_participant(self.tarea, self.supervisor, actor=self.autor)
         hide_comment(comentario=comentario, usuario=self.supervisor, motivo="Ocultar")
 
-        oculto = self.client.get(
+        oculto_payload = self.client.get(
             reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
             {
                 "after_id": comentario.pk,
                 "updated_after": inicial["updated_at"],
                 "updated_after_id": comentario.pk,
             },
-        ).json()["comentarios"][-1]
+        ).json()
+        oculto = oculto_payload["comentarios"][-1]
         self.assertTrue(oculto["tombstone"])
+        self.assertEqual(oculto_payload["pendientes"], 1)
+        self.assertEqual(oculto_payload["primer_pendiente_id"], comentario.pk)
+        self.assertEqual(oculto_payload["comentarios_reconocibles_ids"], [comentario.pk])
 
         comentario.refresh_from_db()
         cursor_oculto = oculto["updated_at"]
         restore_comment(comentario=comentario, usuario=self.supervisor, motivo="Restaurar")
-        restaurado = self.client.get(
+        restaurado_payload = self.client.get(
             reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
             {
                 "after_id": comentario.pk,
                 "updated_after": cursor_oculto,
                 "updated_after_id": comentario.pk,
             },
-        ).json()["comentarios"][-1]
+        ).json()
+        restaurado = restaurado_payload["comentarios"][-1]
         self.assertEqual(restaurado["contenido"], "Visible antes de moderación")
         self.assertFalse(restaurado["tombstone"])
+        self.assertEqual(restaurado_payload["pendientes"], 1)
+        self.assertEqual(restaurado_payload["primer_pendiente_id"], comentario.pk)
+        self.assertEqual(restaurado_payload["comentarios_reconocibles_ids"], [comentario.pk])
 
     def test_only_author_receives_version_history(self):
         comentario = create_comment(
@@ -819,6 +884,63 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         lectura.refresh_from_db()
         self.assertEqual(lectura.comentario_leido_hasta_id, comentarios[19].pk)
+
+    def test_historical_page_does_not_join_the_recognized_contiguous_page(self):
+        comentarios = [
+            create_comment(tarea=self.tarea, usuario=self.autor, contenido=f"Comentario {index}")
+            for index in range(45)
+        ]
+        lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
+        lectura.comentario_leido_hasta = comentarios[24]
+        lectura.save(update_fields=["comentario_leido_hasta"])
+        url = reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+
+        initial_response = self.client.get(url)
+        self.assertEqual(initial_response.status_code, 200)
+        initial = initial_response.json()
+        initial_ids = [item["id"] for item in initial["comentarios"]]
+        self.assertEqual(initial_ids, [item.pk for item in comentarios[25:]])
+        self.assertEqual(len(initial_ids), 20)
+        self.assertEqual(initial["before_comment_id"], comentarios[25].pk)
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id,
+            comentarios[24].pk,
+        )
+
+        historical_response = self.client.get(url, {"before": initial["before_comment_id"]})
+        self.assertEqual(historical_response.status_code, 200)
+        historical_ids = [item["id"] for item in historical_response.json()["comentarios"]]
+        self.assertEqual(historical_ids, [item.pk for item in comentarios[5:25]])
+        self.assertFalse(set(initial_ids) & set(historical_ids))
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id,
+            comentarios[24].pk,
+        )
+
+        read_url = reverse(
+            "tareas:marcar_comentarios_leidos",
+            kwargs={"tarea_id": self.tarea.pk},
+        )
+        mixed_page_response = self.client.post(
+            read_url,
+            {"comentario_ids": initial_ids + historical_ids},
+        )
+        self.assertEqual(mixed_page_response.status_code, 400)
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id,
+            comentarios[24].pk,
+        )
+
+        recognized_response = self.client.post(
+            read_url,
+            {"comentario_ids": initial_ids},
+        )
+        self.assertEqual(recognized_response.status_code, 200)
+        self.assertEqual(recognized_response.json()["pendientes"], 0)
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id,
+            comentarios[-1].pk,
+        )
 
     def test_late_participant_starts_at_latest_comment_and_unlink_preserves_reading(self):
         comentario = create_comment(
@@ -1356,5 +1478,51 @@ class CommentReadViewTests(TestCase):
             TareaLectura.objects.get(
                 tarea=self.tarea, usuario=self.lector
             ).comentario_leido_hasta_id,
+            cursor_inicial,
+        )
+
+    def test_historical_page_keeps_three_day_order_tombstone_and_cursor(self):
+        first_day = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(days=2)
+        comentarios = []
+        for index in range(45):
+            comentario = Comentario.objects.create(
+                tarea=self.tarea,
+                autor=self.lector,
+                contenido=f"Comentario {index}",
+                oculto=index == 10,
+            )
+            created_at = first_day + timedelta(days=index // 15, minutes=index % 15)
+            Comentario.objects.filter(pk=comentario.pk).update(created_at=created_at)
+            comentario.refresh_from_db()
+            comentarios.append(comentario)
+
+        lectura = TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector)
+        cursor_inicial = lectura.comentario_leido_hasta_id
+        url = reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk})
+        initial = self.client.get(url).json()
+        historical_response = self.client.get(url, {"before": initial["before_comment_id"]})
+
+        self.assertEqual(initial["page_size"], 20)
+        initial_ids = [item["id"] for item in initial["comentarios"]]
+        historical_payload = historical_response.json()
+        historical_ids = [item["id"] for item in historical_payload["comentarios"]]
+        self.assertEqual(initial_ids, [item.pk for item in comentarios[25:]])
+        self.assertEqual(historical_ids, [item.pk for item in comentarios[5:25]])
+        self.assertEqual(historical_ids + initial_ids, [item.pk for item in comentarios[5:]])
+        self.assertEqual(len(set(historical_ids + initial_ids)), 40)
+
+        date_keys = []
+        for comentario in comentarios[5:]:
+            date_key = comentario.created_at.date()
+            if not date_keys or date_keys[-1] != date_key:
+                date_keys.append(date_key)
+        self.assertEqual(len(date_keys), 3)
+        hidden_item = next(
+            item for item in historical_payload["comentarios"] if item["id"] == comentarios[10].pk
+        )
+        self.assertTrue(hidden_item["tombstone"])
+        self.assertEqual(historical_response.status_code, 200)
+        self.assertEqual(
+            TareaLectura.objects.get(tarea=self.tarea, usuario=self.lector).comentario_leido_hasta_id,
             cursor_inicial,
         )
