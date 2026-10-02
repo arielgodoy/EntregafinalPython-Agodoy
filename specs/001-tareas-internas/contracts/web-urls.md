@@ -4,8 +4,9 @@
 
 Contrato de la interfaz web server-side rendered. No se inventa una API REST pública;
 si una fase requiere integración, se documenta un adaptador dentro de `tareas/` y se
-mantiene bloqueado hasta autorización del contrato externo. La eliminación física no existe;
-la anulación es una acción protegida y auditada.
+mantiene bloqueado hasta autorización del contrato externo. La eliminación física de Tareas
+no existe; la anulación es una acción protegida y auditada. T105 define la única excepción
+física para MiniTareas sin estado hecho ni historial.
 
 > **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
 > `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
@@ -159,10 +160,12 @@ autorizan crear endpoints ausentes.
 - **Errores**: los `ValidationError` se devuelven como respuesta controlada y
   se muestran en la UI.
 
-### Eliminación — FUERA DE ALCANCE
+### Eliminación de Tareas — FUERA DE ALCANCE
 
-No existe eliminación física, ruta de borrado ni permiso `eliminar`. La anulación/reactivación
-se exponen como acciones de ciclo de vida protegidas por ICMEAS y no destruyen datos.
+No existe eliminación física de Tareas, ruta de borrado de Tareas ni permiso `eliminar`.
+La anulación/reactivación se exponen como acciones de ciclo de vida protegidas por ICMEAS
+y no destruyen datos. La excepción T105 para MiniTareas está definida en la tabla de
+rutas y no altera esta regla histórica de Tareas.
 
 ## Rutas adicionales por fase
 
@@ -180,6 +183,7 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | 2 | Cerrar MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/cerrar/` (`cerrar_minitarea`) | Persona asignada, responsable o `S`; modal/comentario obligatorio; estado `ACTIVA`/`GESTION` |
 | 2 | Reabrir MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/reabrir/` (`reabrir_minitarea`) | Responsable o `S`; modal/motivo obligatorio; estado `ACTIVA`/`GESTION` |
 | 2 | Historial MiniTarea | GET | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/historial/` (`historial_minitarea`) | Lectura autorizada; eventos `CIERRE`/`REAPERTURA`; muestra adjuntos del Comentario relacionado cuando existe; sin mutación |
+| 2 | Eliminar MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/eliminar/` (`eliminar_minitarea`) | `Tareas` + `modificar`; responsable principal o `S`; solo `hecho=False` y sin eventos; modal/CSRF; respuesta controlada |
 
 El POST `cerrar_minitarea` acepta `multipart/form-data`. Además del comentario obligatorio y los destinatarios opt-in de T104, admite cero a cinco archivos opcionales. No expone selector ni metadatos documentales adicionales: cada archivo usa internamente el tipo neutro `DocumentoTarea.Tipo.OTRO`, las validaciones y el procesamiento de imágenes vigentes, y queda relacionado con el `Comentario` automático mediante `ComentarioAdjunto`. El cierre no genera una comunicación adicional de Comentarios.
 
@@ -234,8 +238,10 @@ sin fila explícita. `add_participant`/
 `remove_participant` reciben el actor y revalidan en dominio
 Empresa, usuario activo, `modificar` y lifecycle: `CERRADA` y anulada efectivamente bloquean
 cambios de participantes; `BORRADOR` los admite. Para Comentarios, la participación funcional
-efectiva incluye creador, responsable, vínculo explícito y responsable de Hito vigente/no
-anulado, deduplicados por usuario.
+efectiva incluye creador, responsable, vínculo explícito, responsable de Hito vigente/no
+anulado y `MiniTarea.persona` para MiniTareas existentes de la Tarea, deduplicados por
+usuario. T105 no crea filas `TareaParticipante` y la fuente desaparece al eliminar la
+MiniTarea, salvo que exista otra relación funcional.
 
 Las mutaciones de Comentarios revalidan en backend, inmediatamente antes de persistir, Empresa,
 VICMEAS, participación funcional y estado vigente. Solo estados `ACTIVA`, `GESTION` y
@@ -264,6 +270,14 @@ Empresa efectiva de la consulta. General no consulta todas las Empresas: agrega
 solo aquellas donde el usuario tiene `Permiso.supervisor=True` para la Vista
 `Tareas`. Una Empresa seleccionada y sus niveles descendientes heredan esa misma
 autorización; nunca se confía en el `empresa_id` recibido sin validar alcance.
+
+La sección `Mis MiniTareas` del dashboard personal consulta `MiniTarea` directamente
+para el usuario autenticado y activo (`MiniTarea.persona`), restringida por Empresa
+activa, Tarea madre publicada y no anulada. Incluye MiniTareas `PENDIENTE` y `HECHA`,
+descripción, estado, correlativo/identificación y referencia de Tarea madre, responsable
+de la Tarea y enlace a su detalle. En `ACTIVA`/`GESTION` conserva la operación según
+autorización; en `PENDIENTE_APROBACION_CIERRE`/`CERRADA` es solo lectura; no muestra
+Tareas anuladas ni convierte MiniTarea en una entidad de dashboard independiente.
 
 Cada respuesta de dashboard entrega contexto server-side para exactamente ocho KPI:
 dimensión actual, filtros activos, filas, estado, prioridad, fechas relevantes,

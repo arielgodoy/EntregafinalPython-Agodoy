@@ -17,6 +17,7 @@ from ..models import (
     DocumentoHistorial,
     Hito,
     HitoHistorial,
+    MiniTarea,
     Tarea,
     TareaLectura,
     TareaParticipante,
@@ -260,6 +261,16 @@ def get_personal_dashboard(*, user, empresa_id, reference_date=None):
         .select_related("tarea", "tarea__empresa", "tarea__responsable", "responsable")
         .order_by("tarea__prioridad", "tarea__pk", "fecha_creacion", "pk")
     )
+    mini_tareas = list(
+        MiniTarea.objects.filter(
+            persona=user,
+            tarea__empresa_id=empresa_id,
+            tarea__estado__in=PUBLISHED_STATES,
+            tarea__anulada=False,
+        )
+        .select_related("tarea", "tarea__empresa", "tarea__responsable")
+        .order_by("hecho", "tarea__prioridad", "tarea__pk", "pk")
+    )
     task_groups = {priority: [] for priority in PRIORITIES}
     milestone_groups = {priority: [] for priority in PRIORITIES}
     for tarea in tareas:
@@ -279,6 +290,9 @@ def get_personal_dashboard(*, user, empresa_id, reference_date=None):
         ],
         "tareas": tareas,
         "hitos": hitos,
+        "mini_tareas": mini_tareas,
+        "mini_tareas_pendientes": [mini_tarea for mini_tarea in mini_tareas if not mini_tarea.hecho],
+        "mini_tareas_hechas": [mini_tarea for mini_tarea in mini_tareas if mini_tarea.hecho],
         "read_status": read_status,
         "upcoming_tasks": [tarea for tarea in tareas if tarea.proxima_vencer],
         "filters": {"empresa_id": empresa_id, "reference_date": reference_date},

@@ -199,6 +199,7 @@ Detalle de tarea
                                             <td>
                                                 {% if mini_tarea.puede_cerrar_t104 %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#cerrar-minitarea-{{ mini_tarea.pk }}"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><span data-key="tareas.actions.close">Cerrar</span></button>{% endif %}
                                                 {% if mini_tarea.puede_reabrir_t104 %}<button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reabrir-minitarea-{{ mini_tarea.pk }}"><i class="ri-arrow-go-back-line" aria-hidden="true"></i><span data-key="tareas.actions.reactivar">Reabrir</span></button>{% endif %}
+                                                {% if mini_tarea.puede_eliminar_t105 %}<button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#eliminar-minitarea-{{ mini_tarea.pk }}"><i class="ri-delete-bin-line" aria-hidden="true"></i><span data-key="tareas.actions.delete">Eliminar</span></button>{% endif %}
                                                 {% if mini_tarea.eventos_t104 %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}"><i class="ri-history-line" aria-hidden="true"></i><span data-key="tareas.actions.ver">Historial</span></a>{% endif %}
                                             </td>
                                         </tr>
@@ -238,6 +239,15 @@ Detalle de tarea
                                     {% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="reabrir-minitarea-label-{{ mini_tarea.pk }}" data-key="tareas.actions.reactivar">Reabrir MiniTarea</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
                                     <div class="modal-body"><label class="form-label" for="mini-reapertura-{{ mini_tarea.pk }}"><span data-key="tareas.fields.descripcion">Motivo de reapertura</span> *</label><textarea class="form-control" id="mini-reapertura-{{ mini_tarea.pk }}" name="comentario" rows="3" required></textarea></div>
                                     <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-warning"><span data-key="tareas.actions.reactivar">Devolver a pendiente</span></button></div>
+                                </form></div></div>
+                            </div>
+                            {% endif %}
+                            {% if mini_tarea.puede_eliminar_t105 %}
+                            <div class="modal fade" id="eliminar-minitarea-{{ mini_tarea.pk }}" tabindex="-1" aria-labelledby="eliminar-minitarea-label-{{ mini_tarea.pk }}" aria-hidden="true">
+                                <div class="modal-dialog"><div class="modal-content"><form method="post" action="{% url 'tareas:eliminar_minitarea' tarea.pk mini_tarea.pk %}">
+                                    {% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="eliminar-minitarea-label-{{ mini_tarea.pk }}"><span data-key="tareas.minitareas.delete.title">Eliminar MiniTarea</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                                    <div class="modal-body"><p class="mb-0"><span data-key="tareas.minitareas.delete.confirm">¿Deseas eliminar esta MiniTarea?</span></p></div>
+                                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-danger"><span data-key="tareas.actions.delete">Eliminar</span></button></div>
                                 </form></div></div>
                             </div>
                             {% endif %}

@@ -77,9 +77,11 @@ from .services.authorization import can_manage_task
 from .services.closure import (
     can_close_mini_task,
     can_create_mini_task,
+    can_delete_mini_task,
     can_reopen_mini_task,
     close_mini_task,
     create_mini_task,
+    delete_mini_task,
     reopen_mini_task,
 )
 from .services.comments import create_comment, edit_comment, hide_comment, restore_comment
@@ -607,6 +609,11 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
                 mini_tarea=mini_tarea,
                 actor=self.request.user,
             )
+            mini_tarea.puede_eliminar_t105 = can_delete_mini_task(
+                tarea=self.object,
+                mini_tarea=mini_tarea,
+                actor=self.request.user,
+            )
         context["mini_tareas"] = mini_tareas
         context["puede_crear_minitarea"] = can_create_mini_task(
             tarea=self.object,
@@ -749,6 +756,30 @@ class ReabrirMiniTareaView(
         except ValidationError:
             return self.reject(request, tarea)
         messages.success(request, "tareas.messages.lifecycle_action_applied")
+        return self.redirect_to_detail(tarea)
+
+
+class EliminarMiniTareaView(
+    VerificarPermisoMixin,
+    LoginRequiredMixin,
+    MiniTareaEndpointMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, mini_tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        try:
+            delete_mini_task(
+                tarea=tarea,
+                mini_tarea=mini_tarea,
+                actor=request.user,
+            )
+        except ValidationError:
+            return self.reject(request, tarea)
+        messages.success(request, "tareas.messages.minitask_deleted")
         return self.redirect_to_detail(tarea)
 
 

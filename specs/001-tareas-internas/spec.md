@@ -44,6 +44,47 @@
 	no mueve cursor/unread, se suspende con la pestaña oculta y refleja ediciones,
 	ocultaciones y restauraciones remotas de Comentarios existentes.
 
+### Session 2026-10-02 — T105
+
+- T105 EXTENDS T097 y FR-T02: la participación funcional efectiva agrega al usuario
+	de cada `MiniTarea.persona` cuya Tarea madre pertenezca a la Empresa activa. La
+	participación es dinámica, no crea `TareaParticipante` y permanece mientras exista
+	la MiniTarea, incluso si está `hecho=True`; desaparece al eliminarse la MiniTarea,
+	salvo que subsista otra fuente de participación.
+- La asignación de una MiniTarea permite acceder a la Tarea madre dentro de las reglas
+	normales, leer y crear Comentarios con los permisos ICMEAS correspondientes, pero no
+	concede responsabilidad, supervisor, autorizador, administración de participantes,
+	edición general, lifecycle, creación/eliminación de MiniTareas ni modificación de
+	MiniTareas ajenas.
+- El dashboard personal `/tareas/mis-tareas/` incorpora `Mis MiniTareas` desde
+	`MiniTarea` directamente: solo usuario autenticado y activo, `persona` igual al
+	usuario, Tarea madre de la Empresa activa, publicada, no anulada y con acceso
+	`Tareas - Dashboard personal` + `ingresar`. Muestra pendientes y hechas, conserva
+	las hechas como historial y enlaza al detalle de la Tarea madre. Las Tareas en
+	`ACTIVA`/`GESTION` permiten operación según autorización; las de
+	`PENDIENTE_APROBACION_CIERRE`/`CERRADA` solo lectura; las anuladas no aparecen.
+- T105 agrega eliminación física únicamente para una MiniTarea pendiente (`hecho=False`)
+	sin ningún `MiniTareaEvento`. Una MiniTarea hecha o con cualquier evento, incluida
+	una reabierta, es no eliminable. El backend valida la regla antes de borrar y no
+	elimina eventos, Comentarios, `DocumentoTarea` ni `ComentarioAdjunto`; `PROTECT`
+	permanece como protección final.
+- La eliminación requiere `Tareas` + `modificar` y actor responsable principal de la
+	Tarea madre o supervisor `S`; asignado, participante ordinario, creador sin rol de
+	responsable y responsable de Hito no adquieren esa facultad. La UI solo ofrece la
+	acción cuando ambas condiciones se cumplen y usa modal Bootstrap con POST/CSRF.
+- T105 no agrega modelos, campos, relaciones persistentes ni migraciones. T104 y sus
+	eventos, comentarios automáticos, adjuntos, reapertura y trazabilidad permanecen
+	cerrados y sin cambios.
+
+**Plan de pruebas T105**: exigir pruebas de dashboard para asignado visible, no asignado
+ausente, aislamiento de Empresa, pendientes y hechas visibles, y Tarea anulada excluida;
+de participación para `effective_participant_ids`, lectura/creación de Comentarios,
+ausencia de privilegios adicionales y aislamiento cross-company; y de eliminación para
+responsable y supervisor autorizados, rechazo a asignado/participante, rechazo de hecha y
+reabierta con historial, desaparición de la fuente de participación y rechazo de
+manipulación directa en backend. La regresión debe confirmar cierre, reapertura, comentario
+automático, adjuntos e historial de T104 sin cambios.
+
 ### Session 2026-09-07
 
 - Q: ¿Publicar con responsable desactivado/eliminado? → A: Bloquear la publicación e informar; el usuario debe asignar un responsable válido antes de publicar.
@@ -286,6 +327,12 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-F50**: La bitácora mínima de MiniTarea conserva únicamente eventos `CIERRE` y `REAPERTURA`, actor, fecha/hora, comentario y, para `CIERRE`, los identificadores de destinatarios solicitados para notificación y email. No conserva estados duplicados, contenido de notificaciones, logs SMTP, entrega, apertura, lectura, rebote, respuesta ni recibos.
 - **FR-F51**: Las comunicaciones de cierre son opt-in y posteriores a la persistencia: `emit_task_event` reutiliza la notificación pública de `tareas` solo para destinatarios seleccionados y `send_task_email` usa `send_email_for_purpose` con `purpose="notifications"` para emails seleccionados con dirección válida. No se usa `send_email_message`, no se aplica email automático por prioridad y no se notifica al actor. Un fallo de notificación o email se registra y se informa de forma controlada sin revertir el cierre ni la bitácora; no se crean reintentos, tracking ni cambios en CORE.
 - **FR-F52**: La UI de MiniTarea se integra al detalle existente, muestra descripción, persona y estado, ofrece cierre/reapertura mediante modal obligatorio y presenta la bitácora en modal, acordeón o panel ligero. Todo texto visible nuevo lleva `data-key`; cualquier JavaScript vive bajo `tareas/` y no modifica `static/js/app.js`. Las respuestas mutables son POST protegidos, revalidan el estado actual y no confían en el estado renderizado.
+- **FR-F53 — T105**: La participación funcional efectiva para Comentarios se extiende con `MiniTarea.persona` cuando la MiniTarea pertenece a la Tarea y esta pertenece a la Empresa activa. La fuente es dinámica, se deduplica con creador, responsable, `TareaParticipante` y responsable de Hito vigente/no anulado, no materializa filas y se conserva para MiniTareas hechas mientras existan.
+- **FR-F54 — T105**: El usuario asignado a una MiniTarea puede acceder a la Tarea madre dentro de la autorización normal, leer Comentarios y crear Comentarios con `Tareas` + `ingresar`/`crear` y participación funcional. Esta fuente no concede otros roles, permisos ni operaciones de Tarea o MiniTarea.
+- **FR-F55 — T105**: El dashboard personal `/tareas/mis-tareas/` debe mostrar una sección `Mis MiniTareas` consultada directamente desde MiniTarea para el usuario autenticado y activo, con Empresa activa, Tarea madre publicada y no anulada. Debe incluir descripción, estado `Pendiente`/`Hecha`, correlativo o identificación y referencia de la Tarea madre, su responsable y enlace al detalle; debe mostrar pendientes y hechas.
+- **FR-F56 — T105**: En el dashboard, MiniTareas de Tareas `ACTIVA` o `GESTION` son operativas según autorización; las de `PENDIENTE_APROBACION_CIERRE` o `CERRADA` son visibles de solo lectura; las de Tareas anuladas no se muestran. La MiniTarea no se convierte en Tarea completa ni adquiere campos propios.
+- **FR-F57 — T105**: Una MiniTarea solo puede eliminarse físicamente cuando `hecho=False` y no existe ningún `MiniTareaEvento`. Si está hecha, fue cerrada/reabierta o tiene cualquier evento, debe rechazarse de forma controlada. La validación precede a `delete`; no se borran ni alteran eventos, Comentarios, `DocumentoTarea` o `ComentarioAdjunto`.
+- **FR-F58 — T105**: El borrado de MiniTarea requiere `Tareas` + `modificar` y que el actor sea responsable principal de la Tarea madre o supervisor `S`. La persona asignada, un participante ordinario, el creador sin responsabilidad principal y el responsable de Hito no pueden eliminar por esas relaciones. La UI usa modal Bootstrap y POST protegido con CSRF; el backend revalida Empresa, Tarea, autorización, actor y regla de historial.
 
 **Key Entities — F**: Avance, Hito (responsable, anulado, completado, completado_por, fecha_completado, resena_cierre, peso, cumplimiento, fecha_creacion), HitoEvidencia, HitoHistorial, Mini-tarea (hecho/no hecho, persona), MiniTareaEvento (cierre/reapertura, actor, fecha/hora, comentario y destinatarios solicitados de comunicación).
 
@@ -812,6 +859,7 @@ lectura ni migración masiva de datos.
 
 - **FR-T01**: Una Tarea puede tener cero o más Comentarios; cada Comentario pertenece a exactamente una Tarea, registra autor autenticado, fecha de creación y Empresa derivada de la Tarea. Es una entrada manual, nunca un evento automático del sistema. Debe contener texto no vacío y/o adjuntos. Un Comentario no sustituye una justificación formal exigida por una transición, cierre, anulación u otra operación, ni constituye evidencia formal.
 - **FR-T02**: La superficie usa únicamente `vista_nombre="Tareas"`: `ingresar` para leer, `crear` para crear comentarios, `modificar` para editar comentarios y vincular/desvincular, y `supervisor` (S de VICMEAS) para ocultar/restaurar. No se crean Vistas, permisos ni roles especiales. La lectura del feed requiere usuario autenticado y activo, Empresa activa coincidente, VICMEAS `ingresar` y acceso válido a la Tarea, pero no requiere participación funcional; creador, responsable y otros usuarios autorizados pueden leer sin auto-vincularse. Para mutaciones, reconocimiento y seguimiento, la participación funcional es `Tarea.creada_por OR Tarea.responsable OR TareaParticipante OR Hito.responsable` cuando corresponda. Esta relación no sustituye VICMEAS, Empresa, usuario activo ni lifecycle. Desvincular revoca la participación explícita, sin borrar comentarios ni historial; el responsable y creador conservan participación mientras mantengan su relación implícita. El historial de versiones completo solo es visible al autor de un comentario visible o a un usuario autorizado con S; el contenido, historial y adjuntos de un comentario oculto solo son visibles a S, siempre sujeto al acceso vigente a la Tarea. La administración de `TareaParticipante` requiere VICMEAS `modificar`, permite desde el detalle los roles `PARTICIPANTE` e `INVITADO_OBSERVADOR`, y no requiere que el actor administrador sea él mismo participante. Cambiar participantes se bloquea en `CERRADA` y anulada efectivamente.
+- **FR-T02bis — T105**: T105 extiende la participación funcional de FR-T02/T097 con `MiniTarea.persona` para MiniTareas existentes de la Tarea y Empresa activa. La fuente se deduplica y permite leer y crear Comentarios con los permisos ICMEAS correspondientes, pero no concede roles, administración ni operaciones adicionales.
 - **FR-T03**: La bitácora es lineal, cronológica y estable por `(created_at, pk)`, con páginas fijas de 20 Comentarios que permiten recorrer todo el historial. Las páginas históricas anteriores al cursor no lo mueven. No incluye filtros, buscador propio ni exportación de conversaciones.
 - **FR-T04**: Cada Comentario admite como máximo cinco adjuntos. Se reutilizan documentos existentes de `DocumentoTarea` y sus validaciones/almacenamiento; la UI también puede crear un `DocumentoTarea` desde archivo o captura de cámara móvil (`capture="environment"`) usando las mismas validaciones. Todo documento debe pertenecer a la misma Tarea. El adjunto de Comentario no es `EvidenciaCierre` ni `HitoEvidencia` y no satisface requisitos de evidencia formal. Retirar el vínculo del Comentario no elimina físicamente `DocumentoTarea`; no se duplican archivos.
 - **FR-T05**: Solo el autor puede editar texto y conjunto de adjuntos durante la primera hora desde el `created_at` original; las ediciones no reinician el plazo. Cada creación/edición conserva una versión inmutable del texto y de las referencias a `DocumentoTarea`, con actor y fecha/hora. Un Comentario oculto no es editable.

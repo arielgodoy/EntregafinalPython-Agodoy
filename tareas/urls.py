@@ -27,6 +27,7 @@ urlpatterns = [
     path('<int:tarea_id>/mini-tareas/', views.CrearMiniTareaView.as_view(), name='minitareas_tarea'),
     path('<int:tarea_id>/mini-tareas/<int:mini_tarea_id>/cerrar/', views.CerrarMiniTareaView.as_view(), name='cerrar_minitarea'),
     path('<int:tarea_id>/mini-tareas/<int:mini_tarea_id>/reabrir/', views.ReabrirMiniTareaView.as_view(), name='reabrir_minitarea'),
+    path('<int:tarea_id>/mini-tareas/<int:mini_tarea_id>/eliminar/', views.EliminarMiniTareaView.as_view(), name='eliminar_minitarea'),
     path('<int:tarea_id>/mini-tareas/<int:mini_tarea_id>/historial/', views.HistorialMiniTareaView.as_view(), name='historial_minitarea'),
     path('<int:tarea_id>/similitud/', views.SimilitudTareaView.as_view(), name='similitud_tarea'),
     path('<int:tarea_id>/similitud/<int:evaluacion_id>/confirmar/', views.ConfirmarSimilitudView.as_view(), name='confirmar_similitud'),

@@ -5,6 +5,7 @@ import logging
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from access_control.services.permissions import (
@@ -187,6 +188,22 @@ def can_reopen_mini_task(*, tarea, mini_tarea, actor):
     )
 
 
+def can_delete_mini_task(*, tarea, mini_tarea, actor):
+    return bool(
+        actor
+        and actor.is_active
+        and _has_task_permission(tarea, actor, "modificar")
+        and (
+            actor.pk == tarea.responsable_id
+            or _is_supervisor(tarea, actor)
+        )
+        and tarea.estado in {Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}
+        and not is_effectively_annulled(tarea)
+        and not mini_tarea.hecho
+        and not mini_tarea.eventos.exists()
+    )
+
+
 @transaction.atomic
 def close_mini_task(
     *,
@@ -289,6 +306,30 @@ def reopen_mini_task(*, tarea, mini_tarea, actor, comentario):
         comentario=comentario,
     )
     return mini_tarea, evento
+
+
+@transaction.atomic
+def delete_mini_task(*, tarea, mini_tarea, actor):
+    tarea = Tarea.objects.select_for_update().select_related("empresa").get(pk=tarea.pk)
+    mini_tarea = MiniTarea.objects.select_for_update().get(
+        pk=mini_tarea.pk,
+        tarea_id=tarea.pk,
+    )
+    _validate_operational_task(tarea)
+    _validate_actor(
+        tarea,
+        actor,
+        accion="modificar",
+        allowed_ids={tarea.responsable_id},
+    )
+    if mini_tarea.hecho:
+        raise ValidationError("La mini-tarea hecha conserva su historial.")
+    if MiniTareaEvento.objects.filter(mini_tarea=mini_tarea).exists():
+        raise ValidationError("La mini-tarea con historial no se puede eliminar.")
+    try:
+        mini_tarea.delete()
+    except ProtectedError as error:
+        raise ValidationError("La mini-tarea conserva referencias protegidas.") from error
 
 
 def set_mini_task_done(mini_tarea, hecho=True):

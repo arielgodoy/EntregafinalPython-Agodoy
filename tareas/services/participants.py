@@ -1,6 +1,6 @@
 """Functional task participation without materializing implicit roles."""
 
-from tareas.models import Hito, TareaParticipante
+from tareas.models import Hito, MiniTarea, TareaParticipante
 
 
 def is_effective_participant(tarea, usuario):
@@ -14,6 +14,11 @@ def is_effective_participant(tarea, usuario):
     if TareaParticipante.objects.filter(
         tarea_id=tarea.pk,
         usuario_id=usuario.pk,
+    ).exists():
+        return True
+    if MiniTarea.objects.filter(
+        tarea_id=tarea.pk,
+        persona_id=usuario.pk,
     ).exists():
         return True
     return Hito.objects.filter(
@@ -37,6 +42,11 @@ def effective_participant_ids(tarea):
     participant_ids.update(
         Hito.objects.filter(tarea_id=tarea.pk, anulado=False).values_list(
             "responsable_id", flat=True
+        )
+    )
+    participant_ids.update(
+        MiniTarea.objects.filter(tarea_id=tarea.pk).values_list(
+            "persona_id", flat=True
         )
     )
     return participant_ids

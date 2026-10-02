@@ -57,6 +57,40 @@
                 </div>
             </section>
 
+            <section class="mb-4" aria-labelledby="mis-minitareas-titulo">
+                <h5 id="mis-minitareas-titulo"><span data-key="tareas.personal.mini_tasks.title">Mis MiniTareas</span></h5>
+                {% if mini_tareas %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th><span data-key="tareas.fields.descripcion">Descripción</span></th>
+                                <th><span data-key="tareas.fields.correlativo">Correlativo Tarea</span></th>
+                                <th><span data-key="tareas.fields.titulo">Tarea</span></th>
+                                <th><span data-key="tareas.fields.responsable">Responsable</span></th>
+                                <th><span data-key="tareas.fields.estado">Estado</span></th>
+                                <th><span data-key="tareas.personal.actions">Acción</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for mini_tarea in mini_tareas %}
+                            <tr>
+                                <td>{{ mini_tarea.descripcion }}</td>
+                                <td>{{ mini_tarea.tarea.correlativo|default:"-" }}</td>
+                                <td>{{ mini_tarea.tarea.titulo }}</td>
+                                <td>{{ mini_tarea.tarea.responsable.username }}</td>
+                                <td>{% if mini_tarea.hecho %}<span class="badge bg-success-subtle text-success" data-key="tareas.minitareas.done">Hecha</span>{% else %}<span class="badge bg-warning-subtle text-warning" data-key="tareas.minitareas.pending">Pendiente</span>{% endif %}</td>
+                                <td><a href="{% url 'tareas:detalle_tarea' mini_tarea.tarea.pk %}" class="btn btn-sm btn-outline-primary"><span data-key="tareas.personal.actions.view_task">Ver tarea</span></a></td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info"><span data-key="tareas.personal.empty_mini_tasks">No tienes MiniTareas asignadas en esta empresa.</span></div>
+                {% endif %}
+            </section>
+
             <section aria-labelledby="mis-hitos-titulo">
                 <h5 id="mis-hitos-titulo"><span data-key="tareas.personal.milestones.title">Mis hitos</span></h5>
                 {% for group in priority_groups %}
