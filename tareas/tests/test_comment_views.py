@@ -17,6 +17,7 @@ from tareas.tests.factories import (
     create_empresa,
     create_tarea,
     create_user,
+    simple_jpeg_upload,
 )
 
 
@@ -542,11 +543,7 @@ class CommentReadViewTests(TestCase):
 
     def test_create_post_stores_new_file_through_t098_document_flow(self):
         with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
-            archivo = SimpleUploadedFile(
-                "captura.jpg",
-                b"image-data",
-                content_type="image/jpeg",
-            )
+            archivo = simple_jpeg_upload("captura.jpg")
             response = self.client.post(
                 reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
                 {

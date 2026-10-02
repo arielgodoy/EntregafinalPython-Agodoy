@@ -11,6 +11,7 @@ from access_control.services.permissions import (
     user_has_permission_for_empresa,
 )
 from tareas.models import Avance, Hito, HitoEvidencia, HitoHistorial, TareaParticipante
+from tareas.services.image_processing import optimize_uploaded_image
 
 
 def validate_milestone_responsible(tarea, user):
@@ -223,6 +224,7 @@ def complete_milestone(
         raise ValidationError("La reseña de cierre es obligatoria.")
 
     cumplimiento_anterior = hito.cumplimiento
+    archivo = optimize_uploaded_image(archivo, formato_archivo)
     evidencia = HitoEvidencia(
         hito=hito,
         formato_archivo=formato_archivo,

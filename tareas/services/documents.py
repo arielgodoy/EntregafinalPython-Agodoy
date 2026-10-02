@@ -10,6 +10,7 @@ from tareas.models import (
     TareaParticipante,
 )
 from tareas.services.assignment import _validate_user_in_task_company
+from tareas.services.image_processing import optimize_uploaded_image
 from tareas.services.notifications import emit_task_event, task_recipients
 
 
@@ -36,6 +37,7 @@ def create_document(
 ):
     with transaction.atomic():
         _validate_user_in_task_company(tarea, usuario)
+        archivo = optimize_uploaded_image(archivo, formato_archivo)
         datos = {
             "tarea": tarea,
             "tipo": tipo,
@@ -107,6 +109,7 @@ def register_closure_evidence(
     *, tarea, usuario, formato_archivo, archivo=None, url="", documento=None
 ):
     _validate_user_in_task_company(tarea, usuario)
+    archivo = optimize_uploaded_image(archivo, formato_archivo)
     if documento is not None and documento.tarea_id != tarea.pk:
         raise ValidationError("El documento no pertenece a la tarea.")
     if documento is not None and not archivo and not url:

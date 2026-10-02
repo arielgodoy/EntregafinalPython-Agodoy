@@ -1661,16 +1661,24 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
         if accion == "documento":
             form = DocumentoForm(request.POST, request.FILES)
             if form.is_valid():
-                create_document(
-                    tarea=tarea,
-                    usuario=request.user,
-                    tipo=form.cleaned_data["tipo"],
-                    formato_archivo=form.cleaned_data["formato_archivo"],
-                    archivo=form.cleaned_data["archivo"],
-                    url=form.cleaned_data["url"],
-                    fecha_documento=form.cleaned_data["fecha_documento"],
-                    fecha_vencimiento=form.cleaned_data["fecha_vencimiento"],
-                )
+                try:
+                    create_document(
+                        tarea=tarea,
+                        usuario=request.user,
+                        tipo=form.cleaned_data["tipo"],
+                        formato_archivo=form.cleaned_data["formato_archivo"],
+                        archivo=form.cleaned_data["archivo"],
+                        url=form.cleaned_data["url"],
+                        fecha_documento=form.cleaned_data["fecha_documento"],
+                        fecha_vencimiento=form.cleaned_data["fecha_vencimiento"],
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                    return render(
+                        request,
+                        "tareas/tarea_documentos.html",
+                        self.get_context(tarea, document_form=form),
+                    )
                 messages.success(request, "tareas.messages.document_registered")
                 return redirect("tareas:documentos_tarea", pk=tarea.pk)
             return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, document_form=form))

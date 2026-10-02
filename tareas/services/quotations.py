@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from proveedores.models import Proveedor
 from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion, Tarea
+from tareas.services.image_processing import optimize_uploaded_image
 
 
 def get_next_round_number(*, tarea):
@@ -145,6 +146,7 @@ def update_quotation_status(*, cotizacion, estado):
 
 @transaction.atomic
 def add_quotation_document(*, cotizacion, formato_archivo, usuario, archivo=None, url="", fecha=None):
+    archivo = optimize_uploaded_image(archivo, formato_archivo)
     documento = DocumentoCotizacion(
         cotizacion=cotizacion,
         formato_archivo=formato_archivo,

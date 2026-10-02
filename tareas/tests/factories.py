@@ -1,9 +1,19 @@
 """Shared test data helpers for the Phase 0 MVP baseline."""
 
+from io import BytesIO
+
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from access_control.models import Empresa, Permiso, Vista
 from tareas.models import Tarea
+
+
+def simple_jpeg_upload(name="foto.jpg"):
+    buffer = BytesIO()
+    Image.new("RGB", (20, 20), "blue").save(buffer, format="JPEG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
 
 
 def create_empresa(codigo="01", descripcion="Empresa de prueba"):

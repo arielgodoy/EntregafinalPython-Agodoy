@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from tareas.models import DocumentoHistorial, DocumentoTarea, EvidenciaCierre, FormatoArchivo
 from tareas.services.documents import create_document
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class DocumentViewsTests(TestCase):
@@ -259,7 +259,7 @@ class DocumentViewsTests(TestCase):
             {
                 "accion": "registrar_evidencia",
                 "formato_archivo": FormatoArchivo.JPG,
-                "archivo": SimpleUploadedFile("pago.jpg", b"jpg"),
+                "archivo": simple_jpeg_upload("pago.jpg"),
             },
         )
         self.assertRedirects(response, reverse("tareas:documentos_tarea", args=[self.tarea.pk]))

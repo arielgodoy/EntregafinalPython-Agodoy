@@ -14,7 +14,7 @@ from tareas.services.progress import (
     set_weighted_progress_mode,
     update_milestone,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class HitoT080Tests(TestCase):
@@ -152,7 +152,7 @@ class HitoT080Tests(TestCase):
         self._complete(
             self.owner,
             formato_archivo="JPEG",
-            archivo=SimpleUploadedFile("foto.jpeg", b"jpeg"),
+            archivo=simple_jpeg_upload("foto.jpeg"),
             url="",
         )
         self.assertTrue(HitoEvidencia.objects.filter(hito=self.hito, formato_archivo="JPEG").exists())
@@ -171,7 +171,7 @@ class HitoT080Tests(TestCase):
                 self.owner,
                 resena_cierre="Reseña",
                 formato_archivo="PDF",
-                archivo=SimpleUploadedFile("foto.jpg", b"jpg"),
+                archivo=simple_jpeg_upload("foto.jpg"),
             )
         other_hito.refresh_from_db()
         self.assertFalse(other_hito.completado)

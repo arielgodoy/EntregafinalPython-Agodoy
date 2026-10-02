@@ -5,7 +5,7 @@ from django.test import TestCase
 
 from tareas.models import HitoEvidencia
 from tareas.services.progress import complete_milestone, create_milestone
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class HitoT081Tests(TestCase):
@@ -94,7 +94,7 @@ class HitoT081Tests(TestCase):
         evidencia_archivo = HitoEvidencia.objects.create(
             hito=self.hito,
             formato_archivo="JPG",
-            archivo=SimpleUploadedFile("foto.jpg", b"image"),
+            archivo=simple_jpeg_upload("foto.jpg"),
             usuario=self.manager,
         )
         self._login_with_company(self.observer)

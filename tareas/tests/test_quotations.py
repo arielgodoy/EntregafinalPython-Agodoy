@@ -19,7 +19,7 @@ from tareas.services.quotations import (
     quotation_minimum_met,
     update_quotation_status,
 )
-from tareas.tests.factories import create_empresa, create_tarea, create_user
+from tareas.tests.factories import create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class QuotationRoundTests(TestCase):
@@ -222,7 +222,7 @@ class QuotationTests(TestCase):
                 cotizacion=cotizacion,
                 formato_archivo="PDF",
                 usuario=self.usuario,
-                archivo=SimpleUploadedFile("oferta.jpg", b"jpg"),
+                archivo=simple_jpeg_upload("oferta.jpg"),
             )
 
     def test_jpg_and_jpeg_formats_match_equivalent_extensions(self):
@@ -231,13 +231,13 @@ class QuotationTests(TestCase):
             cotizacion=cotizacion,
             formato_archivo="JPG",
             usuario=self.usuario,
-            archivo=SimpleUploadedFile("oferta.jpg", b"jpg"),
+            archivo=simple_jpeg_upload("oferta.jpg"),
         )
         jpeg = add_quotation_document(
             cotizacion=cotizacion,
             formato_archivo="JPEG",
             usuario=self.usuario,
-            archivo=SimpleUploadedFile("oferta.jpeg", b"jpeg"),
+            archivo=simple_jpeg_upload("oferta.jpeg"),
         )
 
         self.assertEqual(jpg.cotizacion, jpeg.cotizacion)
