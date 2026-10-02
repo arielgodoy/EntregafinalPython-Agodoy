@@ -1,16 +1,48 @@
 .task-detail__card {
-    overflow: hidden;
-    background: var(--bs-tertiary-bg);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
 }
 
 .task-detail__header {
-    border-bottom: 1px solid var(--bs-border-color);
-    background: var(--bs-tertiary-bg);
+    border-bottom: 1px solid var(--vz-border-color);
+    background: transparent;
 }
 
-.task-detail__card > .card-body {
-    padding: 1.15rem;
-    background: var(--bs-tertiary-bg);
+.task-detail__surface {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: var(--vz-body-bg);
+}
+
+[data-bs-theme="light"] .task-detail__surface {
+    background: var(--vz-gray-400);
+}
+
+[data-bs-theme="dark"] .task-detail__surface {
+    background: var(--vz-body-bg);
+}
+
+.task-detail__surface > .task-detail__module {
+    margin-top: 0 !important;
+}
+
+.task-detail__module {
+    background: var(--vz-secondary-bg);
+    box-shadow: var(--vz-box-shadow-sm);
+}
+
+[data-bs-theme="light"] .task-detail__module {
+    box-shadow: var(--vz-box-shadow);
+}
+
+.task-detail__overview {
+    padding: 1rem;
+    border: 1px solid var(--vz-border-color);
+    border-radius: 0.5rem;
 }
 
 .task-detail__header-icon {
@@ -103,9 +135,9 @@
 .task-detail__participants,
 .task-detail__mini-tasks,
 .task-detail__section-block {
-    border: 1px solid var(--bs-border-color);
+    border: 1px solid var(--vz-border-color);
     border-radius: 0.5rem;
-    background: var(--bs-body-bg);
+    background: var(--vz-secondary-bg);
 }
 
 .task-detail__dates {
@@ -214,27 +246,6 @@
     overflow-wrap: anywhere;
 }
 
-.task-detail__participant-avatars {
-    min-height: 2rem;
-}
-
-.task-detail__participant-avatars .avatar-title {
-    border: 2px solid var(--bs-body-bg);
-}
-
-.task-detail__participant-avatar {
-    cursor: help;
-    transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.task-detail__participant-avatar:hover,
-.task-detail__participant-avatar:focus-visible {
-    position: relative;
-    z-index: 1;
-    transform: translateY(-2px);
-    filter: brightness(1.05);
-}
-
 .task-detail__participants > p {
     margin-bottom: 0.6rem;
 }
@@ -244,11 +255,6 @@
     border-bottom: 1px solid var(--bs-border-color);
 }
 
-.task-detail__participants-table-wrap {
-    border-top: 1px solid var(--bs-border-color);
-}
-
-.task-detail__participants-table thead,
 .task-detail__links-table thead {
     color: var(--bs-secondary-color);
     background: var(--bs-tertiary-bg);
@@ -256,17 +262,80 @@
     text-transform: uppercase;
 }
 
-.task-detail__participants-table th,
-.task-detail__participants-table td,
 .task-detail__links-table th,
 .task-detail__links-table td {
     padding: 0.45rem 0.6rem;
     border-bottom: 1px solid var(--bs-border-color-translucent);
 }
 
-.task-detail__participants-table tbody tr:last-child td,
 .task-detail__links-table tbody tr:last-child td {
     border-bottom: 0;
+}
+
+.task-detail__assigned-list {
+    border-top: 1px solid var(--bs-border-color);
+}
+
+.task-detail__assigned-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 3.5rem;
+    padding: 0.55rem 0.2rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.task-detail__assigned-row:last-child {
+    border-bottom: 0;
+}
+
+.task-detail__assigned-avatar,
+.task-detail__assigned-avatar img,
+.task-detail__assigned-avatar .avatar-title {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 2.15rem;
+    width: 2.15rem;
+    height: 2.15rem;
+}
+
+.task-detail__assigned-avatar img,
+.task-detail__assigned-avatar .avatar-title {
+    overflow: hidden;
+    object-fit: cover;
+}
+
+.task-detail__assigned-identity {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.task-detail__assigned-username {
+    overflow-wrap: anywhere;
+    font-weight: 600;
+}
+
+.task-detail__assigned-identity .text-muted,
+.task-detail__assigned-implicit {
+    font-size: 0.76rem;
+}
+
+.task-detail__assigned-implicit,
+.task-detail__assigned-actions {
+    margin-inline-start: auto;
+}
+
+.task-detail__assigned-actions .btn {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+}
+
+.task-detail__assigned-actions .dropdown-menu {
+    min-width: 9rem;
 }
 
 .task-detail__links-table-wrap {
@@ -421,10 +490,7 @@
 
 .task-detail__support-section {
     width: 100%;
-    padding: 0.6rem;
-    border: 1px solid var(--bs-border-color-translucent);
-    border-radius: 0.375rem;
-    background: var(--bs-tertiary-bg);
+    padding: 1rem;
 }
 
 .task-detail__lifecycle-actions {
