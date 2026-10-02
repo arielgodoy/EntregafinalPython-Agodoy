@@ -120,6 +120,60 @@ class HitoT080Tests(TestCase):
         with self.assertRaises(ValidationError):
             self._complete(self.manager)
 
+    def test_pending_hito_reactivation_restores_pending_state(self):
+        original = {
+            "completado": self.hito.completado,
+            "cumplimiento": self.hito.cumplimiento,
+            "responsable_id": self.hito.responsable_id,
+            "peso": self.hito.peso,
+        }
+        set_milestone_annulled(self.hito, self.manager, True)
+        set_milestone_annulled(self.hito, self.manager, False)
+
+        self.hito.refresh_from_db()
+        self.assertFalse(self.hito.anulado)
+        self.assertEqual(self.hito.completado, original["completado"])
+        self.assertEqual(self.hito.cumplimiento, original["cumplimiento"])
+        self.assertEqual(self.hito.responsable_id, original["responsable_id"])
+        self.assertEqual(self.hito.peso, original["peso"])
+
+    def test_completed_hito_reactivation_preserves_state_and_evidence(self):
+        self._complete(self.owner)
+        self.hito.refresh_from_db()
+        evidence = self.hito.evidencias.get()
+        original = {
+            "completado": self.hito.completado,
+            "cumplimiento": self.hito.cumplimiento,
+            "completado_por_id": self.hito.completado_por_id,
+            "fecha_completado": self.hito.fecha_completado,
+            "resena_cierre": self.hito.resena_cierre,
+            "responsable_id": self.hito.responsable_id,
+            "peso": self.hito.peso,
+        }
+
+        set_milestone_annulled(self.hito, self.manager, True)
+        set_milestone_annulled(self.hito, self.manager, False)
+
+        self.hito.refresh_from_db()
+        self.assertFalse(self.hito.anulado)
+        self.assertTrue(self.hito.completado)
+        self.assertEqual(self.hito.completado, original["completado"])
+        self.assertEqual(self.hito.cumplimiento, original["cumplimiento"])
+        self.assertEqual(self.hito.completado_por_id, original["completado_por_id"])
+        self.assertEqual(self.hito.fecha_completado, original["fecha_completado"])
+        self.assertEqual(self.hito.resena_cierre, original["resena_cierre"])
+        self.assertEqual(self.hito.responsable_id, original["responsable_id"])
+        self.assertEqual(self.hito.peso, original["peso"])
+        self.assertEqual(self.hito.evidencias.count(), 1)
+        self.assertEqual(self.hito.evidencias.get().pk, evidence.pk)
+        self.assertEqual(self.hito.evidencias.get().url, evidence.url)
+        self.assertEqual(
+            self.hito.historial.filter(
+                tipo_evento=HitoHistorial.Evento.REACTIVACION,
+            ).count(),
+            1,
+        )
+
     def test_completed_hito_cannot_be_completed_twice(self):
         self._complete(self.owner)
         with self.assertRaises(ValidationError):
