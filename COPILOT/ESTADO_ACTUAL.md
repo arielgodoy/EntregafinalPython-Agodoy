@@ -145,6 +145,7 @@ Estas deudas siguen registradas para planificación; este documento no las resue
 
 - `UserSessionHistory` no existe actualmente en el código; por eso no hay un historial visible ni una causa persistida para distinguir expulsión por nuevo login de expiración natural.
 - Informar “sesión cerrada por otro login” es una estrategia futura, no una funcionalidad comprometida, y requeriría un registro fuera de la sesión eliminada.
+- **Deuda UX contextual:** los detalles breves o de consulta rápida dentro de una Tarea deberían preferentemente mostrarse mediante un modal, conservando el contexto de la Tarea principal. Las operaciones complejas, formularios extensos o superficies que requieran espacio propio pueden continuar usando vistas dedicadas. Evaluar caso a caso candidatos como Ver MiniTarea, historial MiniTarea, detalle Hito y revisión documental; no implica convertirlos todos ni modifica T104.
 
 ### Infraestructura
 

@@ -67,6 +67,9 @@ def _document_specs(documentos_nuevos):
 
 def _resolve_documents(*, tarea, usuario, documentos, documentos_nuevos):
     existentes = list(documentos or [])
+    nuevos_specs = _document_specs(documentos_nuevos)
+    if len(existentes) + len(nuevos_specs) > 5:
+        raise ValidationError("Un Comentario admite como máximo cinco adjuntos.")
     for documento in existentes:
         if not isinstance(documento, DocumentoTarea) or not documento.pk:
             raise ValidationError("Cada adjunto debe ser un DocumentoTarea existente.")
@@ -74,7 +77,7 @@ def _resolve_documents(*, tarea, usuario, documentos, documentos_nuevos):
             raise ValidationError("El documento no pertenece a la tarea.")
 
     nuevos = []
-    for datos in _document_specs(documentos_nuevos):
+    for datos in nuevos_specs:
         if not isinstance(datos, dict):
             raise ValidationError("La definición del documento no es válida.")
         nuevos.append(
@@ -90,8 +93,6 @@ def _resolve_documents(*, tarea, usuario, documentos, documentos_nuevos):
     ids = [documento.pk for documento in documentos_finales]
     if len(ids) != len(set(ids)):
         raise ValidationError("No se puede asociar dos veces el mismo documento.")
-    if len(documentos_finales) > 5:
-        raise ValidationError("Un Comentario admite como máximo cinco adjuntos.")
     return documentos_finales
 
 
@@ -189,6 +190,40 @@ def create_comment(*, tarea, usuario, contenido="", documentos=None, documentos_
         tarea=tarea_actual,
         event="comentario_agregado",
         actor=usuario,
+    )
+    return comentario
+
+
+def _create_mini_task_close_comment(
+    *, tarea, mini_tarea, usuario, comentario_cierre, documentos_nuevos=None
+):
+    if mini_tarea.tarea_id != tarea.pk:
+        raise ValidationError("La MiniTarea no pertenece a la tarea.")
+    documentos = _resolve_documents(
+        tarea=tarea,
+        usuario=usuario,
+        documentos=None,
+        documentos_nuevos=documentos_nuevos,
+    )
+    contenido = (
+        f'Ha completado la MiniTarea "{mini_tarea.descripcion}".\n\n'
+        f"Comentario: {comentario_cierre}"
+    )
+    _ensure_content_or_documents(contenido, documentos)
+    comentario = Comentario.objects.create(
+        tarea=tarea,
+        autor=usuario,
+        contenido=contenido,
+    )
+    _replace_current_documents(comentario, documentos)
+    _create_version(
+        comentario=comentario,
+        evento=ComentarioVersion.Evento.CREADO,
+        actor=usuario,
+        contenido=comentario.contenido,
+        motivo="",
+        documentos=documentos,
+        numero=1,
     )
     return comentario
 

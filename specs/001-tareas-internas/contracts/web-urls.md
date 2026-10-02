@@ -174,7 +174,16 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | 1 | Transición de estado | POST | `transicionar_tarea` | Solo pares permitidos; registra auditoría |
 | 1 | Anular/reactivar | POST | `anular_tarea` / `reactivar_tarea` | Solo cambia el flag `anulada` de la tarea; anulación efectiva lógica (tarea+padre+abuelo); nunca borrar ni tocar estados |
 | 2 | Participantes/reasignación | GET/POST | `participantes_tarea` / `reasignar_tarea` | Usuarios activos y empresa activa |
-| 2 | Jerarquía/mini-tareas | GET/POST | `jerarquia_tarea` / `minitareas_tarea` | Máximo dos niveles; mini-tareas bloquean cierre |
+| 2 | Jerarquía | GET/POST | `jerarquia_tarea` | Máximo dos niveles padre→hija→nieta; no aplica a MiniTarea |
+| 2 | MiniTareas en detalle | GET | `/tareas/<pk>/` (`detalle_tarea`) | `Tareas` + `ingresar`; lista MiniTareas de la Tarea y bitácora mínima |
+| 2 | Crear MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/` (`minitareas_tarea`) | Responsable principal o `S`; estado `ACTIVA`/`GESTION`; comentario no aplica a alta |
+| 2 | Cerrar MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/cerrar/` (`cerrar_minitarea`) | Persona asignada, responsable o `S`; modal/comentario obligatorio; estado `ACTIVA`/`GESTION` |
+| 2 | Reabrir MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/reabrir/` (`reabrir_minitarea`) | Responsable o `S`; modal/motivo obligatorio; estado `ACTIVA`/`GESTION` |
+| 2 | Historial MiniTarea | GET | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/historial/` (`historial_minitarea`) | Lectura autorizada; eventos `CIERRE`/`REAPERTURA`; muestra adjuntos del Comentario relacionado cuando existe; sin mutación |
+
+El POST `cerrar_minitarea` acepta `multipart/form-data`. Además del comentario obligatorio y los destinatarios opt-in de T104, admite cero a cinco archivos opcionales. No expone selector ni metadatos documentales adicionales: cada archivo usa internamente el tipo neutro `DocumentoTarea.Tipo.OTRO`, las validaciones y el procesamiento de imágenes vigentes, y queda relacionado con el `Comentario` automático mediante `ComentarioAdjunto`. El cierre no genera una comunicación adicional de Comentarios.
+
+La tabla de MiniTareas muestra un indicador compacto solo para el último `CIERRE` vigente de una MiniTarea `HECHA`: no muestra indicador con cero adjuntos, muestra `Archivo` con uno y `N archivos` con varios. El historial muestra cada adjunto dentro de su evento `CIERRE`; un evento `REAPERTURA` y un evento histórico sin `comentario_feed` no muestran adjuntos. La relación `MiniTareaEvento.comentario_feed` es la única forma válida de resolver la trazabilidad y no se permite reconstrucción por fecha, actor, texto, posición o nombre de archivo.
 | 2 | Reprogramación | POST | `reprogramar_tarea` | Justificación y auditoría obligatorias |
 | 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental; `hitos_tarea` admite `accion=completar_hito` con reseña y evidencia y muestra `Ver cumplimiento Hito` en lectura para Hitos completados |
 

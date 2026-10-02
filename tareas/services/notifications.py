@@ -99,8 +99,9 @@ def emit_task_event(
     title,
     body="",
     actor=None,
+    send_email=True,
 ):
-    """Emit one task event through the T053 adapters and both critical channels."""
+    """Emit one task event through the public task adapters."""
     unique_recipients = {}
     for recipient in recipients:
         if recipient is None or not recipient.is_active:
@@ -127,7 +128,7 @@ def emit_task_event(
                 recipient.pk,
             )
 
-        if tarea.prioridad == Tarea.Prioridad.CRITICA and recipient.email:
+        if send_email and tarea.prioridad == Tarea.Prioridad.CRITICA and recipient.email:
             email = recipient.email.strip()
             if email:
                 try:

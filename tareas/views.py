@@ -44,6 +44,9 @@ from .forms import (
     HitoForm,
     HitoReasignacionForm,
     MotivoComentarioForm,
+    MiniTareaCloseForm,
+    MiniTareaCreateForm,
+    MiniTareaReopenForm,
     ParticipanteTareaAdminForm,
     ParticipanteTareaForm,
     ResponsableTareaForm,
@@ -62,6 +65,8 @@ from .models import (
     Hito,
     HitoEvidencia,
     EnlaceTarea,
+    MiniTareaEvento,
+    MiniTarea,
     ReunionRevision,
     Tarea,
     TareaParticipante,
@@ -69,6 +74,14 @@ from .models import (
 from .services.context import get_active_company_id
 from .services.assignment import assign_responsible, add_participant, remove_participant
 from .services.authorization import can_manage_task
+from .services.closure import (
+    can_close_mini_task,
+    can_create_mini_task,
+    can_reopen_mini_task,
+    close_mini_task,
+    create_mini_task,
+    reopen_mini_task,
+)
 from .services.comments import create_comment, edit_comment, hide_comment, restore_comment
 from .services.reading import (
     COMMENT_PAGE_SIZE,
@@ -94,7 +107,7 @@ from .services.documents import (
     register_closure_evidence,
 )
 from .services.notifications import emit_task_event, task_recipients
-from .services.participants import is_effective_participant
+from .services.participants import effective_participant_ids, is_effective_participant
 from .services.similarity import (
     confirm_similarity,
     evaluate_task_similarity,
@@ -269,6 +282,15 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
         "tombstone": False,
         "adjuntos": adjuntos,
     }
+
+
+def _mini_task_event_attachments(evento, puede_supervisar):
+    comentario = evento.comentario_feed
+    if evento.tipo != MiniTareaEvento.Tipo.CIERRE or comentario is None:
+        return []
+    if comentario.oculto and not puede_supervisar:
+        return []
+    return [_comment_document_data(adjunto.documento) for adjunto in comentario.adjuntos.all()]
 
 
 class TareaEmpresaQuerysetMixin:
@@ -539,6 +561,66 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             self.object.empresa,
             active_only=True,
         )
+        puede_supervisar_adjuntos = _comment_actor_has_permission(
+            self.object,
+            self.request.user,
+            "supervisor",
+        )
+        eventos_prefetch = Prefetch(
+            "eventos",
+            queryset=(
+                MiniTareaEvento.objects.select_related("actor", "comentario_feed")
+                .prefetch_related("comentario_feed__adjuntos__documento")
+            ),
+            to_attr="eventos_t104",
+        )
+        mini_tareas = list(
+            self.object.mini_tareas.select_related("persona").prefetch_related(
+                eventos_prefetch
+            )
+        )
+        for mini_tarea in mini_tareas:
+            for evento in mini_tarea.eventos_t104:
+                evento.adjuntos_t104 = _mini_task_event_attachments(
+                    evento,
+                    puede_supervisar_adjuntos,
+                )
+            mini_tarea.ultimo_cierre_adjuntos_t104 = []
+            if mini_tarea.hecho:
+                ultimo_cierre = next(
+                    (
+                        evento
+                        for evento in reversed(mini_tarea.eventos_t104)
+                        if evento.tipo == MiniTareaEvento.Tipo.CIERRE
+                    ),
+                    None,
+                )
+                if ultimo_cierre is not None:
+                    mini_tarea.ultimo_cierre_adjuntos_t104 = ultimo_cierre.adjuntos_t104
+            mini_tarea.puede_cerrar_t104 = can_close_mini_task(
+                tarea=self.object,
+                mini_tarea=mini_tarea,
+                actor=self.request.user,
+            )
+            mini_tarea.puede_reabrir_t104 = can_reopen_mini_task(
+                tarea=self.object,
+                mini_tarea=mini_tarea,
+                actor=self.request.user,
+            )
+        context["mini_tareas"] = mini_tareas
+        context["puede_crear_minitarea"] = can_create_mini_task(
+            tarea=self.object,
+            actor=self.request.user,
+        )
+        context["mini_tarea_create_form"] = MiniTareaCreateForm(
+            tarea=self.object,
+        )
+        context["mini_tarea_destinatarios"] = get_valid_users_for_empresa(
+            self.object.empresa,
+            active_only=True,
+        ).filter(
+            pk__in=effective_participant_ids(self.object)
+        ).exclude(pk=self.request.user.pk).order_by("username")
         return context
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
@@ -556,6 +638,160 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
         return self.render_to_response(context)
+
+
+class MiniTareaEndpointMixin:
+    def get_tarea(self, request, tarea_id):
+        return get_object_or_404(
+            Tarea.objects.select_related("empresa", "responsable"),
+            pk=tarea_id,
+            empresa_id=_get_empresa_id(request),
+        )
+
+    def redirect_to_detail(self, tarea):
+        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+
+    def reject(self, request, tarea):
+        messages.error(request, "tareas.messages.generic_error")
+        return self.redirect_to_detail(tarea)
+
+
+class CrearMiniTareaView(
+    VerificarPermisoMixin,
+    LoginRequiredMixin,
+    MiniTareaEndpointMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "crear"
+
+    def post(self, request, tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        form = MiniTareaCreateForm(request.POST, tarea=tarea)
+        if not form.is_valid():
+            return self.reject(request, tarea)
+        try:
+            create_mini_task(
+                tarea=tarea,
+                descripcion=form.cleaned_data["descripcion"],
+                persona=form.cleaned_data["persona"],
+                actor=request.user,
+            )
+        except ValidationError:
+            return self.reject(request, tarea)
+        messages.success(request, "tareas.messages.lifecycle_action_applied")
+        return self.redirect_to_detail(tarea)
+
+
+class CerrarMiniTareaView(
+    VerificarPermisoMixin,
+    LoginRequiredMixin,
+    MiniTareaEndpointMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, mini_tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        form = MiniTareaCloseForm(
+            request.POST,
+            request.FILES,
+            tarea=tarea,
+            actor=request.user,
+        )
+        if not form.is_valid():
+            return self.reject(request, tarea)
+        try:
+            close_mini_task(
+                tarea=tarea,
+                mini_tarea=mini_tarea,
+                actor=request.user,
+                comentario=form.cleaned_data["comentario"],
+                notification_recipient_ids=[
+                    user.pk
+                    for user in form.cleaned_data["destinatarios_notificacion"]
+                ],
+                email_recipient_ids=[
+                    user.pk for user in form.cleaned_data["destinatarios_email"]
+                ],
+                documentos_nuevos=form.nuevos_documentos(),
+            )
+        except ValidationError:
+            return self.reject(request, tarea)
+        messages.success(request, "tareas.messages.lifecycle_action_applied")
+        return self.redirect_to_detail(tarea)
+
+
+class ReabrirMiniTareaView(
+    VerificarPermisoMixin,
+    LoginRequiredMixin,
+    MiniTareaEndpointMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+
+    def post(self, request, tarea_id, mini_tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        form = MiniTareaReopenForm(request.POST)
+        if not form.is_valid():
+            return self.reject(request, tarea)
+        try:
+            reopen_mini_task(
+                tarea=tarea,
+                mini_tarea=mini_tarea,
+                actor=request.user,
+                comentario=form.cleaned_data["comentario"],
+            )
+        except ValidationError:
+            return self.reject(request, tarea)
+        messages.success(request, "tareas.messages.lifecycle_action_applied")
+        return self.redirect_to_detail(tarea)
+
+
+class HistorialMiniTareaView(
+    VerificarPermisoMixin,
+    LoginRequiredMixin,
+    MiniTareaEndpointMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "ingresar"
+
+    def get(self, request, tarea_id, mini_tarea_id):
+        tarea = self.get_tarea(request, tarea_id)
+        mini_tarea = get_object_or_404(
+            MiniTarea.objects.select_related("persona").prefetch_related(
+                Prefetch(
+                    "eventos",
+                    queryset=(
+                        MiniTareaEvento.objects.select_related("actor", "comentario_feed")
+                        .prefetch_related("comentario_feed__adjuntos__documento")
+                    ),
+                    to_attr="eventos_t104",
+                )
+            ),
+            pk=mini_tarea_id,
+            tarea=tarea,
+        )
+        puede_supervisar_adjuntos = _comment_actor_has_permission(
+            tarea,
+            request.user,
+            "supervisor",
+        )
+        for evento in mini_tarea.eventos_t104:
+            evento.adjuntos_t104 = _mini_task_event_attachments(
+                evento,
+                puede_supervisar_adjuntos,
+            )
+        return render(
+            request,
+            "tareas/mini_tarea_historial.html",
+            {"tarea": tarea, "mini_tarea": mini_tarea, "eventos": mini_tarea.eventos_t104},
+        )
 
 
 class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):

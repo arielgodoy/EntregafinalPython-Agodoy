@@ -175,6 +175,74 @@ Detalle de tarea
                             </section>
                             {% endif %}
 
+                            <section class="task-detail__mini-tasks p-3 mt-4" aria-labelledby="tareas-minitareas-titulo">
+                                <h5 id="tareas-minitareas-titulo" class="task-detail__section-heading h6"><i class="ri-list-check-2" aria-hidden="true"></i><span data-key="tareas.minitareas.title">MiniTareas</span></h5>
+                                {% if puede_crear_minitarea %}
+                                <form method="post" action="{% url 'tareas:minitareas_tarea' tarea.pk %}" class="row g-2 align-items-end mb-3">
+                                    {% csrf_token %}
+                                    <div class="col-md-7"><label class="form-label" for="{{ mini_tarea_create_form.descripcion.id_for_label }}"><span data-key="tareas.fields.descripcion">Descripción</span></label>{{ mini_tarea_create_form.descripcion }}</div>
+                                    <div class="col-md-3"><label class="form-label" for="{{ mini_tarea_create_form.persona.id_for_label }}"><span data-key="tareas.minitareas.assignee">Persona asignada</span></label>{{ mini_tarea_create_form.persona }}</div>
+                                    <div class="col-md-2"><button type="submit" class="btn btn-outline-primary"><i class="ri-add-line" aria-hidden="true"></i><span data-key="tareas.participants.add">Agregar MiniTarea</span></button></div>
+                                </form>
+                                {% endif %}
+                                {% if mini_tareas %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead><tr><th><span data-key="tareas.fields.descripcion">Descripción</span></th><th><span data-key="tareas.minitareas.assignee">Persona asignada</span></th><th><span data-key="tareas.fields.estado">Estado</span></th><th><span data-key="tareas.minitareas.attachments">Adjuntos</span></th><th><span data-key="tareas.participants.action">Acciones</span></th></tr></thead>
+                                        <tbody>
+                                        {% for mini_tarea in mini_tareas %}
+                                        <tr>
+                                            <td>{{ mini_tarea.descripcion }}</td>
+                                            <td>{{ mini_tarea.persona.username }}</td>
+                                            <td>{% if mini_tarea.hecho %}<span class="badge bg-success-subtle text-success" data-key="tareas.minitareas.done">Hecha</span>{% else %}<span class="badge bg-warning-subtle text-warning" data-key="tareas.minitareas.pending">Pendiente</span>{% endif %}</td>
+                                            <td>{% if mini_tarea.ultimo_cierre_adjuntos_t104 %}<a class="text-body text-decoration-none" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}"><i class="ri-attachment-2 me-1" aria-hidden="true"></i>{% if mini_tarea.ultimo_cierre_adjuntos_t104|length == 1 %}<span data-key="tareas.minitareas.attachment">Archivo</span>{% else %}{{ mini_tarea.ultimo_cierre_adjuntos_t104|length }} <span data-key="tareas.minitareas.attachments_count">archivos</span>{% endif %}</a>{% endif %}</td>
+                                            <td>
+                                                {% if mini_tarea.puede_cerrar_t104 %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#cerrar-minitarea-{{ mini_tarea.pk }}"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><span data-key="tareas.actions.close">Cerrar</span></button>{% endif %}
+                                                {% if mini_tarea.puede_reabrir_t104 %}<button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reabrir-minitarea-{{ mini_tarea.pk }}"><i class="ri-arrow-go-back-line" aria-hidden="true"></i><span data-key="tareas.actions.reactivar">Reabrir</span></button>{% endif %}
+                                                {% if mini_tarea.eventos_t104 %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}"><i class="ri-history-line" aria-hidden="true"></i><span data-key="tareas.actions.ver">Historial</span></a>{% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="small text-muted mb-0"><span data-key="tareas.links.empty">No hay MiniTareas.</span></p>
+                                {% endif %}
+                            </section>
+
+                            {% for mini_tarea in mini_tareas %}
+                            {% if mini_tarea.puede_cerrar_t104 %}
+                            <div class="modal fade" id="cerrar-minitarea-{{ mini_tarea.pk }}" tabindex="-1" aria-labelledby="cerrar-minitarea-label-{{ mini_tarea.pk }}" aria-hidden="true">
+                                <div class="modal-dialog"><div class="modal-content"><form method="post" enctype="multipart/form-data" action="{% url 'tareas:cerrar_minitarea' tarea.pk mini_tarea.pk %}">
+                                    {% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="cerrar-minitarea-label-{{ mini_tarea.pk }}" data-key="tareas.actions.close">Cerrar MiniTarea</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                                    <div class="modal-body">
+                                        <p class="small text-muted">{{ mini_tarea.descripcion }}</p>
+                                        <label class="form-label" for="mini-comentario-{{ mini_tarea.pk }}"><span data-key="tareas.fields.descripcion">Comentario de cierre</span> *</label>
+                                        <textarea class="form-control" id="mini-comentario-{{ mini_tarea.pk }}" name="comentario" rows="3" required></textarea>
+                                        <label class="form-label mt-3" for="mini-archivos-{{ mini_tarea.pk }}"><span data-key="tareas.comments.attach">Adjuntar</span></label>
+                                        <input class="form-control" type="file" id="mini-archivos-{{ mini_tarea.pk }}" name="archivos" multiple>
+                                        <div class="form-text" data-key="tareas.comments.max_files">Máximo cinco adjuntos.</div>
+                                        <label class="form-label mt-3" for="mini-notificar-{{ mini_tarea.pk }}"><span data-key="tareas.links.recipient">Notificar a</span></label>
+                                        <select class="form-select" id="mini-notificar-{{ mini_tarea.pk }}" name="destinatarios_notificacion" multiple>{% for destinatario in mini_tarea_destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.username }}</option>{% endfor %}</select>
+                                        <label class="form-label mt-3" for="mini-email-{{ mini_tarea.pk }}"><span data-key="tareas.links.recipient">Enviar por email a</span></label>
+                                        <select class="form-select" id="mini-email-{{ mini_tarea.pk }}" name="destinatarios_email" multiple>{% for destinatario in mini_tarea_destinatarios %}{% if destinatario.email %}<option value="{{ destinatario.pk }}">{{ destinatario.username }} ({{ destinatario.email }})</option>{% endif %}{% endfor %}</select>
+                                    </div>
+                                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-success"><span data-key="tareas.actions.close">Cerrar MiniTarea</span></button></div>
+                                </form></div></div>
+                            </div>
+                            {% endif %}
+                            {% if mini_tarea.puede_reabrir_t104 %}
+                            <div class="modal fade" id="reabrir-minitarea-{{ mini_tarea.pk }}" tabindex="-1" aria-labelledby="reabrir-minitarea-label-{{ mini_tarea.pk }}" aria-hidden="true">
+                                <div class="modal-dialog"><div class="modal-content"><form method="post" action="{% url 'tareas:reabrir_minitarea' tarea.pk mini_tarea.pk %}">
+                                    {% csrf_token %}<div class="modal-header"><h5 class="modal-title" id="reabrir-minitarea-label-{{ mini_tarea.pk }}" data-key="tareas.actions.reactivar">Reabrir MiniTarea</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                                    <div class="modal-body"><label class="form-label" for="mini-reapertura-{{ mini_tarea.pk }}"><span data-key="tareas.fields.descripcion">Motivo de reapertura</span> *</label><textarea class="form-control" id="mini-reapertura-{{ mini_tarea.pk }}" name="comentario" rows="3" required></textarea></div>
+                                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-warning"><span data-key="tareas.actions.reactivar">Devolver a pendiente</span></button></div>
+                                </form></div></div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+
                             <div class="task-detail__actions mt-4">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><i class="ri-arrow-left-line" aria-hidden="true"></i><span data-key="tareas.actions.volver">Volver</span></a>
                                 {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}

@@ -15,6 +15,7 @@ from .models import (
     EvidenciaCierre,
     FormatoArchivo,
     Hito,
+    MiniTarea,
     ReunionParticipante,
     ReunionRevision,
     ReunionTarea,
@@ -133,6 +134,24 @@ class MultipleFileField(forms.FileField):
         return cleaned_files
 
 
+def _validate_comment_files(archivos, existing_count=0):
+    archivos = list(archivos or [])
+    if existing_count + len(archivos) > 5:
+        raise forms.ValidationError(
+            "tareas.messages.generic_error",
+            code="tareas.messages.generic_error",
+        )
+    valid_extensions = {formato.lower() for formato, _label in FormatoArchivo.choices}
+    for archivo in archivos:
+        extension = splitext(archivo.name)[1].lower().lstrip(".")
+        if extension not in valid_extensions:
+            raise forms.ValidationError(
+                "tareas.messages.generic_error",
+                code="tareas.messages.generic_error",
+            )
+    return archivos
+
+
 class ComentarioForm(forms.Form):
     contenido = forms.CharField(required=False, strip=False, widget=forms.Textarea)
     documentos = forms.ModelMultipleChoiceField(
@@ -157,27 +176,13 @@ class ComentarioForm(forms.Form):
         cleaned_data = super().clean()
         documentos = cleaned_data.get("documentos")
         archivos = cleaned_data.get("archivos") or []
-        if documentos is not None and documentos.count() + len(archivos) > 5:
-            self.add_error(
-                "archivos",
-                forms.ValidationError(
-                    "tareas.messages.generic_error",
-                    code="tareas.messages.generic_error",
-                ),
+        try:
+            _validate_comment_files(
+                archivos,
+                existing_count=documentos.count() if documentos is not None else 0,
             )
-            return cleaned_data
-
-        for archivo in archivos:
-            extension = splitext(archivo.name)[1].lower().lstrip(".")
-            if extension not in {formato.lower() for formato, _label in FormatoArchivo.choices}:
-                self.add_error(
-                    "archivos",
-                    forms.ValidationError(
-                        "tareas.messages.generic_error",
-                        code="tareas.messages.generic_error",
-                    ),
-                )
-                break
+        except forms.ValidationError as exc:
+            self.add_error("archivos", exc)
         return cleaned_data
 
     def nuevos_documentos(self):
@@ -285,6 +290,70 @@ class ResponsableTareaForm(forms.Form):
             self.initial["responsable"] = tarea.responsable_id
             if tarea.estado != Tarea.Estado.BORRADOR:
                 self.fields["responsable"].required = True
+
+
+class MiniTareaCreateForm(forms.ModelForm):
+    class Meta:
+        model = MiniTarea
+        fields = ["descripcion", "persona"]
+        widgets = {
+            "descripcion": forms.TextInput(attrs={"maxlength": 200}),
+        }
+
+    def __init__(self, *args, tarea=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["persona"].queryset = (
+            get_valid_users_for_empresa(tarea.empresa, active_only=True)
+            if tarea is not None
+            else User.objects.none()
+        )
+
+
+class MiniTareaCloseForm(forms.Form):
+    comentario = forms.CharField(required=True, strip=True, widget=forms.Textarea(attrs={"rows": 3}))
+    archivos = MultipleFileField(required=False)
+    destinatarios_notificacion = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(), required=False
+    )
+    destinatarios_email = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(), required=False
+    )
+
+    def __init__(self, *args, tarea=None, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if tarea is None:
+            return
+        from tareas.services.participants import effective_participant_ids
+
+        queryset = get_valid_users_for_empresa(tarea.empresa, active_only=True).filter(
+            pk__in=effective_participant_ids(tarea)
+        )
+        if actor is not None:
+            queryset = queryset.exclude(pk=actor.pk)
+        self.fields["destinatarios_notificacion"].queryset = queryset
+        self.fields["destinatarios_email"].queryset = queryset.exclude(email="")
+
+    def clean_archivos(self):
+        return _validate_comment_files(self.cleaned_data.get("archivos"))
+
+    def nuevos_documentos(self):
+        formatos_por_extension = {
+            formato.lower(): formato for formato, _label in FormatoArchivo.choices
+        }
+        return [
+            {
+                "tipo": DocumentoTarea.Tipo.OTRO,
+                "formato_archivo": formatos_por_extension[
+                    splitext(archivo.name)[1].lower().lstrip(".")
+                ],
+                "archivo": archivo,
+            }
+            for archivo in self.cleaned_data.get("archivos", [])
+        ]
+
+
+class MiniTareaReopenForm(forms.Form):
+    comentario = forms.CharField(required=True, strip=True, widget=forms.Textarea(attrs={"rows": 3}))
 
 
 class EvidenciaConfigForm(forms.Form):

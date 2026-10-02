@@ -1,0 +1,34 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Historial de MiniTarea{% endblock title %}
+
+{% block content %}
+<div class="main-content"><div class="page-content"><div class="container-fluid">
+    <div class="card"><div class="card-body">
+        <h4><span data-key="tareas.actions.ver">Historial</span>: {{ mini_tarea.descripcion }}</h4>
+        {% if eventos %}
+        <ol class="list-group list-group-numbered mt-3">
+            {% for evento in eventos %}
+            <li class="list-group-item">
+                <strong>{{ evento.actor.username }}</strong>
+                {% if evento.tipo == "CIERRE" %}<span data-key="tareas.actions.close">cerró la MiniTarea</span>{% else %}<span data-key="tareas.actions.reactivar">devolvió la MiniTarea a pendiente</span>{% endif %}
+                <div class="small text-muted">{{ evento.fecha }}</div>
+                <blockquote class="mb-0 mt-2">{{ evento.comentario }}</blockquote>
+                {% if evento.adjuntos_t104 %}
+                <div class="mt-2">
+                    <div class="small fw-semibold"><span data-key="tareas.minitareas.attachments">Adjuntos:</span></div>
+                    <ul class="list-unstyled small mb-0">
+                    {% for documento in evento.adjuntos_t104 %}
+                        <li><a class="text-body text-decoration-none" href="{{ documento.archivo_url|default:documento.url }}" target="_blank" rel="noopener"><i class="ri-attachment-2 me-1" aria-hidden="true"></i>{{ documento.nombre_archivo }}</a></li>
+                    {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}<p><span data-key="tareas.links.empty">No hay historial.</span></p>{% endif %}
+        <a class="btn btn-secondary mt-3" href="{% url 'tareas:detalle_tarea' tarea.pk %}"><span data-key="tareas.actions.volver">Volver</span></a>
+    </div></div>
+</div></div></div>
+{% endblock content %}

@@ -761,6 +761,48 @@ class MiniTarea(models.Model):
         return self.descripcion
 
 
+class MiniTareaEvento(models.Model):
+    class Tipo(models.TextChoices):
+        CIERRE = "CIERRE", "CIERRE"
+        REAPERTURA = "REAPERTURA", "REAPERTURA"
+
+    mini_tarea = models.ForeignKey(
+        MiniTarea,
+        on_delete=models.PROTECT,
+        related_name="eventos",
+    )
+    comentario_feed = models.OneToOneField(
+        "Comentario",
+        on_delete=models.PROTECT,
+        related_name="evento_cierre_minitarea",
+        null=True,
+        blank=True,
+    )
+    tipo = models.CharField(max_length=12, choices=Tipo.choices)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="eventos_mini_tareas",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+    comentario = models.TextField()
+    destinatarios_notificacion = models.JSONField(default=list)
+    destinatarios_email = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["fecha", "pk"]
+        indexes = [models.Index(fields=["mini_tarea", "fecha"])]
+
+    def clean(self):
+        super().clean()
+        if self.tipo == self.Tipo.REAPERTURA and (
+            self.destinatarios_notificacion or self.destinatarios_email
+        ):
+            raise ValidationError(
+                "La reapertura no puede conservar destinatarios de comunicación."
+            )
+
+
 class DocumentoTarea(models.Model):
     class Tipo(models.TextChoices):
         COTIZACION = "COTIZACION", "Cotización"
