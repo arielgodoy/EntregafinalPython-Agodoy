@@ -29,10 +29,13 @@ Detalle de tarea
 
             <div class="row g-4 align-items-start">
                 <div class="col-12 task-detail-main">
-                    <div class="card shadow-lg rounded task-detail__card">
+                    <div class="card shadow-sm rounded task-detail__card">
                         <div class="card-body">
-                            <div class="card-header task-detail__header px-0 pt-0 mb-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
-                                <h4 class="card-title task-detail__title mb-0">{{ tarea.titulo }}</h4>
+                            <div class="card-header task-detail__header px-0 pt-0 mb-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
+                                <div class="d-flex align-items-start gap-3 min-w-0">
+                                    <span class="task-detail__header-icon avatar-title rounded bg-primary-subtle text-primary" aria-hidden="true"><i class="ri-task-line"></i></span>
+                                    <h4 class="card-title task-detail__title mb-0">{{ tarea.titulo }}</h4>
+                                </div>
                                 <div class="task-detail__badges">
                                     <span class="badge bg-success-subtle text-success"><span data-key="tareas.fields.estado">Estado</span>: {% include "tareas/_state_label.html" with value=tarea.estado %}</span>
                                     <span class="badge bg-info-subtle text-info"><span data-key="tareas.fields.prioridad">Prioridad</span>: {% include "tareas/_priority_label.html" with value=tarea.prioridad %}</span>
@@ -45,7 +48,8 @@ Detalle de tarea
                             </div>
                             {% endif %}
 
-                            <section class="mb-4" aria-labelledby="tareas-jerarquia-titulo">
+                            {% if tarea_padre or tareas_hijas %}
+                            <section class="task-detail__hierarchy mb-4" aria-labelledby="tareas-jerarquia-titulo">
                                 <h5 id="tareas-jerarquia-titulo"><span data-key="tareas.hierarchy.title">Jerarquía</span></h5>
                                 {% if tarea_padre %}
                                 <p class="mb-2">
@@ -73,31 +77,42 @@ Detalle de tarea
                                 </div>
                                 {% endif %}
                             </section>
+                            {% endif %}
 
-                            <dl class="row g-3 task-detail__facts mb-0">
-                                <dt class="col-sm-4"><span data-key="tareas.fields.descripcion">Descripción</span></dt>
-                                <dd class="col-sm-8 task-detail__description">{{ tarea.descripcion|default:"—" }}</dd>
+                            <dl class="task-detail__facts mb-0">
+                                <div class="task-detail__fact task-detail__fact--description">
+                                    <dt><i class="ri-file-text-line" aria-hidden="true"></i><span data-key="tareas.fields.descripcion">Descripción</span></dt>
+                                    <dd class="task-detail__description">{{ tarea.descripcion|default:"—" }}</dd>
+                                </div>
 
-                                <dt class="col-sm-4"><span data-key="tareas.fields.responsable">Responsable</span></dt>
-                                <dd class="col-sm-8">{% if tarea.responsable %}{{ tarea.responsable.username }}{% else %}—{% endif %}</dd>
+                                <div class="task-detail__fact">
+                                    <dt><i class="ri-user-line" aria-hidden="true"></i><span data-key="tareas.fields.responsable">Responsable</span></dt>
+                                    <dd>{% if tarea.responsable %}{{ tarea.responsable.username }}{% else %}—{% endif %}</dd>
+                                </div>
 
-                                <dt class="col-sm-4"><span data-key="tareas.fields.empresa">Empresa</span></dt>
-                                <dd class="col-sm-8">{{ tarea.empresa }}</dd>
+                                <div class="task-detail__fact">
+                                    <dt><i class="ri-building-line" aria-hidden="true"></i><span data-key="tareas.fields.empresa">Empresa</span></dt>
+                                    <dd>{{ tarea.empresa }}</dd>
+                                </div>
 
-                                <dt class="col-sm-4"><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
-                                <dd class="col-sm-8">{{ tarea.correlativo|default:"—" }}</dd>
+                                <div class="task-detail__fact">
+                                    <dt><i class="ri-hashtag" aria-hidden="true"></i><span data-key="tareas.fields.correlativo">Correlativo</span></dt>
+                                    <dd>{{ tarea.correlativo|default:"—" }}</dd>
+                                </div>
 
-                                <dt class="col-sm-4"><span data-key="tareas.fields.fechas_pendientes">Fechas pendientes</span></dt>
-                                <dd class="col-sm-8">{{ tarea.fechas_pendientes_confirmacion }}</dd>
+                                <div class="task-detail__fact">
+                                    <dt><i class="ri-calendar-close-line" aria-hidden="true"></i><span data-key="tareas.fields.fechas_pendientes">Fechas pendientes</span></dt>
+                                    <dd>{% if tarea.fechas_pendientes_confirmacion %}<span class="badge bg-warning-subtle text-warning" data-key="tareas.minitareas.pending">Pendientes</span>{% else %}<span class="badge bg-success-subtle text-success" data-key="tareas.fechas.al_dia">Al día</span>{% endif %}</dd>
+                                </div>
                             </dl>
 
-                            <section class="task-detail__config p-3 mt-4" aria-labelledby="tareas-configuracion-titulo">
-                                <button class="btn btn-link text-body text-decoration-none p-0 d-flex align-items-center gap-2 w-100" type="button" data-bs-toggle="collapse" data-bs-target="#tareas-configuracion-cierre-{{ tarea.pk }}" aria-expanded="false" aria-controls="tareas-configuracion-cierre-{{ tarea.pk }}">
+                            <section class="task-detail__config accordion-item mt-3" aria-labelledby="tareas-configuracion-titulo">
+                                <button class="accordion-button collapsed text-body" type="button" data-bs-toggle="collapse" data-bs-target="#tareas-configuracion-cierre-{{ tarea.pk }}" aria-expanded="false" aria-controls="tareas-configuracion-cierre-{{ tarea.pk }}">
                                     <i class="ri-settings-3-line" aria-hidden="true"></i>
                                     <span id="tareas-configuracion-titulo" data-key="tareas.evidence.configuration">Configuración de cierre</span>
-                                    <i class="ri-arrow-down-s-line ms-auto" aria-hidden="true"></i>
                                 </button>
-                                <div class="collapse mt-3" id="tareas-configuracion-cierre-{{ tarea.pk }}">
+                                <div class="collapse" id="tareas-configuracion-cierre-{{ tarea.pk }}">
+                                    <div class="accordion-body">
                                     {% if puede_configurar_evidencia %}
                                     <form method="post">
                                         {% csrf_token %}
@@ -110,44 +125,65 @@ Detalle de tarea
                                     {% else %}
                                     <span data-key="tareas.common.no">No</span>
                                     {% endif %}
+                                    </div>
                                 </div>
                             </section>
 
-                            <section class="task-detail__dates p-3 mt-4" aria-labelledby="tareas-fechas-titulo">
-                                <h5 id="tareas-fechas-titulo" class="task-detail__section-heading h6 mb-3"><i class="ri-calendar-line" aria-hidden="true"></i><span data-key="tareas.details.dates">Fechas</span></h5>
-                                <div class="row g-3">
-                                    <div class="col-sm-6 task-detail__date-item"><span class="task-detail__date-label" data-key="tareas.fields.fecha_creacion">Fecha de creación</span><span class="task-detail__date-value">{{ tarea.fecha_creacion }}</span></div>
-                                    <div class="col-sm-6 task-detail__date-item"><span class="task-detail__date-label" data-key="tareas.fields.fecha_publicacion">Fecha de publicación</span><span class="task-detail__date-value">{% if tarea.fecha_publicacion %}{{ tarea.fecha_publicacion }}{% else %}—{% endif %}</span></div>
-                                    <div class="col-sm-6 task-detail__date-item"><span class="task-detail__date-label" data-key="tareas.fields.fecha_asignacion">Fecha de asignación</span><span class="task-detail__date-value">{% if tarea.fecha_asignacion %}{{ tarea.fecha_asignacion }}{% else %}—{% endif %}</span></div>
-                                    <div class="col-sm-6 task-detail__date-item"><span class="task-detail__date-label" data-key="tareas.fields.fecha_tope">Fecha tope</span><span class="task-detail__date-value">{% if tarea.fecha_tope %}{{ tarea.fecha_tope }}{% else %}—{% endif %}</span></div>
-                                    <div class="col-sm-6 task-detail__date-item"><span class="task-detail__date-label" data-key="tareas.fields.fecha_cumplimiento">Fecha de cumplimiento</span><span class="task-detail__date-value">{% if tarea.fecha_cumplimiento %}{{ tarea.fecha_cumplimiento }}{% else %}—{% endif %}</span></div>
+                            <section class="task-detail__dates task-detail__section-block mt-3" aria-labelledby="tareas-fechas-titulo">
+                                <div class="task-detail__section-header"><h5 id="tareas-fechas-titulo" class="task-detail__section-heading h6 mb-0"><i class="ri-calendar-line" aria-hidden="true"></i><span data-key="tareas.details.dates">Fechas</span></h5></div>
+                                <div class="task-detail__dates-grid" role="table" aria-label="Fechas de la tarea">
+                                    <div class="task-detail__date-column" role="row">
+                                        <div class="task-detail__date-label" role="columnheader"><i class="ri-add-circle-line" aria-hidden="true"></i><span data-key="tareas.fields.fecha_creacion">Fecha de creación</span></div>
+                                        <div class="task-detail__date-value" role="cell">{{ tarea.fecha_creacion }}</div>
+                                    </div>
+                                    <div class="task-detail__date-column" role="row">
+                                        <div class="task-detail__date-label" role="columnheader"><i class="ri-send-plane-line" aria-hidden="true"></i><span data-key="tareas.fields.fecha_publicacion">Fecha de publicación</span></div>
+                                        <div class="task-detail__date-value" role="cell">{% if tarea.fecha_publicacion %}{{ tarea.fecha_publicacion }}{% else %}—{% endif %}</div>
+                                    </div>
+                                    <div class="task-detail__date-column" role="row">
+                                        <div class="task-detail__date-label" role="columnheader"><i class="ri-user-add-line" aria-hidden="true"></i><span data-key="tareas.fields.fecha_asignacion">Fecha de asignación</span></div>
+                                        <div class="task-detail__date-value" role="cell">{% if tarea.fecha_asignacion %}{{ tarea.fecha_asignacion }}{% else %}—{% endif %}</div>
+                                    </div>
+                                    <div class="task-detail__date-column" role="row">
+                                        <div class="task-detail__date-label" role="columnheader"><i class="ri-calendar-event-line" aria-hidden="true"></i><span data-key="tareas.fields.fecha_tope">Fecha tope</span></div>
+                                        <div class="task-detail__date-value" role="cell">{% if tarea.fecha_tope %}{{ tarea.fecha_tope }}{% else %}—{% endif %}</div>
+                                    </div>
+                                    <div class="task-detail__date-column" role="row">
+                                        <div class="task-detail__date-label" role="columnheader"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><span data-key="tareas.fields.fecha_cumplimiento">Fecha de cumplimiento</span></div>
+                                        <div class="task-detail__date-value" role="cell">{% if tarea.fecha_cumplimiento %}{{ tarea.fecha_cumplimiento }}{% else %}—{% endif %}</div>
+                                    </div>
                                 </div>
                             </section>
 
-                            <section class="task-detail__participants p-3 mt-4" aria-labelledby="tareas-participantes-titulo">
-                                <h5 id="tareas-participantes-titulo" class="task-detail__section-heading h6"><i class="ri-team-line" aria-hidden="true"></i><span data-key="tareas.participants.title">Participantes</span></h5>
+                            <section class="task-detail__participants task-detail__section-block p-3 mt-3" aria-labelledby="tareas-participantes-titulo">
+                                <h5 id="tareas-participantes-titulo" class="task-detail__section-heading h6 mb-2"><i class="ri-team-line" aria-hidden="true"></i><span data-key="tareas.participants.title">Participantes</span></h5>
                                 <p class="small text-muted"><span data-key="tareas.participants.implicit_help">El creador y el responsable participan automáticamente.</span></p>
+                                <div class="avatar-group task-detail__participant-avatars mb-2" aria-label="Participantes">
+                                    <span class="avatar-xs task-detail__participant-avatar" title="{{ tarea.creada_por.username }}" aria-label="{{ tarea.creada_por.username }}" data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top" tabindex="0" role="img"><span class="avatar-title rounded-circle bg-primary-subtle text-primary">{{ tarea.creada_por.username|first|upper }}</span></span>
+                                    {% if tarea.responsable and tarea.responsable_id != tarea.creada_por_id %}<span class="avatar-xs task-detail__participant-avatar" title="{{ tarea.responsable.username }}" aria-label="{{ tarea.responsable.username }}" data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top" tabindex="0" role="img"><span class="avatar-title rounded-circle bg-info-subtle text-info">{{ tarea.responsable.username|first|upper }}</span></span>{% endif %}
+                                    {% for participante in participantes_explicitos %}<span class="avatar-xs task-detail__participant-avatar" title="{{ participante.usuario.username }}" aria-label="{{ participante.usuario.username }}" data-bs-toggle="tooltip" data-bs-trigger="hover focus" data-bs-placement="top" tabindex="0" role="img"><span class="avatar-title rounded-circle bg-secondary-subtle text-secondary">{{ participante.usuario.username|first|upper }}</span></span>{% endfor %}
+                                </div>
                                 {% if puede_administrar_participantes %}
-                                <form method="post" action="{% url 'tareas:administrar_responsable_detalle' tarea.pk %}" class="row g-2 align-items-end mb-3">
+                                <form method="post" action="{% url 'tareas:administrar_responsable_detalle' tarea.pk %}" class="row g-2 align-items-end mb-2 task-detail__responsible-form">
                                     {% csrf_token %}
                                     <div class="col-md-8"><label class="form-label" for="{{ responsable_form.responsable.id_for_label }}"><span data-key="tareas.fields.responsable">Responsable</span></label><select name="responsable" id="{{ responsable_form.responsable.id_for_label }}" class="form-select"{% if tarea.estado != "BORRADOR" %} required{% endif %}>{% if tarea.estado == "BORRADOR" %}<option value="">—</option>{% endif %}{% for responsable in responsables_validos %}<option value="{{ responsable.pk }}"{% if responsable.pk == tarea.responsable_id %} selected{% endif %}>{{ responsable.username }}</option>{% endfor %}</select><div class="form-text"><span data-key="tareas.form.assignee_draft_help">Puede dejarse sin responsable mientras la tarea permanezca en borrador.</span></div></div>
                                     <div class="col-md-4"><button type="submit" class="btn btn-outline-primary"><i class="ri-user-settings-line" aria-hidden="true"></i><span data-key="tareas.actions.reassign">Reasignar</span></button></div>
                                 </form>
                                 {% endif %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle">
+                                <div class="table-responsive task-detail__participants-table-wrap">
+                                    <table class="table table-sm table-borderless align-middle mb-0 task-detail__participants-table">
                                         <thead><tr><th><span data-key="tareas.participants.user">Usuario</span></th><th><span data-key="tareas.participants.role">Rol</span></th><th><span data-key="tareas.participants.action">Acción</span></th></tr></thead>
                                         <tbody>
-                                            <tr><td>{{ tarea.creada_por.username }}</td><td><span data-key="tareas.participants.creator">CREADOR</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>
-                                            {% if tarea.responsable and tarea.responsable_id != tarea.creada_por_id %}<tr><td>{{ tarea.responsable.username }}</td><td><span data-key="tareas.participants.responsible">RESPONSABLE</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>{% endif %}
+                                            <tr><td>{{ tarea.creada_por.username }}</td><td><span class="badge bg-primary-subtle text-primary" data-key="tareas.participants.creator">CREADOR</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>
+                                            {% if tarea.responsable and tarea.responsable_id != tarea.creada_por_id %}<tr><td>{{ tarea.responsable.username }}</td><td><span class="badge bg-info-subtle text-info" data-key="tareas.participants.responsible">RESPONSABLE</span></td><td><span data-key="tareas.participants.implicit">Implícito</span></td></tr>{% endif %}
                                             {% for participante in participantes_explicitos %}
-                                            <tr><td>{{ participante.usuario.username }}</td><td>{% if participante.rol == "INVITADO_OBSERVADOR" %}<span data-key="tareas.participants.guest">INVITADO_OBSERVADOR</span>{% else %}<span data-key="tareas.participants.member">PARTICIPANTE</span>{% endif %}</td><td>{% if puede_administrar_participantes %}<form method="post" action="{% url 'tareas:desvincular_participante_detalle' tarea.pk participante.usuario_id %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-user-unfollow-line" aria-hidden="true"></i><span data-key="tareas.participants.remove">Desvincular</span></button></form>{% else %}<span data-key="tareas.participants.no_action">Sin acción</span>{% endif %}</td></tr>
+                                            <tr><td>{{ participante.usuario.username }}</td><td>{% if participante.rol == "INVITADO_OBSERVADOR" %}<span class="badge bg-secondary-subtle text-secondary" data-key="tareas.participants.guest">INVITADO_OBSERVADOR</span>{% else %}<span class="badge bg-success-subtle text-success" data-key="tareas.participants.member">PARTICIPANTE</span>{% endif %}</td><td>{% if puede_administrar_participantes %}<form method="post" action="{% url 'tareas:desvincular_participante_detalle' tarea.pk participante.usuario_id %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-icon btn-outline-danger" title="Desvincular" aria-label="Desvincular"><i class="ri-user-unfollow-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.participants.remove">Desvincular</span></button></form>{% else %}<span data-key="tareas.participants.no_action">Sin acción</span>{% endif %}</td></tr>
                                             {% endfor %}
                                         </tbody>
                                     </table>
                                 </div>
                                 {% if puede_administrar_participantes and participantes_elegibles %}
-                                <form method="post" action="{% url 'tareas:vincular_participante_detalle' tarea.pk %}" class="row g-2 align-items-end mt-2">
+                                <form method="post" action="{% url 'tareas:vincular_participante_detalle' tarea.pk %}" class="row g-2 align-items-end mt-2 task-detail__participant-add-form">
                                     {% csrf_token %}
                                     <div class="col-md-5"><label class="form-label" for="{{ participante_form.usuario.id_for_label }}"><span data-key="tareas.participants.add_user">Añadir usuario</span></label>{{ participante_form.usuario }}</div>
                                     <div class="col-md-5"><label class="form-label" for="{{ participante_form.rol.id_for_label }}"><span data-key="tareas.participants.role">Rol</span></label>{{ participante_form.rol }}</div>
@@ -157,8 +193,8 @@ Detalle de tarea
                             </section>
 
                             {% if puede_configurar_evidencia %}
-                            <section class="task-detail__links p-3 mt-4" aria-labelledby="tareas-enlaces-titulo">
-                                <h5 id="tareas-enlaces-titulo" class="task-detail__section-heading h6"><i class="ri-share-line" aria-hidden="true"></i><span data-key="tareas.links.title">Enlaces compartidos</span></h5>
+                            <section class="task-detail__links task-detail__section-block p-3 mt-3" aria-labelledby="tareas-enlaces-titulo">
+                                <div class="task-detail__section-header"><h5 id="tareas-enlaces-titulo" class="task-detail__section-heading h6 mb-0"><i class="ri-share-line" aria-hidden="true"></i><span data-key="tareas.links.title">Enlaces compartidos</span></h5></div>
                                 <form method="post" action="{% url 'tareas:crear_enlace_tarea' tarea.pk %}" class="row g-2 align-items-end js-task-link-form">
                                     {% csrf_token %}
                                     <div class="col-md-4"><label class="form-label" for="enlace-destinatario"><span data-key="tareas.links.recipient">Destinatario</span></label><select id="enlace-destinatario" name="destinatario_id" class="form-select" required>{% for destinatario in destinatarios_enlace %}<option value="{{ destinatario.pk }}">{{ destinatario.username }}</option>{% endfor %}</select></div>
@@ -171,45 +207,51 @@ Detalle de tarea
                                     <span data-key="tareas.links.created">Enlace creado correctamente.</span>
                                     <span data-key="tareas.links.url_created">URL creada:</span>
                                 </div>
-                                {% if enlaces %}<div class="table-responsive mt-3"><table class="table table-sm"><thead><tr><th><span data-key="tareas.links.recipient">Destinatario</span></th><th><span data-key="tareas.links.created_by">Creado por</span></th><th><span data-key="tareas.links.created_at">Creación</span></th><th><span data-key="tareas.links.expiration">Expiración</span></th><th><span data-key="tareas.links.status">Estado</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>{% for enlace in enlaces %}<tr><td>{{ enlace.destinatario.username }}</td><td>{{ enlace.creado_por.username }}</td><td>{{ enlace.fecha_creacion }}</td><td>{{ enlace.fecha_expiracion }}</td><td>{{ enlace.estado_t060 }}</td><td>{% if enlace.estado_t060 == "ACTIVO" %}<form method="post" action="{% url 'tareas:revocar_enlace_tarea' enlace.pk %}" class="d-inline js-task-link-revoke">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit"><span data-key="tareas.links.revoke">Revocar</span></button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="mt-3"><span data-key="tareas.links.empty">No hay enlaces compartidos.</span></p>{% endif %}
+                                {% if enlaces %}<div class="table-responsive mt-3 task-detail__links-table-wrap"><table class="table table-sm table-borderless align-middle mb-0 task-detail__links-table"><thead><tr><th><span data-key="tareas.links.recipient">Destinatario</span></th><th><span data-key="tareas.links.created_by">Creado por</span></th><th><span data-key="tareas.links.created_at">Creación</span></th><th><span data-key="tareas.links.expiration">Expiración</span></th><th><span data-key="tareas.links.status">Estado</span></th><th><span data-key="tareas.dashboard.actions">Acción</span></th></tr></thead><tbody>{% for enlace in enlaces %}<tr><td>{{ enlace.destinatario.username }}</td><td>{{ enlace.creado_por.username }}</td><td>{{ enlace.fecha_creacion }}</td><td>{{ enlace.fecha_expiracion }}</td><td><span class="badge {% if enlace.estado_t060 == "ACTIVO" %}bg-success-subtle text-success{% elif enlace.estado_t060 == "EXPIRADO" %}bg-warning-subtle text-warning{% else %}bg-secondary-subtle text-secondary{% endif %}">{{ enlace.estado_t060 }}</span></td><td>{% if enlace.estado_t060 == "ACTIVO" %}<form method="post" action="{% url 'tareas:revocar_enlace_tarea' enlace.pk %}" class="d-inline js-task-link-revoke">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit"><i class="ri-link-unlink-m" aria-hidden="true"></i><span data-key="tareas.links.revoke">Revocar</span></button></form>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="task-detail__empty-state mt-3"><i class="ri-links-line" aria-hidden="true"></i><span data-key="tareas.links.empty">No hay enlaces compartidos.</span></div>{% endif %}
                             </section>
                             {% endif %}
 
-                            <section class="task-detail__mini-tasks p-3 mt-4" aria-labelledby="tareas-minitareas-titulo">
-                                <h5 id="tareas-minitareas-titulo" class="task-detail__section-heading h6"><i class="ri-list-check-2" aria-hidden="true"></i><span data-key="tareas.minitareas.title">MiniTareas</span></h5>
+                            <section class="task-detail__mini-tasks task-detail__section-block accordion-item mt-3" aria-labelledby="tareas-minitareas-titulo">
+                                <h5 class="accordion-header" id="tareas-minitareas-titulo"><button class="accordion-button text-body" type="button" data-bs-toggle="collapse" data-bs-target="#tareas-minitareas-panel-{{ tarea.pk }}" aria-expanded="true" aria-controls="tareas-minitareas-panel-{{ tarea.pk }}"><i class="ri-list-check-2 me-2" aria-hidden="true"></i><span data-key="tareas.minitareas.title">MiniTareas</span></button></h5>
+                                <div class="collapse show" id="tareas-minitareas-panel-{{ tarea.pk }}">
+                                    <div class="accordion-body task-detail__mini-body">
                                 {% if puede_crear_minitarea %}
-                                <form method="post" action="{% url 'tareas:minitareas_tarea' tarea.pk %}" class="row g-2 align-items-end mb-3">
+                                <form method="post" action="{% url 'tareas:minitareas_tarea' tarea.pk %}" class="task-detail__mini-form mb-3">
                                     {% csrf_token %}
-                                    <div class="col-md-7"><label class="form-label" for="{{ mini_tarea_create_form.descripcion.id_for_label }}"><span data-key="tareas.fields.descripcion">Descripción</span></label>{{ mini_tarea_create_form.descripcion }}</div>
-                                    <div class="col-md-3"><label class="form-label" for="{{ mini_tarea_create_form.persona.id_for_label }}"><span data-key="tareas.minitareas.assignee">Persona asignada</span></label>{{ mini_tarea_create_form.persona }}</div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-outline-primary"><i class="ri-add-line" aria-hidden="true"></i><span data-key="tareas.participants.add">Agregar MiniTarea</span></button></div>
+                                    <div class="task-detail__mini-field task-detail__mini-field--description"><label class="form-label" for="{{ mini_tarea_create_form.descripcion.id_for_label }}"><span data-key="tareas.fields.descripcion">Descripción</span></label>{{ mini_tarea_create_form.descripcion }}</div>
+                                    <div class="task-detail__mini-field task-detail__mini-field--assignee"><label class="form-label" for="{{ mini_tarea_create_form.persona.id_for_label }}"><span data-key="tareas.minitareas.assignee">Persona asignada</span></label>{{ mini_tarea_create_form.persona }}</div>
+                                    <div class="task-detail__mini-field task-detail__mini-field--submit"><button type="submit" class="btn btn-outline-primary"><i class="ri-add-line" aria-hidden="true"></i><span data-key="tareas.participants.add">Agregar MiniTarea</span></button></div>
                                 </form>
                                 {% endif %}
                                 {% if mini_tareas %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm align-middle">
-                                        <thead><tr><th><span data-key="tareas.fields.descripcion">Descripción</span></th><th><span data-key="tareas.minitareas.assignee">Persona asignada</span></th><th><span data-key="tareas.fields.estado">Estado</span></th><th><span data-key="tareas.minitareas.attachments">Adjuntos</span></th><th><span data-key="tareas.participants.action">Acciones</span></th></tr></thead>
-                                        <tbody>
+                                <div class="task-detail__mini-list" role="table" aria-label="MiniTareas">
+                                    <div class="task-detail__mini-row task-detail__mini-row--header" role="row">
+                                        <span role="columnheader" data-key="tareas.fields.descripcion">Descripción</span>
+                                        <span role="columnheader" data-key="tareas.minitareas.assignee">Asignado</span>
+                                        <span role="columnheader" data-key="tareas.minitareas.status">Estado</span>
+                                        <span role="columnheader" data-key="tareas.minitareas.attachment">Evidencia</span>
+                                        <span role="columnheader" data-key="tareas.dashboard.actions">Acciones</span>
+                                    </div>
                                         {% for mini_tarea in mini_tareas %}
-                                        <tr>
-                                            <td>{{ mini_tarea.descripcion }}</td>
-                                            <td>{{ mini_tarea.persona.username }}</td>
-                                            <td>{% if mini_tarea.hecho %}<span class="badge bg-success-subtle text-success" data-key="tareas.minitareas.done">Hecha</span>{% else %}<span class="badge bg-warning-subtle text-warning" data-key="tareas.minitareas.pending">Pendiente</span>{% endif %}</td>
-                                            <td>{% if mini_tarea.ultimo_cierre_adjuntos_t104 %}<a class="text-body text-decoration-none" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}"><i class="ri-attachment-2 me-1" aria-hidden="true"></i>{% if mini_tarea.ultimo_cierre_adjuntos_t104|length == 1 %}<span data-key="tareas.minitareas.attachment">Archivo</span>{% else %}{{ mini_tarea.ultimo_cierre_adjuntos_t104|length }} <span data-key="tareas.minitareas.attachments_count">archivos</span>{% endif %}</a>{% endif %}</td>
-                                            <td>
-                                                {% if mini_tarea.puede_cerrar_t104 %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#cerrar-minitarea-{{ mini_tarea.pk }}"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><span data-key="tareas.actions.close">Cerrar</span></button>{% endif %}
-                                                {% if mini_tarea.puede_reabrir_t104 %}<button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reabrir-minitarea-{{ mini_tarea.pk }}"><i class="ri-arrow-go-back-line" aria-hidden="true"></i><span data-key="tareas.actions.reactivar">Reabrir</span></button>{% endif %}
-                                                {% if mini_tarea.puede_eliminar_t105 %}<button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#eliminar-minitarea-{{ mini_tarea.pk }}"><i class="ri-delete-bin-line" aria-hidden="true"></i><span data-key="tareas.actions.delete">Eliminar</span></button>{% endif %}
-                                                {% if mini_tarea.eventos_t104 %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}"><i class="ri-history-line" aria-hidden="true"></i><span data-key="tareas.actions.ver">Historial</span></a>{% endif %}
-                                            </td>
-                                        </tr>
+                                        <div class="task-detail__mini-row" role="row">
+                                            <div class="task-detail__mini-description" role="cell">{{ mini_tarea.descripcion }}</div>
+                                            <div class="task-detail__mini-assignee" role="cell"><i class="ri-user-line" aria-hidden="true"></i><span>{{ mini_tarea.persona.username }}</span></div>
+                                            <div class="task-detail__mini-status" role="cell">{% if mini_tarea.hecho %}<span class="badge bg-success-subtle text-success" data-key="tareas.minitareas.done">Hecha</span>{% else %}<span class="badge bg-warning-subtle text-warning" data-key="tareas.minitareas.pending">Pendiente</span>{% endif %}</div>
+                                            <div class="task-detail__mini-evidence" role="cell">{% if mini_tarea.ultimo_cierre_adjuntos_t104 %}<a class="task-detail__mini-attachment" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}" aria-label="Evidencia"><i class="ri-attachment-2" aria-hidden="true"></i><span class="visually-hidden">{% if mini_tarea.ultimo_cierre_adjuntos_t104|length == 1 %}<span data-key="tareas.minitareas.attachment">Archivo</span>{% else %}{{ mini_tarea.ultimo_cierre_adjuntos_t104|length }} <span data-key="tareas.minitareas.attachments_count">archivos</span>{% endif %}</span></a>{% else %}<span class="text-muted">—</span>{% endif %}</div>
+                                            <div class="task-detail__mini-actions" role="cell">
+                                                {% if mini_tarea.puede_cerrar_t104 %}<button type="button" class="btn btn-sm btn-icon btn-outline-success" data-bs-toggle="modal" data-bs-target="#cerrar-minitarea-{{ mini_tarea.pk }}" aria-label="Cerrar"><i class="ri-checkbox-circle-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.close">Cerrar</span></button>{% endif %}
+                                                {% if mini_tarea.puede_reabrir_t104 %}<button type="button" class="btn btn-sm btn-icon btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reabrir-minitarea-{{ mini_tarea.pk }}" aria-label="Reabrir"><i class="ri-arrow-go-back-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.reactivar">Reabrir</span></button>{% endif %}
+                                                {% if mini_tarea.puede_eliminar_t105 %}<button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-bs-toggle="modal" data-bs-target="#eliminar-minitarea-{{ mini_tarea.pk }}" aria-label="Eliminar"><i class="ri-delete-bin-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.delete">Eliminar</span></button>{% endif %}
+                                                {% if mini_tarea.eventos_t104 %}<a class="btn btn-sm btn-icon btn-outline-secondary" href="{% url 'tareas:historial_minitarea' tarea.pk mini_tarea.pk %}" aria-label="Historial"><i class="ri-history-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.ver">Historial</span></a>{% endif %}
+                                            </div>
+                                        </div>
                                         {% endfor %}
-                                        </tbody>
-                                    </table>
                                 </div>
                                 {% else %}
                                 <p class="small text-muted mb-0"><span data-key="tareas.links.empty">No hay MiniTareas.</span></p>
                                 {% endif %}
+                                    </div>
+                                </div>
                             </section>
 
                             {% for mini_tarea in mini_tareas %}
@@ -253,11 +295,21 @@ Detalle de tarea
                             {% endif %}
                             {% endfor %}
 
-                            <div class="task-detail__actions mt-4">
-                                <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><i class="ri-arrow-left-line" aria-hidden="true"></i><span data-key="tareas.actions.volver">Volver</span></a>
-                                {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}
-                                <a href="{% url 'tareas:hitos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-flag-line" aria-hidden="true"></i><span data-key="tareas.actions.hitos">Hitos y avance</span></a>
-                                <a href="{% url 'tareas:documentos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-folder-line" aria-hidden="true"></i><span data-key="tareas.actions.documentos">Documentos y evidencia</span></a>
+                            <div class="task-detail__actions task-detail__section-block mt-4">
+                                <div class="task-detail__action-group task-detail__actions-navigation"><a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><i class="ri-arrow-left-line" aria-hidden="true"></i><span data-key="tareas.actions.volver">Volver</span></a>{% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}</div>
+                                <div class="task-detail__support-section" aria-label="Seguimiento y soporte">
+                                <div class="task-detail__action-group task-detail__operational-accordions accordion">
+                                    <div class="accordion-item">
+                                        <h5 class="accordion-header" id="tareas-hitos-titulo-{{ tarea.pk }}"><button class="accordion-button collapsed text-body" type="button" data-bs-toggle="collapse" data-bs-target="#tareas-hitos-panel-{{ tarea.pk }}" aria-expanded="false" aria-controls="tareas-hitos-panel-{{ tarea.pk }}"><i class="ri-flag-line me-2" aria-hidden="true"></i><span data-key="tareas.actions.hitos">Hitos y avance</span></button></h5>
+                                        <div class="accordion-collapse collapse" id="tareas-hitos-panel-{{ tarea.pk }}"><div class="accordion-body"><a href="{% url 'tareas:hitos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-flag-line" aria-hidden="true"></i><span data-key="tareas.actions.hitos">Hitos y avance</span></a></div></div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h5 class="accordion-header" id="tareas-documentos-titulo-{{ tarea.pk }}"><button class="accordion-button collapsed text-body" type="button" data-bs-toggle="collapse" data-bs-target="#tareas-documentos-panel-{{ tarea.pk }}" aria-expanded="false" aria-controls="tareas-documentos-panel-{{ tarea.pk }}"><i class="ri-attachment-line me-2" aria-hidden="true"></i><span data-key="tareas.actions.documentos">Documentos y evidencia</span></button></h5>
+                                        <div class="accordion-collapse collapse" id="tareas-documentos-panel-{{ tarea.pk }}"><div class="accordion-body"><a href="{% url 'tareas:documentos_tarea' tarea.pk %}" class="btn btn-outline-primary"><i class="ri-attachment-line" aria-hidden="true"></i><span data-key="tareas.actions.documentos">Documentos y evidencia</span></a></div></div>
+                                    </div>
+                                </div>
+                                </div>
+                                <div class="task-detail__action-group task-detail__lifecycle-actions">
                                 {% if tarea.estado == "BORRADOR" %}
                                 <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">
                                     {% csrf_token %}
@@ -284,7 +336,7 @@ Detalle de tarea
                                 {% endif %}
                                 {% if not tarea.anulada %}
                                 {% if tarea.estado == "ACTIVA" or tarea.estado == "GESTION" or tarea.estado == "PENDIENTE_APROBACION_CIERRE" %}
-                                <form method="post" action="{% url 'tareas:anular_tarea' tarea.pk %}" class="d-inline">
+                                <form method="post" action="{% url 'tareas:anular_tarea' tarea.pk %}" class="d-inline task-detail__danger-group">
                                     {% csrf_token %}<button type="submit" class="btn btn-outline-danger task-detail__danger"><i class="ri-close-circle-line" aria-hidden="true"></i><span data-key="tareas.actions.anular">Anular</span></button>
                                 </form>
                                 {% endif %}
@@ -294,6 +346,7 @@ Detalle de tarea
                                     {% csrf_token %}<button type="submit" class="btn btn-outline-primary"><i class="ri-refresh-line" aria-hidden="true"></i><span data-key="tareas.actions.reactivar">Reactivar</span></button>
                                 </form>
                                 {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
