@@ -1,0 +1,63 @@
+<div class="row g-3 task-detail__documents-content">
+    <div class="col-12">
+        <section class="card task-detail__documents-card">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="mb-0"><span data-key="tareas.documents.list">Documentos</span></h5>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#agregarDocumentoModal">
+                        <span data-key="tareas.actions.add_document">Agregar documento</span>
+                    </button>
+                </div>
+                {% if documentos %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th><span data-key="tareas.documents.type">Tipo</span></th><th><span data-key="tareas.documents.format">Formato</span></th><th><span data-key="tareas.documents.source">Archivo o URL</span></th><th><span data-key="tareas.documents.date">Fecha documento</span></th><th><span data-key="tareas.documents.expiry">Vencimiento</span></th><th><span data-key="tareas.documents.uploaded_by">Subido por</span></th><th><span data-key="tareas.documents.history">Historial</span></th></tr></thead>
+                        <tbody>
+                        {% for documento in documentos %}
+                        <tr>
+                            <td>{{ documento.get_tipo_display }}</td>
+                            <td>{{ documento.get_formato_archivo_display }}</td>
+                            <td>{% if documento.archivo %}{% with nombre_archivo=documento.archivo.name|cut:"tareas/documentos/" %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.archivo.url }}" target="_blank" rel="noopener" title="{{ nombre_archivo }}"><i class="ri-file-line me-1" aria-hidden="true"></i>{{ nombre_archivo }}</a>{% endwith %}{% elif documento.url %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.url }}" target="_blank" rel="noopener" title="{{ documento.url }}"><i class="ri-external-link-line me-1" aria-hidden="true"></i><span data-key="tareas.documents.link_source">Enlace</span></a>{% else %}<span>—</span>{% endif %}</td>
+                            <td>{{ documento.fecha_documento|date:"Y-m-d" }}</td>
+                            <td>{% if documento.fecha_vencimiento %}{{ documento.fecha_vencimiento|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+                            <td>{{ documento.usuario.username }}</td>
+                            <td>{% for evento in documento.historial.all %}{{ evento.accion }} {{ evento.fecha|date:"Y-m-d H:i" }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span data-key="tareas.documents.no_history">Sin historial</span>{% endfor %}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<p><span data-key="tareas.documents.empty">No hay documentos registrados.</span></p>{% endif %}
+            </div>
+        </section>
+    </div>
+    <div class="col-12" id="evidenciaPanel">
+        <section class="card task-detail__documents-card">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="mb-0"><span data-key="tareas.evidence.list">Evidencias de cierre</span></h5>
+                    <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#agregarEvidenciaModal">
+                        <span data-key="tareas.actions.add_evidence">Agregar evidencia</span>
+                    </button>
+                </div>
+                {% if evidencias %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th><span data-key="tareas.evidence.file_format">Formato</span></th><th><span data-key="tareas.documents.source">Archivo o URL</span></th><th><span data-key="tareas.evidence.registered_by">Registrada por</span></th><th><span data-key="tareas.evidence.date">Fecha</span></th></tr></thead>
+                        <tbody>
+                        {% for evidencia in evidencias %}
+                        <tr>
+                            <td>{{ evidencia.get_formato_archivo_display }}</td>
+                            <td>{% if evidencia.archivo %}<a href="{{ evidencia.archivo.url }}" target="_blank" rel="noopener">{{ evidencia.archivo.name|cut:"tareas/evidencias/" }}</a>{% else %}<a href="{{ evidencia.url }}" target="_blank" rel="noopener">{{ evidencia.url }}</a>{% endif %}</td>
+                            <td>{{ evidencia.usuario.username }}</td>
+                            <td>{{ evidencia.fecha|date:"Y-m-d H:i" }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<p><span data-key="tareas.evidence.empty">No hay evidencias de cierre registradas.</span></p>{% endif %}
+            </div>
+        </section>
+    </div>
+</div>

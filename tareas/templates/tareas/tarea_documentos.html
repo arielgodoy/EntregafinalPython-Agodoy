@@ -12,124 +12,17 @@
     <div class="page-content">
         <div class="container-fluid">
             {% if messages %}
-                            {% for message in messages %}
-                            <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
-                            {% endfor %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
+                {% endfor %}
             {% endif %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4><span data-key="tareas.documents.title">Documentos y evidencia</span></h4>
                 <a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
             </div>
             <p><span data-key="tareas.fields.titulo">Tarea</span>: {{ tarea.titulo }}</p>
-
-            <div class="row g-3">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-body">
-                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                                <h5 class="mb-0"><span data-key="tareas.documents.list">Documentos</span></h5>
-                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#agregarDocumentoModal">
-                                    <span data-key="tareas.actions.add_document">Agregar documento</span>
-                                </button>
-                            </div>
-                            {% if documentos %}
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead><tr><th><span data-key="tareas.documents.type">Tipo</span></th><th><span data-key="tareas.documents.format">Formato</span></th><th><span data-key="tareas.documents.source">Archivo o URL</span></th><th><span data-key="tareas.documents.date">Fecha documento</span></th><th><span data-key="tareas.documents.expiry">Vencimiento</span></th><th><span data-key="tareas.documents.uploaded_by">Subido por</span></th><th><span data-key="tareas.documents.history">Historial</span></th></tr></thead>
-                                    <tbody>
-                                    {% for documento in documentos %}
-                                    <tr>
-                                        <td>{{ documento.get_tipo_display }}</td><td>{{ documento.get_formato_archivo_display }}</td>
-                                        <td>{% if documento.archivo %}<a href="{{ documento.archivo.url }}"><span data-key="tareas.documents.file">Archivo</span></a>{% else %}<a href="{{ documento.url }}">{{ documento.url }}</a>{% endif %}</td>
-                                        <td>{{ documento.fecha_documento }}</td><td>{{ documento.fecha_vencimiento|default:"-" }}</td><td>{{ documento.usuario.username }}</td>
-                                        <td>{% for evento in documento.historial.all %}{{ evento.accion }} {{ evento.fecha }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span data-key="tareas.documents.no_history">Sin historial</span>{% endfor %}</td>
-                                    </tr>
-                                    {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {% else %}<p><span data-key="tareas.documents.empty">No hay documentos registrados.</span></p>{% endif %}
-                        </div>
-                    </div>
-                </div>
-                <div class="col-12" id="evidenciaPanel">
-                    <div class="card"><div class="card-body">
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                            <h5 class="mb-0"><span data-key="tareas.evidence.list">Evidencias de cierre</span></h5>
-                            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#agregarEvidenciaModal">
-                                <span data-key="tareas.actions.add_evidence">Agregar evidencia</span>
-                            </button>
-                        </div>
-                        {% if evidencias %}
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead><tr><th><span data-key="tareas.evidence.file_format">Formato</span></th><th><span data-key="tareas.documents.source">Archivo o URL</span></th><th><span data-key="tareas.evidence.registered_by">Registrada por</span></th><th><span data-key="tareas.evidence.date">Fecha</span></th></tr></thead>
-                                <tbody>
-                                {% for evidencia in evidencias %}
-                                <tr>
-                                    <td>{{ evidencia.get_formato_archivo_display }}</td>
-                                    <td>{% if evidencia.archivo %}<a href="{{ evidencia.archivo.url }}">{{ evidencia.archivo.name|cut:"tareas/evidencias/" }}</a>{% else %}<a href="{{ evidencia.url }}">{{ evidencia.url }}</a>{% endif %}</td>
-                                    <td>{{ evidencia.usuario }}</td>
-                                    <td>{{ evidencia.fecha }}</td>
-                                </tr>
-                                {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        {% else %}<p><span data-key="tareas.evidence.empty">No hay evidencias de cierre registradas.</span></p>{% endif %}
-                    </div></div>
-                </div>
-            </div>
-
-            <div class="modal fade{% if document_form.is_bound and document_form.errors %} show d-block{% endif %}" id="agregarDocumentoModal" tabindex="-1" aria-labelledby="agregarDocumentoModalLabel" aria-hidden="{% if document_form.is_bound and document_form.errors %}false{% else %}true{% endif %}"{% if document_form.is_bound and document_form.errors %} style="display: block;"{% endif %}>
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <form method="post" enctype="multipart/form-data">
-                            {% csrf_token %}<input type="hidden" name="accion" value="documento">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="agregarDocumentoModalLabel"><span data-key="tareas.documents.add">Agregar documento</span></h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                            </div>
-                            <div class="modal-body">
-                                {% include "tareas/_i18n_form_errors.html" with errors=document_form.non_field_errors %}
-                                <div class="mb-2"><label for="{{ document_form.tipo.id_for_label }}"><span data-key="tareas.documents.type">Tipo</span></label>{{ document_form.tipo }}{{ document_form.tipo.errors }}</div>
-                                <div class="mb-2"><label for="{{ document_form.formato_archivo.id_for_label }}"><span data-key="tareas.documents.format">Formato de archivo</span></label>{{ document_form.formato_archivo }}{{ document_form.formato_archivo.errors }}</div>
-                                <div class="mb-2"><label for="{{ document_form.archivo.id_for_label }}"><span data-key="tareas.documents.file">Archivo</span></label>{{ document_form.archivo }}{{ document_form.archivo.errors }}</div>
-                                <div class="mb-2"><label for="{{ document_form.url.id_for_label }}"><span data-key="tareas.documents.url">URL</span></label>{{ document_form.url }}{{ document_form.url.errors }}</div>
-                                <div class="row"><div class="col-md-6 mb-2"><label for="{{ document_form.fecha_documento.id_for_label }}"><span data-key="tareas.documents.date">Fecha documento</span></label>{{ document_form.fecha_documento }}{{ document_form.fecha_documento.errors }}</div><div class="col-md-6 mb-2"><label for="{{ document_form.fecha_vencimiento.id_for_label }}"><span data-key="tareas.documents.expiry">Fecha vencimiento</span></label>{{ document_form.fecha_vencimiento }}{{ document_form.fecha_vencimiento.errors }}</div></div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button>
-                                <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.create_document">Registrar documento</span></button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            <div class="modal fade{% if evidencia_registro_form.is_bound and evidencia_registro_form.errors %} show d-block{% endif %}" id="agregarEvidenciaModal" tabindex="-1" aria-labelledby="agregarEvidenciaModalLabel" aria-hidden="{% if evidencia_registro_form.is_bound and evidencia_registro_form.errors %}false{% else %}true{% endif %}"{% if evidencia_registro_form.is_bound and evidencia_registro_form.errors %} style="display: block;"{% endif %}>
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <form id="evidenciaRegistroForm" method="post" enctype="multipart/form-data">
-                            {% csrf_token %}<input type="hidden" name="accion" value="registrar_evidencia">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="agregarEvidenciaModalLabel"><span data-key="tareas.evidence.add">Agregar evidencia de cierre</span></h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                            </div>
-                            <div class="modal-body">
-                                {% include "tareas/_i18n_form_errors.html" with errors=evidencia_registro_form.non_field_errors %}
-                                <div class="mb-2"><label for="{{ evidencia_registro_form.formato_archivo.id_for_label }}"><span data-key="tareas.evidence.file_format">Formato de archivo</span></label>{{ evidencia_registro_form.formato_archivo }}{{ evidencia_registro_form.formato_archivo.errors }}</div>
-                                <div class="mb-2"><label for="{{ evidencia_registro_form.archivo.id_for_label }}"><span data-key="tareas.evidence.file">Archivo</span></label>{{ evidencia_registro_form.archivo }}{{ evidencia_registro_form.archivo.errors }}</div>
-                                <div class="mb-2"><label for="{{ evidencia_registro_form.url.id_for_label }}"><span data-key="tareas.evidence.url">URL</span></label>{{ evidencia_registro_form.url }}{{ evidencia_registro_form.url.errors }}</div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button>
-                                <button type="submit" class="btn btn-outline-success"><span data-key="tareas.actions.register_evidence">Registrar evidencia</span></button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            {% if document_form.is_bound and document_form.errors or evidencia_registro_form.is_bound and evidencia_registro_form.errors %}<div class="modal-backdrop fade show"></div>{% endif %}
+            {% include "tareas/_tarea_documentos.html" with documents_action_url="" documents_return_to_detail=False %}
+            {% include "tareas/_tarea_documentos_modals.html" with documents_action_url="" documents_return_to_detail=False %}
         </div>
     </div>
 </div>

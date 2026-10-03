@@ -39,6 +39,58 @@ class DocumentViewsTests(TestCase):
         self.assertContains(response, documento.url)
         self.assertContains(response, "CREADO")
 
+    def test_detalle_incluye_documentos_con_permiso_especifico(self):
+        assign_permission(self.usuario, self.empresa, "Tareas", ingresar=True)
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[self.tarea.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="tarea-pane-documentos"')
+        self.assertContains(response, "Agregar documento")
+        self.assertContains(response, "Agregar evidencia de cierre")
+        self.assertContains(response, "documentos_evidencia.js")
+
+    def test_post_documento_desde_detalle_vuelve_al_tab_documentos(self):
+        response = self.client.post(
+            reverse("tareas:documentos_tarea", args=[self.tarea.pk]),
+            {
+                "accion": "documento",
+                "tipo": DocumentoTarea.Tipo.CONTRATO,
+                "formato_archivo": DocumentoTarea.FormatoArchivo.PDF,
+                "url": "https://example.com/contrato-detalle",
+                "fecha_documento": "2026-09-01",
+                "next": "detalle",
+            },
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('tareas:detalle_tarea', args=[self.tarea.pk])}#tarea-pane-documentos",
+        )
+
+    def test_post_evidencia_desde_detalle_vuelve_al_tab_documentos(self):
+        response = self.client.post(
+            reverse("tareas:documentos_tarea", args=[self.tarea.pk]),
+            {
+                "accion": "registrar_evidencia",
+                "formato_archivo": FormatoArchivo.PDF,
+                "url": "https://example.com/evidencia-detalle",
+                "next": "detalle",
+            },
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('tareas:detalle_tarea', args=[self.tarea.pk])}#tarea-pane-documentos",
+        )
+
+    def test_post_invalido_desde_detalle_conserva_modal_documento(self):
+        response = self.client.post(
+            reverse("tareas:documentos_tarea", args=[self.tarea.pk]),
+            {"accion": "documento", "next": "detalle"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="tarea-pane-documentos"')
+        self.assertContains(response, 'class="modal fade show d-block"')
+        self.assertContains(response, 'id="agregarDocumentoModal"')
+        self.assertTrue(response.context["document_form"].errors)
+
     def test_modal_evidencia_no_exige_documento_y_muestra_fuentes(self):
         response = self.client.get(reverse("tareas:documentos_tarea", args=[self.tarea.pk]))
 

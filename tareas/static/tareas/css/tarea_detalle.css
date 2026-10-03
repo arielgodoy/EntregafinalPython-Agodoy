@@ -30,9 +30,57 @@
     margin-top: 0 !important;
 }
 
+.task-detail__tabs-nav {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    margin-top: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0.25rem 0;
+    white-space: nowrap;
+}
+
+.task-detail__tabs-nav .nav-link {
+    white-space: nowrap;
+}
+
+.task-detail__tabs-nav.nav-tabs-custom .nav-item .nav-link.active {
+    color: var(--vz-primary);
+    font-weight: 600;
+}
+
+.task-detail__tabs-nav.nav-tabs-custom .nav-item .nav-link.active::after {
+    height: 2px;
+    background: var(--vz-primary);
+    transform: scale(1);
+}
+
+.task-detail__tabs-nav.nav-tabs-custom .nav-item .nav-link {
+    outline-offset: -2px;
+}
+
+.task-detail__tabs-content {
+    min-width: 0;
+}
+
+.task-detail__tabs-content > .tab-pane > .task-detail__module {
+    margin-top: 0 !important;
+}
+
 .task-detail__module {
     background: var(--vz-secondary-bg);
     box-shadow: var(--vz-box-shadow-sm);
+}
+
+.task-detail__hitos-progress-card input[type="number"] {
+    display: block;
+    width: 100%;
+    min-height: calc(1.5em + 0.5rem + 2px);
+    padding: 0.25rem 0.5rem;
+    color: var(--vz-body-color);
+    background-color: var(--vz-input-bg-custom);
+    border: 1px solid var(--vz-input-border-custom);
+    border-radius: var(--vz-border-radius);
 }
 
 [data-bs-theme="light"] .task-detail__module {
@@ -61,6 +109,10 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.3rem;
+}
+
+.task-detail__badges .badge {
+    font-size: 0.75rem;
 }
 
 .task-detail__facts {
@@ -376,10 +428,12 @@
 }
 
 .task-detail__mini-form {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(11rem, 1fr) auto;
-    gap: 0.6rem;
-    align-items: center;
+    margin-inline: 0;
+}
+
+.task-detail__mini-form input,
+.task-detail__mini-form select {
+    width: 100%;
 }
 
 .task-detail__mini-field .form-label {
@@ -390,6 +444,16 @@
 
 .task-detail__mini-field--submit {
     align-self: end;
+}
+
+.task-detail__mini-create-blocked {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px dashed var(--vz-border-color);
+    border-radius: var(--vz-border-radius);
+    background: var(--vz-tertiary-bg);
 }
 
 .task-detail__mini-row {
@@ -435,6 +499,7 @@
 
 .task-detail__mini-assignee,
 .task-detail__mini-evidence {
+    min-width: 0;
     color: var(--bs-secondary-color);
     font-size: 0.82rem;
 }
@@ -447,12 +512,26 @@
 .task-detail__mini-attachment {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 1.9rem;
-    height: 1.9rem;
+    min-width: 0;
+    max-width: 100%;
+    gap: 0.35rem;
     border-radius: 0.25rem;
     color: var(--bs-secondary-color);
     text-decoration: none;
+}
+
+.task-detail__mini-file-name {
+    min-width: 0;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-detail__mini-file-count {
+    flex: 0 0 auto;
+    color: var(--bs-secondary-color);
+    font-size: 0.72rem;
 }
 
 .task-detail__mini-attachment:hover,
@@ -483,6 +562,24 @@
     border-top: 0;
 }
 
+.task-detail__top-actions {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--vz-border-color);
+}
+
+.task-detail__nav-actions,
+.task-detail__task-actions {
+    min-width: 0;
+}
+
+.task-detail__task-actions {
+    flex: 1 1 auto;
+}
+
+.task-detail__top-actions form {
+    margin: 0;
+}
+
 .task-detail__actions-navigation,
 .task-detail__lifecycle-actions {
     width: 100%;
@@ -499,6 +596,12 @@
 }
 
 .task-detail__actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.task-detail__top-actions .btn {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
@@ -587,15 +690,6 @@
         gap: 0.75rem;
     }
 
-    .task-detail__mini-form {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    }
-
-    .task-detail__mini-field--description,
-    .task-detail__mini-field--submit {
-        grid-column: 1 / -1;
-    }
-
     .task-detail__mini-field--submit .btn {
         width: 100%;
     }
@@ -641,6 +735,15 @@
     .task-detail__action-group,
     .task-detail__danger-group {
         width: 100%;
+    }
+
+    .task-detail__nav-actions,
+    .task-detail__task-actions {
+        width: 100%;
+    }
+
+    .task-detail__task-actions {
+        justify-content: flex-start !important;
     }
 
     .task-detail__operational-accordions {

@@ -16,7 +16,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils import timezone
@@ -628,6 +628,33 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         ).filter(
             pk__in=effective_participant_ids(self.object)
         ).exclude(pk=self.request.user.pk).order_by("username")
+        context["puede_ver_hitos"] = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas - Hitos",
+            accion="ingresar",
+        )
+        if context["puede_ver_hitos"]:
+            context.update(_build_hitos_context(self.object, self.request.user))
+            context["hitos_action_url"] = reverse(
+                "tareas:hitos_tarea",
+                kwargs={"pk": self.object.pk},
+            )
+            context["hitos_return_to_detail"] = True
+        context["puede_ver_documentos"] = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.object.empresa,
+            vista_nombre="Tareas - Documentos y evidencia",
+            accion="modificar",
+        )
+        if context["puede_ver_documentos"]:
+            context.update(_build_document_context(self.object))
+            context["documents_action_url"] = reverse(
+                "tareas:documentos_tarea",
+                kwargs={"pk": self.object.pk},
+            )
+            context["documents_return_to_detail"] = True
+            context.setdefault("documentos_tab_activo", False)
         return context
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
@@ -1662,6 +1689,38 @@ class ReactivarTareaView(TareaLifecycleView):
     accion = "reactivar"
 
 
+def _build_hitos_context(tarea, actor, **form_overrides):
+    avance = Avance.objects.filter(tarea=tarea).first()
+    hitos = list(
+        tarea.hitos.select_related("responsable", "completado_por").prefetch_related(
+            Prefetch(
+                "evidencias",
+                queryset=HitoEvidencia.objects.select_related("usuario").order_by("fecha", "pk"),
+            )
+        )
+    )
+    for hito in hitos:
+        capability = milestone_capability(tarea, hito, actor)
+        hito.puede_gestionar = capability == "manage"
+        hito.puede_actualizar = capability in {"progress", "manage"}
+        hito.puede_completar = capability in {"progress", "manage"} and not hito.completado
+    return {
+        "tarea": tarea,
+        "hitos": hitos,
+        "responsables_validos": HitoCrearForm(tarea=tarea).fields["responsable"].queryset,
+        "avance": avance,
+        "avance_calculado": weighted_progress(tarea),
+        "hito_form": form_overrides.get("hito_form", HitoCrearForm(tarea=tarea)),
+        "editar_form": form_overrides.get("editar_form", HitoForm()),
+        "reasignar_form": form_overrides.get("reasignar_form", HitoReasignacionForm(tarea=tarea)),
+        "completar_form": form_overrides.get("completar_form", CompletarHitoForm()),
+        "modal_abierto_hito_id": form_overrides.get("modal_abierto_hito_id"),
+        "modal_abierto_accion": form_overrides.get("modal_abierto_accion"),
+        "manual_form": form_overrides.get("manual_form", AvanceManualForm()),
+        "ponderado_form": form_overrides.get("ponderado_form", AvancePonderadoForm()),
+    }
+
+
 class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Hitos"
     permiso_requerido = "ingresar"
@@ -1669,39 +1728,15 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
     def get_tarea(self, pk):
         return get_object_or_404(self.get_queryset(), pk=pk)
 
-    def get_context(self, tarea, **forms):
-        avance = Avance.objects.filter(tarea=tarea).first()
-        hitos = list(
-            tarea.hitos.select_related("responsable", "completado_por").prefetch_related(
-                Prefetch(
-                    "evidencias",
-                    queryset=HitoEvidencia.objects.select_related("usuario").order_by("fecha", "pk"),
-                )
+    def redirect_after_post(self, request, tarea):
+        if request.POST.get("next") == "detalle":
+            return redirect(
+                f"{reverse('tareas:detalle_tarea', kwargs={'pk': tarea.pk})}#tarea-pane-hitos"
             )
-        )
-        for hito in hitos:
-            capability = milestone_capability(tarea, hito, self.request.user)
-            hito.puede_gestionar = capability == "manage"
-            hito.puede_actualizar = capability in {
-                "progress",
-                "manage",
-            }
-            hito.puede_completar = capability in {"progress", "manage"} and not hito.completado
-        return {
-            "tarea": tarea,
-            "hitos": hitos,
-            "responsables_validos": HitoCrearForm(tarea=tarea).fields["responsable"].queryset,
-            "avance": avance,
-            "avance_calculado": weighted_progress(tarea),
-            "hito_form": forms.get("hito_form", HitoCrearForm(tarea=tarea)),
-            "editar_form": forms.get("editar_form", HitoForm()),
-            "reasignar_form": forms.get("reasignar_form", HitoReasignacionForm(tarea=tarea)),
-            "completar_form": forms.get("completar_form", CompletarHitoForm()),
-            "modal_abierto_hito_id": forms.get("modal_abierto_hito_id"),
-            "modal_abierto_accion": forms.get("modal_abierto_accion"),
-            "manual_form": forms.get("manual_form", AvanceManualForm()),
-            "ponderado_form": forms.get("ponderado_form", AvancePonderadoForm()),
-        }
+        return redirect("tareas:hitos_tarea", pk=tarea.pk)
+
+    def get_context(self, tarea, **forms):
+        return _build_hitos_context(tarea, self.request.user, **forms)
 
     def get(self, request, pk):
         tarea = self.get_tarea(pk)
@@ -1743,7 +1778,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.milestone_created")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
         hito = None
         if request.POST.get("hito_id"):
@@ -1768,7 +1803,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.milestone_completed")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(
                 request,
                 "tareas/tarea_hitos.html",
@@ -1794,7 +1829,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.milestone_updated")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(
                 request,
                 "tareas/tarea_hitos.html",
@@ -1818,7 +1853,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.milestone_progress_updated")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(
                 request,
                 "tareas/tarea_hitos.html",
@@ -1843,7 +1878,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.milestone_reassigned")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(
                 request,
                 "tareas/tarea_hitos.html",
@@ -1861,7 +1896,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 messages.error(request, "; ".join(exc.messages))
             else:
                 messages.success(request, "tareas.messages.milestone_status_updated")
-            return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return self.redirect_after_post(request, tarea)
         if accion == "eliminar_hito":
             try:
                 delete_milestone_safely(hito, request.user)
@@ -1869,7 +1904,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                 messages.error(request, "; ".join(exc.messages))
             else:
                 messages.success(request, "tareas.messages.milestone_deleted_or_annulled")
-            return redirect("tareas:hitos_tarea", pk=tarea.pk)
+            return self.redirect_after_post(request, tarea)
         if accion == "manual":
             form = AvanceManualForm(request.POST)
             if form.is_valid():
@@ -1879,7 +1914,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.manual_progress_updated")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, manual_form=form))
         if accion == "ponderado":
             form = AvancePonderadoForm(request.POST)
@@ -1890,12 +1925,24 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.weighted_mode_configured")
-                    return redirect("tareas:hitos_tarea", pk=tarea.pk)
+                    return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, ponderado_form=form))
         raise ValidationError(
             "tareas.messages.progress_action_not_configured",
             code="tareas.messages.progress_action_not_configured",
         )
+
+
+def _build_document_context(tarea, **form_overrides):
+    return {
+        "tarea": tarea,
+        "documentos": tarea.documentos.all().prefetch_related("historial__usuario"),
+        "evidencias": tarea.evidencias_cierre.select_related("usuario").order_by("-fecha", "-pk"),
+        "document_form": form_overrides.get("document_form", DocumentoForm()),
+        "evidencia_registro_form": form_overrides.get(
+            "evidencia_registro_form", EvidenciaRegistroForm()
+        ),
+    }
 
 
 class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
@@ -1906,17 +1953,33 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
         return get_object_or_404(self.get_queryset(), pk=pk)
 
     def get_context(self, tarea, **forms):
-        documentos = tarea.documentos.all().prefetch_related("historial__usuario")
-        evidencias = tarea.evidencias_cierre.select_related("usuario").order_by("-fecha", "-pk")
-        return {
-            "tarea": tarea,
-            "documentos": documentos,
-            "evidencias": evidencias,
-            "document_form": forms.get("document_form", DocumentoForm()),
-            "evidencia_registro_form": forms.get(
-                "evidencia_registro_form", EvidenciaRegistroForm()
-            ),
-        }
+        return _build_document_context(tarea, **forms)
+
+    def redirect_after_post(self, request, tarea):
+        if request.POST.get("next") == "detalle":
+            return redirect(
+                f"{reverse('tareas:detalle_tarea', kwargs={'pk': tarea.pk})}#tarea-pane-documentos"
+            )
+        return redirect("tareas:documentos_tarea", pk=tarea.pk)
+
+    def render_invalid(self, request, tarea, **forms):
+        if request.POST.get("next") != "detalle":
+            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, **forms))
+        detail_view = DetalleTareaView()
+        detail_view.request = request
+        detail_view.args = ()
+        detail_view.kwargs = {"pk": tarea.pk}
+        detail_view.object = tarea
+        context = detail_view.get_context_data(object=tarea)
+        context.update(_build_document_context(tarea, **forms))
+        context["puede_ver_documentos"] = True
+        context["documents_action_url"] = reverse(
+            "tareas:documentos_tarea",
+            kwargs={"pk": tarea.pk},
+        )
+        context["documents_return_to_detail"] = True
+        context["documentos_tab_activo"] = True
+        return render(request, "tareas/tarea_detalle.html", context)
 
     def get(self, request, pk):
         tarea = self.get_tarea(pk)
@@ -1941,14 +2004,10 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                     )
                 except ValidationError as exc:
                     form.add_error(None, exc)
-                    return render(
-                        request,
-                        "tareas/tarea_documentos.html",
-                        self.get_context(tarea, document_form=form),
-                    )
+                    return self.render_invalid(request, tarea, document_form=form)
                 messages.success(request, "tareas.messages.document_registered")
-                return redirect("tareas:documentos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, document_form=form))
+                return self.redirect_after_post(request, tarea)
+            return self.render_invalid(request, tarea, document_form=form)
         if accion == "registrar_evidencia":
             form = EvidenciaRegistroForm(request.POST, request.FILES)
             if form.is_valid():
@@ -1969,14 +2028,10 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
                     else:
                         for mensaje in exc.messages:
                             form.add_error(None, mensaje)
-                    return render(
-                        request,
-                        "tareas/tarea_documentos.html",
-                        self.get_context(tarea, evidencia_registro_form=form),
-                    )
+                    return self.render_invalid(request, tarea, evidencia_registro_form=form)
                 messages.success(request, "tareas.messages.evidence_registered")
-                return redirect("tareas:documentos_tarea", pk=tarea.pk)
-            return render(request, "tareas/tarea_documentos.html", self.get_context(tarea, evidencia_registro_form=form))
+                return self.redirect_after_post(request, tarea)
+            return self.render_invalid(request, tarea, evidencia_registro_form=form)
         raise ValidationError(
             "tareas.messages.document_action_not_configured",
             code="tareas.messages.document_action_not_configured",

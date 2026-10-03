@@ -42,6 +42,26 @@ class ProgressViewsTests(TestCase):
         self.assertContains(response, "Cumplimiento (%)")
         self.assertContains(response, "Peso del hito (%)")
 
+    def test_detalle_embeds_hitos_with_hitos_permission(self):
+        assign_permission(self.usuario, self.empresa, "Tareas", ingresar=True)
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[self.tarea.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="tarea-pane-hitos"')
+        self.assertContains(response, "Configurar avance manual")
+        self.assertContains(response, "Crear hito")
+
+    def test_detalle_hitos_tab_requires_hitos_permission(self):
+        usuario = create_user(username="progress-detail-reader")
+        assign_permission(usuario, self.empresa, "Tareas", ingresar=True)
+        self.client.logout()
+        self.client.login(username="progress-detail-reader", password="password-prueba")
+        session = self.client.session
+        session["empresa_id"] = self.empresa.id
+        session.save()
+        response = self.client.get(reverse("tareas:detalle_tarea", args=[self.tarea.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="tarea-pane-hitos"')
+
     def test_post_crea_hito_mediante_servicio(self):
         response = self.client.post(
             reverse("tareas:hitos_tarea", args=[self.tarea.pk]),
@@ -55,6 +75,25 @@ class ProgressViewsTests(TestCase):
         )
         self.assertRedirects(response, reverse("tareas:hitos_tarea", args=[self.tarea.pk]))
         self.assertTrue(Hito.objects.filter(tarea=self.tarea, nombre="Ejecución").exists())
+
+    def test_post_desde_detalle_vuelve_al_tab_hitos(self):
+        response = self.client.post(
+            reverse("tareas:hitos_tarea", args=[self.tarea.pk]),
+            {
+                "accion": "hito",
+                "nombre": "Desde detalle",
+                "responsable": self.usuario.pk,
+                "cumplimiento": "0",
+                "peso": "1",
+                "next": "detalle",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            f"{reverse('tareas:detalle_tarea', args=[self.tarea.pk])}#tarea-pane-hitos",
+        )
+        self.assertTrue(Hito.objects.filter(tarea=self.tarea, nombre="Desde detalle").exists())
 
     def test_post_configura_avance_manual_y_ponderado(self):
         self.client.post(
