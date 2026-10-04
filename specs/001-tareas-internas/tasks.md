@@ -199,24 +199,24 @@ otra APPLICATION_APP y consumiendo solo infraestructura pública SYSTEM/CORE.
 Django, las fuentes se resuelven sin fallback, permisos y errores son controlados, y no
 existen imports funcionales desde `gestiondte`.
 
-- [ ] T103 [US8] Crear `TareaConnectionRole` global en `tareas/models.py` con cuatro roles cerrados, fuente XOR, alias Django, conexión MySQL, base validada y sin FK Empresa ni credenciales.
-- [ ] T104 [US8] Crear la migración aditiva de `TareaConnectionRole` en `tareas/migrations/` sin modificar migraciones externas ni ejecutarla durante la generación.
-- [ ] T105 [US8] Implementar `tareas/services/connection_roles.py` con catálogo SYSTEM adaptado, resolver propio, errores controlados y rechazo de fallback a `default`.
-- [ ] T106 [US8] Implementar el form propio en `tareas/forms.py`, restringiendo Legacy a MySQL y validando alias SYSTEM, conexión activa, XOR y `database_name`.
-- [ ] T107 [US8] Implementar la view propia en `tareas/views.py` con identidad `Tareas - Conexiones SQL`, `ingresar` para GET y `modificar` para POST.
-- [ ] T108 [US8] Añadir la URL `/tareas/configuracion/conexiones/` con nombre `tareas:conexiones_sql` en `tareas/urls.py`.
-- [ ] T109 [US8] Crear template propio en `tareas/templates/tareas/` con cuatro bloques, i18n y respuestas controladas; no reutilizar templates de Gestión DTE.
-- [ ] T110 [US8] Crear JS propio bajo `tareas/static/tareas/` para selectores de fuente; no modificar vendor ni `gestiondte/static/`.
-- [ ] T111 [US8] Registrar la Vista VICMEAS y submenu mediante una tarea externa autorizada en `access_control`, documentando la dependencia y sin modificarla desde esta fase.
-- [ ] T112 [US8] Añadir tests de modelo para unicidad global, cuatro roles, XOR, ausencia de FK Empresa y restricciones Legacy.
-- [ ] T113 [US8] Añadir tests del resolver para alias SYSTEM, conexión activa, `database_name`, role inexistente, role sin configurar y no fallback.
-- [ ] T114 [US8] Añadir tests de forms/views para permisos, 200, 302, 400, 403 y respuestas sin secretos.
-- [ ] T115 [US8] Añadir tests contractuales de consumo Django `.using(alias)` y MySQL mediante `open_mysql_connection()` con mocks.
-- [ ] T116 [US8] Añadir test de independencia que confirme que Tareas no importa `gestiondte` funcional.
-- [ ] T117 [US8] Ejecutar el gate i18n de la nueva superficie y verificar claves ES/EN sin modificar diccionarios globales sin autorización.
-- [ ] T118 [US8] Ejecutar `python manage.py check --settings=AppDocs.settings_test` y la regresión focalizada de `tareas`.
-- [ ] T119 [US8] Validar los escenarios de conexiones SQL del `quickstart.md` y actualizar únicamente evidencia documental.
-- [ ] T120 [US8] Revisar diff, boundary, ausencia de cambios en router/DATABASES/settings/Gestión DTE y cerrar la documentación de la fase.
+- [ ] T106 [US8] Crear `TareaConnectionRole` global en `tareas/models.py` con cuatro roles cerrados, fuente XOR, alias Django, conexión MySQL, base validada y sin FK Empresa ni credenciales.
+- [ ] T107 [US8] Crear la migración aditiva de `TareaConnectionRole` en `tareas/migrations/` sin modificar migraciones externas ni ejecutarla durante la generación.
+- [ ] T108 [US8] Implementar `tareas/services/connection_roles.py` con catálogo SYSTEM adaptado, resolver propio, errores controlados y rechazo de fallback a `default`.
+- [ ] T109 [US8] Implementar el form propio en `tareas/forms.py`, restringiendo Legacy a MySQL y validando alias SYSTEM, conexión activa, XOR y `database_name`.
+- [ ] T110 [US8] Implementar la view propia en `tareas/views.py` con identidad `Tareas - Conexiones SQL`, `ingresar` para GET y `modificar` para POST.
+- [ ] T111 [US8] Añadir la URL `/tareas/configuracion/conexiones/` con nombre `tareas:conexiones_sql` en `tareas/urls.py`.
+- [ ] T112 [US8] Crear template propio en `tareas/templates/tareas/` con cuatro bloques, i18n y respuestas controladas; no reutilizar templates de Gestión DTE.
+- [ ] T113 [US8] Crear JS propio bajo `tareas/static/tareas/` para selectores de fuente; no modificar vendor ni `gestiondte/static/`.
+- [ ] T114 [US8] Registrar la Vista VICMEAS y submenu mediante una tarea externa autorizada en `access_control`, documentando la dependencia y sin modificarla desde esta fase.
+- [ ] T115 [US8] Añadir tests de modelo para unicidad global, cuatro roles, XOR, ausencia de FK Empresa y restricciones Legacy.
+- [ ] T116 [US8] Añadir tests del resolver para alias SYSTEM, conexión activa, `database_name`, role inexistente, role sin configurar y no fallback.
+- [ ] T117 [US8] Añadir tests de forms/views para permisos, 200, 302, 400, 403 y respuestas sin secretos.
+- [ ] T118 [US8] Añadir tests contractuales de consumo Django `.using(alias)` y MySQL mediante `open_mysql_connection()` con mocks.
+- [ ] T119 [US8] Añadir test de independencia que confirme que Tareas no importa `gestiondte` funcional.
+- [ ] T120 [US8] Ejecutar el gate i18n de la nueva superficie y verificar claves ES/EN sin modificar diccionarios globales sin autorización.
+- [ ] T121 [US8] Ejecutar `python manage.py check --settings=AppDocs.settings_test` y la regresión focalizada de `tareas`.
+- [ ] T122 [US8] Validar los escenarios de conexiones SQL del `quickstart.md` y actualizar únicamente evidencia documental.
+- [ ] T123 [US8] Revisar diff, boundary, ausencia de cambios en router/DATABASES/settings/Gestión DTE y cerrar la documentación de la fase.
 
 ### Regla transversal de cierre i18n
 
