@@ -20,7 +20,13 @@ from .models import (
     ReunionRevision,
     ReunionTarea,
     Tarea,
+    TareaConnectionRole,
     TareaParticipante,
+)
+from .services.connection_roles import (
+    get_active_mysql_connection_catalog,
+    get_system_database_catalog,
+    is_allowed_mysql_connection,
 )
 
 
@@ -467,3 +473,88 @@ class ReunionTareaForm(forms.ModelForm):
             if empresa is not None
             else self.fields["tarea"].queryset.none()
         )
+
+
+class TareaConnectionRoleForm(forms.ModelForm):
+    class Meta:
+        model = TareaConnectionRole
+        fields = ("source_type", "django_alias", "mysql_connection", "database_name")
+        widgets = {
+            "source_type": forms.Select(attrs={"data-role-source-type": "true"}),
+            "django_alias": forms.Select(attrs={"data-role-django-alias": "true"}),
+            "mysql_connection": forms.Select(attrs={"data-role-mysql-connection": "true"}),
+            "database_name": forms.TextInput(attrs={"data-role-database-name": "true"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.role = kwargs.pop("role", None)
+        super().__init__(*args, **kwargs)
+        self.role = self.role or self.instance.role
+        self.show_database_name = self.role in TareaConnectionRole.DATABASE_CONFIGURABLE_ROLES
+        if not self.show_database_name:
+            self.fields.pop("database_name")
+        elif not self.is_bound and not self.instance.database_name:
+            self.initial["database_name"] = {
+                "BASE_TAREAS": "tareas",
+                "AUDITORIA_TAREAS": "tareas_auditoria",
+            }[self.role]
+        if self.role in TareaConnectionRole.LEGACY_MYSQL_ROLES:
+            self.fields["source_type"].choices = (("MYSQL_CONFIG", "Conexión MySQL"),)
+            self.fields["source_type"].widget.choices = self.fields["source_type"].choices
+        django_alias_choices = [
+            ("", "Seleccione una conexión del sistema"),
+            *[
+                (
+                    item["alias"],
+                    f"{item['alias']} ({item['vendor']} / {item['classification']})",
+                )
+                for item in get_system_database_catalog()
+            ],
+        ]
+        self.fields["django_alias"].choices = django_alias_choices
+        self.fields["django_alias"].widget.choices = django_alias_choices
+        self.fields["django_alias"].required = False
+        self.fields["mysql_connection"].queryset = get_active_mysql_connection_catalog()
+        self.fields["mysql_connection"].required = False
+        self.fields["mysql_connection"].label_from_instance = (
+            lambda connection: f"{connection.empresa.codigo} - "
+            f"{connection.empresa.descripcion or 'Sin descripción'} / "
+            f"{connection.nombre_logico}"
+        )
+        self.fields["source_type"].required = self.role in TareaConnectionRole.LEGACY_MYSQL_ROLES
+
+    def clean(self):
+        cleaned = super().clean()
+        source_type = cleaned.get("source_type")
+        django_alias = (cleaned.get("django_alias") or "").strip()
+        mysql_connection = cleaned.get("mysql_connection")
+
+        if source_type == "DJANGO":
+            if self.role in TareaConnectionRole.LEGACY_MYSQL_ROLES:
+                self.add_error("source_type", "Los roles Legacy requieren una conexión MySQL.")
+            if not django_alias:
+                self.add_error("django_alias", "Debe seleccionar un alias Django SYSTEM.")
+            if mysql_connection is not None:
+                self.add_error("mysql_connection", "No puede combinar ambas fuentes.")
+            cleaned["django_alias"] = django_alias or None
+            cleaned["mysql_connection"] = None
+            cleaned["database_name"] = None
+            self.instance.database_name = None
+        elif source_type == "MYSQL_CONFIG":
+            if mysql_connection is None:
+                self.add_error("mysql_connection", "Debe seleccionar una conexión MySQL activa.")
+            elif not is_allowed_mysql_connection(mysql_connection):
+                self.add_error(
+                    "mysql_connection",
+                    "La conexión debe pertenecer al catálogo Empresa 00 y estar activa.",
+                )
+            if django_alias:
+                self.add_error("django_alias", "No puede combinar ambas fuentes.")
+            cleaned["django_alias"] = None
+            if self.role not in TareaConnectionRole.DATABASE_CONFIGURABLE_ROLES:
+                cleaned["database_name"] = None
+                self.instance.database_name = None
+        else:
+            self.add_error("source_type", "Debe seleccionar el tipo de conexión.")
+
+        return cleaned

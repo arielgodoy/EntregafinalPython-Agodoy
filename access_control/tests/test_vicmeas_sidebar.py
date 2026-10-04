@@ -91,6 +91,10 @@ class VicmeasSidebarTests(TestCase):
             nombre="Tareas - Dashboard personal",
             defaults={"route_name": "tareas:mis_tareas"},
         )
+        self.tasks_connections, _ = Vista.objects.get_or_create(
+            nombre="Tareas - Conexiones SQL",
+            defaults={"route_name": "tareas:conexiones_sql"},
+        )
         self.tasks_core, _ = Vista.objects.get_or_create(
             nombre="Tareas",
             defaults={"route_name": "tareas:listar_tareas"},
@@ -731,6 +735,16 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertNotIn("tasks_dashboard", visible)
+
+    def test_tasks_connections_v_controls_sidebar_visibility(self):
+        permiso = self._permission(self.empresa_a, self.tasks_connections, ver=True)
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertIn("tasks_connections", visible)
+
+        permiso.ver = False
+        permiso.save(update_fields=("ver",))
+        visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
+        self.assertNotIn("tasks_connections", visible)
 
     def test_tasks_sidebar_items_bind_to_canonical_registry_definitions(self):
         self._permission(self.empresa_a, self.tasks_core, ver=True)

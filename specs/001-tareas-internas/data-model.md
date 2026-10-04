@@ -12,7 +12,7 @@ modelo real todavía. Su alcance es `GLOBAL POR APP`.
 | `role` | choice/string | Único global; exactamente `BASE_TAREAS`, `AUDITORIA_TAREAS`, `LEGACY_MYSQL`, `LEGACY_AUDITORIA` |
 | `source_type` | choice | `DJANGO` o `MYSQL_CONFIG` |
 | `django_alias` | string nullable | Obligatorio solo para Django; debe existir y ser SYSTEM |
-| `mysql_connection` | FK conceptual nullable | Obligatorio solo para MySQL; referencia `SettingsMySQLConnection` activa |
+| `mysql_connection` | FK conceptual nullable | Obligatorio solo para MySQL; referencia una `SettingsMySQLConnection` activa del catálogo Tareas (`Empresa.codigo == "00"`) |
 | `database_name` | string nullable | Requerido cuando el rol MySQL lo necesite y validado por patron seguro |
 | `created_at` | datetime | Auditoria |
 | `updated_at` | datetime | Auditoria |
@@ -20,6 +20,8 @@ modelo real todavía. Su alcance es `GLOBAL POR APP`.
 Reglas invariantes:
 
 - no existe FK a `Empresa`;
+- las fuentes MySQL válidas pertenecen a `Empresa.codigo == "00"`;
+- la empresa activa de sesión no interviene en la selección;
 - Django y MySQL son XOR;
 - Legacy no admite Django;
 - no se guardan credenciales en Tareas;

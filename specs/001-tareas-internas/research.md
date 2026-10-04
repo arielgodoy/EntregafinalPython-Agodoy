@@ -176,6 +176,16 @@ proveedores Django distintos vigentes sin sumar rondas.
   settings funcional, seed/sidebar de CORE ni Gestion DTE desde la feature.
 - **Rationale**: son dependencias externas protegidas y requieren autorizacion propia.
 
+### D20. Catalogo MySQL central de Tareas
+
+- **Decision**: Tareas consume únicamente conexiones activas de
+  `SettingsMySQLConnection` cuya `Empresa.codigo == "00"`; la empresa activa de sesión
+  no participa en la selección ni resolución.
+- **Rationale**: preserva el modelo per-company de Settings y da a Tareas un catálogo
+  central estable para sus roles globales sin modificar Settings, Gestión DTE, API o router.
+- **Alternatives considered**: usar la empresa activa, globalizar Settings o crear una
+  capa de asignaciones; quedan fuera de esta feature.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.

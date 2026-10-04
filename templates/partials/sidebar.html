@@ -187,6 +187,9 @@
                             {% if "tasks_dashboard" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:mis_tareas' %}" class="nav-link" data-key="menu.tareas.dashboard">Mis Hitos y Tareas</a>
                             </li>{% endif %}
+                            {% if "tasks_connections" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'tareas:conexiones_sql' %}" class="nav-link" data-key="menu.tareas.connections">Conexiones SQL</a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}

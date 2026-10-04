@@ -21,6 +21,11 @@ VISTAS = [
         "route_name": "gestion_dte:connection_roles",
         "legacy_names": ("Configuración - Conexiones Gestión DTE",),
     },
+    {
+        "nombre": "Tareas - Conexiones SQL",
+        "descripcion": "Configuración global de roles de conexión Tareas",
+        "route_name": "tareas:conexiones_sql",
+    },
     {"nombre": "API - Acceso", "descripcion": "Acceso a la API protegido por ICMEAS"},
     {"nombre": "API - Maestros Locales", "descripcion": "Acceso API al maestro de locales"},
 ]

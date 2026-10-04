@@ -25,7 +25,8 @@ se describen escenarios de verificación end-to-end.
 8. Un role inexistente, alias invalido, conexion inexistente/inactiva o `database_name`
    invalido devuelve error controlado.
 9. No existe fallback a `default`.
-10. Cambiar la empresa activa no crea ni resuelve un segundo conjunto `(empresa, role)`.
+10. Con Empresa 09 activa, el catálogo MySQL de Tareas sigue mostrando únicamente
+   conexiones activas asociadas a Empresa código `00`; la empresa activa no interviene.
 11. Los tests confirman ausencia de imports desde `gestiondte` y ausencia de credenciales
    en HTML, respuestas y logs.
 

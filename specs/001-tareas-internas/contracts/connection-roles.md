@@ -28,6 +28,10 @@ role)` ni FK `Empresa` en el modelo de roles.
 
 Django y MySQL son mutuamente excluyentes. Legacy solo admite MySQL.
 
+Para Tareas, el catálogo MySQL disponible para estos roles corresponde exclusivamente a
+conexiones activas de `SettingsMySQLConnection` asociadas a `Empresa.codigo == "00"`.
+La empresa activa de sesión no interviene en la selección ni resolución.
+
 ## Resolver
 
 Entrada conceptual:
@@ -65,6 +69,7 @@ El resolver debe producir errores controlados para:
 - alias no clasificado como SYSTEM;
 - conexion MySQL inexistente;
 - conexion MySQL inactiva;
+- conexion MySQL fuera del catálogo Empresa 00;
 - `database_name` invalido;
 - tipo de fuente prohibido;
 - combinacion simultanea de fuentes.

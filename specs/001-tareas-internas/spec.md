@@ -124,6 +124,11 @@ Tareas debe resolver sus roles dentro de la propia app y consumir unicamente API
 de SYSTEM/CORE. No puede importar codigo funcional de `gestiondte`, aunque Gestion DTE y
 `CertificadoSIIRepository` sean referencias de implementacion.
 
+Para fuentes MySQL, Tareas consume como catálogo central únicamente las conexiones activas
+de `SettingsMySQLConnection` asociadas a `Empresa.codigo == "00"`. La empresa activa de la
+sesión no interviene en la selección ni resolución del catálogo Tareas. Esto no globaliza
+`SettingsMySQLConnection`, que conserva su FK y CRUD por Empresa.
+
 La superficie `Tareas - Conexiones SQL` usa Vista VICMEAS propia: `V` controla visibilidad,
 `ingresar` permite consultar y `modificar` guardar. `supervisor` queda reservado para una
 operacion estructural futura. La catalogacion de Vista y submenu pertenece a infraestructura

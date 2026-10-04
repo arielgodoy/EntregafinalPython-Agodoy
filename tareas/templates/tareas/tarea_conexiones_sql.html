@@ -1,0 +1,84 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}Tareas - Conexiones SQL{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="tareas.connection_roles.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="card p-4">
+        <h3 data-key="tareas.connection_roles.heading">Tareas - Conexiones SQL</h3>
+        <p data-key="tareas.connection_roles.description">
+          Configuracion global de los roles logicos de conexion de Tareas.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          {% for item in role_forms %}
+          <section class="border rounded p-3 mb-3" data-connection-role="{{ item.role }}">
+            {% if item.role == 'BASE_TAREAS' %}
+              <h5 data-key="tareas.connection_roles.role.BASE_TAREAS">Base tareas</h5>
+            {% elif item.role == 'AUDITORIA_TAREAS' %}
+              <h5 data-key="tareas.connection_roles.role.AUDITORIA_TAREAS">Auditoria tareas</h5>
+            {% elif item.role == 'LEGACY_MYSQL' %}
+              <h5 data-key="tareas.connection_roles.role.LEGACY_MYSQL">Legacy MySQL</h5>
+            {% else %}
+              <h5 data-key="tareas.connection_roles.role.LEGACY_AUDITORIA">Auditoria Legacy</h5>
+            {% endif %}
+            {% for status in connection_status.roles %}
+              {% if status.role == item.role %}
+                {% if status.status == 'configured' %}
+                  <span class="badge bg-success-subtle text-success" data-key="tareas.connection_roles.status.configured">CONFIGURADO</span>
+                {% elif status.status == 'invalid' %}
+                  <span class="badge bg-danger-subtle text-danger" data-key="tareas.connection_roles.status.invalid">CONFIGURACION INVALIDA</span>
+                {% else %}
+                  <span class="badge bg-warning-subtle text-warning" data-key="tareas.connection_roles.status.missing">NO CONFIGURADO</span>
+                {% endif %}
+                {% if status.metadata.alias %}<span class="text-muted ms-2">{{ status.metadata.alias }}</span>{% endif %}
+                {% if status.metadata.empresa %}<span class="text-muted ms-2">{{ status.metadata.empresa }}</span>{% endif %}
+                {% if status.metadata.nombre_logico %}<span class="text-muted ms-2">{{ status.metadata.nombre_logico }}</span>{% endif %}
+                {% if status.metadata.vendor %}<span class="text-muted ms-2">{{ status.metadata.vendor }}</span>{% endif %}
+              {% endif %}
+            {% endfor %}
+            {% if item.form.non_field_errors %}
+              {% for error in item.form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+            {% endif %}
+            <div class="mb-3">
+              <label class="form-label" data-key="tareas.connection_roles.source_type">Tipo de conexion</label>
+              {{ item.form.source_type }}
+              {% for error in item.form.source_type.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="mb-3" data-role-field-container="django_alias">
+              <label class="form-label" data-key="tareas.connection_roles.django_alias">Conexion del sistema</label>
+              {{ item.form.django_alias }}
+              {% for error in item.form.django_alias.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="mb-3" data-role-field-container="mysql_connection">
+              <label class="form-label" data-key="tareas.connection_roles.mysql_connection">Conexion MySQL</label>
+              {{ item.form.mysql_connection }}
+              {% for error in item.form.mysql_connection.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            {% if item.form.show_database_name %}
+              <div class="mb-3" data-role-field-container="database_name">
+                <label class="form-label" data-key="tareas.connection_roles.database_name">Base de datos</label>
+                {{ item.form.database_name }}
+                {% for error in item.form.database_name.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+          </section>
+          {% endfor %}
+          <button type="submit" class="btn btn-success" data-key="buttons.save">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'tareas/js/connection_roles.js' %}"></script>
+{% endblock extra_js %}

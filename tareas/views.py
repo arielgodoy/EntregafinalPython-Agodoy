@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -55,6 +56,7 @@ from .forms import (
     ReunionRevisionForm,
     ReunionTareaForm,
     TareaForm,
+    TareaConnectionRoleForm,
 )
 from .models import (
     Avance,
@@ -69,6 +71,7 @@ from .models import (
     MiniTarea,
     ReunionRevision,
     Tarea,
+    TareaConnectionRole,
     TareaParticipante,
 )
 from .services.context import get_active_company_id
@@ -129,6 +132,7 @@ from .services.links import (
     resolve_task_link,
     revoke_task_link,
 )
+from .services.connection_roles import get_tarea_connection_status
 from .services.progress import (
     create_milestone,
     complete_milestone,
@@ -362,6 +366,65 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             tarea.participantes_visibles = participantes[:4]
             tarea.participantes_restantes = max(0, len(participantes) - 4)
         return context
+
+
+class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    template_name = "tareas/tarea_conexiones_sql.html"
+    vista_nombre = "Tareas - Conexiones SQL"
+    permiso_requerido = "ingresar"
+    verificar_vicmeas_en_dispatch = False
+
+    def _role_instances(self):
+        existing = {
+            item.role: item
+            for item in TareaConnectionRole.objects.select_related(
+                "mysql_connection", "mysql_connection__empresa"
+            )
+        }
+        return [
+            (role, label, existing.get(role))
+            for role, label in TareaConnectionRole.ROLE_CHOICES
+        ]
+
+    def _context(self, forms):
+        return {
+            "role_forms": forms,
+            "connection_status": get_tarea_connection_status(),
+            "vista_nombre": self.vista_nombre,
+        }
+
+    @method_decorator(verificar_permiso(vista_nombre, "ingresar"))
+    def get(self, request):
+        forms = []
+        for role, label, instance in self._role_instances():
+            form = TareaConnectionRoleForm(
+                prefix=f"role-{role}",
+                instance=instance or TareaConnectionRole(role=role),
+                role=role,
+            )
+            forms.append({"role": role, "label": label, "form": form})
+        return render(request, self.template_name, self._context(forms))
+
+    @method_decorator(verificar_permiso(vista_nombre, "modificar"))
+    def post(self, request):
+        forms = []
+        for role, label, instance in self._role_instances():
+            form = TareaConnectionRoleForm(
+                request.POST,
+                prefix=f"role-{role}",
+                instance=instance or TareaConnectionRole(role=role),
+                role=role,
+            )
+            forms.append({"role": role, "label": label, "form": form})
+
+        if not all(item["form"].is_valid() for item in forms):
+            return render(request, self.template_name, self._context(forms), status=400)
+
+        with transaction.atomic():
+            for item in forms:
+                item["form"].save()
+        messages.success(request, "La configuración de conexiones SQL fue guardada.")
+        return redirect(reverse("tareas:conexiones_sql"))
 
 
 class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):

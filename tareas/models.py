@@ -12,6 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from access_control.models import Empresa
+from settings.models import SettingsMySQLConnection
 
 
 class FormatoArchivo(models.TextChoices):
@@ -29,6 +30,107 @@ def formato_coincide_extension(formato, extension):
     if formato in {FormatoArchivo.JPG, FormatoArchivo.JPEG}:
         return extension in {"jpg", "jpeg"}
     return extension == formato.lower()
+
+
+class TareaConnectionRole(models.Model):
+    LEGACY_MYSQL_ROLES = frozenset({
+        "LEGACY_MYSQL",
+        "LEGACY_AUDITORIA",
+    })
+    DATABASE_CONFIGURABLE_ROLES = frozenset({
+        "BASE_TAREAS",
+        "AUDITORIA_TAREAS",
+    })
+    DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+    ROLE_CHOICES = (
+        ("BASE_TAREAS", "Base tareas"),
+        ("AUDITORIA_TAREAS", "Auditoría tareas"),
+        ("LEGACY_MYSQL", "Legacy MySQL"),
+        ("LEGACY_AUDITORIA", "Legacy auditoría"),
+    )
+    SOURCE_TYPE_CHOICES = (
+        ("DJANGO", "Sistema Django"),
+        ("MYSQL_CONFIG", "Conexión MySQL"),
+    )
+
+    role = models.CharField(max_length=32, choices=ROLE_CHOICES, unique=True)
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES)
+    django_alias = models.CharField(max_length=100, null=True, blank=True)
+    mysql_connection = models.ForeignKey(
+        SettingsMySQLConnection,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tareas_connection_roles",
+    )
+    database_name = models.CharField(max_length=64, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        source_type="DJANGO",
+                        django_alias__isnull=False,
+                        mysql_connection__isnull=True,
+                    )
+                    & ~models.Q(django_alias="")
+                )
+                | models.Q(
+                    source_type="MYSQL_CONFIG",
+                    django_alias__isnull=True,
+                    mysql_connection__isnull=False,
+                ),
+                name="tareas_role_source_xor",
+            ),
+        ]
+
+    def clean(self):
+        from .services.connection_roles import get_system_database_catalog
+
+        errors = {}
+        alias = (self.django_alias or "").strip()
+        database_name = (self.database_name or "").strip()
+
+        if self.role not in {role for role, _label in self.ROLE_CHOICES}:
+            errors["role"] = "El rol de conexión no es válido."
+        elif self.source_type == "DJANGO":
+            if self.role in self.LEGACY_MYSQL_ROLES:
+                errors["source_type"] = "Los roles Legacy requieren una conexión MySQL."
+            if not alias:
+                errors["django_alias"] = "Debe seleccionar un alias Django SYSTEM."
+            elif alias not in {item["alias"] for item in get_system_database_catalog()}:
+                errors["django_alias"] = "El alias debe existir y estar clasificado como SYSTEM."
+            if self.mysql_connection_id is not None:
+                errors["mysql_connection"] = "No puede combinar alias Django y conexión MySQL."
+            self.django_alias = alias or None
+            self.database_name = None
+        elif self.source_type == "MYSQL_CONFIG":
+            if self.mysql_connection_id is None:
+                errors["mysql_connection"] = "Debe seleccionar una conexión MySQL activa."
+            elif not self.mysql_connection.is_active:
+                errors["mysql_connection"] = "La conexión MySQL seleccionada está inactiva."
+            if alias:
+                errors["django_alias"] = "No puede combinar conexión MySQL y alias Django."
+            self.django_alias = None
+            if self.role in self.DATABASE_CONFIGURABLE_ROLES:
+                if not database_name:
+                    errors["database_name"] = "Debe indicar una base de datos MySQL."
+                elif not self.DATABASE_NAME_PATTERN.fullmatch(database_name):
+                    errors["database_name"] = "El nombre de base de datos no es válido."
+                else:
+                    self.database_name = database_name
+            else:
+                self.database_name = None
+        else:
+            errors["source_type"] = "Tipo de conexión inválido."
+
+        if errors:
+            raise ValidationError(errors)
+        super().clean()
 
 
 class Tarea(models.Model):

@@ -192,8 +192,9 @@ description: "Task list for the Tareas Internas master feature"
 
 ## Phase 9: Connection Roles SQL [US8]
 
-**Goal**: Implementar posteriormente cuatro roles SQL globales de Tareas sin depender de
-otra APPLICATION_APP y consumiendo solo infraestructura pública SYSTEM/CORE.
+**Goal**: Implementar cuatro roles SQL globales de Tareas sin depender de otra
+APPLICATION_APP y consumiendo como catálogo MySQL central únicamente conexiones activas
+de `SettingsMySQLConnection` asociadas a `Empresa.codigo == "00"`.
 
 **Independent test criteria**: los cuatro roles son únicos globalmente, Legacy rechaza
 Django, las fuentes se resuelven sin fallback, permisos y errores son controlados, y no
@@ -201,7 +202,7 @@ existen imports funcionales desde `gestiondte`.
 
 - [ ] T106 [US8] Crear `TareaConnectionRole` global en `tareas/models.py` con cuatro roles cerrados, fuente XOR, alias Django, conexión MySQL, base validada y sin FK Empresa ni credenciales.
 - [ ] T107 [US8] Crear la migración aditiva de `TareaConnectionRole` en `tareas/migrations/` sin modificar migraciones externas ni ejecutarla durante la generación.
-- [ ] T108 [US8] Implementar `tareas/services/connection_roles.py` con catálogo SYSTEM adaptado, resolver propio, errores controlados y rechazo de fallback a `default`.
+- [ ] T108 [US8] Implementar `tareas/services/connection_roles.py` con catálogo SYSTEM adaptado, catálogo MySQL Empresa 00, resolver propio, errores controlados y rechazo de fallback a `default`.
 - [ ] T109 [US8] Implementar el form propio en `tareas/forms.py`, restringiendo Legacy a MySQL y validando alias SYSTEM, conexión activa, XOR y `database_name`.
 - [ ] T110 [US8] Implementar la view propia en `tareas/views.py` con identidad `Tareas - Conexiones SQL`, `ingresar` para GET y `modificar` para POST.
 - [ ] T111 [US8] Añadir la URL `/tareas/configuracion/conexiones/` con nombre `tareas:conexiones_sql` en `tareas/urls.py`.
