@@ -13,6 +13,24 @@ se describen escenarios de verificación end-to-end.
 
 ## Prerequisitos
 
+### Conexiones SQL de Tareas (validacion futura)
+
+1. Sin `ingresar`, GET devuelve 403.
+2. Con `ingresar`, la superficie muestra exactamente los cuatro roles globales.
+3. Con `modificar`, un POST valido devuelve 302.
+4. `BASE_TAREAS` acepta Django y MySQL.
+5. `AUDITORIA_TAREAS` acepta Django y MySQL.
+6. `LEGACY_MYSQL` rechaza Django.
+7. `LEGACY_AUDITORIA` rechaza Django.
+8. Un role inexistente, alias invalido, conexion inexistente/inactiva o `database_name`
+   invalido devuelve error controlado.
+9. No existe fallback a `default`.
+10. Cambiar la empresa activa no crea ni resuelve un segundo conjunto `(empresa, role)`.
+11. Los tests confirman ausencia de imports desde `gestiondte` y ausencia de credenciales
+   en HTML, respuestas y logs.
+
+Estos escenarios son futuros y no implican implementacion en esta actualizacion documental.
+
 1. Entorno local del proyecto activo (venv, dependencias ya instaladas según README).
 2. Migraciones de la fase habilitada aplicadas:
    ```powershell

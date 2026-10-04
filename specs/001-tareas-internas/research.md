@@ -128,6 +128,54 @@ proveedores Django distintos vigentes sin sumar rondas.
 - **Notifications**: creación/edición/ocultación/restauración reutilizan T053/T054; notifican participantes actuales y activos, excluyen actor y deduplican. En `CRITICA` se mantienen in-app y email automático existentes. Solo creación incrementa no leídos; lectura y las otras mutaciones no lo hacen. Un adjunto no duplica el evento documental.
 - **Alternatives considered**: nueva app, almacenamiento de archivo duplicado, lectura por fila para cada Comentario, permisos/roles nuevos y chat independiente; rechazados o innecesarios frente al cursor y relaciones existentes.
 
+### D14. Connection Roles para Tareas
+
+- **Decision**: Tareas tendra roles propios con alcance `GLOBAL POR APP`.
+- **Rationale**: la configuracion logica pertenece a la app completa, aunque una fuente
+  MySQL seleccionada conserve su propia empresa en `SettingsMySQLConnection`.
+- **Alternatives considered**: `(empresa, role)` y reutilizar registros de Gestion DTE;
+  rechazadas.
+
+### D15. Roles y fuentes
+
+- **Decision**: `BASE_TAREAS` y `AUDITORIA_TAREAS` admiten Django o MySQL; `LEGACY_MYSQL`
+  y `LEGACY_AUDITORIA` admiten solo MySQL.
+- **Rationale**: conserva la separacion funcional probada en Gestion DTE.
+- **Alternatives considered**: permitir Django para Legacy o mezclar fuentes; rechazadas.
+
+### D16. Gestion DTE como referencia
+
+- **Decision**: `GestionDTEConnectionRole` y `CertificadoSIIRepository` son referencia,
+  no dependencia. Tareas tendra modelo y resolver propios.
+- **Rationale**: las APPLICATION_APPS no dependen funcionalmente entre si.
+- **Alternatives considered**: importar `gestiondte.services.connection_roles`; rechazada.
+
+### D17. Puente publico y no fallback
+
+- **Decision**: reutilizar `SettingsMySQLConnection` y `open_mysql_connection()`; para
+  Django usar alias validado SYSTEM y `.using(alias)`. No existe fallback silencioso a
+  `default`.
+- **Rationale**: `CertificadoSIIRepository` demuestra el contrato y sus tests verifican
+  el error cuando falta `serverbasedte`.
+- **Alternatives considered**: abrir conexiones ad hoc o modificar router/DATABASES;
+  rechazadas.
+
+### D18. Catalogo Django SYSTEM
+
+- **Decision**: la primera implementacion adaptara en Tareas la logica minima de
+  `get_system_database_catalog()` sin importar Gestion DTE. Promoverla a CORE queda para
+  una tarea arquitectonica separada.
+- **Rationale**: el catalogo actual reside en Gestion DTE y no existe una API publica
+  equivalente en settings.
+- **Alternatives considered**: importar Gestion DTE o modificar settings ahora;
+  rechazadas.
+
+### D19. Infraestructura protegida
+
+- **Decision**: no modificar `api.Router_Databases.MultiDatabaseRouter`, `DATABASES`,
+  settings funcional, seed/sidebar de CORE ni Gestion DTE desde la feature.
+- **Rationale**: son dependencias externas protegidas y requieren autorizacion propia.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.

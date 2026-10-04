@@ -98,6 +98,49 @@ automático, adjuntos e historial de T104 sin cambios.
 
 ---
 
+## Tareas - Conexiones SQL
+
+Esta superficie tiene alcance `GLOBAL POR APP`. Tareas mantiene exactamente cuatro
+roles globales y no existe configuracion `(empresa, role)` ni FK `Empresa` en los roles:
+
+- `BASE_TAREAS`
+- `AUDITORIA_TAREAS`
+- `LEGACY_MYSQL`
+- `LEGACY_AUDITORIA`
+
+| Rol | Sistema Django | MySQL |
+|---|---:|---:|
+| `BASE_TAREAS` | Si | Si |
+| `AUDITORIA_TAREAS` | Si | Si |
+| `LEGACY_MYSQL` | No | Si |
+| `LEGACY_AUDITORIA` | No | Si |
+
+Legacy solo admite MySQL. Django y MySQL son fuentes mutuamente excluyentes. No existe
+fallback silencioso a `default`; una configuracion inexistente, invalida o inactiva
+produce un error controlado. Las credenciales pertenecen a la infraestructura publica de
+`settings` y nunca se almacenan duplicadas en Tareas.
+
+Tareas debe resolver sus roles dentro de la propia app y consumir unicamente APIs publicas
+de SYSTEM/CORE. No puede importar codigo funcional de `gestiondte`, aunque Gestion DTE y
+`CertificadoSIIRepository` sean referencias de implementacion.
+
+La superficie `Tareas - Conexiones SQL` usa Vista VICMEAS propia: `V` controla visibilidad,
+`ingresar` permite consultar y `modificar` guardar. `supervisor` queda reservado para una
+operacion estructural futura. La catalogacion de Vista y submenu pertenece a infraestructura
+externa y requiere autorizacion separada.
+
+Submenu futuro:
+
+```text
+Tareas
+	- Lista de Tareas
+	- Crear Tarea
+	- Mis Hitos y Tareas
+	- Conexiones SQL
+```
+
+No se modifica el sidebar como parte de esta actualizacion documental.
+
 ## Regla arquitectónica (vigente)
 
 - Toda la lógica funcional nueva vive dentro de `tareas/` y respeta APPLICATION BOUNDARY (ver Constitución y `COPILOT/ARQUITECTURA_APPS.md`).

@@ -175,6 +175,86 @@ commit se ejecuta `git diff --cached --name-status`; si existe una ruta externa,
 está prohibido. Se usa stage selectivo (`git add -- <application>/<archivo>`), nunca
 `git add .` ni `git add -A`.
 
+## Patron de Roles de Conexion para APPLICATION_APPS
+
+Una APPLICATION_APP que requiera SQL configurable debe seguir esta cadena:
+
+```text
+APPLICATION_APP
+	-> roles logicos propios
+	-> resolver propio de la app
+	-> infraestructura publica SYSTEM/CORE
+	-> alias Django o conexion MySQL
+	-> operacion
+```
+
+### Separacion APPLICATION_APP / SYSTEM
+
+Las APPLICATION_APPS pueden consumir servicios publicos de `settings`, resolver
+conexiones mediante APIs autorizadas, usar clasificadores publicos y abrir conexiones
+externas mediante servicios base.
+
+No pueden modificar internamente `settings`, credenciales, `DATABASES` o el router
+global, ni depender funcionalmente de otra APPLICATION_APP.
+
+### Alcance de roles
+
+Los scopes validos son `GLOBAL POR APP` y `POR EMPRESA`. El scope debe declararse en la
+spec de cada app y no se infiere por la existencia de multiempresa general.
+
+### Convencion conceptual
+
+Cuando corresponda, una app puede separar `BASE_APP`, `AUDITORIA_APP`, `LEGACY` y
+`LEGACY_AUDITORIA`. La convencion no obliga a todas las apps a tener cuatro roles;
+cada app define solo los necesarios y mantiene separadas base, auditoria y Legacy
+cuando aplique.
+
+### Resolucion
+
+Para Django:
+
+```text
+resolver role -> alias validado como SYSTEM -> .using(alias)
+```
+
+Para MySQL:
+
+```text
+resolver role -> SettingsMySQLConnection -> open_mysql_connection()
+```
+
+`settings` es infraestructura SYSTEM/CORE protegida. Sus APIs publicas actuales para
+este patron son `SettingsMySQLConnection`, `normalize_engine()`,
+`get_mysql_connection_config()`, `get_mysql_connection_config_for_request()` y
+`open_mysql_connection()`. Las apps consumidoras no modifican su comportamiento global
+sin autorizacion explicita.
+
+`api.Router_Databases.MultiDatabaseRouter` tambien es infraestructura protegida. Las
+APPLICATION_APPS no lo modifican para implementar integraciones SQL propias. Para
+runtime/Legacy se prefiere `.using(alias)` para Django y `open_mysql_connection()` para
+MySQL.
+
+### Referencia funcional y limite entre apps
+
+`CertificadoSIIRepository` de Certificados PFX-DTE es una referencia funcional del
+consumo de roles, no una dependencia arquitectonica.
+
+`gestiondte` es una APPLICATION_APP. Su codigo puede servir como referencia, copiarse
+y adaptarse dentro de otra APPLICATION_APP, o promoverse formalmente a infraestructura
+comun mediante una tarea separada. No puede importarse implicitamente como base comun.
+
+Prohibido:
+
+```text
+tareas -> gestiondte.services.connection_roles -> settings
+```
+
+Correcto:
+
+```text
+tareas -> tareas.services.connection_roles -> settings
+```
+
 ## Deuda arquitectonica conocida
 
 - `api -> biblioteca`: una app SYSTEM importa el modelo `Propietario`.

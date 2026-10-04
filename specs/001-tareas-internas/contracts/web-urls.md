@@ -29,6 +29,18 @@ este contrato salvo clasificación explícita.
 
 ## Rutas
 
+### Conexiones SQL de Tareas (futura)
+
+| Método | Ruta | Nombre | Vista | Permiso |
+|---|---|---|---|---|
+| GET | `/tareas/configuracion/conexiones/` | `tareas:conexiones_sql` | `Tareas - Conexiones SQL` | `ingresar` |
+| POST | `/tareas/configuracion/conexiones/` | `tareas:conexiones_sql` | `Tareas - Conexiones SQL` | `modificar` |
+
+La ruta permanece documental y no autoriza crear URL todavía. El GET puede responder 200,
+el POST exitoso 302, la falta de autorización 403 y los datos inválidos 400 siguiendo el
+patrón existente de la app. La Vista es propia de Tareas; no reutiliza la Vista ni los
+permisos de Gestión DTE. El registro de Vista y submenu es dependencia externa autorizada.
+
 | Método | Ruta | Nombre (`tareas:`) | Vista | `vista_nombre` | `permiso_requerido` |
 |---|---|---|---|---|---|
 | GET | `/tareas/` | `listar_tareas` | `ListarTareasView` | `Tareas - Listado` | `ingresar` |

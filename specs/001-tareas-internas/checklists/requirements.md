@@ -29,7 +29,23 @@
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
 
+## Connection Roles Readiness
+
+- [x] El alcance `GLOBAL POR APP` esta declarado explicitamente.
+- [x] Los cuatro roles globales estan definidos y no tienen FK Empresa.
+- [x] Legacy solo admite MySQL y las fuentes son mutuamente excluyentes.
+- [x] Se exige uso de APIs publicas de `settings` sin duplicar credenciales.
+- [x] Se prohibe fallback silencioso a `default`.
+- [x] Se prohiben imports funcionales desde `gestiondte`.
+- [x] Se prohiben cambios al router global y a `DATABASES`.
+- [x] Se exigen permisos propios, unicidad, fuentes invalidas y tests de resolucion.
+
 ## Notes
+
+- Actualización Connection Roles: la spec debe declarar explícitamente `GLOBAL POR APP`
+  o `POR EMPRESA`, exigir roles propios, fuentes válidas, cero credenciales duplicadas,
+  cero fallback silencioso, independencia de `gestiondte`, no modificación de router o
+  `DATABASES`, permisos propios y tests de resolución, unicidad, fuentes inválidas y ACL.
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
 - Validación inicial 2026-09-07: todos los ítems pasan. La spec menciona ICMEAS y multiempresa

@@ -24,6 +24,10 @@ Sync Impact Report
 - Enmienda 2026-09-20 (v1.4.0, MINOR): se formalizan la identidad funcional única
   de VICMEAS, la autorización visible en View/FBV, la distinción entre superficies
   y auxiliares, y la prohibición explícita de modificar BASE/SYSTEM sin autorización.
+- Enmienda 2026-10-04 (v1.5.0, MINOR): se incorpora Connection Roles Pattern para
+  APPLICATION_APPS, con alcance GLOBAL POR APP o POR EMPRESA, independencia entre apps
+  y consumo exclusivo de APIs públicas SYSTEM/CORE. Afecta también a
+  COPILOT/ARQUITECTURA_APPS.md y specs/001-tareas-internas/.
 -->
 
 # AppDocs Constitution
@@ -83,6 +87,26 @@ scope y autorización explícitos.
 
 Rationale: la propiedad física, la reutilización de infraestructura y la detención ante
 dependencias externas preservan aislamiento, seguridad y estabilidad transversal.
+
+#### Connection Roles Pattern
+
+Toda APPLICATION_APP que necesite integracion SQL configurable MUST definir roles
+logicos propios y declarar explicitamente su alcance: `GLOBAL POR APP` o `POR EMPRESA`.
+Debe persistir la configuracion dentro de la app o mediante infraestructura comun
+autorizada y resolver sus roles con un resolver propio.
+
+La APPLICATION_APP MUST consumir unicamente APIs publicas de SYSTEM/CORE, no importar
+servicios, modelos, forms o views de otra APPLICATION_APP, no duplicar credenciales,
+no exponer passwords al navegador o logs, no modificar `DATABASES` y no modificar
+routers globales sin autorizacion arquitectonica explicita. Si existe UI de configuracion
+debe tener Vista VICMEAS propia y tests de resolucion, fuentes invalidas, permisos,
+unicidad y aislamiento.
+
+El alcance de los roles de conexion MUST declararse en la especificacion de cada app.
+No debe inferirse automaticamente porque el sistema general sea multiempresa.
+
+Rationale: los roles aislan la semantica de cada dominio y evitan que una APPLICATION_APP
+de negocio se convierta accidentalmente en infraestructura comun de otra.
 
 ### IV. Código vendor inmutable (NON-NEGOTIABLE)
 
@@ -196,4 +220,4 @@ especificado.
   MINOR: nuevo principio o sección; PATCH: aclaraciones sin cambio semántico) y
   actualización del Sync Impact Report al inicio de este archivo.
 
-**Version**: 1.4.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-20
+**Version**: 1.5.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-04

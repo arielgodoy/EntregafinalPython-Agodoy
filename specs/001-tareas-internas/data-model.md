@@ -2,6 +2,32 @@
 
 **Date**: 2026-09-07 | **Feature**: [spec.md](spec.md) | **Research**: [research.md](research.md)
 
+## Entidad conceptual: `TareaConnectionRole`
+
+Esta entidad se documenta para la futura feature de conexiones y no autoriza crear el
+modelo real todavía. Su alcance es `GLOBAL POR APP`.
+
+| Campo | Tipo conceptual | Reglas |
+|---|---|---|
+| `role` | choice/string | Único global; exactamente `BASE_TAREAS`, `AUDITORIA_TAREAS`, `LEGACY_MYSQL`, `LEGACY_AUDITORIA` |
+| `source_type` | choice | `DJANGO` o `MYSQL_CONFIG` |
+| `django_alias` | string nullable | Obligatorio solo para Django; debe existir y ser SYSTEM |
+| `mysql_connection` | FK conceptual nullable | Obligatorio solo para MySQL; referencia `SettingsMySQLConnection` activa |
+| `database_name` | string nullable | Requerido cuando el rol MySQL lo necesite y validado por patron seguro |
+| `created_at` | datetime | Auditoria |
+| `updated_at` | datetime | Auditoria |
+
+Reglas invariantes:
+
+- no existe FK a `Empresa`;
+- Django y MySQL son XOR;
+- Legacy no admite Django;
+- no se guardan credenciales en Tareas;
+- alias, conexion y base se validan antes de resolver;
+- una fuente invalida produce error controlado;
+- no existe fallback silencioso a `default`;
+- los registros no se comparten con `GestionDTEConnectionRole`.
+
 ## Entidad: `Tarea` (app `tareas`)
 
 | Campo | Tipo (Django) | Nulable | Default | Reglas |

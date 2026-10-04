@@ -291,6 +291,21 @@ ninguna migración de otra app.
 No hay violaciones constitucionales justificables. La complejidad se controla por fases y
 límites explícitos; no se autoriza resolverla con un modelo monolítico o cambios transversales.
 
+### Connection Roles / Conexiones SQL
+
+Esta fase y su implementacion posterior deben permanecer autocontenidas en `tareas/`.
+La secuencia prevista separa: modelo y migracion; resolver; form; view; URL;
+template/JS; permisos, seed y submenu; tests; y validacion final.
+
+Dependencias externas explicitas: `access_control` para catalogacion VICMEAS, sidebar y
+seed; `settings` para `SettingsMySQLConnection` y `open_mysql_connection()`; y la
+clasificacion SYSTEM para aliases Django. Esas dependencias no autorizan importar
+`gestiondte` ni modificar otras APPLICATION_APPS.
+
+Limites obligatorios: NO modificar router, NO modificar `DATABASES`, NO cambiar
+`settings` funcional y NO modificar Gestion DTE. Los roles son `GLOBAL POR APP`, no por
+empresa.
+
 ## Post-Design Constitution Check
 
 PASS: el diseño mantiene `tareas/` como frontera funcional, conserva Fase 1, reutiliza
