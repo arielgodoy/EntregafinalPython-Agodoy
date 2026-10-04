@@ -13,7 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Prefetch, Q, prefetch_related_objects
+from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -314,7 +314,54 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     permiso_requerido = "ingresar"
 
     def get_queryset(self):
-        return super().get_queryset().order_by("-fecha_creacion")
+        queryset = super().get_queryset().prefetch_related(
+            "participantes__usuario__avatar"
+        )
+        search = self.request.GET.get("tarea_busqueda", "").strip()
+        estado = self.request.GET.get("estado", "").strip()
+        prioridad = self.request.GET.get("prioridad", "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(correlativo__icontains=search)
+                | Q(titulo__icontains=search)
+                | Q(descripcion__icontains=search)
+                | Q(responsable__username__icontains=search)
+            )
+        if estado in {value for value, _label in Tarea.Estado.choices}:
+            queryset = queryset.filter(estado=estado)
+        if prioridad in {value for value, _label in Tarea.Prioridad.choices}:
+            queryset = queryset.filter(prioridad=prioridad)
+        return queryset.order_by("-fecha_creacion")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        summary = TareaEmpresaQuerysetMixin.get_queryset(self).aggregate(
+            total=Count("pk"),
+            activas=Count("pk", filter=Q(estado=Tarea.Estado.ACTIVA)),
+            gestion=Count("pk", filter=Q(estado=Tarea.Estado.GESTION)),
+            cerradas=Count("pk", filter=Q(estado=Tarea.Estado.CERRADA)),
+        )
+        context["tareas_summary"] = summary
+        context["tareas_busqueda"] = self.request.GET.get("tarea_busqueda", "")
+        context["tareas_estado"] = self.request.GET.get("estado", "")
+        context["tareas_prioridad"] = self.request.GET.get("prioridad", "")
+        context["tarea_estados"] = Tarea.Estado.choices
+        context["tarea_prioridades"] = Tarea.Prioridad.choices
+        for tarea in context["tareas"]:
+            participantes = []
+            seen_ids = {tarea.responsable_id}
+            if tarea.creada_por_id not in seen_ids:
+                participantes.append({"usuario": tarea.creada_por, "rol": "CREADOR"})
+                seen_ids.add(tarea.creada_por_id)
+            for participante in tarea.participantes.all():
+                if participante.usuario_id not in seen_ids:
+                    participantes.append(
+                        {"usuario": participante.usuario, "rol": participante.rol}
+                    )
+                    seen_ids.add(participante.usuario_id)
+            tarea.participantes_visibles = participantes[:4]
+            tarea.participantes_restantes = max(0, len(participantes) - 4)
+        return context
 
 
 class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):

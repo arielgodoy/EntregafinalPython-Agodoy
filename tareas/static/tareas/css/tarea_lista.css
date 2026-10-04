@@ -1,0 +1,30 @@
+.task-list__participants .avatar-group {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding-right: 0.75rem;
+    white-space: nowrap;
+}
+
+.task-list__participants .avatar-group-item {
+    display: inline-flex;
+    flex: 0 0 2rem;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0;
+    border: 2px solid var(--vz-secondary-bg);
+    border-radius: 50%;
+}
+
+.task-list__participants .avatar-group-item + .avatar-group-item {
+    margin-left: -0.75rem;
+}
+
+.task-list__participants .avatar-group-item .avatar-title,
+.task-list__participants .avatar-group-item img {
+    display: block;
+    height: 2rem;
+    width: 2rem;
+    object-fit: cover;
+}

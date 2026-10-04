@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
-from tareas.models import Tarea
+from tareas.models import Tarea, TareaParticipante
 
 
 class TareasViewsBase(TestCase):
@@ -49,6 +49,70 @@ class TareasViewsBase(TestCase):
         }
         datos.update(kwargs)
         return Tarea.objects.create(**datos)
+
+
+class ListarTareasTests(TareasViewsBase):
+    def setUp(self):
+        self._permiso(self.vista_tareas, ingresar=True, crear=True, modificar=True)
+        self._login()
+
+    def test_lista_renderiza_resumen_y_columnas_operacionales(self):
+        self._crear_tarea(titulo="Gestionable", correlativo="A0000001", estado=Tarea.Estado.GESTION)
+        response = self.client.get(reverse("tareas:listar_tareas"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Todas las tareas")
+        self.assertContains(response, "Total tareas")
+        self.assertContains(response, "Correlativo")
+        self.assertContains(response, "Fecha tope")
+        self.assertContains(response, "A0000001")
+
+    def test_lista_filtra_por_busqueda_estado_y_prioridad(self):
+        self._crear_tarea(
+            titulo="Coincidente",
+            correlativo="A0000002",
+            estado=Tarea.Estado.GESTION,
+            prioridad=Tarea.Prioridad.URGENTE,
+        )
+        self._crear_tarea(
+            titulo="Otra",
+            correlativo="A0000003",
+            estado=Tarea.Estado.CERRADA,
+        )
+        response = self.client.get(
+            reverse("tareas:listar_tareas"),
+            {"tarea_busqueda": "Coincidente", "estado": Tarea.Estado.GESTION, "prioridad": Tarea.Prioridad.URGENTE},
+        )
+        self.assertContains(response, "Coincidente")
+        self.assertNotContains(response, "Otra")
+
+    def test_lista_aisla_empresa_activa_y_contadores(self):
+        self._crear_tarea(titulo="Visible", correlativo="A0000004")
+        self._crear_tarea(empresa=self.otra_empresa, titulo="Fuera", correlativo="B0000001")
+        response = self.client.get(reverse("tareas:listar_tareas"))
+        self.assertContains(response, "Visible")
+        self.assertNotContains(response, "Fuera")
+        self.assertEqual(response.context["tareas_summary"]["total"], 1)
+
+    def test_lista_muestra_responsable_y_participantes_sin_duplicarlo(self):
+        participante = User.objects.create_user(username="participante-lista", password="pass")
+        tarea = self._crear_tarea(
+            titulo="Con participantes",
+            correlativo="A0000005",
+            responsable=self.responsable,
+        )
+        TareaParticipante.objects.create(
+            tarea=tarea,
+            usuario=self.responsable,
+            rol=TareaParticipante.Rol.RESPONSABLE_LIDER,
+        )
+        TareaParticipante.objects.create(
+            tarea=tarea,
+            usuario=participante,
+            rol=TareaParticipante.Rol.INVITADO_OBSERVADOR,
+        )
+        response = self.client.get(reverse("tareas:listar_tareas"))
+        self.assertContains(response, "participante-lista")
+        self.assertContains(response, "INVITADO_OBSERVADOR")
 
 
 class CrearEditarBorradoresTests(TareasViewsBase):
