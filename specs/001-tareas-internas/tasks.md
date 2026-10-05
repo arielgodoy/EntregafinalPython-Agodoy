@@ -263,6 +263,23 @@ siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender 
   Deudas: ledger participantes, guards legacy/pausas de otras familias y
   reacomodo fechas tras reactivar.
 
+- [x] T134.3D [US8] MiniTareas configurables: implementación de alta/cierre/
+  reapertura/borrado, agregado completo de cierre, historial, sección personal,
+  identidad efectiva por DTO, fail-closed y alias explícito. 25 tests focales
+  nuevos y lectura MySQL positiva; validación real de ciclos, same-PK y doble
+  cierre concurrente. Create/close/reopen/delete Django y MySQL PASS; events/feed/
+  documents/readings/notifications, history/Mis MiniTareas/effective participation,
+  closure, Django alias/MySQL config/same-PK/fail-closed PASS.
+  REAL_MYSQL_VALIDATION = PASS_ALREADY_DEMONSTRATED; gate consolidado 258/258 PASS,
+  regresión Responsable/Participantes + i18n 101/101 PASS y Python 3.11 135/135 PASS.
+  Sin modelos/migraciones/schema/SYSTEM. Bloqueos históricos de 13 claves dinámicas
+  assignment y tres claves bootstrap sin catálogo resueltos en T134.3D.1/.2.
+  T134_3D_GLOBAL = PASS; checkpoint listo para commit.
+  MINITASK_HISTORY_MODAL_FOLLOWUP_REQUIRED = YES;
+  PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES;
+  REACTIVATION_DATES_FOLLOWUP_REQUIRED = YES;
+  HISTORICAL_T081_HITO_RENDER_FAILURES = 4. No se inició Hitos/Avance.
+
 ### Regla transversal de cierre i18n
 
 Ninguna task nueva que agregue o modifique UI puede marcarse `[x]` sin ejecutar el

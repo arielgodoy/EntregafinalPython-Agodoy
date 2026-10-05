@@ -351,14 +351,16 @@ class MiniTareaCloseForm(forms.Form):
         queryset=User.objects.none(), required=False
     )
 
-    def __init__(self, *args, tarea=None, actor=None, **kwargs):
+    def __init__(self, *args, tarea=None, actor=None, empresa=None, effective_ids=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if tarea is None:
+        empresa = empresa or (tarea.empresa if tarea is not None else None)
+        if empresa is None:
             return
-        from tareas.services.participants import effective_participant_ids
-
-        queryset = get_valid_users_for_empresa(tarea.empresa, active_only=True).filter(
-            pk__in=effective_participant_ids(tarea)
+        if effective_ids is None:
+            from tareas.services.participants import effective_participant_ids
+            effective_ids = effective_participant_ids(tarea)
+        queryset = get_valid_users_for_empresa(empresa, active_only=True).using("default").filter(
+            pk__in=effective_ids
         )
         if actor is not None:
             queryset = queryset.exclude(pk=actor.pk)

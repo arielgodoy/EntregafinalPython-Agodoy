@@ -1,14 +1,14 @@
-{% if key == "tareas.assignment.success" %}<span data-key="{{ key }}">Participante o responsable actualizado correctamente.</span>
-{% elif key == "tareas.assignment.errors.permission" %}<span data-key="{{ key }}">No tiene autorización para administrar esta tarea.</span>
-{% elif key == "tareas.assignment.errors.state" %}<span data-key="{{ key }}">Esta tarea no admite cambios de responsable o participantes.</span>
-{% elif key == "tareas.assignment.errors.annulled" %}<span data-key="{{ key }}">La tarea o uno de sus ancestros está anulado.</span>
-{% elif key == "tareas.assignment.errors.reason_required" %}<span data-key="{{ key }}">Ingrese el motivo de reasignación.</span>
-{% elif key == "tareas.assignment.errors.invalid_user" %}<span data-key="{{ key }}">El usuario debe estar activo y pertenecer a la empresa.</span>
-{% elif key == "tareas.assignment.errors.implicit_user" %}<span data-key="{{ key }}">El creador y el responsable ya son participantes implícitos.</span>
-{% elif key == "tareas.assignment.errors.duplicate" %}<span data-key="{{ key }}">Ese usuario ya es participante explícito.</span>
-{% elif key == "tareas.assignment.errors.missing" %}<span data-key="{{ key }}">El participante no existe.</span>
-{% elif key == "tareas.assignment.errors.invalid_role" %}<span data-key="{{ key }}">Seleccione participante o invitado/observador.</span>
-{% elif key == "tareas.assignment.errors.backend" %}<span data-key="{{ key }}">No se pudo resolver el almacenamiento configurado de Tareas.</span>
-{% elif key == "tareas.assignment.errors.storage" %}<span data-key="{{ key }}">No se pudo guardar el cambio de responsable o participantes.</span>
-{% elif key == "tareas.assignment.errors.invalid_edit" %}<span data-key="{{ key }}">Los datos de edición no corresponden a esta tarea.</span>
+{% if key == "tareas.assignment.success" %}<span data-key="tareas.assignment.success">Participante o responsable actualizado correctamente.</span>
+{% elif key == "tareas.assignment.errors.permission" %}<span data-key="tareas.assignment.errors.permission">No tiene autorización para administrar esta tarea.</span>
+{% elif key == "tareas.assignment.errors.state" %}<span data-key="tareas.assignment.errors.state">Esta tarea no admite cambios de responsable o participantes.</span>
+{% elif key == "tareas.assignment.errors.annulled" %}<span data-key="tareas.assignment.errors.annulled">La tarea o uno de sus ancestros está anulado.</span>
+{% elif key == "tareas.assignment.errors.reason_required" %}<span data-key="tareas.assignment.errors.reason_required">Ingrese el motivo de reasignación.</span>
+{% elif key == "tareas.assignment.errors.invalid_user" %}<span data-key="tareas.assignment.errors.invalid_user">El usuario debe estar activo y pertenecer a la empresa.</span>
+{% elif key == "tareas.assignment.errors.implicit_user" %}<span data-key="tareas.assignment.errors.implicit_user">El creador y el responsable ya son participantes implícitos.</span>
+{% elif key == "tareas.assignment.errors.duplicate" %}<span data-key="tareas.assignment.errors.duplicate">Ese usuario ya es participante explícito.</span>
+{% elif key == "tareas.assignment.errors.missing" %}<span data-key="tareas.assignment.errors.missing">El participante no existe.</span>
+{% elif key == "tareas.assignment.errors.invalid_role" %}<span data-key="tareas.assignment.errors.invalid_role">Seleccione participante o invitado/observador.</span>
+{% elif key == "tareas.assignment.errors.backend" %}<span data-key="tareas.assignment.errors.backend">No se pudo resolver el almacenamiento configurado de Tareas.</span>
+{% elif key == "tareas.assignment.errors.storage" %}<span data-key="tareas.assignment.errors.storage">No se pudo guardar el cambio de responsable o participantes.</span>
+{% elif key == "tareas.assignment.errors.invalid_edit" %}<span data-key="tareas.assignment.errors.invalid_edit">Los datos de edición no corresponden a esta tarea.</span>
 {% else %}<span data-key="tareas.messages.generic_error">No fue posible completar la operación.</span>{% endif %}

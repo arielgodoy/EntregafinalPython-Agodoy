@@ -52,7 +52,8 @@ class MySQLDetailStorageTests(TestCase):
         role.database_name = "tareas"
         role.save()
 
-    def _fake_connection(self, task_rows=None, parent_rows=None, child_rows=None, participant_rows=None):
+    def _fake_connection(self, task_rows=None, parent_rows=None, child_rows=None, participant_rows=None,
+                         mini_rows=None, event_rows=None, attachment_rows=None):
         connection = MagicMock()
         cursor = MagicMock()
         task_rows = task_rows if task_rows is not None else []
@@ -82,6 +83,22 @@ class MySQLDetailStorageTests(TestCase):
             elif "from tareas_tareaparticipante" in lower:
                 cursor.description = [("usuario_id",), ("rol",)]
                 cursor._result = participant_rows
+            elif "select id, descripcion, persona_id" in lower:
+                cursor.description = [(name,) for name in (
+                    "id", "descripcion", "persona_id", "hecho", "fecha_creacion", "fecha_completado",
+                )]
+                cursor._result = mini_rows or []
+            elif "from tareas_minitareaevento" in lower:
+                cursor.description = [(name,) for name in (
+                    "id", "mini_tarea_id", "comentario_feed_id", "tipo", "actor_id", "fecha",
+                    "comentario", "oculto", "destinatarios_notificacion", "destinatarios_email",
+                )]
+                cursor._result = event_rows or []
+            elif "from tareas_comentarioadjunto" in lower:
+                cursor.description = [(name,) for name in (
+                    "comentario_id", "id", "tipo", "formato_archivo", "archivo", "url",
+                )]
+                cursor._result = attachment_rows or []
             else:
                 cursor.description = []
                 cursor._result = []
@@ -90,6 +107,42 @@ class MySQLDetailStorageTests(TestCase):
         cursor.fetchall.side_effect = lambda: cursor._result
         connection.cursor.return_value = cursor
         return connection, cursor
+
+    @patch("tareas.services.detail_storage.open_mysql_connection")
+    def test_minitask_history_retains_external_actor_recipients_feed_and_file_url(self, open_connection):
+        from tareas.services.minitask_storage import MySQLMiniTaskStorage
+        from tareas.tests.factories import activate_company
+
+        task_row = (
+            3, "MYSQL task", "Description", "NORMAL", "B0000003", 0, 0, 0,
+            "GESTION", self.user.pk, self.empresa.pk, self.user.pk,
+            "2026-10-05", None, None, "2026-10-31", None,
+        )
+        connection, cursor = self._fake_connection(
+            task_rows=[task_row],
+            mini_rows=[(5, "MYSQL MiniTask", self.user.pk, 1, "2026-10-05", "2026-10-05")],
+            event_rows=[
+                (6, 5, 7, "CIERRE", self.user.pk, "2026-10-05", "Completed", 0, "[8]", "[]"),
+                (9, 5, None, "REAPERTURA", self.user.pk, "2026-10-05", "Reopened", None, "[]", "[]"),
+            ],
+            attachment_rows=[(7, 10, "OTRO", "PDF", "tareas/documentos/proof.pdf", "")],
+        )
+        open_connection.return_value = nullcontext(connection)
+        _detail, mini = MySQLMiniTaskStorage(self.connection, "tareas").history(
+            task_id=3, empresa_id=self.empresa.pk, mini_task_id=5, actor_id=self.user.pk,
+        )
+        event = mini.eventos_t104[0]
+        self.assertEqual(event.actor_id, self.user.pk)
+        self.assertEqual(event.actor_username, self.user.username)
+        self.assertEqual(event.destinatarios_notificacion, (8,))
+        self.assertEqual(event.comentario_feed_id, 7)
+        self.assertTrue(event.attachments[0].archivo_url.endswith("tareas/documentos/proof.pdf"))
+        self.assertIsNone(mini.eventos_t104[1].comentario_feed_id)
+        self.client.force_login(self.user)
+        activate_company(self.client, self.empresa)
+        response = self.client.get(reverse("tareas:historial_minitarea", args=[3, 5]))
+        self.assertContains(response, self.user.username)
+        self.assertContains(response, "proof.pdf")
 
     @patch("tareas.services.detail_storage.open_mysql_connection")
     def test_mysql_detail_returns_same_core_contract_and_is_company_scoped(self, open_connection):

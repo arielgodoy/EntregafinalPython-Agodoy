@@ -13,6 +13,7 @@ from tareas.models import (
     Hito,
     HitoHistorial,
     Tarea,
+    TareaConnectionRole,
     TareaLectura,
     TareaParticipante,
     TareaTransicion,
@@ -32,6 +33,9 @@ from tareas.services.kpi import (
 class T059KpiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
+        )
         cls.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa A")
         cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.usuario = User.objects.create_user(username="usuario", password="x")

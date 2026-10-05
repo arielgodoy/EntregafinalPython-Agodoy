@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa
-from tareas.models import MiniTarea, MiniTareaEvento, Tarea
+from tareas.models import MiniTarea, MiniTareaEvento, Tarea, TareaConnectionRole
 from tareas.services.closure import create_mini_task, delete_mini_task
 from tareas.services.lifecycle import transition_task
 from tareas.services.participants import effective_participant_ids, is_effective_participant
@@ -16,6 +16,9 @@ from django.contrib.auth.models import User
 class MiniTareaT105Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
+        )
         cls.empresa = Empresa.objects.create(codigo="T105", descripcion="Empresa T105")
         cls.otra_empresa = Empresa.objects.create(codigo="T105B", descripcion="Empresa T105 B")
         cls.responsable = User.objects.create_user("t105_responsable")

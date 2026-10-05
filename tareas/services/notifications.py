@@ -100,6 +100,7 @@ def emit_task_event(
     body="",
     actor=None,
     send_email=True,
+    raise_errors=False,
 ):
     """Emit one task event through the public task adapters."""
     unique_recipients = {}
@@ -110,6 +111,7 @@ def emit_task_event(
             continue
         unique_recipients[recipient.pk] = recipient
 
+    failed = False
     for recipient in unique_recipients.values():
         try:
             notify_task_event(
@@ -121,7 +123,8 @@ def emit_task_event(
                 dedupe_key=f"tarea:{tarea.pk}:{event}:{recipient.pk}",
             )
         except Exception:
-            logger.exception(
+            failed = True
+            logger.error(
                 "T054 notification failure: tarea=%s event=%s recipient=%s channel=in_app",
                 tarea.pk,
                 event,
@@ -139,9 +142,12 @@ def emit_task_event(
                         to_emails=[email],
                     )
                 except Exception:
-                    logger.exception(
+                    failed = True
+                    logger.error(
                         "T054 notification failure: tarea=%s event=%s recipient=%s channel=email",
                         tarea.pk,
                         event,
                         recipient.pk,
                     )
+    if failed and raise_errors:
+        raise RuntimeError("Task communication failed")

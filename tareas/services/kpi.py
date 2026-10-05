@@ -261,16 +261,8 @@ def get_personal_dashboard(*, user, empresa_id, reference_date=None):
         .select_related("tarea", "tarea__empresa", "tarea__responsable", "responsable")
         .order_by("tarea__prioridad", "tarea__pk", "fecha_creacion", "pk")
     )
-    mini_tareas = list(
-        MiniTarea.objects.filter(
-            persona=user,
-            tarea__empresa_id=empresa_id,
-            tarea__estado__in=PUBLISHED_STATES,
-            tarea__anulada=False,
-        )
-        .select_related("tarea", "tarea__empresa", "tarea__responsable")
-        .order_by("hecho", "tarea__prioridad", "tarea__pk", "pk")
-    )
+    from tareas.services.minitask_storage import resolve_minitask_storage
+    mini_tareas = resolve_minitask_storage().assigned(empresa_id=empresa_id, actor_id=user.pk)
     task_groups = {priority: [] for priority in PRIORITIES}
     milestone_groups = {priority: [] for priority in PRIORITIES}
     for tarea in tareas:

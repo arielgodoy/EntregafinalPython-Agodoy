@@ -24,6 +24,10 @@ from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
+from tareas.services.minitask_storage import (
+    CreateMiniTaskCommand, CloseMiniTaskCommand, ReopenMiniTaskCommand,
+    DeleteMiniTaskCommand, MiniTaskNotFound, resolve_minitask_storage,
+)
 
 from acounts.models import Avatar
 from access_control.models import Empresa, Permiso, Vista
@@ -92,10 +96,6 @@ from .services.participant_storage import (
 from .services.authorization import can_manage_task
 from .services.closure import (
     can_create_mini_task,
-    close_mini_task,
-    create_mini_task,
-    delete_mini_task,
-    reopen_mini_task,
 )
 from .services.comments import create_comment, edit_comment, hide_comment, restore_comment
 from .services.reading import (
@@ -490,7 +490,7 @@ def _detail_document_context(detail_result, **form_overrides):
     }
 
 
-def _detail_task_presentation(core, empresa):
+def _detail_task_presentation(core, empresa, effective_ids=None):
     responsable = (
         SimpleNamespace(
             pk=core.responsable_id,
@@ -519,6 +519,7 @@ def _detail_task_presentation(core, empresa):
         responsable=responsable,
         empresa=empresa,
         creada_por_id=core.creada_por_id,
+        _tareas_effective_user_ids=effective_ids,
     )
 
 
@@ -771,7 +772,15 @@ class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmp
         )
 
     def get(self, request):
-        return render(request, self.template_name, self.get_context_data())
+        try:
+            context = self.get_context_data()
+        except TaskStorageError:
+            logger.error("Assigned MiniTask storage failure")
+            return HttpResponse(
+                render(request, self.template_name, {"mini_storage_error": True}).content,
+                status=503,
+            )
+        return render(request, self.template_name, context)
 
 
 def _dashboard_filters(request):
@@ -935,7 +944,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             raise Http404 from exc
         self.detail_result = result
         self.detail_empresa = empresa
-        return _detail_task_presentation(result.core, empresa)
+        return _detail_task_presentation(result.core, empresa, _detail_effective_participant_ids(result))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1084,17 +1093,15 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         mini_tareas = []
         for mini_tarea in self.detail_result.mini_tasks:
             if not puede_supervisar_adjuntos:
-                visible_attachments = tuple(
-                    event_attachments
-                    for event in reversed(mini_tarea.eventos_t104)
+                last_close = next((
+                    event for event in reversed(mini_tarea.eventos_t104)
                     if event.tipo == MiniTareaEvento.Tipo.CIERRE
-                    and not event.comentario_oculto
-                    for event_attachments in [event.attachments]
-                )
+                ), None)
                 mini_tarea = replace(
                     mini_tarea,
                     ultimo_cierre_adjuntos_t104=(
-                        visible_attachments[0] if visible_attachments else ()
+                        last_close.attachments
+                        if mini_tarea.hecho and last_close and not last_close.comentario_oculto else ()
                     ),
                 )
             mini_tareas.append(
@@ -1216,13 +1223,34 @@ class ReprogramarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
 
 
-class MiniTareaEndpointMixin(ExistingTaskBackendGuardMixin):
+class MiniTareaEndpointMixin:
+    crear_permiso_faltante = False
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            self.mini_storage = resolve_minitask_storage()
+            return super().dispatch(request, *args, **kwargs)
+        except MiniTaskNotFound as exc:
+            raise Http404 from exc
+        except PermissionDenied:
+            return self.handle_no_permission(request)
+        except TaskStorageError:
+            logger.error("MiniTask endpoint storage failure")
+            messages.error(request, "tareas.messages.generic_error")
+            return HttpResponse(
+                render(request, "tareas/mini_tarea_historial.html", {"storage_error": True}).content,
+                status=503,
+            )
+
+    def scope(self, request, tarea_id):
+        return dict(task_id=tarea_id, empresa_id=_get_empresa_id(request), actor_id=request.user.pk)
+
     def get_tarea(self, request, tarea_id):
-        return get_object_or_404(
-            Tarea.objects.select_related("empresa", "responsable"),
-            pk=tarea_id,
-            empresa_id=_get_empresa_id(request),
-        )
+        empresa = get_object_or_404(Empresa.objects.using("default"), pk=_get_empresa_id(request))
+        detail = self.mini_storage.detail(task_id=tarea_id, empresa_id=empresa.pk)
+        return _detail_task_presentation(
+            detail.core, empresa, _detail_effective_participant_ids(detail)
+        ), detail
 
     def redirect_to_detail(self, tarea):
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
@@ -1240,19 +1268,18 @@ class CrearMiniTareaView(
 ):
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
+    crear_permiso_faltante = False
 
     def post(self, request, tarea_id):
-        tarea = self.get_tarea(request, tarea_id)
-        form = MiniTareaCreateForm(request.POST, tarea=tarea)
+        tarea, _detail = self.get_tarea(request, tarea_id)
+        form = MiniTareaCreateForm(request.POST, empresa=tarea.empresa)
         if not form.is_valid():
             return self.reject(request, tarea)
         try:
-            create_mini_task(
-                tarea=tarea,
-                descripcion=form.cleaned_data["descripcion"],
-                persona=form.cleaned_data["persona"],
-                actor=request.user,
-            )
+            self.mini_storage.create(CreateMiniTaskCommand(
+                **self.scope(request, tarea_id), descripcion=form.cleaned_data["descripcion"],
+                persona_id=form.cleaned_data["persona"].pk,
+            ))
         except ValidationError:
             return self.reject(request, tarea)
         messages.success(request, "tareas.messages.lifecycle_action_applied")
@@ -1267,36 +1294,38 @@ class CerrarMiniTareaView(
 ):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+    crear_permiso_faltante = False
 
     def post(self, request, tarea_id, mini_tarea_id):
-        tarea = self.get_tarea(request, tarea_id)
-        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        tarea, detail = self.get_tarea(request, tarea_id)
+        if not any(mini.id == mini_tarea_id for mini in detail.mini_tasks):
+            raise Http404
         form = MiniTareaCloseForm(
             request.POST,
             request.FILES,
-            tarea=tarea,
+            empresa=tarea.empresa, effective_ids=_detail_effective_participant_ids(detail),
             actor=request.user,
         )
         if not form.is_valid():
             return self.reject(request, tarea)
         try:
-            close_mini_task(
-                tarea=tarea,
-                mini_tarea=mini_tarea,
-                actor=request.user,
+            result = self.mini_storage.close(CloseMiniTaskCommand(
+                **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
                 comentario=form.cleaned_data["comentario"],
-                notification_recipient_ids=[
+                notification_recipient_ids=tuple(
                     user.pk
                     for user in form.cleaned_data["destinatarios_notificacion"]
-                ],
-                email_recipient_ids=[
+                ),
+                email_recipient_ids=tuple(
                     user.pk for user in form.cleaned_data["destinatarios_email"]
-                ],
-                documentos_nuevos=form.nuevos_documentos(),
-            )
+                ),
+                uploaded_files=tuple(form.cleaned_data["archivos"]),
+            ))
         except ValidationError:
             return self.reject(request, tarea)
         messages.success(request, "tareas.messages.lifecycle_action_applied")
+        if result.delivery.failed:
+            messages.warning(request, "tareas.minitareas.communication_failed")
         return self.redirect_to_detail(tarea)
 
 
@@ -1308,20 +1337,18 @@ class ReabrirMiniTareaView(
 ):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+    crear_permiso_faltante = False
 
     def post(self, request, tarea_id, mini_tarea_id):
-        tarea = self.get_tarea(request, tarea_id)
-        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        tarea, _detail = self.get_tarea(request, tarea_id)
         form = MiniTareaReopenForm(request.POST)
         if not form.is_valid():
             return self.reject(request, tarea)
         try:
-            reopen_mini_task(
-                tarea=tarea,
-                mini_tarea=mini_tarea,
-                actor=request.user,
+            self.mini_storage.reopen(ReopenMiniTaskCommand(
+                **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
                 comentario=form.cleaned_data["comentario"],
-            )
+            ))
         except ValidationError:
             return self.reject(request, tarea)
         messages.success(request, "tareas.messages.lifecycle_action_applied")
@@ -1336,16 +1363,14 @@ class EliminarMiniTareaView(
 ):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+    crear_permiso_faltante = False
 
     def post(self, request, tarea_id, mini_tarea_id):
-        tarea = self.get_tarea(request, tarea_id)
-        mini_tarea = get_object_or_404(MiniTarea, pk=mini_tarea_id, tarea=tarea)
+        tarea, _detail = self.get_tarea(request, tarea_id)
         try:
-            delete_mini_task(
-                tarea=tarea,
-                mini_tarea=mini_tarea,
-                actor=request.user,
-            )
+            self.mini_storage.delete(DeleteMiniTaskCommand(
+                **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
+            ))
         except ValidationError:
             return self.reject(request, tarea)
         messages.success(request, "tareas.messages.minitask_deleted")
@@ -1360,37 +1385,26 @@ class HistorialMiniTareaView(
 ):
     vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
+    crear_permiso_faltante = False
 
     def get(self, request, tarea_id, mini_tarea_id):
-        tarea = self.get_tarea(request, tarea_id)
-        mini_tarea = get_object_or_404(
-            MiniTarea.objects.select_related("persona").prefetch_related(
-                Prefetch(
-                    "eventos",
-                    queryset=(
-                        MiniTareaEvento.objects.select_related("actor", "comentario_feed")
-                        .prefetch_related("comentario_feed__adjuntos__documento")
-                    ),
-                    to_attr="eventos_t104",
-                )
-            ),
-            pk=mini_tarea_id,
-            tarea=tarea,
+        detail, mini_tarea = self.mini_storage.history(
+            **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
         )
-        puede_supervisar_adjuntos = _comment_actor_has_permission(
-            tarea,
-            request.user,
-            "supervisor",
+        empresa = get_object_or_404(Empresa.objects.using("default"), pk=_get_empresa_id(request))
+        tarea = _detail_task_presentation(detail.core, empresa, _detail_effective_participant_ids(detail))
+        supervisor = user_has_permission_for_empresa(
+            user=request.user, empresa=empresa, vista_nombre="Tareas", accion="supervisor",
         )
-        for evento in mini_tarea.eventos_t104:
-            evento.adjuntos_t104 = _mini_task_event_attachments(
-                evento,
-                puede_supervisar_adjuntos,
-            )
+        eventos = [SimpleNamespace(
+            actor_username=event.actor_username, fecha=event.fecha, tipo=event.tipo,
+            comentario=event.comentario,
+            adjuntos_t104=event.attachments if supervisor or not event.comentario_oculto else (),
+        ) for event in mini_tarea.eventos_t104]
         return render(
             request,
             "tareas/mini_tarea_historial.html",
-            {"tarea": tarea, "mini_tarea": mini_tarea, "eventos": mini_tarea.eventos_t104},
+            {"tarea": tarea, "mini_tarea": mini_tarea, "eventos": eventos},
         )
 
 

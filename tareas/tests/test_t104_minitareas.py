@@ -121,8 +121,8 @@ class MiniTareaT104Tests(TestCase):
                 actor=self.responsable,
             )
 
-    @patch("tareas.services.closure.send_task_email")
-    @patch("tareas.services.closure.emit_task_event")
+    @patch("tareas.services.minitask_storage.send_task_email")
+    @patch("tareas.services.minitask_storage.emit_task_event")
     def test_close_persists_event_snapshot_and_opt_in_channels(
         self, emit_task_event, send_task_email
     ):
@@ -159,7 +159,7 @@ class MiniTareaT104Tests(TestCase):
         self.assertFalse(emit_task_event.call_args.kwargs["send_email"])
         send_task_email.assert_called_once()
 
-    @patch("tareas.services.closure.emit_task_event")
+    @patch("tareas.services.minitask_storage.emit_task_event")
     def test_close_creates_feed_comment_with_author_version_and_attachment(self, emit_task_event):
         tarea = self.make_task()
         mini_tarea = create_mini_task(

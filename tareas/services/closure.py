@@ -1,32 +1,14 @@
 """Closure rules for mini-tasks (T031/T104)."""
 
-import logging
-
-from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import transaction
-from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from access_control.services.permissions import (
-    get_valid_users_for_empresa,
     user_has_permission_for_empresa,
 )
 from tareas.models import EvidenciaCierre, MiniTarea, MiniTareaEvento, Tarea
 from tareas.services.assignment import _validate_user_in_task_company
-from tareas.services.comments import _create_mini_task_close_comment
 from tareas.services.hierarchy import is_effectively_annulled
-from tareas.services.notifications import emit_task_event, send_task_email
-from tareas.services.participants import effective_participant_ids
-
-logger = logging.getLogger(__name__)
-
-
-def _validate_operational_task(tarea):
-    if tarea.estado not in {Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}:
-        raise ValidationError("La tarea no admite cambios de mini-tareas en este estado.")
-    if is_effectively_annulled(tarea):
-        raise ValidationError("La tarea está anulada; no admite cambios de mini-tareas.")
 
 
 def _has_task_permission(tarea, actor, accion):
@@ -42,99 +24,17 @@ def _is_supervisor(tarea, actor):
     return _has_task_permission(tarea, actor, "supervisor")
 
 
-def _validate_actor(tarea, actor, *, accion, allowed_ids):
-    _validate_user_in_task_company(tarea, actor)
-    if not _has_task_permission(tarea, actor, accion):
-        raise ValidationError("El usuario no tiene autorización para esta operación.")
-    if actor.pk not in allowed_ids and not _is_supervisor(tarea, actor):
-        raise ValidationError("El usuario no puede ejecutar esta operación.")
-
-
-def _eligible_recipients(tarea, actor, recipient_ids, *, require_email=False):
-    requested_ids = {int(value) for value in (recipient_ids or [])}
-    requested_ids.discard(actor.pk)
-    allowed_ids = effective_participant_ids(tarea)
-    if not requested_ids.issubset(allowed_ids):
-        raise ValidationError("Los destinatarios deben estar relacionados con la tarea.")
-    valid_ids = allowed_ids & requested_ids
-    users = list(
-        get_valid_users_for_empresa(tarea.empresa, active_only=True).filter(
-            pk__in=valid_ids,
-        ).order_by("pk")
-    )
-    valid_user_ids = {user.pk for user in users}
-    if valid_user_ids != valid_ids:
-        raise ValidationError("Los destinatarios deben ser usuarios activos relacionados con la tarea.")
-    if require_email and any(not user.email or not user.email.strip() for user in users):
-        raise ValidationError("Todos los destinatarios de email deben tener un email válido.")
-    return users
-
-
-def _dispatch_mini_task_close(
-    *,
-    tarea_id,
-    mini_tarea_id,
-    actor_id,
-    descripcion,
-    comentario,
-    notification_ids,
-    email_addresses,
-):
-    try:
-        tarea = Tarea.objects.select_related("empresa").get(pk=tarea_id)
-        actor = User.objects.get(pk=actor_id)
-        recipients = User.objects.filter(pk__in=notification_ids, is_active=True)
-        title = "MiniTarea cerrada"
-        body = (
-            f"{actor.username} cerró la MiniTarea '{descripcion}' de la tarea "
-            f"'{tarea.titulo}'. Comentario: {comentario}"
-        )
-        if notification_ids:
-            emit_task_event(
-                tarea=tarea,
-                event=f"mini_tarea_cierre:{mini_tarea_id}",
-                recipients=recipients,
-                title=title,
-                body=body,
-                actor=actor,
-                send_email=False,
-            )
-        if email_addresses:
-            try:
-                send_task_email(
-                    tarea=tarea,
-                    subject=title,
-                    body_text=body,
-                    to_emails=email_addresses,
-                )
-            except Exception:
-                logger.exception(
-                    "T104 mini-task email failure: tarea=%s mini_tarea=%s",
-                    tarea_id,
-                    mini_tarea_id,
-                )
-    except Exception:
-        logger.exception(
-            "T104 mini-task notification failure: tarea=%s mini_tarea=%s",
-            tarea_id,
-            mini_tarea_id,
-        )
-
-
-@transaction.atomic
 def create_mini_task(*, tarea, descripcion, persona, actor=None):
+    if actor is not None:
+        from .minitask_storage import CreateMiniTaskCommand, resolve_minitask_storage
+        storage = resolve_minitask_storage()
+        result = _mini_command(storage, "create", CreateMiniTaskCommand(
+            tarea.pk, tarea.empresa_id, actor.pk, persona.pk, descripcion,
+        ))
+        return _mini_compat_result(storage, result, tarea.empresa_id)[0]
     descripcion = str(descripcion or "").strip()
     if not descripcion:
         raise ValidationError("La descripción de la mini-tarea es obligatoria.")
-    if actor is not None:
-        tarea = Tarea.objects.select_for_update().get(pk=tarea.pk)
-        _validate_operational_task(tarea)
-        _validate_actor(
-            tarea,
-            actor,
-            accion="crear",
-            allowed_ids={tarea.responsable_id},
-        )
     _validate_user_in_task_company(tarea, persona)
     return MiniTarea.objects.create(
         tarea=tarea,
@@ -204,7 +104,6 @@ def can_delete_mini_task(*, tarea, mini_tarea, actor):
     )
 
 
-@transaction.atomic
 def close_mini_task(
     *,
     tarea,
@@ -215,121 +114,61 @@ def close_mini_task(
     email_recipient_ids=None,
     documentos_nuevos=None,
 ):
-    tarea = Tarea.objects.select_for_update().select_related("empresa").get(pk=tarea.pk)
-    mini_tarea = MiniTarea.objects.select_for_update().get(
-        pk=mini_tarea.pk,
-        tarea_id=tarea.pk,
-    )
-    comentario = str(comentario or "").strip()
-    if not comentario:
-        raise ValidationError("El comentario de cierre es obligatorio.")
-    _validate_operational_task(tarea)
-    _validate_actor(
-        tarea,
-        actor,
-        accion="modificar",
-        allowed_ids={mini_tarea.persona_id, tarea.responsable_id},
-    )
-    if mini_tarea.hecho:
-        raise ValidationError("La mini-tarea ya está hecha.")
-    notification_users = _eligible_recipients(
-        tarea,
-        actor,
-        notification_recipient_ids,
-    )
-    email_users = _eligible_recipients(
-        tarea,
-        actor,
-        email_recipient_ids,
-        require_email=True,
-    )
-    mini_tarea.hecho = True
-    mini_tarea.fecha_completado = timezone.now()
-    mini_tarea.save(update_fields=["hecho", "fecha_completado"])
-    evento = MiniTareaEvento.objects.create(
-        mini_tarea=mini_tarea,
-        tipo=MiniTareaEvento.Tipo.CIERRE,
-        actor=actor,
-        comentario=comentario,
-        destinatarios_notificacion=[user.pk for user in notification_users],
-        destinatarios_email=[user.pk for user in email_users],
-    )
-    comentario_feed = _create_mini_task_close_comment(
-        tarea=tarea,
-        mini_tarea=mini_tarea,
-        usuario=actor,
-        comentario_cierre=comentario,
-        documentos_nuevos=documentos_nuevos,
-    )
-    evento.comentario_feed = comentario_feed
-    evento.save(update_fields=["comentario_feed"])
-    transaction.on_commit(
-        lambda: _dispatch_mini_task_close(
-            tarea_id=tarea.pk,
-            mini_tarea_id=mini_tarea.pk,
-            actor_id=actor.pk,
-            descripcion=mini_tarea.descripcion,
-            comentario=comentario,
-            notification_ids=evento.destinatarios_notificacion,
-            email_addresses=[user.email.strip() for user in email_users],
-        )
-    )
-    return mini_tarea, evento
+    from .minitask_storage import CloseMiniTaskCommand, resolve_minitask_storage
+    files = []
+    for spec in documentos_nuevos or ():
+        if (
+            not isinstance(spec, dict) or not spec.get("archivo")
+            or spec.get("tipo") != "OTRO" or spec.get("url")
+        ):
+            raise ValidationError("tareas.messages.generic_error")
+        files.append(spec["archivo"])
+    storage = resolve_minitask_storage()
+    result = _mini_command(storage, "close", CloseMiniTaskCommand(
+        tarea.pk, tarea.empresa_id, actor.pk, mini_tarea.pk, comentario,
+        tuple(notification_recipient_ids or ()), tuple(email_recipient_ids or ()), tuple(files),
+    ))
+    return _mini_compat_result(storage, result, tarea.empresa_id)
 
 
-@transaction.atomic
 def reopen_mini_task(*, tarea, mini_tarea, actor, comentario):
-    tarea = Tarea.objects.select_for_update().select_related("empresa").get(pk=tarea.pk)
-    mini_tarea = MiniTarea.objects.select_for_update().get(
-        pk=mini_tarea.pk,
-        tarea_id=tarea.pk,
-    )
-    comentario = str(comentario or "").strip()
-    if not comentario:
-        raise ValidationError("El motivo de reapertura es obligatorio.")
-    _validate_operational_task(tarea)
-    _validate_actor(
-        tarea,
-        actor,
-        accion="modificar",
-        allowed_ids={tarea.responsable_id},
-    )
-    if not mini_tarea.hecho:
-        raise ValidationError("La mini-tarea ya está pendiente.")
-    mini_tarea.hecho = False
-    mini_tarea.fecha_completado = None
-    mini_tarea.save(update_fields=["hecho", "fecha_completado"])
-    evento = MiniTareaEvento.objects.create(
-        mini_tarea=mini_tarea,
-        tipo=MiniTareaEvento.Tipo.REAPERTURA,
-        actor=actor,
-        comentario=comentario,
-    )
-    return mini_tarea, evento
+    from .minitask_storage import ReopenMiniTaskCommand, resolve_minitask_storage
+    storage = resolve_minitask_storage()
+    result = _mini_command(storage, "reopen", ReopenMiniTaskCommand(
+        tarea.pk, tarea.empresa_id, actor.pk, mini_tarea.pk, comentario,
+    ))
+    return _mini_compat_result(storage, result, tarea.empresa_id)
 
 
-@transaction.atomic
 def delete_mini_task(*, tarea, mini_tarea, actor):
-    tarea = Tarea.objects.select_for_update().select_related("empresa").get(pk=tarea.pk)
-    mini_tarea = MiniTarea.objects.select_for_update().get(
-        pk=mini_tarea.pk,
-        tarea_id=tarea.pk,
-    )
-    _validate_operational_task(tarea)
-    _validate_actor(
-        tarea,
-        actor,
-        accion="modificar",
-        allowed_ids={tarea.responsable_id},
-    )
-    if mini_tarea.hecho:
-        raise ValidationError("La mini-tarea hecha conserva su historial.")
-    if MiniTareaEvento.objects.filter(mini_tarea=mini_tarea).exists():
-        raise ValidationError("La mini-tarea con historial no se puede eliminar.")
+    from .minitask_storage import DeleteMiniTaskCommand, resolve_minitask_storage
+    _mini_command(resolve_minitask_storage(), "delete", DeleteMiniTaskCommand(
+        tarea.pk, tarea.empresa_id, actor.pk, mini_tarea.pk,
+    ))
+
+
+def _mini_command(storage, operation, command):
+    from django.core.exceptions import PermissionDenied
+    from .minitask_storage import MiniTaskNotFound
     try:
-        mini_tarea.delete()
-    except ProtectedError as error:
-        raise ValidationError("La mini-tarea conserva referencias protegidas.") from error
+        return getattr(storage, operation)(command)
+    except (PermissionDenied, MiniTaskNotFound):
+        raise ValidationError("tareas.messages.generic_error") from None
+
+
+def _mini_compat_result(storage, result, empresa_id):
+    from .minitask_storage import DjangoMiniTaskStorage
+    if isinstance(storage, DjangoMiniTaskStorage):
+        mini = MiniTarea.objects.using(storage.alias).get(pk=result.mini_task_id)
+        event = (
+            MiniTareaEvento.objects.using(storage.alias).get(pk=result.event_id)
+            if result.event_id else None
+        )
+        return mini, event
+    detail = storage.detail(task_id=result.task_id, empresa_id=empresa_id)
+    mini = next(item for item in detail.mini_tasks if item.id == result.mini_task_id)
+    event = next((item for item in mini.eventos_t104 if item.id == result.event_id), None)
+    return mini, event
 
 
 def set_mini_task_done(mini_tarea, hecho=True):

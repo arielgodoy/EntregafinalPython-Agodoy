@@ -59,6 +59,7 @@
 
             <section class="mb-4" aria-labelledby="mis-minitareas-titulo">
                 <h5 id="mis-minitareas-titulo"><span data-key="tareas.personal.mini_tasks.title">Mis MiniTareas</span></h5>
+                {% if mini_storage_error %}<div class="alert alert-danger"><span data-key="tareas.messages.generic_error">No fue posible procesar la solicitud.</span></div>{% endif %}
                 {% if mini_tareas %}
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle">

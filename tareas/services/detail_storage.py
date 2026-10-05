@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from decimal import Decimal
+import json
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
@@ -191,6 +192,11 @@ class TaskDetailMiniTaskEvent:
     comentario: str
     comentario_oculto: bool
     attachments: tuple[TaskDetailAttachment, ...]
+    actor_id: int | None = None
+    actor_username: str = ""
+    comentario_feed_id: int | None = None
+    destinatarios_notificacion: tuple[int, ...] = ()
+    destinatarios_email: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -564,6 +570,10 @@ class DjangoTaskDetailStorage:
         user_ids = {user_id for user_id, _role in participant_rows}
         user_ids.update(item.usuario_id for item in reprogramming_history)
         user_ids.update(mini.persona_id for mini in mini_task_rows)
+        user_ids.update(
+            event.actor_id for mini in mini_task_rows
+            for event in getattr(mini, "detail_events", ())
+        )
         for milestone in milestone_rows:
             user_ids.add(milestone.responsable_id)
             if milestone.completado_por_id:
@@ -623,6 +633,12 @@ class DjangoTaskDetailStorage:
                             event.comentario_feed and event.comentario_feed.oculto
                         ),
                         attachments=_event_attachments(event),
+                        actor_id=event.actor_id,
+                        actor_username=users_by_id[event.actor_id].username
+                        if event.actor_id in users_by_id else str(event.actor_id),
+                        comentario_feed_id=event.comentario_feed_id,
+                        destinatarios_notificacion=tuple(event.destinatarios_notificacion),
+                        destinatarios_email=tuple(event.destinatarios_email),
                     )
                     for event in getattr(mini, "detail_events", ())
                 ),
@@ -909,7 +925,8 @@ class MySQLTaskDetailStorage:
                         event_rows = self._rows(
                             cursor,
                             "SELECT e.id, e.mini_tarea_id, e.comentario_feed_id, e.tipo, "
-                            "e.actor_id, e.fecha, e.comentario, c.oculto "
+                            "e.actor_id, e.fecha, e.comentario, c.oculto, "
+                            "e.destinatarios_notificacion, e.destinatarios_email "
                             "FROM tareas_minitareaevento e LEFT JOIN tareas_comentario c "
                             "ON c.id = e.comentario_feed_id "
                             f"WHERE e.mini_tarea_id IN ({marks}) ORDER BY e.mini_tarea_id, e.fecha, e.id",
@@ -1052,11 +1069,23 @@ class MySQLTaskDetailStorage:
                 TaskDetailAttachment(
                     id=item["id"], nombre_archivo=self._file(item["archivo"], item["url"])[0],
                     tipo=item["tipo"], formato_archivo=item["formato_archivo"],
-                    url=item["url"], archivo_url="",
+                    url=item["url"], archivo_url=(
+                        DocumentoTarea._meta.get_field("archivo").storage.url(item["archivo"])
+                        if item["archivo"] else ""
+                    ),
                 ) for item in event_attachments.get(event["comentario_feed_id"], [])
             )
             event_by_mini.setdefault(event["mini_tarea_id"], []).append(
-                TaskDetailMiniTaskEvent(event["id"], event["tipo"], event["fecha"], event["comentario"], bool(event["oculto"]), attachments)
+                TaskDetailMiniTaskEvent(
+                    event["id"], event["tipo"], event["fecha"], event["comentario"],
+                    bool(event["oculto"]), attachments,
+                    actor_id=event["actor_id"],
+                    actor_username=users_by_id[event["actor_id"]].username
+                    if event["actor_id"] in users_by_id else str(event["actor_id"]),
+                    comentario_feed_id=event["comentario_feed_id"],
+                    destinatarios_notificacion=tuple(json.loads(event["destinatarios_notificacion"])),
+                    destinatarios_email=tuple(json.loads(event["destinatarios_email"])),
+                )
             )
         mini_tasks = []
         for row in mini_rows:

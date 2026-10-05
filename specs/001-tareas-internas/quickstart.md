@@ -135,6 +135,34 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
    errores de resolver sin fallback, mismo ID Django intacto, candidatos reales
    filtrados y alternancia ES/EN sin destruir opciones de los selects.
 
+### E2 quater. MiniTareas configurables (T134.3D)
+
+- Repetir alta/cierre/reapertura/cierre y eliminación de una pendiente sin eventos
+  en Django y MySQL. Verificar comentario/versión, asociaciones documentales,
+  lectura con cursor conservado y comunicaciones independientes por evento.
+- Verificar negativos de actor/persona, estados, anulación, historial protegido,
+  configuración inválida, same-PK y propagación de alias a todo el agregado.
+- Evidencia de desarrollo T134.3D: Tarea MySQL 1 (misma PK que Django);
+  MiniTarea 1 con eventos 1/2/3, feeds 1/2 y MiniTarea 2 eliminada. Doble CLOSE
+  real sobre MiniTarea 3: un commit/evento 4 y un rechazo; sin feed duplicado.
+  Historial/Detalle/Mis Tareas HTTP 200 mediante RequestFactory sin sesiones
+  persistidas. Hash lógico Django sin cambios y guard de cero writes SYSTEM.
+  Selección de comunicaciones vacía; archivos reales omitidos, cubiertos por
+  tests con storage en memoria. Los datos MySQL de prueba quedan en desarrollo.
+- 135 archivos Python compilados, check con solo ckeditor.W001 y sin drift de
+  modelos. La inspección de migraciones conserva el warning histórico de
+  DB_sistema/django_lab. Sin migración, cambio de schema ni modificación SYSTEM/CORE.
+- Historial de cierre: el gate intermedio dio 257 PASS / 1 FAIL por 13 `data-key`
+  dinámicos de assignment presentes en HEAD. T134.3D.1 los sustituyó por literales
+  con render equivalente; el siguiente gate reveló tres claves bootstrap ausentes
+  en ES/EN, catalogadas en T134.3D.2. Ambos bloqueos históricos están resueltos.
+- Resultado final: regresión Responsable/Participantes + i18n 101/101 PASS;
+  selección consolidada 258/258 PASS, 0 FAIL, 0 ERROR. Los 25 tests nuevos pasan.
+  Workaround de migraciones de Settings únicamente en runtime, no persistido.
+  REAL_MYSQL_VALIDATION = PASS_ALREADY_DEMONSTRATED: no se repitieron mutaciones
+  reales durante las reparaciones i18n ni la sincronización documental T134.3D.3.
+  T134_3D_GLOBAL = PASS; checkpoint listo para commit.
+
 ### E3. Publicación bloqueada sin responsable (FR-007)
 
 1. Quitar el responsable del borrador → intentar Publicar.

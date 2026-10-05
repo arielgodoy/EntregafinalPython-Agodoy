@@ -316,6 +316,15 @@ de la Tarea y enlace a su detalle. En `ACTIVA`/`GESTION` conserva la operación 
 autorización; en `PENDIENTE_APROBACION_CIERRE`/`CERRADA` es solo lectura; no muestra
 Tareas anuladas ni convierte MiniTarea en una entidad de dashboard independiente.
 
+T134.3D conserva estas rutas, permisos y formularios HTML POST/CSRF. Todas las
+operaciones MiniTarea y su historial resuelven BASE_TAREAS antes del lookup
+operacional y no hacen fallback. Detalle/historial incluyen actor externo,
+destinatarios históricos, comentario feed y URL de archivo. Mis MiniTareas usa
+el mismo backend, conservando el filtro T105 de anulación directa (sin ampliar
+silenciosamente la semántica del dashboard legacy). El historial dedicado sigue
+pendiente de evaluación UX modal. Un fallo de comunicaciones posteriores al
+commit muestra `tareas.minitareas.communication_failed`, sin revertir el cierre.
+
 Cada respuesta de dashboard entrega contexto server-side para exactamente ocho KPI:
 dimensión actual, filtros activos, filas, estado, prioridad, fechas relevantes,
 enlaces al siguiente nivel y datos mínimos de la Tarea. El servicio no genera HTML.

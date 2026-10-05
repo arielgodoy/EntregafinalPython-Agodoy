@@ -5,12 +5,15 @@
 {% block content %}
 <div class="main-content"><div class="page-content"><div class="container-fluid">
     <div class="card"><div class="card-body">
+        {% if storage_error %}
+        <div class="alert alert-danger"><span data-key="tareas.messages.generic_error">No fue posible procesar la solicitud.</span></div>
+        {% else %}
         <h4><span data-key="tareas.actions.ver">Historial</span>: {{ mini_tarea.descripcion }}</h4>
         {% if eventos %}
         <ol class="list-group list-group-numbered mt-3">
             {% for evento in eventos %}
             <li class="list-group-item">
-                <strong>{{ evento.actor.username }}</strong>
+                <strong>{{ evento.actor_username }}</strong>
                 {% if evento.tipo == "CIERRE" %}<span data-key="tareas.actions.close">cerró la MiniTarea</span>{% else %}<span data-key="tareas.actions.reactivar">devolvió la MiniTarea a pendiente</span>{% endif %}
                 <div class="small text-muted">{{ evento.fecha }}</div>
                 <blockquote class="mb-0 mt-2">{{ evento.comentario }}</blockquote>
@@ -29,6 +32,7 @@
         </ol>
         {% else %}<p><span data-key="tareas.links.empty">No hay historial.</span></p>{% endif %}
         <a class="btn btn-secondary mt-3" href="{% url 'tareas:detalle_tarea' tarea.pk %}"><span data-key="tareas.actions.volver">Volver</span></a>
+        {% endif %}
     </div></div>
 </div></div></div>
 {% endblock content %}

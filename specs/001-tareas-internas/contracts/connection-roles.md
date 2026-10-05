@@ -81,6 +81,17 @@ a la edición general, incluso si el resolver produce un error inesperado.
 Resuelve antes de cualquier lookup operativo. Los guards legacy de otras
 familias no se modifican en esta entrega y su adaptación queda pendiente.
 
+T134.3D aplica resolución fail-closed a MiniTareas, historial y su sección personal.
+El agregado operacional del cierre usa exclusivamente el alias resuelto o la
+conexión MySQL pública: evento, feed, versiones, documentos/asociaciones y
+lecturas. No depende de señales ORM para MySQL ni escapa a default cuando la
+fuente es MySQL u otro alias. User/Empresa se validan en SYSTEM; no se crean
+copias ni FKs externas.
+Archivos nuevos se limpian ante fallos anteriores al commit; ante resultado de
+commit incierto se conservan para reconciliación, evitando borrar un archivo
+que podría estar confirmado. No se promete atomicidad del filesystem ni del
+rollback de una transacción externa al servicio.
+
 ## Seguridad
 
 - No se exponen passwords ni secretos en HTML, JSON, logs o mensajes.

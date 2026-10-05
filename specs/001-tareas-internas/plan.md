@@ -150,6 +150,20 @@ alias explícito o SQL parametrizado, lock y transacción por agregado sin fallb
 Detalle integra modal POST y lectura bulk de historial/causas; las identidades SYSTEM
 se resuelven por ID. No altera schema ni resuelve fechas posteriores a reactivación.
 
+T134.3D implementa los cuatro comandos MiniTarea por IDs en `minitask_storage`.
+Una política común valida actores, estados y anulación efectiva; los storages
+usan alias explícito o SQL parametrizado y locks del agregado. El cierre persiste
+estado, evento, comentario, versión, archivos/asociaciones y lecturas sin señales
+ORM ni escapes a default. Las comunicaciones son post-commit y deduplican por
+evento de cierre. Historial y Mis MiniTareas consumen BASE_TAREAS; otras familias
+del dashboard y CRUD generales permanecen fuera de scope. No cambia schema.
+T134.3D está funcionalmente completo: paridad Django/MySQL, MySQL real, same-PK
+y fail-closed PASS; gate consolidado final 258/258 PASS. Durante el cierre se
+detectaron dos bloqueos i18n históricos: 13 claves dinámicas de assignment,
+reproducidas sobre HEAD, y tres claves bootstrap sin catálogo ES/EN. Se resolvieron
+en T134.3D.1 (literales con render equivalente) y T134.3D.2 (catálogos aditivos),
+sin relajar tests. T134_3D_GLOBAL = PASS; checkpoint listo para commit.
+
 ### Phase 2 boundary for lifecycle
 
 Phase 2 solo implementa el ciclo de una tarea: estados canónicos, eventos, auditoría,
