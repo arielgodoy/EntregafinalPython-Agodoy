@@ -240,6 +240,16 @@ siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender 
 - [ ] T132 [US8] Definir el schema y routing futuro de `AUDITORIA_TAREAS`.
 - [ ] T133 [US8] Definir validaciones futuras mediante `LEGACY_MYSQL`.
 - [ ] T134 [US8] Definir evolución/versionado del schema MySQL de `BASE_TAREAS` antes de producción madura.
+- [x] T134.2E.2 [US8] Reprogramación Django/MySQL con POST/modal, historial en Detalle,
+  autorización `Tareas` + `modificar`, ACTIVA/GESTION, anulación efectiva, fecha hoy/futura,
+  justificación y 1..N causas; lock, atomicidad, rollback y same-PK. Validada con tests
+  Django/MySQL fake y prueba real MySQL en T134.2E.3; pendiente de revisión humana. Sin migraciones,
+  `TareaTransicion`, propagación ni reacomodo tras reactivar.
+- [x] T134.2E.3 [US8] Cerrar catálogo base e i18n de Reprogramación: seed de seis
+  causas oficiales, idempotencia y rollback/conflictos, integración al bootstrap de
+  Tareas, 23 claves ES/EN y validación real por servicio con Detail/List HTTP 200,
+  negativos y same-PK Django intacto. Sin cambios SYSTEM, schema o configuración.
+  Sin stage/commit/push; revisión humana pendiente.
 
 ### Regla transversal de cierre i18n
 

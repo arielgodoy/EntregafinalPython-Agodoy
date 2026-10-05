@@ -59,6 +59,7 @@ from .forms import (
     ReunionTareaForm,
     TareaForm,
     TaskEditForm,
+    ReprogramTaskForm,
     TareaConnectionRoleForm,
 )
 from .models import (
@@ -157,6 +158,11 @@ from .services.detail_storage import (
     resolve_detail_storage,
 )
 from .services.closure_storage import ClosureCommand, resolve_closure_storage
+from .services.reprogramming_storage import (
+    ALLOWED_REPROGRAMMING_STATES,
+    ReprogramTaskCommand,
+    reprogram_task,
+)
 from .services.hierarchy_lifecycle_storage import (
     HierarchyLifecycleCommand,
     resolve_hierarchy_lifecycle_storage,
@@ -924,6 +930,22 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["detail_core"] = self.detail_result.core
+        context["reprogramming_history"] = self.detail_result.reprogramming_history
+        context["puede_reprogramar"] = bool(
+            self.request.user.is_active
+            and self.detail_result.core.estado in ALLOWED_REPROGRAMMING_STATES
+            and not self.detail_result.hierarchy.effectively_annulled
+            and get_valid_users_for_empresa(
+                self.detail_empresa, active_only=True
+            ).filter(pk=self.request.user.pk).exists()
+            and user_has_permission_for_empresa(
+                user=self.request.user, empresa=self.detail_empresa,
+                vista_nombre="Tareas", accion="modificar",
+            )
+        )
+        context["reprogramming_form"] = ReprogramTaskForm(
+            causes=self.detail_result.reprogramming_causes
+        )
         hierarchy = self.detail_result.hierarchy
         context["tarea_padre"] = hierarchy.parent
         context["tareas_hijas"] = hierarchy.children
@@ -1130,6 +1152,44 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
         return self.render_to_response(context)
+
+
+class ReprogramarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+    vista_nombre = "Tareas"
+    permiso_requerido = "modificar"
+    crear_permiso_faltante = False
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        form = ReprogramTaskForm(request.POST)
+        if not form.is_valid():
+            for errors in form.errors.values():
+                for error in errors:
+                    messages.error(request, error)
+        else:
+            try:
+                reprogram_task(ReprogramTaskCommand(
+                    task_id=pk, empresa_id=_get_empresa_id(request),
+                    actor_id=request.user.pk,
+                    fecha_tope_nueva=form.cleaned_data["fecha_tope_nueva"],
+                    justificacion=form.cleaned_data["justificacion"],
+                    causa_ids=form.cleaned_data["causa_ids"],
+                ))
+            except EditTaskNotFound as exc:
+                raise Http404 from exc
+            except PermissionDenied:
+                return self.handle_no_permission(request)
+            except ValidationError as exc:
+                for message in exc.messages:
+                    messages.error(request, message)
+            except TaskStorageError as exc:
+                logger.error("Reprogramming storage failure: task=%s", pk)
+                messages.error(request, str(exc))
+            else:
+                messages.success(request, "tareas.reprogramming.success")
+        return redirect(
+            reverse("tareas:detalle_tarea", kwargs={"pk": pk}) + "#tarea-reprogramaciones"
+        )
 
 
 class MiniTareaEndpointMixin(ExistingTaskBackendGuardMixin):

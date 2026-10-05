@@ -109,3 +109,19 @@ MySQL. No existe dependencia runtime con `gestiondte`.
 El bootstrap inicial está separado de `BASE_TAREAS_RUNTIME_STORAGE`, que permanece
 `PENDING` y será una futura abstracción Storage/Repository con transacciones por agregado.
 La evolución automática del schema MySQL también queda como deuda futura separada.
+
+T134.2E: Reprogramación resuelve exclusivamente `BASE_TAREAS`, sin fallback ni router
+transparente. El catálogo `CausaAtraso`, ledger y through son operacionales; usuario
+se resuelve en SYSTEM después por ID.
+
+T134.2E.3: `Crear estructura Base Tareas` garantiza también las seis causas oficiales
+de `CausaAtraso`. La fuente canónica runtime es `tareas/services/reference_data.py`,
+con los mismos códigos/nombres que la migración histórica 0009, que permanece intacta.
+`ensure_base_tareas_reference_data()` permite preparar únicamente ese catálogo en una
+base MySQL ya estructurada, resolviendo `BASE_TAREAS` sin fallback ni cambios de roles.
+Solo inserta causas faltantes; conserva IDs y datos existentes. Conflictos de código
+o nombre abortan con identificación del código oficial, sin sobrescritura ni seed
+parcial. Requiere InnoDB y ejecuta el seed completo en una transacción propia.
+MySQL puede confirmar DDL implícitamente: estructura y seed son fases separadas; un
+fallo del catálogo no promete revertir tablas ya creadas, pero nunca informa éxito del
+bootstrap. No incorpora otros backfills históricos ni ejecuta migraciones Django.

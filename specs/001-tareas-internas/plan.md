@@ -138,6 +138,11 @@ existentes. No se modifica `control_de_proyectos`, `access_control`, `notificaci
     reprogramación con justificación y auditoría.
 - Modelar mini-tareas checkbox con una persona, sin ponderación y bloqueantes del cierre.
 
+T134.2E adapta Reprogramación a `BASE_TAREAS` Django/MySQL con command/result,
+alias explícito o SQL parametrizado, lock y transacción por agregado sin fallback.
+Detalle integra modal POST y lectura bulk de historial/causas; las identidades SYSTEM
+se resuelven por ID. No altera schema ni resuelve fechas posteriores a reactivación.
+
 ### Phase 2 boundary for lifecycle
 
 Phase 2 solo implementa el ciclo de una tarea: estados canónicos, eventos, auditoría,

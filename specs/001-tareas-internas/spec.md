@@ -392,11 +392,35 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-G02**: MUST calcularse `dias_atraso` de forma derivada, sin almacenarlo si puede calcularse. Toda Tarea publicada tiene `fecha_tope`; mientras no esté cumplida, si `fecha_referencia > fecha_tope`, el atraso es la diferencia entre ambas fechas. `fecha_cumplimiento` MUST registrar la fecha/hora real en que se completa la última acción operativa necesaria y, al pasar a `PENDIENTE_APROBACION_CIERRE`, MUST ser el corte del atraso: la aprobación administrativa posterior no suma días. Si el cierre es rechazado y vuelve a `GESTION`, `fecha_cumplimiento` MUST volver a NULL y el intento anterior MUST quedar auditado en `TareaTransicion`; al completarse nuevamente se fija una nueva fecha. La fecha de asignación/publicación MUST conservarse como referencia histórica original y una reasignación no la cambia ni modifica `fecha_tope`.
 - **FR-G03**: MUST soportarse múltiples causas de atraso por cada reprogramación. La lista inicial incluye únicamente: imposibilidad técnica, atraso importación, permisos municipales, problemas de escrituras, causas internas y causas externas. La relación `Reprogramacion` ↔ `CausaAtraso` MUST ser M:N y conservar el contexto histórico de cada operación.
 - **FR-G04**: La justificación MUST ser obligatoria para reprogramar.
-- **FR-G05**: Cambiar una `fecha_tope` ya definida MUST tratarse como reprogramación y ser trazable mediante registro de `fecha_tope` anterior/nueva, justificación obligatoria, usuario, fecha/hora de operación y una o varias causas asociadas. No existe asignación inicial de fecha sobre una Tarea publicada: la fecha debe estar resuelta antes de publicar. La reprogramación explícita no se confunde con la reasignación. La anulación no cambia fechas, no pausa el reloj histórico, no borra atraso ni limpia desempeño; la reactivación conserva las fechas existentes y no recalcula ni extiende la planificación. `fechas_pendientes_confirmacion` se conserva únicamente por compatibilidad histórica, sin semántica nueva en T030.
+- **FR-G05**: Cambiar una `fecha_tope` ya definida en `ACTIVA` o `GESTION` MUST tratarse como reprogramación y ser trazable mediante registro de `fecha_tope` anterior/nueva, justificación obligatoria, usuario, fecha/hora de operación y una o varias causas asociadas. `BORRADOR` permite editar su fecha sin este historial; ningún otro estado admite reprogramación. No existe asignación inicial de fecha sobre una Tarea publicada: la fecha debe estar resuelta antes de publicar. La reprogramación explícita no se confunde con la reasignación. La anulación no cambia fechas, no pausa el reloj histórico, no borra atraso ni limpia desempeño; la reactivación conserva las fechas existentes y no recalcula ni extiende la planificación. `fechas_pendientes_confirmacion` se conserva únicamente por compatibilidad histórica, sin semántica nueva en T030.
 
 **Fórmula funcional de atraso**: durante la edición de un `BORRADOR` sin `fecha_tope`, `dias_atraso = 0`; toda Tarea publicada tiene fecha y, si no está cumplida, se calcula la diferencia cuando `fecha_referencia > fecha_tope`; con Tarea cumplida, `fecha_cumplimiento` es el corte; con Tarea anulada, se conserva el atraso histórico generado hasta la anulación sin resetearlo.
 
 **Key Entities — G**: Fechas (asignación, vencimiento), Causa de atraso, Reprogramación.
+
+### Contrato aprobado T134.2E — Reprogramación operacional
+
+- Solo `ACTIVA` y `GESTION` admiten reprogramación. `CERRADA` nunca se reabre ni se
+  reprograma; una necesidad posterior origina una nueva Tarea. `BORRADOR` es la
+  excepción explícita: Editar puede cambiar su fecha sin crear `Reprogramacion`.
+- La operación exige usuario activo, pertenencia válida a Empresa activa de sesión y
+  `Tareas` + `modificar`, sin exigir ser creador, responsable o participante.
+  Anulación propia, del padre o del abuelo bloquea; no hay cascada física.
+- Fecha actual no NULL; nueva fecha distinta, hoy o futura en fecha local. Puede
+  adelantarse o postergarse, sin restricciones relativas a padre/hijas/hitos.
+  Justificación con trim obligatorio y 1..N causas existentes, sin PK nulo ni duplicados,
+  exclusivamente del backend operacional. El catálogo no tiene flag activo.
+- POST protegido con CSRF desde modal Bootstrap en Detalle y PRG al mismo Detalle.
+  Historial visible ordenado por `fecha_operacion DESC, id DESC`, con usuario y causas.
+- Resolver `BASE_TAREAS` antes del lookup, sin fallback. Django usa alias explícito;
+  MySQL usa SQL parametrizado. Lock de Tarea y scope `task_id + empresa_id`;
+  UPDATE de fecha, INSERT de historial y M2M son una unidad atómica. Fecha anterior
+  capturada bajo lock. No crea `TareaTransicion` ni modifica otros campos.
+- Evento `reprogramacion` para responsable y participantes explícitos activos, excluyendo
+  actor/duplicados; email según criticidad. Comunicación after-commit sin revertir negocio.
+- Reacomodo/confirmación de fechas tras reactivar, propagación jerárquica y cambios en
+  `fechas_pendientes_confirmacion` permanecen fuera de alcance:
+  `REACTIVATION_DATES_FOLLOWUP_REQUIRED = YES`.
 
 ---
 

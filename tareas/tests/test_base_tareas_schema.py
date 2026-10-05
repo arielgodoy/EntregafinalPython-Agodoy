@@ -171,6 +171,12 @@ class BaseTareasSchemaServiceTests(SimpleTestCase):
         connection = MagicMock()
         cursor = MagicMock()
         cursor.fetchone.return_value = None
+        cursor.fetchall.return_value = []
+        def execute(sql, params=()):
+            if sql.startswith("SELECT ENGINE"):
+                cursor.fetchone.side_effect = None
+                cursor.fetchone.return_value = ("InnoDB",)
+        cursor.execute.side_effect = execute
         connection.cursor.return_value = cursor
         return connection, cursor
 
@@ -197,8 +203,10 @@ class BaseTareasSchemaServiceTests(SimpleTestCase):
         self.assertEqual(processed, 1)
         get_connection.assert_called_once_with("BASE_TAREAS")
         open_connection.assert_called_once()
-        self.assertEqual(cursor.execute.call_args_list[-1].args[0], read_schema.return_value[0])
-        connection.commit.assert_called_once_with()
+        self.assertIn(read_schema.return_value[0], [
+            call.args[0] for call in cursor.execute.call_args_list
+        ])
+        self.assertEqual(connection.commit.call_count, 2)
         connection.rollback.assert_not_called()
 
     @patch("tareas.services.base_tareas_schema.get_tarea_connection")
@@ -259,8 +267,10 @@ class BaseTareasSchemaServiceTests(SimpleTestCase):
         processed = install_base_tareas_schema()
 
         self.assertEqual(processed, 3)
-        self.assertEqual(cursor.execute.call_count, 3)
-        connection.commit.assert_called_once_with()
+        self.assertEqual(sum("information_schema." in call.args[0] and
+                             not call.args[0].startswith("SELECT ENGINE")
+                             for call in cursor.execute.call_args_list), 3)
+        self.assertEqual(connection.commit.call_count, 2)
 
     @patch("tareas.services.base_tareas_schema._read_frozen_schema_statements")
     @patch("tareas.services.base_tareas_schema.open_mysql_connection")
@@ -284,11 +294,10 @@ class BaseTareasSchemaServiceTests(SimpleTestCase):
 
         install_base_tareas_schema()
 
-        self.assertEqual(
-            cursor.execute.call_args_list[-1].args[0],
-            read_schema.return_value[1],
-        )
-        connection.commit.assert_called_once_with()
+        self.assertIn(read_schema.return_value[1], [
+            call.args[0] for call in cursor.execute.call_args_list
+        ])
+        self.assertEqual(connection.commit.call_count, 2)
 
 
 class BaseTareasSchemaViewTests(TestCase):

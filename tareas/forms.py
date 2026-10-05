@@ -4,6 +4,7 @@ from os.path import splitext
 
 from django.contrib.auth.models import User
 from django import forms
+from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
 from tareas.services.reading import COMMENT_PAGE_SIZE
@@ -456,6 +457,37 @@ class TareaForm(forms.ModelForm):
             "descripcion": forms.Textarea(attrs={"rows": 4}),
             "fecha_tope": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class ReprogramTaskForm(forms.Form):
+    fecha_tope_nueva = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        error_messages={
+            "required": "tareas.reprogramming.errors.invalid_date",
+            "invalid": "tareas.reprogramming.errors.invalid_date",
+        },
+    )
+    justificacion = forms.CharField(
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        error_messages={"required": "tareas.reprogramming.errors.justification_required"},
+    )
+    causa_ids = forms.Field(
+        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": 6}),
+        error_messages={"required": "tareas.reprogramming.errors.causes_required"},
+    )
+
+    def __init__(self, *args, causes=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["causa_ids"].widget.choices = [
+            (item.id, item.nombre) for item in causes
+        ]
+        self.fields["fecha_tope_nueva"].widget.attrs["min"] = timezone.localdate().isoformat()
+
+    def clean_causa_ids(self):
+        try:
+            return tuple(int(value) for value in self.cleaned_data["causa_ids"])
+        except (TypeError, ValueError) as exc:
+            raise forms.ValidationError("tareas.reprogramming.errors.invalid_causes") from exc
 
 
 class TaskEditForm(forms.Form):

@@ -3,12 +3,9 @@
 from datetime import date, datetime
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.utils import timezone
 
-from access_control.services.permissions import get_valid_users_for_empresa
-from tareas.models import CausaAtraso, Reprogramacion, Tarea, TareaParticipante, TareaTransicion
-from tareas.services.notifications import emit_task_event, task_recipients
+from tareas.models import TareaTransicion
 
 
 def _as_date(value):
@@ -59,60 +56,13 @@ def dias_atraso(tarea, fecha_referencia=None):
     return max(0, (referencia - tarea.fecha_tope).days)
 
 
-def _validate_causas(causas):
-    causas = list(causas or [])
-    if not causas:
-        raise ValidationError("Debe indicar al menos una causa de atraso.")
-    ids = {getattr(causa, "pk", causa) for causa in causas}
-    if None in ids or len(ids) != len(causas):
-        raise ValidationError("Las causas de atraso no son válidas.")
-    valid_ids = set(CausaAtraso.objects.filter(pk__in=ids).values_list("pk", flat=True))
-    if valid_ids != ids:
-        raise ValidationError("Las causas de atraso no son válidas.")
-    return list(ids)
-
-
 def reprogramar(tarea, fecha_tope_nueva, justificacion, usuario, causas):
-    """Change an existing deadline and persist its complete audit trail."""
-    if tarea.pk is None or tarea.fecha_tope is None:
-        raise ValidationError("Solo se puede reprogramar una tarea con fecha tope definida.")
-    justificacion = str(justificacion or "").strip()
-    if not justificacion:
-        raise ValidationError("La justificación de reprogramación es obligatoria.")
-    fecha_tope_nueva = _as_date(fecha_tope_nueva)
-    causas_ids = _validate_causas(causas)
-    if not get_valid_users_for_empresa(tarea.empresa).filter(pk=getattr(usuario, "pk", None)).exists():
-        raise ValidationError("El usuario no pertenece al contexto de la empresa de la tarea.")
+    """Compatibility entry point; operational work always uses the resolved backend."""
+    from .reprogramming_storage import ReprogramTaskCommand, reprogram_task
 
-    with transaction.atomic():
-        tarea_bloqueada = Tarea.objects.select_for_update().get(pk=tarea.pk)
-        if tarea_bloqueada.empresa_id != tarea.empresa_id:
-            raise ValidationError("La tarea no pertenece al contexto esperado.")
-        fecha_anterior = tarea_bloqueada.fecha_tope
-        if fecha_anterior is None or fecha_anterior == fecha_tope_nueva:
-            raise ValidationError("La nueva fecha tope debe modificar la fecha existente.")
-        tarea_bloqueada.fecha_tope = fecha_tope_nueva
-        tarea_bloqueada.save(update_fields=["fecha_tope"])
-        historial = Reprogramacion.objects.create(
-            tarea=tarea_bloqueada,
-            fecha_tope_anterior=fecha_anterior,
-            fecha_tope_nueva=fecha_tope_nueva,
-            justificacion=justificacion,
-            usuario=usuario,
-        )
-        historial.causas.set(causas_ids)
-    tarea.fecha_tope = fecha_tope_nueva
-    emit_task_event(
-        tarea=tarea,
-        event="reprogramacion",
-        recipients=task_recipients(
-            tarea,
-            actor=usuario,
-            include_responsible=True,
-            participant_roles=list(TareaParticipante.Rol),
-        ),
-        title="Fecha tope reprogramada",
-        body="La fecha tope de la tarea fue reprogramada.",
-        actor=usuario,
-    )
-    return historial
+    result = reprogram_task(ReprogramTaskCommand(
+        tarea.pk, tarea.empresa_id, usuario.pk, fecha_tope_nueva, justificacion,
+        tuple(getattr(causa, "pk", causa) for causa in (causas or ())),
+    ))
+    tarea.fecha_tope = result.fecha_tope_nueva
+    return result

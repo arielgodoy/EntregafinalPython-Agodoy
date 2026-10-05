@@ -1,11 +1,11 @@
 from datetime import date, timedelta
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
 from access_control.models import Empresa
-from tareas.models import CausaAtraso, Tarea, TareaTransicion
+from tareas.models import CausaAtraso, Tarea, TareaConnectionRole, TareaTransicion
 from tareas.services.lifecycle import (
     annul_task,
     complete_task,
@@ -24,7 +24,10 @@ class SchedulingT030Tests(TestCase):
         cls.creador = create_user("t30_creador")
         cls.responsable = create_user("t30_responsable")
         cls.autorizador = create_user("t30_autorizador")
-        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True, modificar=True)
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
 
     def make_task(self, **kwargs):
         defaults = {
@@ -109,7 +112,7 @@ class SchedulingT030Tests(TestCase):
         )
         task.refresh_from_db()
         self.assertEqual(task.fecha_tope, date.today() + timedelta(days=5))
-        self.assertEqual(historial.causas.count(), 2)
+        self.assertEqual(task.reprogramaciones.get(pk=historial.reprogramacion_id).causas.count(), 2)
         with self.assertRaises(ValidationError):
             reprogramar(task, date.today() + timedelta(days=6), "", self.creador, causas)
 
@@ -135,7 +138,7 @@ class SchedulingT030Tests(TestCase):
         task = self.publish_and_start()
         fecha_original = task.fecha_tope
         causas = list(CausaAtraso.objects.order_by("codigo")[:1])
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             reprogramar(
                 task,
                 fecha_original + timedelta(days=1),
@@ -153,7 +156,7 @@ class SchedulingT030Tests(TestCase):
         causas = list(CausaAtraso.objects.order_by("codigo")[:1])
         reprogramar(
             task,
-            task.fecha_tope + timedelta(days=1),
+            timezone.localdate() + timedelta(days=1),
             "Nueva dependencia",
             self.creador,
             causas,

@@ -67,6 +67,10 @@ la infraestructura base. La vista inicial sigue dependiendo de `ingresar=True`.
 - **Alternatives considered**: cascada física de estados ANULADA y snapshot de estructura
   para reactivación; rechazadas por duplicar fuente de verdad y complejidad.
 
+Nota T134.2E: Reprogramación usa el ledger existente `Reprogramacion` y su M:N,
+sin agregar `TareaTransicion`. La fecha anterior se captura bajo lock; la comunicación
+se ejecuta después del commit. Reacomodo tras reactivar sigue siendo deuda separada.
+
 ### D7. Avance ponderado
 
 - **Decision**: pesos relativos normalizados; `avance = sum(cumplimiento * peso) / sum(pesos)`.

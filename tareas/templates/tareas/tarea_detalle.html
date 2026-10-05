@@ -49,6 +49,7 @@ Detalle de tarea
                                 </div>
                                 <div class="task-detail__task-actions d-flex flex-wrap justify-content-end align-items-center gap-2">
                                     {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}
+                                    {% if puede_reprogramar %}<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reprogramar-tarea-modal"><i class="ri-calendar-event-line" aria-hidden="true"></i><span data-key="tareas.reprogramming.action">Reprogramar</span></button>{% endif %}
                                     {% if tarea.estado == "BORRADOR" %}
                                     <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">
                                         {% csrf_token %}
@@ -201,6 +202,8 @@ Detalle de tarea
                                     </div>
                                 </div>
                             </section>
+
+                            {% include "tareas/_reprogramming.html" %}
 
                             <ul class="nav nav-tabs nav-tabs-custom task-detail__tabs-nav" role="tablist" aria-label="Secciones de la tarea">
                                 <li class="nav-item" role="presentation"><a class="nav-link{% if not documentos_tab_activo %} active{% endif %}" id="tarea-tab-participantes" data-bs-toggle="tab" href="#tarea-pane-participantes" role="tab" aria-controls="tarea-pane-participantes" aria-selected="{% if documentos_tab_activo %}false{% else %}true{% endif %}"><span data-key="tareas.participants.title">Participantes</span></a></li>

@@ -70,6 +70,7 @@ identifica una ruta que no debe inventarse en esta feature.
 | ACTIVE | GET | `/tareas/<pk>/` | `detalle_tarea` |
 | ACTIVE | GET/POST | `/tareas/crear/` | `crear_tarea` |
 | ACTIVE | GET/POST | `/tareas/<pk>/editar/` | `editar_tarea` |
+| ACTIVE | POST | `/tareas/<pk>/reprogramar/` | `reprogramar_tarea` |
 | ACTIVE | POST | `/tareas/<pk>/publicar/` | `publicar_tarea` |
 | ACTIVE | POST | `/tareas/<tarea_id>/responsable/` | `administrar_responsable_detalle` |
 | ACTIVE | POST | `/tareas/<pk>/gestionar/` | `gestionar_tarea` |
@@ -200,7 +201,7 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 El POST `cerrar_minitarea` acepta `multipart/form-data`. Además del comentario obligatorio y los destinatarios opt-in de T104, admite cero a cinco archivos opcionales. No expone selector ni metadatos documentales adicionales: cada archivo usa internamente el tipo neutro `DocumentoTarea.Tipo.OTRO`, las validaciones y el procesamiento de imágenes vigentes, y queda relacionado con el `Comentario` automático mediante `ComentarioAdjunto`. El cierre no genera una comunicación adicional de Comentarios.
 
 La tabla de MiniTareas muestra un indicador compacto solo para el último `CIERRE` vigente de una MiniTarea `HECHA`: no muestra indicador con cero adjuntos, muestra `Archivo` con uno y `N archivos` con varios. El historial muestra cada adjunto dentro de su evento `CIERRE`; un evento `REAPERTURA` y un evento histórico sin `comentario_feed` no muestran adjuntos. La relación `MiniTareaEvento.comentario_feed` es la única forma válida de resolver la trazabilidad y no se permite reconstrucción por fecha, actor, texto, posición o nombre de archivo.
-| 2 | Reprogramación | POST | `reprogramar_tarea` | Justificación y auditoría obligatorias |
+| 2 | Reprogramación (implementada T134.2E) | POST | `reprogramar_tarea` | `Tareas` + `modificar`; solo ACTIVA/GESTION no anulada efectivamente; modal, CSRF, PRG al Detalle e historial especializado |
 | 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental; `hitos_tarea` admite `accion=completar_hito` con reseña y evidencia y muestra `Ver cumplimiento Hito` en lectura para Hitos completados |
 
 La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal de solo lectura; no crea una URL ni una acción POST nueva. Solo se muestra cuando `Hito.completado=True` y la autorización de lectura vigente permite consultar la Tarea/Hito. El modal lee los campos canónicos del Hito y lista todas sus `HitoEvidencia` (`0..N`), sin mezclar `EvidenciaCierre` de Tarea ni modificar datos. Para un Hito completado, el contrato visual solo ofrece `Ver cumplimiento Hito` y `Anular` cuando el actor tenga esa facultad; no ofrece edición, reasignación, nueva completitud, actualización de avance ni eliminación física. Al reactivar un Hito anulado se restaura exactamente su estado funcional previo: un Hito completado vuelve completado con sus evidencias intactas y uno pendiente vuelve pendiente; la operación solo limpia `anulado` y registra la reactivación.

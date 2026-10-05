@@ -15,6 +15,7 @@ from settings.services.mysql_connections import (
 
 from ..models import TareaConnectionRole
 from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .reference_data import BaseTareasReferenceDataError, ensure_mysql_delay_causes
 
 
 class BaseTareasSchemaInstallError(RuntimeError):
@@ -198,7 +199,7 @@ def _metadata_exists(cursor, statement: str, database_name: str) -> bool:
 
 
 def install_base_tareas_schema() -> int:
-    """Create the configured BASE_TAREAS MySQL structure idempotently."""
+    """Ensure frozen structure and official causes; MySQL DDL commits separately."""
     try:
         source = get_tarea_connection("BASE_TAREAS")
         if source["type"] != "MYSQL_CONFIG":
@@ -223,9 +224,12 @@ def install_base_tareas_schema() -> int:
                 raise
             finally:
                 cursor.close()
+            ensure_mysql_delay_causes(connection)
         return len(statements)
     except BaseTareasSchemaInstallError:
         raise
+    except BaseTareasReferenceDataError as exc:
+        raise BaseTareasSchemaInstallError(str(exc)) from exc
     except MySQLConnectionOpenError as exc:
         raise BaseTareasSchemaInstallError(
             "No se pudo abrir la conexión de BASE_TAREAS."

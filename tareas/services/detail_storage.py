@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -30,6 +30,12 @@ from ..models import (
 from .connection_roles import TareaConnectionError, get_tarea_connection
 from .connection_roles import get_tarea_mysql_connection
 from .task_storage import TaskStorageBackendNotImplemented, TaskStorageError
+from .reprogramming_storage import (
+    ReprogrammingCause,
+    ReprogrammingHistory,
+    django_reprogramming_detail,
+    mysql_reprogramming_detail,
+)
 from settings.services.mysql_connections import open_mysql_connection
 
 
@@ -264,6 +270,8 @@ class TaskDetailResult:
     milestones: tuple[TaskDetailMilestone, ...] = ()
     documents: tuple[TaskDetailDocument, ...] = ()
     closure_evidence: tuple[TaskDetailClosureEvidence, ...] = ()
+    reprogramming_causes: tuple[ReprogrammingCause, ...] = ()
+    reprogramming_history: tuple[ReprogrammingHistory, ...] = ()
 
 
 def _avatar_url(user) -> str:
@@ -541,7 +549,11 @@ class DjangoTaskDetailStorage:
                 .filter(tarea_id=task.pk, tarea__empresa_id=empresa_id)
                 .order_by("-fecha_creacion", "-pk")
             )
+        reprogramming_causes, reprogramming_history = django_reprogramming_detail(
+            self.alias, task.pk, empresa_id
+        )
         user_ids = {user_id for user_id, _role in participant_rows}
+        user_ids.update(item.usuario_id for item in reprogramming_history)
         user_ids.update(mini.persona_id for mini in mini_task_rows)
         for milestone in milestone_rows:
             user_ids.add(milestone.responsable_id)
@@ -730,6 +742,13 @@ class DjangoTaskDetailStorage:
             milestones=milestones,
             documents=documents,
             closure_evidence=closure_evidence,
+            reprogramming_causes=reprogramming_causes,
+            reprogramming_history=tuple(replace(
+                item,
+                usuario_username=users_by_id[item.usuario_id].username
+                if item.usuario_id in users_by_id else "",
+                usuario_avatar_url=avatars_by_user.get(item.usuario_id, ""),
+            ) for item in reprogramming_history),
         )
 
 
@@ -804,6 +823,10 @@ class MySQLTaskDetailStorage:
                 if not task_rows:
                     raise DetailTaskNotFound
                 task = task_rows[0]
+                reprogramming_causes, reprogramming_history = mysql_reprogramming_detail(
+                    cursor, task_id, empresa_id
+                )
+                user_ids.update(item.usuario_id for item in reprogramming_history)
                 user_ids.update((task["creada_por_id"], task["responsable_id"]))
 
                 parent_rows = self._rows(
@@ -1055,14 +1078,25 @@ class MySQLTaskDetailStorage:
         closure_evidence = tuple(TaskDetailClosureEvidence(
             id=row["id"], formato_archivo=row["formato_archivo"], formato_archivo_display=dict(DocumentoTarea.FormatoArchivo.choices).get(row["formato_archivo"], row["formato_archivo"]), nombre_archivo=self._file(row["archivo"], row["url"])[0], archivo_url="", url=row["url"], usuario_id=row["usuario_id"], usuario_username=users_by_id.get(row["usuario_id"]).username if row["usuario_id"] in users_by_id else "", fecha=row["fecha"]
         ) for row in closure_rows)
-        return TaskDetailResult(core=core, hierarchy=hierarchy, participants=participants, mini_tasks=tuple(mini_tasks), links=links, progress=progress, milestones=milestones, documents=documents, closure_evidence=closure_evidence)
+        return TaskDetailResult(
+            core=core, hierarchy=hierarchy, participants=participants,
+            mini_tasks=tuple(mini_tasks), links=links, progress=progress,
+            milestones=milestones, documents=documents, closure_evidence=closure_evidence,
+            reprogramming_causes=reprogramming_causes,
+            reprogramming_history=tuple(replace(
+                item,
+                usuario_username=users_by_id[item.usuario_id].username
+                if item.usuario_id in users_by_id else "",
+                usuario_avatar_url=avatars_by_id.get(item.usuario_id, ""),
+            ) for item in reprogramming_history),
+        )
 
 
 def resolve_detail_storage() -> DjangoTaskDetailStorage:
     try:
         source = get_tarea_connection("BASE_TAREAS")
     except TareaConnectionError as exc:
-        return DjangoTaskDetailStorage("default")
+        raise TaskStorageError("No se pudo resolver el almacenamiento de tareas.") from exc
     if source["type"] == "MYSQL_CONFIG":
         try:
             return MySQLTaskDetailStorage(

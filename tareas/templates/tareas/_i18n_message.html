@@ -1,4 +1,30 @@
-{% if message.message == "tareas.messages.participant_added" %}
+{% if message.message == "tareas.reprogramming.success" %}
+<span data-key="tareas.reprogramming.success">Fecha límite reprogramada correctamente.</span>
+{% elif message.message == "tareas.reprogramming.errors.invalid_date" %}
+<span data-key="tareas.reprogramming.errors.invalid_date">Indique una nueva fecha válida.</span>
+{% elif message.message == "tareas.reprogramming.errors.past_date" %}
+<span data-key="tareas.reprogramming.errors.past_date">La nueva fecha no puede quedar en el pasado.</span>
+{% elif message.message == "tareas.reprogramming.errors.same_date" %}
+<span data-key="tareas.reprogramming.errors.same_date">La nueva fecha debe ser distinta de la actual.</span>
+{% elif message.message == "tareas.reprogramming.errors.missing_current_date" %}
+<span data-key="tareas.reprogramming.errors.missing_current_date">La tarea debe tener una fecha límite actual.</span>
+{% elif message.message == "tareas.reprogramming.errors.justification_required" %}
+<span data-key="tareas.reprogramming.errors.justification_required">La justificación es obligatoria.</span>
+{% elif message.message == "tareas.reprogramming.errors.causes_required" %}
+<span data-key="tareas.reprogramming.errors.causes_required">Seleccione al menos una causa de atraso.</span>
+{% elif message.message == "tareas.reprogramming.errors.duplicate_causes" %}
+<span data-key="tareas.reprogramming.errors.duplicate_causes">No se permiten causas duplicadas.</span>
+{% elif message.message == "tareas.reprogramming.errors.invalid_causes" %}
+<span data-key="tareas.reprogramming.errors.invalid_causes">Las causas seleccionadas no son válidas.</span>
+{% elif message.message == "tareas.reprogramming.errors.invalid_state" %}
+<span data-key="tareas.reprogramming.errors.invalid_state">Solo se pueden reprogramar tareas activas o en gestión.</span>
+{% elif message.message == "tareas.reprogramming.errors.annulled" %}
+<span data-key="tareas.reprogramming.errors.annulled">No se puede reprogramar una tarea anulada o con un ancestro anulado.</span>
+{% elif message.message == "tareas.reprogramming.errors.backend" %}
+<span data-key="tareas.reprogramming.errors.backend">No se pudo resolver el almacenamiento configurado de Tareas.</span>
+{% elif message.message == "tareas.reprogramming.errors.storage" %}
+<span data-key="tareas.reprogramming.errors.storage">No se pudo guardar la reprogramación.</span>
+{% elif message.message == "tareas.messages.participant_added" %}
 <span data-key="tareas.messages.participant_added">Participante o responsable asignado correctamente.</span>
 {% elif message.message == "tareas.messages.participant_invalid" %}
 <span data-key="tareas.messages.participant_invalid">No fue posible asignar o actualizar el participante o responsable.</span>

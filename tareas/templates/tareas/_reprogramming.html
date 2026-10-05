@@ -1,0 +1,49 @@
+<section id="tarea-reprogramaciones" class="task-detail__module mb-3" aria-labelledby="reprogramaciones-titulo">
+    <h5 id="reprogramaciones-titulo"><span data-key="tareas.reprogramming.history">Historial de reprogramaciones</span></h5>
+    {% if reprogramming_history %}
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr>
+                <th><span data-key="tareas.reprogramming.old_date">Fecha anterior</span></th>
+                <th><span data-key="tareas.reprogramming.new_date">Nueva fecha límite</span></th>
+                <th><span data-key="tareas.reprogramming.justification">Justificación</span></th>
+                <th><span data-key="tareas.reprogramming.causes">Causas del atraso</span></th>
+                <th><span data-key="tareas.reprogramming.actor">Usuario</span></th>
+                <th><span data-key="tareas.reprogramming.timestamp">Fecha de operación</span></th>
+            </tr></thead>
+            <tbody>{% for item in reprogramming_history %}<tr>
+                <td class="text-nowrap">{{ item.fecha_tope_anterior|date:"Y-m-d" }}</td>
+                <td class="text-nowrap">{{ item.fecha_tope_nueva|date:"Y-m-d" }}</td>
+                <td class="text-break">{{ item.justificacion|linebreaksbr }}</td>
+                <td><ul class="mb-0 ps-3">{% for cause in item.causas %}<li>{{ cause.nombre }}</li>{% endfor %}</ul></td>
+                <td>{{ item.usuario_username|default:item.usuario_id }}</td>
+                <td class="text-nowrap">{{ item.fecha_operacion|date:"Y-m-d H:i:s" }}</td>
+            </tr>{% endfor %}</tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted"><span data-key="tareas.reprogramming.empty">Sin reprogramaciones registradas.</span></p>
+    {% endif %}
+</section>
+{% if puede_reprogramar %}
+<div class="modal fade" id="reprogramar-tarea-modal" tabindex="-1" aria-labelledby="reprogramar-tarea-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+        <form method="post" action="{% url 'tareas:reprogramar_tarea' tarea.pk %}">
+            {% csrf_token %}
+            <div class="modal-header">
+                <h5 class="modal-title" id="reprogramar-tarea-titulo"><span data-key="tareas.reprogramming.action">Reprogramar</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar" data-key="tareas.reprogramming.close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label" for="{{ reprogramming_form.fecha_tope_nueva.id_for_label }}"><span data-key="tareas.reprogramming.new_date">Nueva fecha límite</span></label>{{ reprogramming_form.fecha_tope_nueva }}</div>
+                <div class="mb-3"><label class="form-label" for="{{ reprogramming_form.causa_ids.id_for_label }}"><span data-key="tareas.reprogramming.causes">Causas del atraso</span></label>{{ reprogramming_form.causa_ids }}</div>
+                <div><label class="form-label" for="{{ reprogramming_form.justificacion.id_for_label }}"><span data-key="tareas.reprogramming.justification">Justificación</span></label>{{ reprogramming_form.justificacion }}</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button>
+                <button type="submit" class="btn btn-primary"><span data-key="tareas.reprogramming.action">Reprogramar</span></button>
+            </div>
+        </form>
+    </div></div>
+</div>
+{% endif %}

@@ -43,6 +43,7 @@ urlpatterns = [
     path('<int:tarea_id>/enlaces/crear/', views.CrearEnlaceTareaView.as_view(), name='crear_enlace_tarea'),
     path('crear/', views.CrearTareaView.as_view(), name='crear_tarea'),
     path('<int:pk>/editar/', views.EditarTareaView.as_view(), name='editar_tarea'),
+    path('<int:pk>/reprogramar/', views.ReprogramarTareaView.as_view(), name='reprogramar_tarea'),
     path('<int:pk>/publicar/', views.PublicarTareaView.as_view(), name='publicar_tarea'),
     path('<int:pk>/gestionar/', views.IniciarGestionView.as_view(), name='gestionar_tarea'),
     path('<int:pk>/completar/', views.CompletarTareaView.as_view(), name='completar_tarea'),
