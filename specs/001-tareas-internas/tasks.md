@@ -258,7 +258,8 @@ siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender 
   fail-closed. Validada con 253 tests focales + 210 de regresión, MySQL real
   (Tarea TEST 3, cerrada al terminar), same-PK, cero writes SYSTEM y UI ES/EN,
   móvil/desktop y light/dark sobre snapshots aislados. Cuatro errores históricos
-  de render Hito T081 reproducidos con su vista HEAD, no corregidos en este scope.
+  de render Hito T081 reproducidos con su vista HEAD; corregidos posteriormente
+  en T134.4B, no dentro de este scope.
   Sin modelos/migraciones/schema/SYSTEM ni stage/commit/push.
   Deudas: ledger participantes, guards legacy/pausas de otras familias y
   reacomodo fechas tras reactivar.
@@ -278,7 +279,34 @@ siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender 
   MINITASK_HISTORY_MODAL_FOLLOWUP_REQUIRED = YES;
   PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES;
   REACTIVATION_DATES_FOLLOWUP_REQUIRED = YES;
-  HISTORICAL_T081_HITO_RENDER_FAILURES = 4. No se inició Hitos/Avance.
+  HISTORICAL_T081_HITO_RENDER_FAILURES = 0 (corregidos posteriormente en T134.4B).
+  Durante T134.3D no se inició Hitos/Avance.
+
+- [x] T134.4B [US8] Hitos y Avance configurables: comandos por IDs y agregado
+  transaccional Django alias/MySQL, DTOs de Detail/historial/asignaciones,
+  persisted-before independiente de ModelForm, locks, rollback y compensación
+  de archivos nuevos. VICMEAS por acción más roles; solo BORRADOR/ACTIVA/GESTION
+  sin anulación efectiva. Eliminar físicamente solo con CREACION, sin actividad
+  posterior/completitud/evidencia; otros casos anulan lógicamente.
+  Avance simple y ponderado mantienen fórmula, exclusión de anulados/MiniTareas,
+  recálculo inmediato y ausencia de auto-close/bloqueo adicional del cierre.
+  Cuatro regresiones T081 corregidas; Hito completado no muestra Eliminar.
+  Gate consolidado pre-checkpoint: 316/316 tests PASS, incluyendo 36 contratos nuevos
+  del agregado, HTTP MySQL controlado, historial/i18n y regresiones compartidas
+  de Detail, permisos, cierre, MiniTareas, participantes, KPI y lectura.
+  Auditoría pre-commit corrigió únicamente el gate visual de avance ponderado:
+  ambos formularios de Avance se ocultan en lectura o sin permiso modificar.
+  MySQL real DEV: Tareas 4 y 5; flujo completo, lectura HTTP 200, participación
+  dinámica y doble completitud concurrente (una confirmada, una rechazada).
+  Same-PK de Tarea 5 y snapshots de 111 tablas default intactos.
+  Python 3.11: 138/138; check solo ckeditor.W001; sin cambios detectados de
+  migraciones (warning ambiental de history en alias DB_sistema no disponible).
+  Cinco claves nuevas de historial ES/EN, sin cambios a claves anteriores.
+  Sin modelos/migraciones/schema/SYSTEM ni stage/commit/push.
+  MINITASK_HISTORY_MODAL_FOLLOWUP_REQUIRED = YES;
+  PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES;
+  REACTIVATION_DATES_FOLLOWUP_REQUIRED = YES;
+  HISTORICAL_T081_HITO_RENDER_FAILURES = 0. Ninguna próxima familia iniciada.
 
 ### Regla transversal de cierre i18n
 

@@ -1,5 +1,5 @@
 {% for hito in hitos %}
-{% if hito.puede_gestionar and not hito.completado %}
+{% if hito.puede_gestionar and not hito.completado and not hito.anulado %}
 <div class="modal fade{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %} show d-block{% endif %}" id="editarHitoModal-{{ hito.pk }}" tabindex="-1" aria-labelledby="editarHitoModalLabel-{{ hito.pk }}" aria-hidden="{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %}false{% else %}true{% endif %}"{% if modal_abierto_hito_id == hito.pk and modal_abierto_accion == 'editar_hito' %} style="display: block;"{% endif %}>
     <div class="modal-dialog modal-lg"><div class="modal-content">
         <form method="post" action="{{ hitos_action_url }}">
@@ -82,9 +82,49 @@
     </div></div>
 </div>
 {% endif %}
+{% if puede_ver_historial_hitos %}<div class="modal fade" id="historialHitoModal-{{ hito.pk }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><span data-key="tareas.documents.history">Historial</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+        <div class="modal-body">
+            {% for evento in hito.historial %}
+            <div class="border-bottom mb-2 pb-2">
+                <strong>
+                    {% if evento.tipo_evento == 'CREACION' %}<span data-key="tareas.milestones.created">Creado</span>
+                    {% elif evento.tipo_evento == 'CAMBIO_NOMBRE' %}<span data-key="tareas.milestones.history.name_changed">Nombre modificado</span>
+                    {% elif evento.tipo_evento == 'CAMBIO_CUMPLIMIENTO' %}<span data-key="tareas.milestones.history.compliance_changed">Cumplimiento modificado</span>
+                    {% elif evento.tipo_evento == 'CAMBIO_PESO' %}<span data-key="tareas.milestones.history.weight_changed">Peso modificado</span>
+                    {% elif evento.tipo_evento == 'REASIGNACION' %}<span data-key="tareas.milestones.history.reassigned">Responsable reasignado</span>
+                    {% elif evento.tipo_evento == 'ANULACION' %}<span data-key="tareas.milestones.cancelled">Anulado</span>
+                    {% elif evento.tipo_evento == 'REACTIVACION' %}<span data-key="tareas.milestones.history.reactivated">Reactivado</span>
+                    {% elif evento.tipo_evento == 'COMPLETADO' %}<span data-key="tareas.milestones.completed">Completado</span>
+                    {% endif %}
+                </strong> {{ evento.usuario_username }} — {{ evento.fecha }}
+                {% if evento.motivo %}<p class="mb-1">{{ evento.motivo }}</p>{% endif %}
+                {% if evento.datos_anteriores %}<pre class="mb-1">{{ evento.datos_anteriores }}</pre>{% endif %}
+                {% if evento.datos_nuevos %}<pre class="mb-1">{{ evento.datos_nuevos }}</pre>{% endif %}
+            </div>
+            {% empty %}<span data-key="tareas.documents.no_history">Sin historial.</span>{% endfor %}
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.close">Cerrar</span></button></div>
+    </div></div>
+</div>{% endif %}
+{% if hito.puede_eliminar %}
+<div class="modal fade" id="eliminarHitoModal-{{ hito.pk }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="post" action="{{ hitos_action_url }}">
+            {% csrf_token %}{% if hitos_return_to_detail %}<input type="hidden" name="next" value="detalle">{% endif %}
+            <input type="hidden" name="accion" value="eliminar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}">
+            <div class="modal-header"><h5 class="modal-title"><span data-key="tareas.actions.delete">Eliminar</span></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body">{{ hito.nombre }}</div>
+            <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal"><span data-key="tareas.actions.cancel">Cancelar</span></button><button type="submit" class="btn btn-danger"><span data-key="tareas.actions.delete">Eliminar</span></button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
 {% endfor %}
 
-<div class="modal fade{% if hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
+<div class="modal fade{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
+    {% if puede_crear_hito %}
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="post" action="{{ hitos_action_url }}">
@@ -106,6 +146,7 @@
                 </div>
             </form>
         </div>
+        {% endif %}
     </div>
 </div>
-{% if hito_form.is_bound and hito_form.errors or editar_form.is_bound and editar_form.errors or reasignar_form.is_bound and reasignar_form.errors or cumplimiento_form.is_bound and cumplimiento_form.errors or completar_form.is_bound and completar_form.errors or modal_abierto_hito_id %}<div class="modal-backdrop fade show"></div>{% endif %}
+{% if puede_crear_hito and hito_form.is_bound and hito_form.errors or modal_abierto_hito_id %}<div class="modal-backdrop fade show"></div>{% endif %}

@@ -15,6 +15,9 @@
                 <div class="alert alert-{{ message.tags }}" role="alert">{% include "tareas/_i18n_message.html" with message=message %}</div>
                 {% endfor %}
             {% endif %}
+            {% if storage_error %}
+            <div class="alert alert-danger" role="alert"><span data-key="tareas.assignment.errors.storage">No se pudo cargar la información.</span></div>
+            {% else %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4><span data-key="tareas.progress.title">Hitos y avance</span></h4>
                 <a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-outline-secondary"><span data-key="tareas.actions.volver">Volver</span></a>
@@ -22,6 +25,7 @@
             <p><span data-key="tareas.fields.titulo">Tarea</span>: {{ tarea.titulo }}</p>
             {% include "tareas/_tarea_hitos.html" with hitos_action_url="" hitos_return_to_detail=False %}
             {% include "tareas/_tarea_hitos_modals.html" with hitos_action_url="" hitos_return_to_detail=False %}
+            {% endif %}
         </div>
     </div>
 </div>

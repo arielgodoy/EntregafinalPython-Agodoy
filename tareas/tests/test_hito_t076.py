@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
 from tareas.forms import HitoCrearForm, HitoForm
@@ -14,12 +14,13 @@ from tareas.services.progress import (
     update_milestone,
     weighted_progress,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class HitoT076Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="76", descripcion="Empresa T076")
         cls.otra_empresa = create_empresa(codigo="77", descripcion="Otra T076")
         cls.manager = create_user("t076_manager")
@@ -30,13 +31,15 @@ class HitoT076Tests(TestCase):
         cls.inactive.is_active = False
         cls.inactive.save(update_fields=["is_active"])
         for user in [cls.manager, cls.owner, cls.new_owner, cls.observer, cls.inactive]:
-            assign_permission(user, cls.empresa, "Tareas - Hitos", ingresar=True)
+            assign_permission(user, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
         assign_permission(
             cls.manager,
             cls.empresa,
             "Tareas - Hitos",
             ingresar=True,
+            crear=True,
             modificar=True,
+            eliminar=True,
         )
         cls.tarea = create_tarea(
             cls.empresa,
@@ -91,11 +94,11 @@ class HitoT076Tests(TestCase):
                 usuario=self.owner,
             ).exists()
         )
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             update_milestone(self.hito, self.owner, nombre="Cambio no permitido")
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             update_milestone(self.hito, self.owner, peso=4)
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             reassign_milestone(self.hito, self.owner, self.new_owner, "motivo")
 
     def test_manager_reassignment_requires_reason_and_is_audited(self):
@@ -143,7 +146,7 @@ class HitoT076Tests(TestCase):
 
     def test_task_creator_can_manage_without_being_task_or_milestone_responsible(self):
         creator = create_user("t076_creator")
-        assign_permission(creator, self.empresa, "Tareas - Hitos", ingresar=True)
+        assign_permission(creator, self.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True)
         task = create_tarea(
             self.empresa,
             creator,
@@ -172,7 +175,7 @@ class HitoT076Tests(TestCase):
 
     def test_authorizer_can_manage_within_task_scope(self):
         authorizer = create_user("t076_authorizer")
-        assign_permission(authorizer, self.empresa, "Tareas - Hitos", ingresar=True)
+        assign_permission(authorizer, self.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
         TareaParticipante.objects.create(
             tarea=self.tarea,
             usuario=authorizer,
@@ -196,7 +199,7 @@ class HitoT076Tests(TestCase):
         self.assertFalse(self.hito.anulado)
 
     def test_invalid_reassignment_is_atomic(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.manager)
         self.tarea.avance.refresh_from_db()
         original = {
             "nombre": self.hito.nombre,
@@ -471,18 +474,18 @@ class HitoT076Tests(TestCase):
 
     def test_manager_roles_have_precedence_and_observer_is_read_only(self):
         supervisor = create_user("t076_supervisor")
-        assign_permission(supervisor, self.empresa, "Tareas - Hitos", ingresar=True)
+        assign_permission(supervisor, self.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
         TareaParticipante.objects.create(
             tarea=self.tarea,
             usuario=supervisor,
             rol=TareaParticipante.Rol.SUPERVISOR,
         )
         update_milestone(self.hito, supervisor, nombre="Supervisor editó")
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             update_milestone(self.hito, self.observer, cumplimiento=50)
 
     def test_annulled_hito_is_excluded_and_reactivated(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.manager)
         self.tarea.avance.refresh_from_db()
         self.assertEqual(weighted_progress(self.tarea), Decimal("20.00"))
         set_milestone_annulled(self.hito, self.manager, True)

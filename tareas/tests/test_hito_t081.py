@@ -5,12 +5,13 @@ from django.test import TestCase
 
 from tareas.models import HitoEvidencia
 from tareas.services.progress import complete_milestone, create_milestone
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class HitoT081Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="81", descripcion="Empresa T081")
         cls.otra_empresa = create_empresa(codigo="82", descripcion="Otra T081")
         cls.manager = create_user("t081_manager")
@@ -20,7 +21,8 @@ class HitoT081Tests(TestCase):
         cls.foreign = create_user("t081_foreign")
         for user in [cls.manager, cls.owner, cls.observer]:
             assign_permission(user, cls.empresa, "Tareas - Hitos", ingresar=True)
-        assign_permission(cls.manager, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
+        assign_permission(cls.manager, cls.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True, eliminar=True)
+        assign_permission(cls.owner, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
         assign_permission(cls.foreign, cls.otra_empresa, "Tareas - Hitos", ingresar=True)
         cls.tarea = create_tarea(
             cls.empresa,
@@ -70,6 +72,9 @@ class HitoT081Tests(TestCase):
         self.assertIn("Ver cumplimiento Hito", table)
         self.assertIn(f'verCumplimientoHitoModal-{self.hito.pk}', table)
         self.assertIn("Anular", table)
+        self.assertNotIn('data-key="tareas.actions.delete"', table)
+        self.assertNotIn(f'data-bs-target="#eliminarHitoModal-{self.hito.pk}"', table)
+        self.assertFalse(response.context["hitos"][0].puede_eliminar)
         for text in ["Editar", "Reasignar", "Completar Hito", "Actualizar avance", "Eliminar"]:
             self.assertNotIn(text, table)
 

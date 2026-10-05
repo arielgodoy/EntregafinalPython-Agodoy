@@ -1,7 +1,7 @@
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
@@ -14,12 +14,14 @@ from tareas.services.progress import (
     set_weighted_progress_mode,
     update_milestone,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
+from tareas.services.task_storage import TaskStorageError
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
 
 class HitoT080Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="80", descripcion="Empresa T080")
         cls.otra_empresa = create_empresa(codigo="81", descripcion="Otra T080")
         cls.manager = create_user("t080_manager")
@@ -28,8 +30,8 @@ class HitoT080Tests(TestCase):
         cls.observer = create_user("t080_observer")
         cls.foreign = create_user("t080_foreign")
         for user in [cls.manager, cls.owner, cls.creator, cls.observer]:
-            assign_permission(user, cls.empresa, "Tareas - Hitos", ingresar=True)
-        assign_permission(cls.manager, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
+            assign_permission(user, cls.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True)
+        assign_permission(cls.manager, cls.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True)
         assign_permission(cls.foreign, cls.otra_empresa, "Tareas - Hitos", ingresar=True)
         cls.tarea = create_tarea(
             cls.empresa,
@@ -112,9 +114,9 @@ class HitoT080Tests(TestCase):
         self.assertEqual(other_hito.completado_por, self.creator)
 
     def test_observer_foreign_and_annulled_hito_cannot_complete(self):
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             self._complete(self.observer)
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(PermissionDenied):
             self._complete(self.foreign)
         set_milestone_annulled(self.hito, self.manager, True)
         with self.assertRaises(ValidationError):
@@ -238,17 +240,17 @@ class HitoT080Tests(TestCase):
         self.assertFalse(self.hito.completado)
 
     def test_completion_recalculates_weighted_progress(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.manager)
         self._complete(self.owner)
         self.tarea.avance.refresh_from_db()
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("100.00"))
 
     def test_completion_rolls_back_when_history_fails(self):
         with patch(
-            "tareas.services.progress._record_history",
+            "tareas.services.milestone_storage._history",
             side_effect=RuntimeError("history failure"),
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(TaskStorageError):
                 self._complete(self.owner)
         self.hito.refresh_from_db()
         self.assertFalse(self.hito.completado)

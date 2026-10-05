@@ -367,8 +367,8 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-F11**: El hito MUST NOT tener prioridad o clasificación propia ni asumir una `fecha_tope` propia o heredada; para presentación y dashboard hereda la prioridad/clasificación de su tarea padre.
 - **FR-F12**: Un Hito puede editarse en nombre, cumplimiento y peso. La edición normal MUST NOT modificar responsable ni motivo de reasignación. Toda edición MUST respetar la Empresa de la Tarea, cumplimiento `0..100` y el contrato vigente de pesos; no se agregan prioridad, clasificación ni `fecha_tope` propias.
 - **FR-F13**: La reasignación de responsable de Hito está permitida y MUST ser auditada con Hito, responsable anterior, responsable nuevo, usuario que reasigna, fecha/hora y motivo obligatorio no vacío tras trim. El nuevo responsable MUST estar activo y ser válido para la Empresa de la Tarea. La auditoría debe usar historial propio de Hito, no `TareaReasignacion` por analogía.
-- **FR-F14**: Todo cambio relevante de Hito MUST conservar historial específico de creación, nombre, cumplimiento, peso, responsable, anulación, reactivación y eliminación física cuando corresponda, incluyendo usuario, fecha/hora, valores anterior/nuevo y motivo cuando aplique. El historial MUST permitir determinar actividad/progreso histórico aunque el cumplimiento actual vuelva a `0`.
-- **FR-F15**: Un Hito solo puede eliminarse físicamente si nunca tuvo actividad operativa ni evidencia histórica de cambios, progreso o reasignaciones relevantes. Si la eliminación física requiere conservar auditoría fuera del registro eliminado, esa estrategia debe definirse antes de implementarla; no se asume una solución física en este contrato.
+- **FR-F14**: Todo cambio relevante de Hito MUST conservar historial específico de creación, nombre, cumplimiento, peso, responsable, anulación, reactivación y completitud, incluyendo usuario, fecha/hora, valores anterior/nuevo y motivo cuando aplique. El historial MUST permitir determinar actividad/progreso histórico aunque el cumplimiento actual vuelva a `0`. La excepción de eliminación física de FR-F15 elimina únicamente el Hito sin actividad y su creación; no genera un evento destinado a desaparecer por cascade ni pretende auditoría persistente fuera del agregado.
+- **FR-F15**: T134.4B permite eliminación física exclusivamente si el historial contiene solo `CREACION`, no existe actividad posterior, completitud ni evidencia. Cualquier otro caso convierte `Eliminar` en anulación lógica, conserva historial/evidencias y no crea otra tabla de auditoría ni `TareaTransicion`.
 - **FR-F16**: Un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica MUST conservarse mediante anulación lógica (`anulado=True`); no se elimina físicamente. El Hito anulado conserva datos e historial, deja de ser pendiente operativo y no aparece como asignación pendiente, pero permanece disponible en historial/consulta.
 - **FR-F17**: Se permite reactivar un Hito anulado. Reactivar MUST limpiar únicamente la condición de anulación, conservar responsable, cumplimiento, peso e historial, registrar el evento y reincorporar el Hito al avance ponderado y a la asignación activa; no debe resetear cumplimiento ni peso.
 - **FR-F18**: Solo los Hitos operativos (`anulado=False`) participan en el avance ponderado. Crear, editar cumplimiento/peso, anular, reactivar o eliminar físicamente un Hito MUST recalcular el `Avance` ponderado de la Tarea cuando corresponda, usando `sum(cumplimiento * peso) / sum(pesos)` sobre Hitos operativos. MiniTarea sigue fuera de la fórmula.
@@ -398,6 +398,27 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-F42**: Anular un Hito completado conserva `completado=True`, `completado_por`, `fecha_completado`, `resena_cierre`, todas sus `HitoEvidencia` y `HitoHistorial`. La anulación solo lo excluye del avance ponderado y de la operación vigente; no borra ni reemplaza la trazabilidad de completitud.
 - **FR-F43**: Los Hitos anulados, incluidos los completados que luego se anulen, quedan excluidos del cálculo de avance ponderado conforme a FR-F18. No se redefine la fórmula vigente.
 - **FR-F44**: Al reactivar un Hito anulado se restaura exactamente su estado funcional previo a la anulación. Si estaba pendiente, vuelve pendiente; si estaba completado, vuelve completado conservando `completado`, `cumplimiento`, `completado_por`, `fecha_completado`, `resena_cierre` y todas sus `HitoEvidencia`. La reactivación solo limpia `anulado`, no exige completar nuevamente, no elimina, recrea, duplica ni degrada evidencias, y registra el evento de reactivación en `HitoHistorial`.
+
+#### T134.4B — Hitos y Avance en almacenamiento configurable
+
+Todas las lecturas y escrituras operativas resuelven `BASE_TAREAS` antes del
+lookup, usan exclusivamente el alias Django explícito o `MYSQL_CONFIG` y fallan
+cerradas, sin fallback a SYSTEM. User/Empresa/VICMEAS permanecen en SYSTEM.
+Las mutaciones admiten solo `BORRADOR`, `ACTIVA` y `GESTION`, sin anulación
+propia, de padre o abuelo; `PENDIENTE_APROBACION_CIERRE` y `CERRADA` son lectura.
+La superficie `Tareas - Hitos` exige `ingresar` para lectura, `crear` para alta,
+`eliminar` para Eliminar y `modificar` para toda otra escritura, además del rol
+contextual de FR-F20…FR-F27. Se conserva la semántica pública de supervisor
+definida por access_control, sin inventar un bypass adicional.
+Avance simple admite subidas y bajadas válidas `0..100`; seleccionar ponderado
+calcula y persiste inmediatamente la fórmula vigente, redondeada a dos decimales.
+El porcentaje `100` no cierra la Tarea y un Hito pendiente no bloquea su cierre.
+Edición compara contra valores persistidos bajo lock, no contra la instancia
+mutada por validación de formulario. Completitud formal y evidencia son un
+agregado transaccional; archivos nuevos se compensan ante fallo anterior al
+commit, no ante resultado incierto ni rollback externo al servicio.
+No se agregan REOPEN, notificaciones ni migraciones.
+
 - **FR-F45**: Una MiniTarea MUST conservar únicamente descripción, una persona asignada y el estado `hecho` (`PENDIENTE`/`HECHA`); la reapertura es un evento `REAPERTURA`, no un estado adicional. La MiniTarea MUST NOT incorporar prioridad, clasificación, avance, hitos, documentos propios, participantes propios, fechas de planificación, vencimiento, reprogramación, jerarquía, subtareas, aprobaciones, evidencia, cotizaciones, reuniones, enlaces, dashboards, KPIs, lectura/no lectura, inbox o búsqueda propia.
 - **FR-F46**: La lectura de MiniTareas se integra al detalle de Tarea y requiere usuario autenticado/activo, Empresa activa coincidente, acceso válido a la Tarea y `Tareas` + `ingresar`. Crear, cerrar y reabrir conservan la protección ICMEAS de la operación vigente y además exigen los actores aprobados: crear solo responsable principal o `S`; cerrar solo persona asignada, responsable o `S`; reabrir solo responsable o `S`. Creador, participante, invitado/observador, responsable de Hito, lector o un usuario con `modificar` sin ese rol no adquieren facultad por sí solos. Todas las operaciones deben revalidar actor activo, Empresa activa, pertenencia de la Tarea y la regla de actor en backend.
 - **FR-F47**: MiniTarea solo admite creación, cierre y reapertura en `ACTIVA` o `GESTION`. En `BORRADOR`, `PENDIENTE_APROBACION_CIERRE`, `CERRADA` y una Tarea anulada efectivamente solo se permite lectura; `PENDIENTE_APROBACION_CIERRE` queda totalmente congelada. Una MiniTarea pendiente bloquea el cierre mediante `validate_closure_requirements`; una MiniTarea hecha permite continuar el cierre aunque conserve eventos históricos.

@@ -92,6 +92,13 @@ commit incierto se conservan para reconciliación, evitando borrar un archivo
 que podría estar confirmado. No se promete atomicidad del filesystem ni del
 rollback de una transacción externa al servicio.
 
+T134.4B aplica la misma resolución fail-closed a Hitos, historial/evidencias,
+avance simple/ponderado, Detail y asignaciones personales. Los comandos solo
+transportan IDs de Tarea/Hito/Empresa/actor; toda entidad operativa y sus locks
+pertenecen al mismo backend resuelto. Los wrappers ORM legacy rechazan instancias
+de otro alias o un backend MySQL antes de acceder a relaciones operativas.
+El agregado no depende de señales ORM ni crea notificaciones nuevas.
+
 ## Seguridad
 
 - No se exponen passwords ni secretos en HTML, JSON, logs o mensajes.

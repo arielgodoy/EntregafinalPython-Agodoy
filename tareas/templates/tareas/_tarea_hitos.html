@@ -9,6 +9,7 @@
                 <dt class="col-sm-4"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-sm-8">{{ progress.percentage }}%</dd>
                 <dt class="col-sm-4"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-sm-8">{{ progress.weighted_percentage }}%</dd>
             </dl>
+            {% if puede_modificar_avance %}
             <div class="col-12 col-lg-4">
                 <div class="d-flex flex-column gap-2">
                     <h6 class="mb-0"><span data-key="tareas.progress.manual">Configurar avance manual</span></h6>
@@ -26,6 +27,7 @@
                     <button type="submit" class="btn btn-outline-primary"><span data-key="tareas.actions.set_weighted">Configurar ponderado</span></button>
                 </form>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -34,9 +36,9 @@
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <h5 class="mb-0"><span data-key="tareas.milestones.list">Hitos</span></h5>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#crearHitoModal">
+            {% if puede_crear_hito %}<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#crearHitoModal">
                 <span data-key="tareas.actions.create_milestone">Crear hito</span>
-            </button>
+            </button>{% endif %}
         </div>
         {% if hitos %}
         <div class="table-responsive">
@@ -55,27 +57,27 @@
                         {% if hito.completado %}
                         <div class="d-flex flex-wrap gap-1">
                             <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#verCumplimientoHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.view_completion">Ver cumplimiento Hito</span></button>
-                            {% if hito.puede_gestionar and not hito.anulado %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
+                            {% if hito.puede_gestionar %}{% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}{% endif %}
                         </div>
                         {% elif hito.puede_gestionar %}
                         <div class="d-flex flex-wrap gap-1">
+                            {% if not hito.anulado %}
                             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.edit">Editar</span></button>
                             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reasignarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.reassign">Reasignar</span></button>
                             {% if not hito.anulado %}<button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#cumplimientoHitoModal-{{ hito.pk }}" title="Actualizar avance"><span data-key="tareas.hitos.actions.avance_short">Avance</span></button>{% endif %}
                             {% if hito.puede_completar %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#completarHitoModal-{{ hito.pk }}" title="Completar hito"><span data-key="tareas.hitos.actions.completar_short">Completar</span></button>{% endif %}
+                            {% endif %}
                             {% if hito.anulado %}<button type="submit" form="reactivar-{{ hito.pk }}" class="btn btn-sm btn-outline-success"><span data-key="tareas.actions.reactivate">Reactivar</span></button>{% else %}<button type="submit" form="anular-{{ hito.pk }}" class="btn btn-sm btn-outline-warning"><span data-key="tareas.actions.cancel">Anular</span></button>{% endif %}
-                            <button type="submit" form="eliminar-{{ hito.pk }}" class="btn btn-sm btn-outline-danger"><span data-key="tareas.actions.delete">Eliminar</span></button>
                         </div>
                         {% elif hito.puede_actualizar and not hito.anulado %}
                         <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#cumplimientoHitoModal-{{ hito.pk }}" title="Actualizar avance"><span data-key="tareas.hitos.actions.avance_short">Avance</span></button>
                         {% if hito.puede_completar %}<button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#completarHitoModal-{{ hito.pk }}" title="Completar hito"><span data-key="tareas.hitos.actions.completar_short">Completar</span></button>{% endif %}
                         {% endif %}
-                        {% if hito.completado %}
-                        {% if hito.puede_gestionar and not hito.anulado %}<form id="anular-{{ hito.pk }}" method="post" action="{{ hitos_action_url }}" class="d-none">{% csrf_token %}{% if hitos_return_to_detail %}<input type="hidden" name="next" value="detalle">{% endif %}<input type="hidden" name="accion" value="anular_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>{% endif %}
-                        {% elif hito.puede_gestionar %}
+                        {% if hito.puede_eliminar %}<button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#eliminarHitoModal-{{ hito.pk }}"><span data-key="tareas.actions.delete">Eliminar</span></button>{% endif %}
+                        {% if puede_ver_historial_hitos %}<button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historialHitoModal-{{ hito.pk }}"><span data-key="tareas.documents.history">Historial</span></button>{% endif %}
+                        {% if hito.puede_gestionar %}
                         <form id="anular-{{ hito.pk }}" method="post" action="{{ hitos_action_url }}" class="d-none">{% csrf_token %}{% if hitos_return_to_detail %}<input type="hidden" name="next" value="detalle">{% endif %}<input type="hidden" name="accion" value="anular_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
                         <form id="reactivar-{{ hito.pk }}" method="post" action="{{ hitos_action_url }}" class="d-none">{% csrf_token %}{% if hitos_return_to_detail %}<input type="hidden" name="next" value="detalle">{% endif %}<input type="hidden" name="accion" value="reactivar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
-                        <form id="eliminar-{{ hito.pk }}" method="post" action="{{ hitos_action_url }}" class="d-none">{% csrf_token %}{% if hitos_return_to_detail %}<input type="hidden" name="next" value="detalle">{% endif %}<input type="hidden" name="accion" value="eliminar_hito"><input type="hidden" name="hito_id" value="{{ hito.pk }}"></form>
                         {% endif %}
                     </td>
                 </tr>

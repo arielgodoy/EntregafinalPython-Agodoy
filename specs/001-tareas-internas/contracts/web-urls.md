@@ -228,6 +228,16 @@ La tabla de MiniTareas muestra un indicador compacto solo para el último `CIERR
 | 2 | Reprogramación (implementada T134.2E) | POST | `reprogramar_tarea` | `Tareas` + `modificar`; solo ACTIVA/GESTION no anulada efectivamente; modal, CSRF, PRG al Detalle e historial especializado |
 | 3 | Hitos/documentos | GET/POST | `hitos_tarea` / `documentos_tarea` | Peso normalizado; historial documental; `hitos_tarea` admite `accion=completar_hito` con reseña y evidencia y muestra `Ver cumplimiento Hito` en lectura para Hitos completados |
 
+T134.4B conserva las URLs de Hitos/Avance y POST HTML/PRG. Hitos usa
+`Tareas - Hitos`: GET `ingresar`, alta `crear`, Eliminar `eliminar`, demás
+mutaciones `modificar`, más las facultades contextuales existentes.
+Toda escritura revalida BORRADOR/ACTIVA/GESTION y anulación efectiva bajo lock.
+Pending/closed son lectura. Eliminar usa el modal existente: solo CREACION sin
+completitud/evidencia se borra físicamente; con actividad se anula lógicamente.
+DTOs canónicos, no RelatedManager, abastecen la pantalla, Detail y la consulta
+personal, incluyendo historial y evidencia. Un fallo de conexión es 503
+controlado sin consultar la Tarea del mismo PK en default.
+
 La acción `Ver cumplimiento Hito` reutiliza el GET de `hitos_tarea` y un modal de solo lectura; no crea una URL ni una acción POST nueva. Solo se muestra cuando `Hito.completado=True` y la autorización de lectura vigente permite consultar la Tarea/Hito. El modal lee los campos canónicos del Hito y lista todas sus `HitoEvidencia` (`0..N`), sin mezclar `EvidenciaCierre` de Tarea ni modificar datos. Para un Hito completado, el contrato visual solo ofrece `Ver cumplimiento Hito` y `Anular` cuando el actor tenga esa facultad; no ofrece edición, reasignación, nueva completitud, actualización de avance ni eliminación física. Al reactivar un Hito anulado se restaura exactamente su estado funcional previo: un Hito completado vuelve completado con sus evidencias intactas y uno pendiente vuelve pendiente; la operación solo limpia `anulado` y registra la reactivación.
 | 4 | Cotizaciones | GET/POST | `rondas_cotizacion` / `cotizaciones_ronda` | Default 3; máximo 3 versiones |
 | 5 | Reunión/similitud | GET/POST | `reunion_revision` / `similitud_tarea` / `confirmar_similitud` | Reunión: ver, crear, modificar, `CONVOCAR` y marcar realizada; similitud: evaluar, mostrar coincidencias y confirmar decisiones antes de publicar |

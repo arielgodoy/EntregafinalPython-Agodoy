@@ -7,20 +7,22 @@ from django.utils import timezone
 
 from tareas.models import Hito, Tarea
 from tareas.services.progress import create_milestone
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class T077DashboardTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="77", descripcion="Empresa T077")
         cls.otra_empresa = create_empresa(codigo="78", descripcion="Otra T077")
         cls.usuario = create_user("t077_usuario")
         cls.otro_usuario = create_user("t077_otro")
         assign_permission(cls.usuario, cls.empresa, "Tareas - Dashboard personal", ingresar=True)
-        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True)
+        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True)
         assign_permission(cls.otro_usuario, cls.empresa, "Tareas - Dashboard personal", ingresar=True)
         assign_permission(cls.usuario, cls.otra_empresa, "Tareas - Dashboard personal", ingresar=True)
+        assign_permission(cls.usuario, cls.otra_empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True)
 
         cls.tarea_critica = create_tarea(
             cls.empresa,

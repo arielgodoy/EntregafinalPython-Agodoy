@@ -67,13 +67,10 @@ from .forms import (
     TareaConnectionRoleForm,
 )
 from .models import (
-    Avance,
     Comentario,
     DocumentoHistorial,
     DocumentoTarea,
     EvaluacionSimilitud,
-    Hito,
-    HitoEvidencia,
     EnlaceTarea,
     MiniTareaEvento,
     MiniTarea,
@@ -180,17 +177,11 @@ from .services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
     install_base_tareas_schema,
 )
-from .services.progress import (
-    create_milestone,
-    complete_milestone,
-    delete_milestone_safely,
-    milestone_capability,
-    reassign_milestone,
-    set_manual_progress,
-    set_milestone_annulled,
-    set_weighted_progress_mode,
-    update_milestone,
-    weighted_progress,
+from .services.milestone_storage import (
+    CreateMilestoneCommand, UpdateMilestoneCommand, CompleteMilestoneCommand,
+    ReassignMilestoneCommand, SetMilestoneAnnulledCommand, DeleteMilestoneCommand,
+    MilestoneNotFound, resolve_milestone_storage,
+    UpdateManualProgressCommand, SetWeightedProgressModeCommand,
 )
 from .services.kpi import (
     DashboardPermissionError,
@@ -430,6 +421,17 @@ def _detail_milestone_context(detail_result, empresa, actor, **form_overrides):
             )
         )
     )
+    writable = (
+        core.estado in {Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}
+        and not detail_result.hierarchy.effectively_annulled
+        and not core.anulada
+    )
+    permissions = {
+        action: actor_is_valid and user_has_permission_for_empresa(
+            user=actor, empresa=empresa, vista_nombre="Tareas - Hitos", accion=action,
+        )
+        for action in ("crear", "modificar", "eliminar")
+    }
     milestones = []
     for milestone in detail_result.milestones:
         capability = (
@@ -442,16 +444,38 @@ def _detail_milestone_context(detail_result, empresa, actor, **form_overrides):
         milestones.append(
             replace(
                 milestone,
-                puede_gestionar=capability == "manage",
-                puede_actualizar=capability in {"progress", "manage"},
+                puede_gestionar=writable and permissions["modificar"] and capability == "manage",
+                puede_actualizar=(
+                    writable and permissions["modificar"]
+                    and capability in {"progress", "manage"}
+                    and not milestone.anulado and not milestone.completado
+                ),
                 puede_completar=(
-                    capability in {"progress", "manage"}
+                    writable and permissions["modificar"]
+                    and capability in {"progress", "manage"}
+                    and not milestone.completado and not milestone.anulado
+                ),
+                puede_eliminar=(
+                    writable and permissions["eliminar"] and manager
                     and not milestone.completado
                 ),
             )
         )
+    modal_id = form_overrides.get("modal_abierto_hito_id")
+    modal_action = form_overrides.get("modal_abierto_accion")
+    modal_milestone = next((item for item in milestones if item.pk == modal_id), None)
+    modal_allowed = bool(
+        modal_milestone and (
+            modal_milestone.puede_completar if modal_action == "completar_hito"
+            else modal_milestone.puede_actualizar if modal_action == "cumplimiento_hito"
+            else modal_milestone.puede_gestionar
+            and not modal_milestone.completado and not modal_milestone.anulado
+        )
+    )
     return {
         "hitos": tuple(milestones),
+        "puede_crear_hito": writable and permissions["crear"] and manager,
+        "puede_modificar_avance": writable and permissions["modificar"],
         "progress": detail_result.progress,
         "avance": detail_result.progress,
         "avance_calculado": (
@@ -470,8 +494,8 @@ def _detail_milestone_context(detail_result, empresa, actor, **form_overrides):
             "reasignar_form", HitoReasignacionForm(empresa=empresa)
         ),
         "completar_form": form_overrides.get("completar_form", CompletarHitoForm()),
-        "modal_abierto_hito_id": form_overrides.get("modal_abierto_hito_id"),
-        "modal_abierto_accion": form_overrides.get("modal_abierto_accion"),
+        "modal_abierto_hito_id": modal_id if modal_allowed else None,
+        "modal_abierto_accion": modal_action if modal_allowed else None,
         "manual_form": form_overrides.get("manual_form", AvanceManualForm()),
         "ponderado_form": form_overrides.get(
             "ponderado_form", AvancePonderadoForm()
@@ -2435,47 +2459,48 @@ class ReactivarTareaView(TareaLifecycleView):
 
 
 def _build_hitos_context(tarea, actor, **form_overrides):
-    avance = Avance.objects.filter(tarea=tarea).first()
-    hitos = list(
-        tarea.hitos.select_related("responsable", "completado_por").prefetch_related(
-            Prefetch(
-                "evidencias",
-                queryset=HitoEvidencia.objects.select_related("usuario").order_by("fecha", "pk"),
-            )
-        )
+    detail = resolve_milestone_storage().detail(
+        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=actor.pk,
     )
-    for hito in hitos:
-        capability = milestone_capability(tarea, hito, actor)
-        hito.puede_gestionar = capability == "manage"
-        hito.puede_actualizar = capability in {"progress", "manage"}
-        hito.puede_completar = capability in {"progress", "manage"} and not hito.completado
+    empresa = Empresa.objects.get(pk=detail.core.empresa_id)
     return {
-        "tarea": tarea,
-        "hitos": hitos,
-        "responsables_validos": HitoCrearForm(tarea=tarea).fields["responsable"].queryset,
-        "avance": avance,
-        "avance_calculado": weighted_progress(tarea),
-        "hito_form": form_overrides.get(
-            "hito_form", HitoCrearForm(empresa=tarea.empresa)
-        ),
-        "editar_form": form_overrides.get("editar_form", HitoForm()),
-        "reasignar_form": form_overrides.get(
-            "reasignar_form", HitoReasignacionForm(empresa=tarea.empresa)
-        ),
-        "completar_form": form_overrides.get("completar_form", CompletarHitoForm()),
-        "modal_abierto_hito_id": form_overrides.get("modal_abierto_hito_id"),
-        "modal_abierto_accion": form_overrides.get("modal_abierto_accion"),
-        "manual_form": form_overrides.get("manual_form", AvanceManualForm()),
-        "ponderado_form": form_overrides.get("ponderado_form", AvancePonderadoForm()),
+        "tarea": _detail_task_presentation(detail.core, empresa),
+        **_detail_milestone_context(detail, empresa, actor, **form_overrides),
     }
 
 
-class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas - Hitos"
     permiso_requerido = "ingresar"
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST":
+            action = request.POST.get("accion")
+            self.permiso_requerido = (
+                "crear" if action == "hito"
+                else "eliminar" if action == "eliminar_hito"
+                else "modificar"
+            )
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except (MilestoneNotFound, DetailTaskNotFound):
+            raise Http404
+        except PermissionDenied:
+            return self.handle_no_permission(request)
+        except TaskStorageError:
+            return HttpResponse(
+                render(request, "tareas/tarea_hitos.html", {"storage_error": True}).content,
+                status=503,
+            )
+
     def get_tarea(self, pk):
-        return get_object_or_404(self.get_queryset(), pk=pk)
+        self.storage = resolve_milestone_storage()
+        self.detail_result = self.storage.detail(
+            task_id=pk, empresa_id=get_active_company_id(self.request),
+            actor_id=self.request.user.pk,
+        )
+        self.empresa = Empresa.objects.get(pk=self.detail_result.core.empresa_id)
+        return _detail_task_presentation(self.detail_result.core, self.empresa)
 
     def redirect_after_post(self, request, tarea):
         if request.POST.get("next") == "detalle":
@@ -2485,19 +2510,43 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
         return redirect("tareas:hitos_tarea", pk=tarea.pk)
 
     def get_context(self, tarea, **forms):
-        return _build_hitos_context(tarea, self.request.user, **forms)
+        if not hasattr(self, "detail_with_history"):
+            self.detail_with_history = replace(
+                self.detail_result,
+                milestones=tuple(
+                    replace(
+                        milestone,
+                        historial=self.storage.history(
+                            task_id=tarea.pk, empresa_id=tarea.empresa_id,
+                            actor_id=self.request.user.pk, milestone_id=milestone.pk,
+                        ),
+                    )
+                    for milestone in self.detail_result.milestones
+                ),
+            )
+        return {
+            "tarea": tarea,
+            **_detail_milestone_context(self.detail_with_history, self.empresa, self.request.user, **forms),
+            "puede_ver_historial_hitos": True,
+        }
 
     def get(self, request, pk):
         tarea = self.get_tarea(pk)
+        context = self.get_context(tarea)
         modal_context = {}
         accion = request.GET.get("accion")
         hito_id = request.GET.get("hito_id")
         if accion in {"cumplimiento_hito", "completar_hito"} and hito_id:
             try:
-                hito = tarea.hitos.get(pk=hito_id)
-            except (Hito.DoesNotExist, ValueError):
+                hito = next(
+                    (item for item in context["hitos"] if item.pk == int(hito_id)),
+                    None,
+                )
+            except ValueError:
                 hito = None
-            if hito is not None:
+            if hito is not None and (
+                hito.puede_actualizar if accion == "cumplimiento_hito" else hito.puede_completar
+            ):
                 modal_context = {
                     "modal_abierto_hito_id": hito.pk,
                     "modal_abierto_accion": accion,
@@ -2505,24 +2554,23 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
         return render(
             request,
             "tareas/tarea_hitos.html",
-            self.get_context(tarea, **modal_context),
+            {**context, **modal_context},
         )
 
     def post(self, request, pk):
         tarea = self.get_tarea(pk)
         accion = request.POST.get("accion")
         if accion == "hito":
-            form = HitoCrearForm(request.POST, tarea=tarea)
+            form = HitoCrearForm(request.POST, empresa=self.empresa)
             if form.is_valid():
                 try:
-                    create_milestone(
-                        tarea,
-                        form.cleaned_data["nombre"],
-                        form.cleaned_data["cumplimiento"],
-                        form.cleaned_data["peso"],
-                        form.cleaned_data["responsable"],
-                        request.user,
-                    )
+                    self.storage.execute(CreateMilestoneCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        nombre=form.cleaned_data["nombre"],
+                        cumplimiento=form.cleaned_data["cumplimiento"],
+                        peso=form.cleaned_data["peso"],
+                        responsable_id=form.cleaned_data["responsable"].pk,
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2531,23 +2579,27 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
         hito = None
         if request.POST.get("hito_id"):
-            hito = get_object_or_404(
-                Hito.objects.select_related("tarea", "responsable"),
-                pk=request.POST["hito_id"],
-                tarea=tarea,
-            )
+            try:
+                hito_id = int(request.POST["hito_id"])
+            except (TypeError, ValueError):
+                raise Http404
+            hito = next((item for item in self.detail_result.milestones if item.pk == hito_id), None)
+            if hito is None:
+                raise Http404
+        if accion.endswith("_hito") and hito is None:
+            raise Http404
         if accion == "completar_hito":
             form = CompletarHitoForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    complete_milestone(
-                        hito,
-                        request.user,
+                    self.storage.execute(CompleteMilestoneCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        milestone_id=hito.pk,
                         resena_cierre=form.cleaned_data["resena_cierre"],
                         formato_archivo=form.cleaned_data["formato_archivo"],
                         archivo=form.cleaned_data.get("archivo"),
                         url=form.cleaned_data.get("url", ""),
-                    )
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2564,16 +2616,16 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
                 ),
             )
         if accion == "editar_hito":
-            form = HitoForm(request.POST, instance=hito)
+            form = HitoForm(request.POST)
             if form.is_valid():
                 try:
-                    update_milestone(
-                        hito,
-                        request.user,
+                    self.storage.execute(UpdateMilestoneCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        milestone_id=hito.pk,
                         nombre=form.cleaned_data["nombre"],
                         cumplimiento=form.cleaned_data["cumplimiento"],
                         peso=form.cleaned_data["peso"],
-                    )
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2590,14 +2642,14 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
                 ),
             )
         if accion == "cumplimiento_hito":
-            form = HitoCumplimientoForm(request.POST, instance=hito)
+            form = HitoCumplimientoForm(request.POST)
             if form.is_valid():
                 try:
-                    update_milestone(
-                        hito,
-                        request.user,
+                    self.storage.execute(UpdateMilestoneCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        milestone_id=hito.pk,
                         cumplimiento=form.cleaned_data["cumplimiento"],
-                    )
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2614,15 +2666,15 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
                 ),
             )
         if accion == "reasignar_hito":
-            form = HitoReasignacionForm(request.POST, tarea=tarea)
+            form = HitoReasignacionForm(request.POST, empresa=self.empresa)
             if form.is_valid():
                 try:
-                    reassign_milestone(
-                        hito,
-                        request.user,
-                        form.cleaned_data["responsable"],
-                        form.cleaned_data["motivo"],
-                    )
+                    self.storage.execute(ReassignMilestoneCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        milestone_id=hito.pk,
+                        responsable_id=form.cleaned_data["responsable"].pk,
+                        motivo=form.cleaned_data["motivo"],
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2640,7 +2692,10 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
             )
         if accion in {"anular_hito", "reactivar_hito"}:
             try:
-                set_milestone_annulled(hito, request.user, accion == "anular_hito")
+                self.storage.execute(SetMilestoneAnnulledCommand(
+                    task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                    milestone_id=hito.pk, anulado=accion == "anular_hito",
+                ))
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
@@ -2648,7 +2703,10 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
             return self.redirect_after_post(request, tarea)
         if accion == "eliminar_hito":
             try:
-                delete_milestone_safely(hito, request.user)
+                self.storage.execute(DeleteMilestoneCommand(
+                    task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                    milestone_id=hito.pk,
+                ))
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
@@ -2658,7 +2716,10 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
             form = AvanceManualForm(request.POST)
             if form.is_valid():
                 try:
-                    set_manual_progress(tarea, form.cleaned_data["porcentaje"])
+                    self.storage.execute(UpdateManualProgressCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                        porcentaje=form.cleaned_data["porcentaje"],
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -2669,17 +2730,17 @@ class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, Login
             form = AvancePonderadoForm(request.POST)
             if form.is_valid():
                 try:
-                    set_weighted_progress_mode(tarea)
+                    self.storage.execute(SetWeightedProgressModeCommand(
+                        task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
                     messages.success(request, "tareas.messages.weighted_mode_configured")
                     return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, ponderado_form=form))
-        raise ValidationError(
-            "tareas.messages.progress_action_not_configured",
-            code="tareas.messages.progress_action_not_configured",
-        )
+        messages.error(request, "tareas.messages.progress_action_not_configured")
+        return self.redirect_after_post(request, tarea)
 
 
 def _build_document_context(tarea, **form_overrides):

@@ -217,6 +217,12 @@ class T059KpiTests(TestCase):
         self.assertEqual(kpis["tiempo_promedio_cierre_horas"], Decimal("0.00"))
 
     def test_dashboard_personal_incluye_responsable_participante_hito_y_lectura(self):
+        Permiso.objects.create(
+            usuario=self.responsable,
+            empresa=self.empresa,
+            vista=Vista.objects.get_or_create(nombre="Tareas - Dashboard personal")[0],
+            ingresar=True,
+        )
         direct = self.crear_tarea()
         participant = self.crear_tarea(responsable=self.otro_responsable)
         TareaParticipante.objects.create(

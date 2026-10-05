@@ -159,6 +159,18 @@ class TaskDetailMilestoneEvidence:
 
 
 @dataclass(frozen=True)
+class TaskDetailMilestoneHistory:
+    id: int
+    tipo_evento: str
+    usuario_id: int
+    usuario_username: str
+    fecha: object
+    datos_anteriores: dict
+    datos_nuevos: dict
+    motivo: str
+
+
+@dataclass(frozen=True)
 class TaskDetailMilestone:
     id: int
     nombre: str
@@ -178,6 +190,8 @@ class TaskDetailMilestone:
     puede_gestionar: bool = False
     puede_actualizar: bool = False
     puede_completar: bool = False
+    puede_eliminar: bool = False
+    historial: tuple[TaskDetailMilestoneHistory, ...] = ()
 
     @property
     def pk(self):
@@ -493,7 +507,7 @@ class DjangoTaskDetailStorage:
                 Hito.objects.using(self.alias)
                 .filter(tarea_id=task.pk, tarea__empresa_id=empresa_id)
                 .prefetch_related(
-                    Prefetch("evidencias", queryset=evidence_queryset, to_attr="detail_evidence")
+                    Prefetch("evidencias", queryset=evidence_queryset, to_attr="detail_evidence"),
                 )
                 .order_by("fecha_creacion", "pk")
             )
@@ -782,6 +796,15 @@ def _mysql_file_metadata(filename, url):
     if not filename and url:
         filename = url.rstrip("/").rsplit("/", 1)[-1]
     return filename, "" if not filename or not filename == (filename or "") else ""
+
+
+def _milestone_file_url(filename):
+    if not filename:
+        return ""
+    try:
+        return HitoEvidencia._meta.get_field("archivo").storage.url(filename)
+    except (ValueError, NotImplementedError):
+        return ""
 
 
 class MySQLTaskDetailStorage:
@@ -1125,7 +1148,7 @@ class MySQLTaskDetailStorage:
             completado_por_id=row["completado_por_id"], completado_por_username=users_by_id.get(row["completado_por_id"]).username if row["completado_por_id"] in users_by_id else "",
             cumplimiento=Decimal(str(row["cumplimiento"])), peso=Decimal(str(row["peso"])), fecha_creacion=row["fecha_creacion"], fecha_completado=row["fecha_completado"], resena_cierre=row["resena_cierre"],
             evidencias=tuple(TaskDetailMilestoneEvidence(
-                id=item["id"], formato_archivo=item["formato_archivo"], nombre_archivo=self._file(item["archivo"], item["url"])[0], url=item["url"], archivo_url="", usuario_id=item["usuario_id"], usuario_username=users_by_id.get(item["usuario_id"]).username if item["usuario_id"] in users_by_id else "", fecha=item["fecha"]
+                id=item["id"], formato_archivo=item["formato_archivo"], nombre_archivo=self._file(item["archivo"], item["url"])[0], url=item["url"], archivo_url=_milestone_file_url(item["archivo"]), usuario_id=item["usuario_id"], usuario_username=users_by_id.get(item["usuario_id"]).username if item["usuario_id"] in users_by_id else "", fecha=item["fecha"]
             ) for item in milestone_evidence.get(row["id"], ()))
         ) for row in milestone_rows)
         documents = tuple(TaskDetailDocument(

@@ -1,6 +1,7 @@
 """Formularios de la app tareas."""
 
 from os.path import splitext
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django import forms
@@ -10,12 +11,10 @@ from access_control.services.permissions import get_valid_users_for_empresa
 from tareas.services.reading import COMMENT_PAGE_SIZE
 
 from .models import (
-    Avance,
     Comentario,
     DocumentoTarea,
     EvidenciaCierre,
     FormatoArchivo,
-    Hito,
     MiniTarea,
     ReunionParticipante,
     ReunionRevision,
@@ -31,45 +30,35 @@ from .services.connection_roles import (
 )
 
 
-class HitoForm(forms.ModelForm):
-    class Meta:
-        model = Hito
-        fields = ["nombre", "cumplimiento", "peso"]
+class HitoForm(forms.Form):
+    nombre = forms.CharField(max_length=200, strip=True)
+    cumplimiento = forms.DecimalField(min_value=0, max_value=100, max_digits=5, decimal_places=2, initial=0)
+    peso = forms.DecimalField(min_value=Decimal("0.01"), max_digits=7, decimal_places=2, initial=1)
 
 
-class HitoCrearForm(forms.ModelForm):
+class HitoCrearForm(HitoForm):
+    responsable = forms.ModelChoiceField(queryset=User.objects.none())
+
     def __init__(self, *args, tarea=None, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
-        empresa = empresa or (tarea.empresa if tarea is not None else None)
-        if tarea is None:
-            self.fields["responsable"].queryset = self.fields["responsable"].queryset.none()
-        else:
-            self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
-                is_active=True
-            )
-        if empresa is not None and tarea is None:
+        empresa = empresa or (getattr(tarea, "empresa_id", None) if tarea is not None else None)
+        if empresa is not None:
             self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
                 is_active=True
             )
 
-    class Meta:
-        model = Hito
-        fields = ["nombre", "responsable", "cumplimiento", "peso"]
 
-
-class HitoCumplimientoForm(forms.ModelForm):
-    class Meta:
-        model = Hito
-        fields = ["cumplimiento"]
+class HitoCumplimientoForm(forms.Form):
+    cumplimiento = forms.DecimalField(min_value=0, max_value=100, max_digits=5, decimal_places=2)
 
 
 class HitoReasignacionForm(forms.Form):
-    responsable = forms.ModelChoiceField(queryset=Hito._meta.get_field("responsable").remote_field.model.objects.none())
+    responsable = forms.ModelChoiceField(queryset=User.objects.none())
     motivo = forms.CharField(required=True, strip=True)
 
     def __init__(self, *args, tarea=None, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
-        empresa = empresa or (tarea.empresa if tarea is not None else None)
+        empresa = empresa or (getattr(tarea, "empresa_id", None) if tarea is not None else None)
         if empresa is not None:
             self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
                 is_active=True

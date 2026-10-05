@@ -11,15 +11,16 @@ from tareas.services.progress import (
     update_milestone,
     weighted_progress,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class WeightedProgressTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa()
         cls.usuario = create_user(username="weighted-progress-user")
-        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
+        assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True, crear=True, modificar=True, eliminar=True)
         cls.tarea = create_tarea(cls.empresa, cls.usuario, responsable=cls.usuario)
 
     def _create(self, nombre, cumplimiento=0, peso=1, responsable=None):
@@ -40,7 +41,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(hito.peso, Decimal("2.00"))
 
     def test_manual_mode_is_not_changed_by_milestone(self):
-        set_manual_progress(self.tarea, 25)
+        set_manual_progress(self.tarea, 25, actor=self.usuario)
 
         self._create("Hito", 100, 1)
 
@@ -49,7 +50,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("25.00"))
 
     def test_weighted_mode_uses_completed_milestone_weights(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
 
         self._create("Pendiente", 0, 5)
         self._create("Completado", 100, 3)
@@ -58,7 +59,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("37.50"))
 
     def test_multiple_milestones_use_weighted_formula(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
 
         self._create("Primero", 50, 1)
         self._create("Segundo", 100, 3)
@@ -66,7 +67,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(weighted_progress(self.tarea), Decimal("87.50"))
 
     def test_adding_milestone_redistributes_existing_progress(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         anterior = self._create("Completado", 100, 4)
         self.tarea.avance.refresh_from_db()
         porcentaje_previo = self.tarea.avance.porcentaje
@@ -84,7 +85,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(nuevo.cumplimiento, Decimal("0.00"))
 
     def test_adding_partially_completed_milestone_recalculates_progress(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         anterior = self._create("Completado", 100, 4)
 
         self._create("En curso", 50, 1)
@@ -95,7 +96,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("90.00"))
 
     def test_editing_milestone_weight_or_compliance_recalculates_progress(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         primero = self._create("Primero", 0, 1)
         segundo = self._create("Segundo", 100, 3)
 
@@ -108,7 +109,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(self.tarea.avance.porcentaje, Decimal("75.00"))
 
     def test_successive_milestones_preserve_previous_identity_and_completion(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         primero = self._create("Primero", 100, 4)
         segundo = self._create("Segundo", 50, 1)
         ids_previos = (primero.pk, segundo.pk)
@@ -138,7 +139,7 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(list(Hito.objects.filter(tarea=self.tarea)), [primero, segundo])
 
     def test_invalid_milestone_does_not_persist(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         anterior = self._create("Valido", 100, 1)
         self.tarea.avance.refresh_from_db()
         porcentaje_previo = self.tarea.avance.porcentaje
@@ -153,13 +154,13 @@ class WeightedProgressTests(TestCase):
         self.assertEqual(self.tarea.avance.porcentaje, porcentaje_previo)
 
     def test_manual_progress_is_rejected_in_weighted_mode(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
 
         with self.assertRaises(ValidationError):
-            set_manual_progress(self.tarea, 20)
+            set_manual_progress(self.tarea, 20, actor=self.usuario)
 
     def test_mini_tasks_do_not_participate_in_formula(self):
-        set_weighted_progress_mode(self.tarea)
+        set_weighted_progress_mode(self.tarea, actor=self.usuario)
         self._create("Completado", 100, 1)
         MiniTarea.objects.create(
             tarea=self.tarea,

@@ -191,6 +191,13 @@ documentos, evidencias, hitos, mini-tareas ni otras entidades de fases posterior
 - Añadir evidencia configurable, documentos por tipo como archivo o URL, fechas
     informativas e historial; no automatizar vencimientos documentales.
 - Probar precisión, orden por creación, mini-tareas pendientes y reglas de cierre.
+- T134.4B usa `milestone_storage` como agregado Hito/Avance por IDs y
+  `progress_storage` para rango/fórmula compartida; adapters Django con alias
+  explícito y MySQL transaccional. Mantiene locks de Tarea/Hito/Avance e historia,
+  DTOs de Detail/consulta personal y autorización VICMEAS por acción.
+  Solo BORRADOR/ACTIVA/GESTION no anuladas efectivamente admiten escritura;
+  Eliminar sin actividad/evidencia es físico, cualquier otro caso es anulación.
+  No modifica modelos/schema ni incorpora una auditoría paralela.
 
 ### Phase 4 — Cotizaciones, rondas y maestro local de proveedores
 

@@ -15,8 +15,6 @@ from access_control.services.permissions import (
 
 from ..models import (
     DocumentoHistorial,
-    Hito,
-    HitoHistorial,
     MiniTarea,
     Tarea,
     TareaLectura,
@@ -85,15 +83,11 @@ def _movement_queryset(queryset):
     transition_timestamp = TareaTransicion.objects.filter(
         tarea_id=OuterRef("pk")
     ).order_by("-timestamp").values("timestamp")[:1]
-    hito_timestamp = HitoHistorial.objects.filter(
-        hito__tarea_id=OuterRef("pk")
-    ).order_by("-fecha").values("fecha")[:1]
     document_timestamp = DocumentoHistorial.objects.filter(
         documento__tarea_id=OuterRef("pk")
     ).order_by("-fecha").values("fecha")[:1]
     return queryset.annotate(
         ultimo_transicion=Subquery(transition_timestamp),
-        ultimo_hito=Subquery(hito_timestamp),
         ultimo_documento=Subquery(document_timestamp),
     )
 
@@ -122,10 +116,13 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
     ).count()
 
     movement_cutoff = reference_now - timedelta(days=7)
+    from .milestone_storage import resolve_milestone_storage
+    milestone_storage = resolve_milestone_storage()
     stale_rows = _movement_queryset(open_tasks).values(
+        "pk",
+        "empresa_id",
         "fecha_publicacion",
         "ultimo_transicion",
-        "ultimo_hito",
         "ultimo_documento",
     )
     without_movement = 0
@@ -135,7 +132,7 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
             for value in (
                 row["fecha_publicacion"],
                 row["ultimo_transicion"],
-                row["ultimo_hito"],
+                milestone_storage.latest_movement(task_id=row["pk"], empresa_id=row["empresa_id"]),
                 row["ultimo_documento"],
             )
             if value is not None
@@ -250,17 +247,8 @@ def get_personal_dashboard(*, user, empresa_id, reference_date=None):
             and tarea.estado in OPEN_STATES
         )
 
-    hitos = list(
-        Hito.objects.filter(
-            tarea__empresa_id=empresa_id,
-            tarea__estado__in=PUBLISHED_STATES,
-            tarea__anulada=False,
-            responsable=user,
-            anulado=False,
-        )
-        .select_related("tarea", "tarea__empresa", "tarea__responsable", "responsable")
-        .order_by("tarea__prioridad", "tarea__pk", "fecha_creacion", "pk")
-    )
+    from .milestone_storage import resolve_milestone_storage
+    hitos = resolve_milestone_storage().assigned(empresa_id=empresa_id, actor_id=user.pk)
     from tareas.services.minitask_storage import resolve_minitask_storage
     mini_tareas = resolve_minitask_storage().assigned(empresa_id=empresa_id, actor_id=user.pk)
     task_groups = {priority: [] for priority in PRIORITIES}
@@ -282,6 +270,12 @@ def get_personal_dashboard(*, user, empresa_id, reference_date=None):
         ],
         "tareas": tareas,
         "hitos": hitos,
+        "puede_ver_hitos": user_has_permission_for_empresa(
+            user=user, empresa=empresa_id, vista_nombre="Tareas - Hitos", accion="ingresar",
+        ),
+        "puede_modificar_hitos": user_has_permission_for_empresa(
+            user=user, empresa=empresa_id, vista_nombre="Tareas - Hitos", accion="modificar",
+        ),
         "mini_tareas": mini_tareas,
         "mini_tareas_pendientes": [mini_tarea for mini_tarea in mini_tareas if not mini_tarea.hecho],
         "mini_tareas_hechas": [mini_tarea for mini_tarea in mini_tareas if mini_tarea.hecho],

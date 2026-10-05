@@ -229,6 +229,14 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 - Validar `sum(cumplimiento * peso) / sum(pesos)` y redistribución al agregar un hito.
 - Comprobar que mini-tareas pendientes bloquean cierre y no ponderan avance.
 - Adjuntar documento/evidencia, cambiarlo y verificar historial y vencimiento informativo.
+- T134.4B: con Django alias y MySQL, probar alta/edición/no-op, completitud
+  formal con evidencia, reasignación con motivo, anulación/reactivación,
+  borrado físico solo con CREACION y Eliminar con actividad como anulación.
+  Verificar permisos por acción, pending/closed y anulación efectiva congelados.
+  Probar avance simple descendente/ascendente y modo ponderado con recálculo
+  inmediato, sin cierre automático ni aportes de MiniTareas.
+  Comprobar same-PK default intacto, locks/rollback y las cuatro regresiones T081;
+  la prueba MySQL real solo usa datos DEV y no escribe SYSTEM/legacy.
 
 ### E11. Cotizaciones (Phase 4)
 
