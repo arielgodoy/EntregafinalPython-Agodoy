@@ -15,6 +15,7 @@ from tareas.models import (
     HitoEvidencia,
     TareaLectura,
     Tarea,
+    TareaParticipante,
 )
 from tareas.services.assignment import add_participant
 from tareas.services.comments import (
@@ -27,12 +28,13 @@ from tareas.services.documents import create_document
 from tareas.services.lifecycle import annul_task, reactivate_task
 from tareas.services.participants import effective_participant_ids, is_effective_participant
 from tareas.services.reading import recognize_loaded_comments
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class CommentServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="C098", descripcion="Empresa Comentarios")
         cls.otra_empresa = create_empresa(codigo="C099", descripcion="Otra Empresa")
         cls.autor = create_user(username="comment-author")
@@ -50,7 +52,10 @@ class CommentServiceTests(TestCase):
 
     def make_task(self, *, usuario=None, estado=Tarea.Estado.ACTIVA):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
-        add_participant(tarea, usuario or self.autor, actor=self.autor)
+        if usuario is not None and usuario.pk != self.autor.pk:
+            add_participant(tarea, usuario, actor=self.autor)
+        else:
+            TareaParticipante.objects.create(tarea=tarea, usuario=self.autor)
         tarea.estado = estado
         tarea.fecha_publicacion = timezone.now()
         tarea.save(update_fields=["estado", "fecha_publicacion"])
@@ -319,7 +324,7 @@ class CommentServiceTests(TestCase):
         tarea_foreign.estado = Tarea.Estado.ACTIVA
         tarea_foreign.fecha_publicacion = timezone.now()
         tarea_foreign.save(update_fields=["estado", "fecha_publicacion"])
-        add_participant(tarea_foreign, self.foreign, actor=self.foreign)
+        TareaParticipante.objects.create(tarea=tarea_foreign, usuario=self.foreign)
         with self.assertRaises(ValidationError):
             create_comment(tarea=tarea_foreign, usuario=self.autor, contenido="Cross-company")
 

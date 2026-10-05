@@ -23,12 +23,13 @@ from tareas.services.reading import (
     open_inactivity_pause,
     recognize_loaded_comments,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class CommentReadingServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="C099R", descripcion="Empresa Lectura")
         cls.lector = create_user(username="reading-user")
         cls.otro_lector = create_user(username="reading-other-user")
@@ -40,7 +41,7 @@ class CommentReadingServiceTests(TestCase):
 
     def make_task(self, *, lector=None):
         tarea = create_tarea(self.empresa, self.autor, responsable=self.autor)
-        add_participant(tarea, self.autor, actor=self.admin)
+        TareaParticipante.objects.create(tarea=tarea, usuario=self.autor)
         add_participant(tarea, lector or self.lector, actor=self.admin)
         return tarea
 
@@ -336,7 +337,7 @@ class CommentReadingServiceTests(TestCase):
         self.assertEqual(TareaLectura.objects.filter(tarea=tarea, usuario=self.lector).count(), 1)
         self.assertEqual(get_first_pending_comment(tarea=tarea, usuario=self.lector), comentario)
 
-    def test_relink_keeps_zero_historical_pending(self):
+    def test_relink_preserves_existing_cursor_and_historical_pending(self):
         tarea = self.make_task()
         self.make_comment(tarea)
         remove_participant(tarea, self.lector, actor=self.admin)
@@ -345,5 +346,5 @@ class CommentReadingServiceTests(TestCase):
         add_participant(tarea, self.lector, actor=self.admin)
 
         lectura = TareaLectura.objects.get(tarea=tarea, usuario=self.lector)
-        self.assertEqual(lectura.comentario_leido_hasta_id, newest.pk)
-        self.assertEqual(count_pending_comments(tarea=tarea, usuario=self.lector), 0)
+        self.assertIsNone(lectura.comentario_leido_hasta_id)
+        self.assertEqual(count_pending_comments(tarea=tarea, usuario=self.lector), 2)

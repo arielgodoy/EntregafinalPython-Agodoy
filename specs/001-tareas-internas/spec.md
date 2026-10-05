@@ -288,6 +288,37 @@ posteriores de reprogramación.
 	actor MUST ser el creador de la Tarea o tener autoridad `supervisor` en VICMEAS.
 	Esta regla contextual vive solo en `tareas`; no convierte la participación efectiva
 	en autorización administrativa ni altera la política de Comentarios o lifecycle.
+- **FR-D13 (T134.3B)**: Responsable y participantes MUST usar comandos por IDs y
+  el `BASE_TAREAS` configurado, sin fallback ante errores del resolver. Django
+  opera sobre el alias explícito; MySQL usa SQL parametrizado y una transacción
+  del agregado con lock de Tarea y ancestros. Ambos respetan la Empresa activa.
+- **FR-D14**: `CERRADA` y anulación efectiva propia/padre/abuelo bloquean cambios
+  de responsable, altas, bajas y cambios de rol. Publicadas requieren responsable
+  activo válido y motivo ingresado, no vacío tras trim, para una reasignación real.
+  En BORRADOR el motivo es opcional y limpiar el responsable no genera una
+  reasignación con nuevo responsable nulo (limitación del ledger existente).
+- **FR-D15**: Las altas públicas permiten solo `PARTICIPANTE` e
+  `INVITADO_OBSERVADOR`; rechazan creador, responsable actual y duplicados.
+  Cambiar entre esos roles actualiza la misma fila, preservando ID y fecha;
+  mismo rol es no-op. Los seis roles históricos siguen siendo persistibles.
+  Desvincular exige una fila explícita, pero no actividad ni pertenencia actual
+  del destinatario; solo borra el vínculo, nunca lectura/comentarios/historial.
+- **FR-D16**: Reingresar como responsable o participante MUST conservar todo
+  cursor de lectura existente. Solo se inicializa una lectura ausente usando el
+  comentario más reciente. No se crean vínculos artificiales para relaciones
+  implícitas ni se conceden permisos VICMEAS por participar.
+- **FR-D17**: Detalle y edición general comparten la política canónica de
+  reasignación, ledger, cursor y notificaciones. La edición con reasignación
+  MUST ser atómica con sus demás campos; las fechas de tareas operativas siguen
+  reservadas a Reprogramación. Las notificaciones ocurren después del commit:
+  nuevo y anterior responsable con mensajes distintos; alta, baja y cambio
+  real de rol al usuario afectado activo, excluyendo al actor y duplicados.
+  La baja notifica aunque ya no exista vínculo. CRITICA conserva el canal
+  público de correo con propósito `notifications`, sin cambios SMTP.
+- **Deudas explícitas**: `PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES` (sin nuevo
+  ledger de participantes); `REACTIVATION_DATES_FOLLOWUP_REQUIRED = YES`.
+  Otros guards/familias de escritura legacy y señales globales de actividad/
+  pausa no se adaptan a MySQL en T134.3B.
 
 **Nota UX pendiente**: cada Tarea mantiene un único `responsable` principal,
 mientras el trabajo en equipo puede incluir múltiples participantes. El contrato

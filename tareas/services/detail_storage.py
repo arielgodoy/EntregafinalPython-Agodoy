@@ -272,6 +272,7 @@ class TaskDetailResult:
     closure_evidence: tuple[TaskDetailClosureEvidence, ...] = ()
     reprogramming_causes: tuple[ReprogrammingCause, ...] = ()
     reprogramming_history: tuple[ReprogrammingHistory, ...] = ()
+    effective_user_ids: tuple[int, ...] = ()
 
 
 def _avatar_url(user) -> str:
@@ -462,6 +463,14 @@ class DjangoTaskDetailStorage:
             .order_by("usuario__username")
             .values_list("usuario_id", "rol")
         )
+        effective_user_ids = set(
+            Hito.objects.using(self.alias).filter(tarea_id=task.pk, anulado=False)
+            .values_list("responsable_id", flat=True)
+        )
+        effective_user_ids.update(
+            MiniTarea.objects.using(self.alias).filter(tarea_id=task.pk)
+            .values_list("persona_id", flat=True)
+        )
         avance_row = None
         milestone_rows = []
         progress = None
@@ -581,12 +590,11 @@ class DjangoTaskDetailStorage:
         participants = tuple(
             TaskDetailParticipant(
                 user_id=user_id,
-                username=users_by_id[user_id].username,
+                username=users_by_id[user_id].username if user_id in users_by_id else str(user_id),
                 rol=role,
                 avatar_url=avatars_by_user.get(user_id, ""),
             )
             for user_id, role in participant_rows
-            if user_id in users_by_id
         )
         hierarchy = TaskDetailHierarchy(
             parent=parent_reference,
@@ -736,6 +744,7 @@ class DjangoTaskDetailStorage:
             core=core,
             hierarchy=hierarchy,
             participants=participants,
+            effective_user_ids=tuple(sorted(pk for pk in effective_user_ids if pk is not None)),
             mini_tasks=mini_tasks,
             links=links,
             progress=progress,
@@ -850,6 +859,21 @@ class MySQLTaskDetailStorage:
                     (task_id,),
                 )
                 user_ids.update(row["usuario_id"] for row in participant_rows)
+                effective_rows = self._rows(
+                    cursor,
+                    "SELECT responsable_id AS usuario_id FROM tareas_hito "
+                    "WHERE tarea_id = %s AND anulado = 0",
+                    (task_id,),
+                )
+                effective_rows.extend(self._rows(
+                    cursor,
+                    "SELECT persona_id AS usuario_id FROM tareas_minitarea "
+                    "WHERE tarea_id = %s",
+                    (task_id,),
+                ))
+                effective_user_ids = {
+                    row["usuario_id"] for row in effective_rows if row["usuario_id"] is not None
+                }
 
                 ancestor_annulled = bool(task["anulada"])
                 current_parent_id = parent_rows[0]["id"] if parent_rows else None
@@ -1015,9 +1039,12 @@ class MySQLTaskDetailStorage:
             effectively_annulled=ancestor_annulled,
         )
         participants = tuple(
-            TaskDetailParticipant(row["usuario_id"], users_by_id[row["usuario_id"]].username, row["rol"], avatars_by_id.get(row["usuario_id"], ""))
+            TaskDetailParticipant(
+                row["usuario_id"],
+                users_by_id[row["usuario_id"]].username if row["usuario_id"] in users_by_id else str(row["usuario_id"]),
+                row["rol"], avatars_by_id.get(row["usuario_id"], ""),
+            )
             for row in sorted(participant_rows, key=lambda item: users_by_id.get(item["usuario_id"]).username if users_by_id.get(item["usuario_id"]) else "")
-            if row["usuario_id"] in users_by_id
         )
         event_by_mini = {}
         for event in event_rows:
@@ -1080,6 +1107,7 @@ class MySQLTaskDetailStorage:
         ) for row in closure_rows)
         return TaskDetailResult(
             core=core, hierarchy=hierarchy, participants=participants,
+            effective_user_ids=tuple(sorted(effective_user_ids)),
             mini_tasks=tuple(mini_tasks), links=links, progress=progress,
             milestones=milestones, documents=documents, closure_evidence=closure_evidence,
             reprogramming_causes=reprogramming_causes,

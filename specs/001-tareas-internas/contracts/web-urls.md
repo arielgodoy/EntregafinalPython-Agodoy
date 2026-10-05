@@ -150,12 +150,36 @@ autorizan crear endpoints ausentes.
 - **Permiso**: `Tareas` + `modificar`, con Empresa activa y tarea perteneciente a ella;
   además, el actor debe ser el creador de la Tarea o tener autoridad VICMEAS `supervisor`.
 - **Request (form)**: `responsable` con el ID de un usuario activo válido para la Empresa;
-  puede quedar vacío únicamente mientras la tarea está en `BORRADOR`.
-- **Reglas**: usa `assign_responsible`; en `BORRADOR` permite limpiar el responsable sin
+  puede quedar vacío únicamente mientras la tarea está en `BORRADOR`. `motivo` es
+  opcional en BORRADOR y obligatorio, ingresado por el actor y no vacío tras trim,
+  cuando cambia un responsable publicado.
+- **Reglas**: usa el comando por IDs `reassign_responsible`; en `BORRADOR` permite limpiar el responsable sin
   crear historial con valor nulo. En tareas publicadas/operativas exige un responsable y
   solo permite reasignar a otro usuario válido. No crea `TareaParticipante`.
 - **Response 302**: redirect al detalle con resultado controlado e historial de reasignación
   cuando corresponde.
+
+### Administración de participantes — T134.3B
+
+- Se conservan las rutas/nombres de vincular y desvincular JSON y HTML.
+  Todas usan comandos canónicos por IDs, Empresa de sesión, autorización
+  `modificar` + creador/supervisor, y resolver fail-closed.
+- **POST** `/tareas/<tarea_id>/participantes/<usuario_id>/rol/`
+  (`cambiar_rol_participante`): formulario `rol` con `PARTICIPANTE` o
+  `INVITADO_OBSERVADOR`. Actualiza la misma fila; mismo rol es no-op sin aviso.
+- **Alta**: usuario activo válido para Empresa, no creador/responsable actual/
+  explícito previo. No requiere que el destinatario tenga permiso Tareas.
+- **Baja**: fila explícita existente, aunque el usuario esté inactivo o haya
+  perdido pertenencia. Preserva lecturas y todo contenido histórico.
+- **Estado**: CERRADA/anulación efectiva bloquean las tres operaciones y la
+  reasignación; la UI oculta controles. Los candidatos reales del select excluyen
+  relaciones implícitas y explícitas existentes.
+- **JSON**: respuestas controladas `success` + `message_key`, manteniendo
+  campos de compatibilidad de identificación del participante. Validación 400,
+  usuario/vínculo ausente 404, duplicado 409, permiso 403, almacenamiento 503.
+- **Edición general**: conserva el POST HTML y demás campos; responsable y
+  motivo se ejecutan por la misma transacción canónica. No actualiza el FK
+  directamente ni genera avisos de responsable duplicados.
 
 ### Similitud — T060
 

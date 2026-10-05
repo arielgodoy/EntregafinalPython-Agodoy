@@ -1,0 +1,28 @@
+{% if participantes_explicitos %}
+<div class="table-responsive mt-3">
+    <table class="table table-sm align-middle">
+        <thead><tr><th data-key="tareas.participants.add_user">Usuario</th><th id="participant-role-heading" data-key="tareas.participants.role">Rol</th></tr></thead>
+        <tbody>
+        {% for participante in participantes_explicitos %}
+        <tr>
+            <td>{{ participante.username }}</td>
+            <td>
+                {% if puede_administrar_participantes %}
+                {% if participante.rol == "PARTICIPANTE" or participante.rol == "INVITADO_OBSERVADOR" %}
+                <form method="post" action="{% url 'tareas:cambiar_rol_participante' tarea.pk participante.user_id %}" class="d-flex flex-wrap gap-2">
+                    {% csrf_token %}
+                    <select name="rol" class="form-select form-select-sm w-auto" aria-labelledby="participant-role-heading">
+                        <option value="PARTICIPANTE" data-key="tareas.assignment.role.participant"{% if participante.rol == "PARTICIPANTE" %} selected{% endif %}>Participante</option>
+                        <option value="INVITADO_OBSERVADOR" data-key="tareas.assignment.role.observer"{% if participante.rol == "INVITADO_OBSERVADOR" %} selected{% endif %}>Invitado/observador</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-primary" data-key="tareas.assignment.change_role">Cambiar rol</button>
+                </form>
+                {% else %}{{ participante.rol }}{% endif %}
+                {% else %}{{ participante.rol }}{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

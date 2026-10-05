@@ -131,6 +131,13 @@ existentes. No se modifica `control_de_proyectos`, `access_control`, `notificaci
 
 - Modelar roles, participantes, invitados, lectura y reasignaciones; solo usuarios activos
     y dentro de la empresa activa.
+- T134.3B implementa comandos por IDs y storages Django/MySQL propios de Tareas,
+    compartidos por Detalle y Editar. El agregado se bloquea por Empresa con
+    ancestros; responsable, ledger, lectura y campos de edición se guardan
+    atómicamente. Participantes cambian rol en su misma fila y la baja preserva
+    lecturas. Comunicaciones posteriores al commit, resolver fail-closed y sin
+    cambios de modelo/schema/SYSTEM. Retirar vínculos históricos no exige que
+    el destinatario siga activo ni pertenezca a la Empresa.
 - La cascada padre/hijo/nieto queda deferred para esta fase: Phase 2 implementa anulación y
     reactivación de una sola tarea, snapshot/restauración y contrato extensible. La relación,
     participantes y cascada real se implementan en Phase 3.

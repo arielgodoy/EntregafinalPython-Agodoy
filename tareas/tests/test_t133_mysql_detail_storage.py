@@ -163,7 +163,7 @@ class MySQLDetailStorageTests(TestCase):
 
         sql = " ".join(call.args[0].lower() for call in cursor.execute.call_args_list)
         for table in (
-            "tareas_avance", "tareas_hito", "tareas_hitoevidencia", "tareas_hitohistorial",
+            "tareas_avance", "tareas_hitoevidencia", "tareas_hitohistorial",
             "tareas_documentotarea", "tareas_documentohistorial", "tareas_evidenciacierre",
         ):
             self.assertNotIn(table, sql)
@@ -190,17 +190,21 @@ class MySQLWriteGuardTests(TestCase):
             role="BASE_TAREAS", source_type="MYSQL_CONFIG", mysql_connection=cls.connection, database_name="tareas"
         )
 
-    def test_legacy_write_is_blocked_before_task_lookup(self):
+    def test_responsible_uses_configured_backend_before_default_lookup(self):
         self.client.force_login(self.user)
         session = self.client.session
         session["empresa_id"] = self.empresa.pk
         session.save()
 
-        with patch("tareas.views.Tarea.objects.get", side_effect=AssertionError("lookup before guard")):
+        with patch("tareas.views.Tarea.objects.get", side_effect=AssertionError("default lookup")), patch(
+            "tareas.views.reassign_responsible",
+        ) as reassign:
             response = self.client.post(
                 reverse("tareas:administrar_responsable_detalle", args=[3]),
                 {"responsable": self.user.pk},
             )
 
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 302)
+        reassign.assert_called_once()
+        self.assertEqual(reassign.call_args.args[0].task_id, 3)
         self.assertNotIn("password", response.content.decode().lower())

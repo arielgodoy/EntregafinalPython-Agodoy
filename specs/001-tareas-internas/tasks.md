@@ -251,6 +251,18 @@ siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender 
   negativos y same-PK Django intacto. Sin cambios SYSTEM, schema o configuración.
   Sin stage/commit/push; revisión humana pendiente.
 
+- [x] T134.3B [US8] Paridad Responsable/Participantes Django + MySQL, comandos
+  por IDs, locks/atomicidad, estados/anulación, pertenencia/administración,
+  ledger de responsable, cursores conservados, notificaciones post-commit,
+  alta/baja/cambio público de rol, Detalle/Edición reconciliados y resolver
+  fail-closed. Validada con 253 tests focales + 210 de regresión, MySQL real
+  (Tarea TEST 3, cerrada al terminar), same-PK, cero writes SYSTEM y UI ES/EN,
+  móvil/desktop y light/dark sobre snapshots aislados. Cuatro errores históricos
+  de render Hito T081 reproducidos con su vista HEAD, no corregidos en este scope.
+  Sin modelos/migraciones/schema/SYSTEM ni stage/commit/push.
+  Deudas: ledger participantes, guards legacy/pausas de otras familias y
+  reacomodo fechas tras reactivar.
+
 ### Regla transversal de cierre i18n
 
 Ninguna task nueva que agregue o modifique UI puede marcarse `[x]` sin ejecutar el

@@ -29,6 +29,7 @@ urlpatterns = [
     path('<int:tarea_id>/participantes/<int:usuario_id>/desvincular/', views.DesvincularParticipanteView.as_view(), name='desvincular_participante'),
     path('<int:tarea_id>/participantes/vincular/', views.VincularParticipanteDetalleView.as_view(), name='vincular_participante_detalle'),
     path('<int:tarea_id>/participantes/<int:usuario_id>/desvincular-detalle/', views.DesvincularParticipanteDetalleView.as_view(), name='desvincular_participante_detalle'),
+    path('<int:tarea_id>/participantes/<int:usuario_id>/rol/', views.CambiarRolParticipanteView.as_view(), name='cambiar_rol_participante'),
     path('<int:tarea_id>/responsable/', views.AdministrarResponsableDetalleView.as_view(), name='administrar_responsable_detalle'),
     path('<int:tarea_id>/mini-tareas/', views.CrearMiniTareaView.as_view(), name='minitareas_tarea'),
     path('<int:tarea_id>/mini-tareas/<int:mini_tarea_id>/cerrar/', views.CerrarMiniTareaView.as_view(), name='cerrar_minitarea'),

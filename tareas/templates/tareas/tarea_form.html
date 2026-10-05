@@ -26,11 +26,11 @@
 
                             {% if form.non_field_errors %}
                             <div class="alert alert-danger">
-                                {% include "tareas/_i18n_form_errors.html" with errors=form.non_field_errors %}
+                                {% include "tareas/_i18n_form_errors.html" with errors=form.non_field_errors.as_data %}
                             </div>
                             {% endif %}
 
-                            <form method="post" novalidate>
+                            <form method="post" novalidate{% if object %} data-responsible-form data-initial-responsible="{{ object.responsable_id|default_if_none:'' }}" data-draft="{% if object.estado == 'BORRADOR' %}true{% else %}false{% endif %}"{% endif %}>
                                 {% csrf_token %}
 
                                 <section class="mb-4" aria-labelledby="datos-basicos-titulo">
@@ -47,6 +47,14 @@
                                     {{ form.descripcion }}
                                     {% for error in form.descripcion.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 </div>
+                                {% if object %}
+                                <div class="mt-3">
+                                    <label for="{{ form.motivo.id_for_label }}" class="form-label" data-key="tareas.assignment.reason">Motivo de reasignación</label>
+                                    {{ form.motivo }}
+                                    <div class="form-text" data-key="tareas.assignment.reason_help">Obligatorio si cambia el responsable de una tarea publicada.</div>
+                                    {% for error in form.motivo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                </div>
+                                {% endif %}
                                 </section>
 
                                 <section class="border-top pt-4 mb-4" aria-labelledby="planificacion-titulo">
@@ -92,3 +100,7 @@
     </div>
 </div>
 {% endblock content %}
+
+{% block extra_js %}
+{% if object %}<script src="{% static 'tareas/js/participant_admin.js' %}"></script>{% endif %}
+{% endblock extra_js %}

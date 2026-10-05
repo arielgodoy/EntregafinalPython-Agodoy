@@ -51,7 +51,7 @@ from .forms import (
     MiniTareaCreateForm,
     MiniTareaReopenForm,
     ParticipanteTareaAdminForm,
-    ParticipanteTareaForm,
+    ParticipanteRolForm,
     ResponsableTareaForm,
     ReconocerComentariosForm,
     ReunionParticipanteForm,
@@ -79,7 +79,16 @@ from .models import (
     TareaParticipante,
 )
 from .services.context import get_active_company_id
-from .services.assignment import assign_responsible, add_participant, remove_participant
+from .services.participant_storage import (
+    AddParticipantCommand,
+    ChangeParticipantRoleCommand,
+    ReassignResponsibleCommand,
+    RemoveParticipantCommand,
+    add_task_participant,
+    change_participant_role,
+    reassign_responsible,
+    remove_task_participant,
+)
 from .services.authorization import can_manage_task
 from .services.closure import (
     can_create_mini_task,
@@ -515,6 +524,7 @@ def _detail_task_presentation(core, empresa):
 
 def _detail_effective_participant_ids(detail_result):
     ids = {detail_result.core.creada_por_id, detail_result.core.responsable_id}
+    ids.update(detail_result.effective_user_ids)
     ids.update(item.user_id for item in detail_result.participants)
     ids.update(item.persona_id for item in detail_result.mini_tasks)
     ids.update(
@@ -1034,10 +1044,24 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context["participantes_elegibles"] = get_valid_users_for_empresa(
             self.detail_empresa, active_only=True
         ).exclude(pk__in=implicit_ids | explicit_ids)
-        context["puede_administrar_participantes"] = context["puede_administrar_tarea"]
+        context["puede_administrar_participantes"] = (
+            context["puede_administrar_tarea"]
+            and self.detail_result.core.estado in {
+                Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA,
+                Tarea.Estado.GESTION, Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+            }
+            and not hierarchy.effectively_annulled
+        )
+        context["participantes_visuales"] = tuple(
+            item for item in participantes_explicitos
+            if item.user_id not in implicit_ids
+        )
         context["participante_form"] = kwargs.get(
             "participante_form",
-            ParticipanteTareaAdminForm(empresa=self.detail_empresa, active_only=True),
+            ParticipanteTareaAdminForm(
+                empresa=self.detail_empresa, active_only=True,
+                excluded_ids=implicit_ids | explicit_ids,
+            ),
         )
         context["responsable_form"] = kwargs.get(
             "responsable_form",
@@ -1736,152 +1760,114 @@ class RestaurarComentarioView(_CambiarVisibilidadComentarioView):
     servicio = staticmethod(restore_comment)
 
 
-class VincularParticipanteView(TareaComentariosView):
-    permiso_requerido = "modificar"
-
-    def post(self, request, tarea_id, usuario_id):
-        tarea = self.get_tarea(request, tarea_id)
-        if not can_manage_task(tarea=tarea, actor=request.user):
-            return _comment_error_response(status=403)
-        form = ParticipanteTareaForm(
-            data={"usuario": usuario_id},
-            empresa=tarea.empresa,
-            active_only=True,
-        )
-        if not form.is_valid():
-            return _comment_error_response(status=404)
-        participante = form.cleaned_data["usuario"]
-        if tarea.participantes.filter(usuario=participante).exists():
-            return _comment_error_response(status=409)
-        add_participant(tarea, participante, actor=request.user)
-        return JsonResponse(
-            {
-                "success": True,
-                "participante": {
-                    "id": participante.pk,
-                    "username": participante.username,
-                },
-            }
-        )
-
-
-class DesvincularParticipanteView(TareaComentariosView):
-    permiso_requerido = "modificar"
-
-    def post(self, request, tarea_id, usuario_id):
-        tarea = self.get_tarea(request, tarea_id)
-        if not can_manage_task(tarea=tarea, actor=request.user):
-            return _comment_error_response(status=403)
-        form = ParticipanteTareaForm(
-            data={"usuario": usuario_id},
-            empresa=tarea.empresa,
-            active_only=False,
-        )
-        if not form.is_valid():
-            return _comment_error_response(status=404)
-        participante = form.cleaned_data["usuario"]
-        if not tarea.participantes.filter(usuario=participante).exists():
-            return _comment_error_response(status=404)
-        remove_participant(tarea, participante, actor=request.user)
-        return JsonResponse(
-            {
-                "success": True,
-                "participante_id": participante.pk,
-            }
-        )
-
-
-class VincularParticipanteDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
+class ParticipantAdministrationView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+    crear_permiso_faltante = False
+    http_method_names = ["post"]
+    json_response = False
 
-    def post(self, request, tarea_id):
-        tarea = get_object_or_404(
-            Tarea.objects.select_related("empresa"),
-            pk=tarea_id,
-            empresa_id=_get_empresa_id(request),
-        )
-        _require_task_administration(tarea, request.user)
-        form = ParticipanteTareaAdminForm(
-            data=request.POST,
-            empresa=tarea.empresa,
-            active_only=True,
-        )
+    def post(self, request, tarea_id, **kwargs):
+        try:
+            result = self.execute(request, tarea_id, **kwargs)
+        except EditTaskNotFound as exc:
+            raise Http404 from exc
+        except PermissionDenied:
+            if self.json_response:
+                return JsonResponse({
+                    "success": False, "message_key": "tareas.assignment.errors.permission",
+                }, status=403)
+            return self.handle_no_permission(request)
+        except (ValidationError, TaskStorageError) as exc:
+            key = exc.messages[0] if isinstance(exc, ValidationError) else str(exc)
+            if self.json_response:
+                status = 400
+                if key == "tareas.assignment.errors.invalid_user" or key == "tareas.assignment.errors.missing":
+                    status = 404
+                elif key == "tareas.assignment.errors.duplicate":
+                    status = 409
+                elif isinstance(exc, TaskStorageError):
+                    status = 503
+                return JsonResponse({"success": False, "message_key": key}, status=status)
+            messages.error(request, key)
+        else:
+            if self.json_response:
+                data = {
+                    "success": True, "message_key": "tareas.assignment.success",
+                    "changed": result.changed,
+                }
+                if isinstance(self, VincularParticipanteView):
+                    user = User.objects.using("default").filter(pk=result.user_id).first()
+                    data["participante"] = {
+                        "id": result.user_id, "username": user.username if user else str(result.user_id),
+                    }
+                else:
+                    data["participante_id"] = result.user_id
+                return JsonResponse(data)
+            messages.success(request, "tareas.assignment.success")
+        return redirect("tareas:detalle_tarea", pk=tarea_id)
+
+    def scope(self, request, tarea_id):
+        return {
+            "task_id": tarea_id, "empresa_id": _get_empresa_id(request),
+            "actor_id": request.user.pk,
+        }
+
+
+class VincularParticipanteDetalleView(ParticipantAdministrationView):
+    def execute(self, request, tarea_id, **kwargs):
+        try:
+            user_id = int(request.POST.get("usuario", ""))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("tareas.assignment.errors.invalid_user") from exc
+        return add_task_participant(AddParticipantCommand(
+            **self.scope(request, tarea_id), user_id=user_id,
+            role=request.POST.get("rol", TareaParticipante.Rol.PARTICIPANTE),
+        ))
+
+
+class VincularParticipanteView(ParticipantAdministrationView):
+    json_response = True
+
+    def execute(self, request, tarea_id, usuario_id):
+        return add_task_participant(AddParticipantCommand(
+            **self.scope(request, tarea_id), user_id=usuario_id,
+        ))
+
+
+class DesvincularParticipanteDetalleView(ParticipantAdministrationView):
+    def execute(self, request, tarea_id, usuario_id):
+        return remove_task_participant(RemoveParticipantCommand(
+            **self.scope(request, tarea_id), user_id=usuario_id,
+        ))
+
+
+class DesvincularParticipanteView(DesvincularParticipanteDetalleView):
+    json_response = True
+
+
+class CambiarRolParticipanteView(ParticipantAdministrationView):
+    def execute(self, request, tarea_id, usuario_id):
+        form = ParticipanteRolForm(request.POST)
         if not form.is_valid():
-            messages.error(request, "tareas.messages.participant_invalid")
-            return redirect("tareas:detalle_tarea", pk=tarea.pk)
-        participante = form.cleaned_data["usuario"]
-        if tarea.participantes.filter(usuario=participante).exists():
-            messages.error(request, "tareas.messages.participant_exists")
-            return redirect("tareas:detalle_tarea", pk=tarea.pk)
+            raise ValidationError("tareas.assignment.errors.invalid_role")
+        return change_participant_role(ChangeParticipantRoleCommand(
+            **self.scope(request, tarea_id), user_id=usuario_id,
+            new_role=form.cleaned_data["rol"],
+        ))
+
+
+class AdministrarResponsableDetalleView(ParticipantAdministrationView):
+    def execute(self, request, tarea_id):
+        value = request.POST.get("responsable", "")
         try:
-            add_participant(
-                tarea,
-                participante,
-                rol=form.cleaned_data["rol"],
-                actor=request.user,
-            )
-        except ValidationError:
-            messages.error(request, "tareas.messages.participant_invalid")
-        else:
-            messages.success(request, "tareas.messages.participant_added")
-        return redirect("tareas:detalle_tarea", pk=tarea.pk)
-
-
-class DesvincularParticipanteDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Tareas"
-    permiso_requerido = "modificar"
-
-    def post(self, request, tarea_id, usuario_id):
-        tarea = get_object_or_404(
-            Tarea.objects.select_related("empresa"),
-            pk=tarea_id,
-            empresa_id=_get_empresa_id(request),
-        )
-        _require_task_administration(tarea, request.user)
-        participante = get_object_or_404(
-            get_valid_users_for_empresa(tarea.empresa, active_only=False),
-            pk=usuario_id,
-        )
-        if not tarea.participantes.filter(usuario=participante).exists():
-            messages.error(request, "tareas.messages.participant_missing")
-            return redirect("tareas:detalle_tarea", pk=tarea.pk)
-        try:
-            remove_participant(tarea, participante, actor=request.user)
-        except ValidationError:
-            messages.error(request, "tareas.messages.participant_invalid")
-        else:
-            messages.success(request, "tareas.messages.participant_removed")
-        return redirect("tareas:detalle_tarea", pk=tarea.pk)
-
-
-class AdministrarResponsableDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
-    vista_nombre = "Tareas"
-    permiso_requerido = "modificar"
-
-    def post(self, request, tarea_id):
-        tarea = get_object_or_404(
-            Tarea.objects.select_related("empresa"),
-            pk=tarea_id,
-            empresa_id=_get_empresa_id(request),
-        )
-        _require_task_administration(tarea, request.user)
-        form = ResponsableTareaForm(data=request.POST, tarea=tarea)
-        if not form.is_valid():
-            messages.error(request, "tareas.messages.participant_invalid")
-            return redirect("tareas:detalle_tarea", pk=tarea.pk)
-        try:
-            assign_responsible(
-                tarea,
-                form.cleaned_data["responsable"],
-                request.user,
-                motivo="Administración desde el detalle",
-            )
-        except ValidationError:
-            messages.error(request, "tareas.messages.participant_invalid")
-        else:
-            messages.success(request, "tareas.messages.participant_added")
-        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+            new_id = int(value) if value else None
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("tareas.assignment.errors.invalid_user") from exc
+        return reassign_responsible(ReassignResponsibleCommand(
+            **self.scope(request, tarea_id), new_responsible_id=new_id,
+            reason=request.POST.get("motivo", ""),
+        ))
 
 
 class CrearEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -2017,16 +2003,35 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
+    crear_permiso_faltante = False
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except PermissionDenied:
+            return self.handle_no_permission(request)
+        except TaskStorageError:
+            logger.error("Task edit storage resolution failed: task=%s", kwargs.get("pk"))
+            return HttpResponse("No se pudo resolver el almacenamiento de tareas.", status=503)
 
     def _empresa(self):
         return get_object_or_404(Empresa, pk=_get_empresa_id(self.request))
 
     def _load(self):
         try:
-            return resolve_edit_storage().get_task_for_edit(
+            data = resolve_edit_storage().get_task_for_edit(
                 task_id=self.kwargs["pk"],
                 empresa_id=self._empresa().pk,
             )
+            self.edit_detail = resolve_detail_storage().get_task_detail(
+                task_id=data.id, empresa_id=data.empresa_id,
+                sections=TaskDetailSections(
+                    mini_tasks=False, links=False, milestones=False, documents=False,
+                ),
+            )
+            if not _detail_can_manage_task(self.edit_detail, self.request.user, self._empresa()):
+                raise PermissionDenied
+            return data
         except EditTaskNotFound as exc:
             raise Http404 from exc
 
@@ -2051,12 +2056,15 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "responsable": data.responsable_id,
             "fecha_tope": data.fecha_tope,
         }
-        return TaskEditForm(
+        form = TaskEditForm(
             bound_data,
             initial=initial,
             active_company=empresa,
             task_state=data.estado,
         )
+        if data.estado == Tarea.Estado.CERRADA or self.edit_detail.hierarchy.effectively_annulled:
+            form.fields["responsable"].widget.attrs["disabled"] = True
+        return form
 
     def _render(self, data, form):
         return render(
@@ -2089,15 +2097,26 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
         storage = resolve_edit_storage()
         try:
-            updated = storage.update_task(command)
+            reassign_responsible(ReassignResponsibleCommand(
+                task_id=data.id, empresa_id=data.empresa_id, actor_id=request.user.pk,
+                new_responsible_id=command.responsable_id,
+                reason=form.cleaned_data["motivo"], edit=command,
+            ))
         except EditTaskNotFound as exc:
             raise Http404 from exc
+        except PermissionDenied:
+            return self.handle_no_permission(request)
+        except (ValidationError, TaskStorageError) as exc:
+            for error in exc.messages if isinstance(exc, ValidationError) else [str(exc)]:
+                form.add_error(None, error)
+            return self._render(data, form)
+        updated = storage.get_task_for_edit(task_id=data.id, empresa_id=data.empresa_id)
         if isinstance(storage, DjangoTaskStorage):
             task = Tarea.objects.using(storage.alias).get(
                 pk=updated.id,
                 empresa_id=updated.empresa_id,
             )
-            relevant = {"responsable", "fecha_tope", "prioridad"}.intersection(
+            relevant = {"fecha_tope", "prioridad"}.intersection(
                 form.changed_data
             )
             if relevant:
@@ -2114,7 +2133,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                     body="Se actualizó información funcional de la tarea.",
                     actor=request.user,
                 )
-        elif isinstance(storage, MySQLTaskStorage) and {"responsable", "fecha_tope", "prioridad"}.intersection(form.changed_data):
+        elif isinstance(storage, MySQLTaskStorage) and {"fecha_tope", "prioridad"}.intersection(form.changed_data):
             detail = resolve_detail_storage().get_task_detail(
                 task_id=updated.id,
                 empresa_id=updated.empresa_id,
@@ -2137,7 +2156,9 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 .exclude(pk=request.user.pk)
             )
             emit_task_event(
-                tarea=SimpleNamespace(pk=updated.id, empresa=self._empresa()),
+                tarea=SimpleNamespace(
+                    pk=updated.id, empresa=self._empresa(), prioridad=updated.prioridad,
+                ),
                 event="cambio_relevante",
                 recipients=recipients,
                 title="Cambio relevante en la tarea",

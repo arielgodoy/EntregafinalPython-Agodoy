@@ -7,7 +7,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from access_control.models import Empresa, Permiso, Vista
-from tareas.models import Tarea
+from tareas.models import Tarea, TareaConnectionRole
+
+
+def configure_task_storage(alias="default"):
+    return TareaConnectionRole.objects.update_or_create(
+        role="BASE_TAREAS",
+        defaults={"source_type": "DJANGO", "django_alias": alias},
+    )[0]
 
 
 def simple_jpeg_upload(name="foto.jpg"):

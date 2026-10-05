@@ -118,6 +118,23 @@ Levantar el servidor local (task "Django: Runserver (local)") y verificar:
 4. Publicar la tarea y comprobar que el selector ya no permite dejar el responsable vacío;
    una reasignación válida conserva el registro de reasignación.
 
+### E2 ter. Paridad Responsable/Participantes (T134.3B)
+
+1. En ACTIVA/GESTION, reasignar desde Detalle y desde Editar con motivo
+   ingresado. Verificar anterior/nuevo/actor/fecha/motivo y ausencia de vínculos
+   artificiales. Sin motivo, la edición completa debe quedar sin cambios.
+2. Agregar un usuario activo válido que no sea creador, responsable ni explícito.
+   Cambiar PARTICIPANTE a INVITADO_OBSERVADOR: misma PK/fecha, solo cambia rol.
+3. Quitar el vínculo y reingresar: misma lectura y cursor, comentarios y pausas
+   conservados. Quitar un usuario inactivo o sin pertenencia actual sigue válido.
+4. CERRADA/anulación propia/padre/abuelo bloquean POST y ocultan controles.
+   Un participante con modificar sin ser creador/supervisor recibe 403.
+5. Tras commit, comprobar avisos separados a responsables anterior/nuevo y al
+   participante afectado en alta, baja y cambio real de rol; mismo valor no avisa.
+6. Repetir en BASE_TAREAS Django (alias explícito) y MySQL; verificar rollback,
+   errores de resolver sin fallback, mismo ID Django intacto, candidatos reales
+   filtrados y alternancia ES/EN sin destruir opciones de los selects.
+
 ### E3. Publicación bloqueada sin responsable (FR-007)
 
 1. Quitar el responsable del borrador → intentar Publicar.

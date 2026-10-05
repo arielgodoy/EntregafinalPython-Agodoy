@@ -21,12 +21,13 @@ from tareas.services.assignment import (
     remove_participant,
 )
 from tareas.services.participants import is_effective_participant
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class AssignmentPhase3Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="A3", descripcion="Empresa Phase 3")
         cls.otra_empresa = create_empresa(codigo="B3", descripcion="Otra Empresa")
         cls.creador = create_user(username="p3_creador")
@@ -93,7 +94,7 @@ class AssignmentPhase3Tests(TestCase):
 
     def test_desvincular_no_elimina_participacion_efectiva_responsable(self):
         tarea = self.make_task(responsable=self.participante)
-        add_participant(tarea, self.participante, actor=self.admin)
+        TareaParticipante.objects.create(tarea=tarea, usuario=self.participante)
 
         remove_participant(tarea, self.participante, actor=self.admin)
 
@@ -120,7 +121,7 @@ class AssignmentPhase3Tests(TestCase):
         self.assertFalse(lectura.leido)
         self.assertIsNone(lectura.fecha_lectura)
 
-    def test_revincular_reinicia_solo_cursor_y_preserva_lectura_general(self):
+    def test_revincular_preserva_cursor_y_lectura_general(self):
         tarea = self.make_task()
         Comentario.objects.create(
             tarea=tarea,
@@ -129,6 +130,7 @@ class AssignmentPhase3Tests(TestCase):
         )
         add_participant(tarea, self.participante, actor=self.admin)
         lectura = mark_task_read(tarea, self.participante)
+        original_cursor = lectura.comentario_leido_hasta_id
         comentario_nuevo = Comentario.objects.create(
             tarea=tarea,
             autor=self.creador,
@@ -139,7 +141,8 @@ class AssignmentPhase3Tests(TestCase):
         add_participant(tarea, self.participante, actor=self.admin)
 
         lectura.refresh_from_db()
-        self.assertEqual(lectura.comentario_leido_hasta, comentario_nuevo)
+        self.assertEqual(lectura.comentario_leido_hasta_id, original_cursor)
+        self.assertNotEqual(lectura.comentario_leido_hasta, comentario_nuevo)
         self.assertTrue(lectura.leido)
         self.assertIsNotNone(lectura.fecha_lectura)
         self.assertEqual(
@@ -208,7 +211,7 @@ class AssignmentPhase3Tests(TestCase):
             user = create_user(username=f"rol_user_{index}")
             assign_permission(user, self.empresa, "Tareas", ingresar=True)
             tarea = self.make_task(titulo=f"Tarea rol {index}")
-            participante = add_participant(tarea, user, rol, actor=self.admin)
+            participante = TareaParticipante.objects.create(tarea=tarea, usuario=user, rol=rol)
             participante.refresh_from_db()
             self.assertEqual(participante.rol, rol)
 
@@ -306,7 +309,7 @@ class AssignmentPhase3Tests(TestCase):
             ).exists()
         )
 
-    def test_agregar_responsable_como_participante_no_reinicia_cursor(self):
+    def test_agregar_responsable_como_participante_se_rechaza_sin_reiniciar_cursor(self):
         tarea = self.make_task(responsable=self.nuevo_responsable)
         lectura = TareaLectura.objects.create(
             tarea=tarea,
@@ -319,7 +322,8 @@ class AssignmentPhase3Tests(TestCase):
             contenido="Comentario posterior",
         )
 
-        add_participant(tarea, self.nuevo_responsable, actor=self.admin)
+        with self.assertRaises(ValidationError):
+            add_participant(tarea, self.nuevo_responsable, actor=self.admin)
 
         lectura.refresh_from_db()
         self.assertIsNone(lectura.comentario_leido_hasta_id)
@@ -478,6 +482,7 @@ class AssignmentPhase3Tests(TestCase):
 class ParticipantAdministrationServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="PA1", descripcion="Empresa administración")
         cls.otra_empresa = create_empresa(codigo="PA2", descripcion="Otra empresa")
         cls.creador = create_user(username="pa_creador")

@@ -76,6 +76,11 @@ El resolver debe producir errores controlados para:
 
 No existe fallback silencioso a `default`.
 
+T134.3B aplica esta regla a todos los comandos de responsable/participantes y
+a la edición general, incluso si el resolver produce un error inesperado.
+Resuelve antes de cualquier lookup operativo. Los guards legacy de otras
+familias no se modifican en esta entrega y su adaptación queda pendiente.
+
 ## Seguridad
 
 - No se exponen passwords ni secretos en HTML, JSON, logs o mensajes.

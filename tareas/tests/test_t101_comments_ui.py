@@ -56,7 +56,6 @@ class T101CommentsUiTests(TestCase):
             self.participante,
             responsable=self.participante,
         )
-        add_participant(tarea, self.participante, actor=self.participante)
         tarea.estado = estado
         tarea.anulada = anulada
         tarea.fecha_publicacion = timezone.now() if estado != Tarea.Estado.BORRADOR else None

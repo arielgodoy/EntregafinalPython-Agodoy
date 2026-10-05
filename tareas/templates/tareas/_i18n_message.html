@@ -1,4 +1,6 @@
-{% if message.message == "tareas.reprogramming.success" %}
+{% if message.message|slice:":18" == "tareas.assignment." %}
+{% include "tareas/_assignment_message.html" with key=message.message %}
+{% elif message.message == "tareas.reprogramming.success" %}
 <span data-key="tareas.reprogramming.success">Fecha límite reprogramada correctamente.</span>
 {% elif message.message == "tareas.reprogramming.errors.invalid_date" %}
 <span data-key="tareas.reprogramming.errors.invalid_date">Indique una nueva fecha válida.</span>

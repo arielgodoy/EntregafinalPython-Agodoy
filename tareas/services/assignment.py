@@ -4,18 +4,21 @@ All functional logic stays inside tareas/. Company membership is validated by
 consuming the existing access_control user/company helpers without modifying them.
 """
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from access_control.services.permissions import (
     get_valid_users_for_empresa,
-    user_has_permission_for_empresa,
 )
-from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion
-from tareas.services.authorization import can_manage_task
-from tareas.services.hierarchy import is_effectively_annulled
+from tareas.models import Tarea, TareaLectura, TareaParticipante, TareaReasignacion
 from tareas.services.notifications import emit_task_event, task_recipients
+from tareas.services.participant_storage import (
+    AddParticipantCommand,
+    ReassignResponsibleCommand,
+    RemoveParticipantCommand,
+    resolve_participant_storage,
+)
 
 
 def _validate_active_user(user):
@@ -29,55 +32,31 @@ def _validate_user_in_task_company(tarea, user):
         raise ValidationError("El usuario no pertenece al contexto de la empresa de la tarea.")
 
 
-def _lock_task_for_participant_admin(tarea, actor):
-    """Participant administration needs VICMEAS `modificar`, not being a participant."""
-    tarea_actual = Tarea.objects.select_for_update().get(pk=tarea.pk)
-    _validate_user_in_task_company(tarea_actual, actor)
-    if not user_has_permission_for_empresa(
-        user=actor,
-        empresa=tarea_actual.empresa,
-        vista_nombre="Tareas",
-        accion="modificar",
-    ):
-        raise ValidationError("El usuario no tiene autorización para administrar participantes.")
-    if not can_manage_task(tarea=tarea_actual, actor=actor):
-        raise ValidationError("El usuario no puede administrar esta tarea.")
-    if tarea_actual.estado == Tarea.Estado.CERRADA or is_effectively_annulled(tarea_actual):
-        raise ValidationError("La tarea no admite cambios de participantes.")
-    return tarea_actual
-
-
-@transaction.atomic
 def add_participant(tarea, user, rol=TareaParticipante.Rol.PARTICIPANTE, *, actor):
-    """Add or update one task participant and initialize comment reading."""
-    tarea = _lock_task_for_participant_admin(tarea, actor)
-    _validate_user_in_task_company(tarea, user)
-    participante, created = TareaParticipante.objects.update_or_create(
-        tarea=tarea,
-        usuario=user,
-        defaults={"rol": rol},
-    )
-    comentario_reciente = (
-        Comentario.objects.filter(tarea=tarea)
-        .order_by("-created_at", "-pk")
-        .first()
-    )
-    lectura, lectura_created = TareaLectura.objects.get_or_create(
-        tarea=tarea,
-        usuario=user,
-        defaults={"comentario_leido_hasta": comentario_reciente},
-    )
-    if created and not lectura_created and tarea.responsable_id != user.pk:
-        lectura.comentario_leido_hasta = comentario_reciente
-        lectura.save(update_fields=["comentario_leido_hasta"])
-    return participante
+    """Compatibility adapter; persistence and validation live in the ID command."""
+    storage = resolve_participant_storage()
+    try:
+        result = storage.add(AddParticipantCommand(
+            task_id=tarea.pk, empresa_id=tarea.empresa_id,
+            actor_id=getattr(actor, "pk", None), user_id=getattr(user, "pk", None), role=rol,
+        ))
+    except PermissionDenied as exc:
+        raise ValidationError("tareas.assignment.errors.permission") from exc
+    if hasattr(storage, "alias"):
+        return TareaParticipante.objects.using(storage.alias).get(pk=result.participant_id)
+    return result
 
 
-@transaction.atomic
 def remove_participant(tarea, user, *, actor):
-    """Remove the derived access link without deleting reading or comment history."""
-    tarea = _lock_task_for_participant_admin(tarea, actor)
-    return TareaParticipante.objects.filter(tarea=tarea, usuario=user).delete()
+    """Remove only the explicit link using the configured task backend."""
+    storage = resolve_participant_storage()
+    try:
+        return storage.remove(RemoveParticipantCommand(
+            task_id=tarea.pk, empresa_id=tarea.empresa_id,
+            actor_id=getattr(actor, "pk", None), user_id=getattr(user, "pk", None),
+        ))
+    except PermissionDenied as exc:
+        raise ValidationError("tareas.assignment.errors.permission") from exc
 
 
 def mark_task_read(tarea, user, *, leido=True):
@@ -95,53 +74,21 @@ def mark_task_read(tarea, user, *, leido=True):
 
 
 def assign_responsible(tarea, new_responsible, changed_by, motivo=""):
-    """Assign/reassign the task's lead responsible user with history."""
-    _validate_user_in_task_company(tarea, changed_by)
-    if not can_manage_task(tarea=tarea, actor=changed_by):
-        raise ValidationError("El usuario no puede administrar esta tarea.")
-    if new_responsible is None:
-        if tarea.estado != Tarea.Estado.BORRADOR:
-            raise ValidationError("Una tarea publicada debe conservar un responsable.")
-        if tarea.responsable_id is None:
-            return None
-        tarea.responsable = None
-        tarea.save(update_fields=["responsable"])
+    """Keep legacy Django return values without a second assignment policy."""
+    storage = resolve_participant_storage()
+    try:
+        result = storage.reassign(ReassignResponsibleCommand(
+            task_id=tarea.pk, empresa_id=tarea.empresa_id,
+            actor_id=getattr(changed_by, "pk", None),
+            new_responsible_id=getattr(new_responsible, "pk", None), reason=motivo,
+        ))
+    except PermissionDenied as exc:
+        raise ValidationError("tareas.assignment.errors.permission") from exc
+    if not result.changed or result.reassignment_id is None:
         return None
-    _validate_user_in_task_company(tarea, new_responsible)
-    anterior = tarea.responsable
-    if anterior_id := getattr(anterior, "pk", None):
-        if anterior_id == new_responsible.pk:
-            return None
-    with transaction.atomic():
-        tarea.responsable = new_responsible
-        tarea.full_clean()
-        tarea.save(update_fields=["responsable"])
-        comentario_reciente = (
-            Comentario.objects.filter(tarea=tarea)
-            .order_by("-created_at", "-pk")
-            .first()
-        )
-        TareaLectura.objects.get_or_create(
-            tarea=tarea,
-            usuario=new_responsible,
-            defaults={"comentario_leido_hasta": comentario_reciente},
-        )
-        reasignacion = TareaReasignacion.objects.create(
-            tarea=tarea,
-            responsable_anterior=anterior,
-            responsable_nuevo=new_responsible,
-            usuario=changed_by,
-            motivo=motivo,
-        )
-    emit_task_event(
-        tarea=tarea,
-        event="reasignacion",
-        recipients=task_recipients(tarea, include_responsible=True, actor=changed_by),
-        title="Tarea reasignada",
-        body="La tarea tiene un nuevo responsable.",
-        actor=changed_by,
-    )
-    return reasignacion
+    if hasattr(storage, "alias"):
+        return TareaReasignacion.objects.using(storage.alias).get(pk=result.reassignment_id)
+    return result
 
 
 def create_independent_tasks_for_responsibles(

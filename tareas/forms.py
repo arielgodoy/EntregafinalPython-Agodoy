@@ -283,11 +283,25 @@ class ParticipanteTareaAdminForm(ParticipanteTareaForm):
         )
     )
 
+    def __init__(self, *args, excluded_ids=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["usuario"].queryset = self.fields["usuario"].queryset.exclude(
+            pk__in=[pk for pk in excluded_ids if pk is not None]
+        )
+
+
+class ParticipanteRolForm(forms.Form):
+    rol = forms.ChoiceField(choices=ParticipanteTareaAdminForm.base_fields["rol"].choices)
+
 
 class ResponsableTareaForm(forms.Form):
     responsable = forms.ModelChoiceField(
         queryset=User.objects.none(),
         required=False,
+    )
+    motivo = forms.CharField(
+        required=False, strip=True,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
     )
 
     def __init__(self, *args, tarea=None, empresa=None, responsable_id=None, estado=None, **kwargs):
@@ -497,6 +511,10 @@ class TaskEditForm(forms.Form):
     descripcion = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
     prioridad = forms.ChoiceField(choices=Tarea.Prioridad.choices, required=False)
     responsable = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
+    motivo = forms.CharField(
+        required=False, strip=True,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
     fecha_tope = forms.DateField(
         required=True,
         widget=forms.DateInput(attrs={"type": "date"}),

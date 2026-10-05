@@ -325,12 +325,15 @@ class DetailCharacterizationTests(TestCase):
 
         milestone_tables = (
             "tareas_avance",
-            "tareas_hito",
             "tareas_hitoevidencia",
             "tareas_hitohistorial",
         )
         sql = " ".join(query["sql"].lower() for query in queries)
         self.assertFalse(any(table in sql for table in milestone_tables))
+        identity_reads = [query["sql"] for query in queries if 'FROM "tareas_hito"' in query["sql"]]
+        self.assertEqual(len(identity_reads), 1)
+        self.assertNotIn('"nombre"', identity_reads[0])
+        self.assertEqual(result.effective_user_ids, ())
         self.assertIsNone(result.progress)
         self.assertEqual(result.milestones, ())
 

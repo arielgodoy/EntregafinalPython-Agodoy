@@ -19,11 +19,12 @@ from tareas.services.lifecycle import (
     transition_task,
 )
 from tareas.services.notifications import emit_task_event
-from tareas.tests.factories import assign_permission, create_tarea
+from tareas.tests.factories import assign_permission, configure_task_storage, create_tarea
 
 class T054NotificationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = Empresa.objects.create(codigo="T54", descripcion="T054")
         cls.creator = User.objects.create_user(
             username="t54_creator", email="creator@example.test", password="x"
@@ -288,7 +289,7 @@ class T054NotificationTests(TestCase):
         self, notify_task_event, send_email_for_purpose
     ):
         task = self.make_task(responsable=self.supervisor)
-        add_participant(task, self.supervisor, actor=self.participants_admin)
+        TareaParticipante.objects.create(tarea=task, usuario=self.supervisor)
         add_participant(task, self.participant, actor=self.participants_admin)
         Hito.objects.create(
             tarea=task,
@@ -500,13 +501,14 @@ class T054NotificationTests(TestCase):
     def test_reasignacion_notifica_nuevo_responsable_y_excluye_actor(
         self, notify_task_event, send_task_email
     ):
-        task = self.make_task(responsable=None)
+        task = self.make_task()
 
-        assign_responsible(task, self.new_responsible, self.creator)
+        with self.captureOnCommitCallbacks(execute=True):
+            assign_responsible(task, self.new_responsible, self.creator)
 
         self.assertEqual(
-            [call.kwargs["destinatario"] for call in notify_task_event.call_args_list],
-            [self.new_responsible],
+            {call.kwargs["destinatario"] for call in notify_task_event.call_args_list},
+            {self.new_responsible, self.responsible},
         )
         send_task_email.assert_not_called()
 
@@ -547,11 +549,15 @@ class T054NotificationTests(TestCase):
     def test_solicitud_cierre_solo_autorizadores_activos(self, notify_task_event, send_task_email):
         task = self.make_task()
         admin = self.participants_admin
-        add_participant(task, self.authorizer, TareaParticipante.Rol.AUTORIZADOR, actor=admin)
-        add_participant(
-            task, self.second_authorizer, TareaParticipante.Rol.AUTORIZADOR, actor=admin
+        TareaParticipante.objects.create(
+            tarea=task, usuario=self.authorizer, rol=TareaParticipante.Rol.AUTORIZADOR,
         )
-        add_participant(task, self.supervisor, TareaParticipante.Rol.SUPERVISOR, actor=admin)
+        TareaParticipante.objects.create(
+            tarea=task, usuario=self.second_authorizer, rol=TareaParticipante.Rol.AUTORIZADOR,
+        )
+        TareaParticipante.objects.create(
+            tarea=task, usuario=self.supervisor, rol=TareaParticipante.Rol.SUPERVISOR,
+        )
         self.start_task(task)
 
         complete_task(task, self.responsible)

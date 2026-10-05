@@ -14,6 +14,7 @@ from tareas.services.comments import create_comment, edit_comment, hide_comment,
 from tareas.services.documents import create_document
 from tareas.tests.factories import (
     assign_permission,
+    configure_task_storage,
     create_empresa,
     create_tarea,
     create_user,
@@ -82,6 +83,7 @@ class CommentWebUrlTests(SimpleTestCase):
 class CommentReadViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa(codigo="C100R", descripcion="Empresa Lectura Web")
         cls.lector = create_user(username="reading-web-user")
         cls.autor = create_user(username="reading-web-author")
@@ -123,7 +125,7 @@ class CommentReadViewTests(TestCase):
 
     def setUp(self):
         self.tarea = self.make_active_task()
-        add_participant(self.tarea, self.autor, actor=self.autor)
+        TareaParticipante.objects.create(tarea=self.tarea, usuario=self.autor)
         add_participant(self.tarea, self.lector, actor=self.autor)
         self.login_as(self.lector)
 
@@ -1085,7 +1087,7 @@ class CommentReadViewTests(TestCase):
         for campo, valor in (("estado", Tarea.Estado.CERRADA), ("anulada", True)):
             with self.subTest(campo=campo):
                 tarea = self.make_active_task()
-                add_participant(tarea, self.autor, actor=self.autor)
+                TareaParticipante.objects.create(tarea=tarea, usuario=self.autor)
                 add_participant(tarea, self.lector, actor=self.autor)
                 primero = create_comment(tarea=tarea, usuario=self.autor, contenido="Uno")
                 segundo = create_comment(tarea=tarea, usuario=self.autor, contenido="Dos")
@@ -1242,7 +1244,7 @@ class CommentReadViewTests(TestCase):
         self.assertEqual(asignar.status_code, 200)
         self.assertContains(
             asignar,
-            "Participante o responsable asignado correctamente.",
+            "Participante o responsable actualizado correctamente.",
         )
         self.assertNotContains(asignar, "No fue posible completar la operación.")
         self.assertEqual(tarea.responsable_id, self.nuevo_participante.pk)

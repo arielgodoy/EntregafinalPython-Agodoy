@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+import logging
 import re
 from types import SimpleNamespace
 
@@ -24,6 +25,8 @@ from .connection_roles import (
 from ..models import Empresa, Tarea, TareaTransicion
 from .notifications import emit_task_event, task_recipients
 from settings.services.mysql_connections import open_mysql_connection
+
+logger = logging.getLogger(__name__)
 
 
 class TaskStorageError(RuntimeError):
@@ -1157,16 +1160,17 @@ MySQLTaskStorage.enter_management = _mysql_enter_management
 def resolve_edit_storage():
     try:
         source = get_tarea_connection("BASE_TAREAS")
-    except TareaConnectionError:
-        return DjangoTaskStorage("default")
-    if source["type"] == "DJANGO":
-        return DjangoTaskStorage(source["alias"])
-    if source["type"] == "MYSQL_CONFIG":
-        return MySQLTaskStorage(
-            get_tarea_mysql_connection("BASE_TAREAS"),
-            source["database_name"],
-        )
-    raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
+        if source["type"] == "DJANGO":
+            return DjangoTaskStorage(source["alias"])
+        if source["type"] == "MYSQL_CONFIG":
+            return MySQLTaskStorage(
+                get_tarea_mysql_connection("BASE_TAREAS"),
+                source["database_name"],
+            )
+        raise TaskStorageError("tareas.assignment.errors.backend")
+    except Exception as exc:
+        logger.error("BASE_TAREAS edit storage resolution failed.")
+        raise TaskStorageError("tareas.assignment.errors.backend") from exc
 
 
 def resolve_create_storage() -> DjangoTaskStorage | MySQLTaskStorage:

@@ -106,6 +106,13 @@ class MySQLEditViewTests(TestCase):
         self.storage = MagicMock()
         self.storage.get_task_for_edit.return_value = self.data
         self.storage.update_task.return_value = self.data
+        detail = MagicMock()
+        detail.core.creada_por_id = self.user.pk
+        detail.hierarchy.effectively_annulled = False
+        resolver = patch("tareas.views.resolve_detail_storage")
+        resolve_detail = resolver.start()
+        self.addCleanup(resolver.stop)
+        resolve_detail.return_value.get_task_detail.return_value = detail
 
     @patch("tareas.views.resolve_edit_storage")
     def test_get_renders_backend_neutral_initial_values(self, resolve):
@@ -121,8 +128,9 @@ class MySQLEditViewTests(TestCase):
             empresa_id=self.empresa.pk,
         )
 
+    @patch("tareas.views.reassign_responsible")
     @patch("tareas.views.resolve_edit_storage")
-    def test_valid_post_updates_mysql_storage_without_default_lookup(self, resolve):
+    def test_valid_post_updates_mysql_storage_without_default_lookup(self, resolve, reassign):
         resolve.return_value = self.storage
 
         with patch(
@@ -140,8 +148,10 @@ class MySQLEditViewTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 302)
-        self.storage.update_task.assert_called_once()
-        self.assertEqual(self.storage.update_task.call_args.args[0].task_id, 3)
+        self.storage.update_task.assert_not_called()
+        reassign.assert_called_once()
+        self.assertEqual(reassign.call_args.args[0].edit.task_id, 3)
+        self.assertEqual(reassign.call_args.args[0].actor_id, self.user.pk)
 
     @patch("tareas.views.resolve_edit_storage")
     def test_invalid_post_renders_errors_without_update_or_503(self, resolve):
