@@ -9,6 +9,11 @@ app_name = 'tareas'
 urlpatterns = [
     path('', views.ListarTareasView.as_view(), name='listar_tareas'),
     path('configuracion/conexiones/', views.TareaConnectionRoleView.as_view(), name='conexiones_sql'),
+    path(
+        'configuracion/conexiones/base-tareas/crear/',
+        views.BaseTareasSchemaInstallView.as_view(),
+        name='base_tareas_schema_install',
+    ),
     path('mis-tareas/', views.MisTareasDashboardView.as_view(), name='mis_tareas'),
     path('dashboard/general/', views.TareasDashboardGeneralView.as_view(), name='dashboard_general'),
     path('dashboard/general/empresa/<int:empresa_id>/', views.TareasDashboardEmpresaView.as_view(), name='dashboard_general_empresa'),

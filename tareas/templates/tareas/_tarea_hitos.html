@@ -5,9 +5,9 @@
         </div>
         <div class="row g-3 align-items-start mt-1">
             <dl class="col-12 col-lg-5 row mb-0">
-                <dt class="col-sm-4"><span data-key="tareas.progress.mode">Modo</span></dt><dd class="col-sm-8">{% if avance %}{{ avance.get_modo_display }}{% else %}<span data-key="tareas.progress.not_configured">No configurado</span>{% endif %}</dd>
-                <dt class="col-sm-4"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-sm-8">{% if avance %}{{ avance.porcentaje }}%{% else %}0.00%{% endif %}</dd>
-                <dt class="col-sm-4"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-sm-8">{{ avance_calculado }}%</dd>
+                <dt class="col-sm-4"><span data-key="tareas.progress.mode">Modo</span></dt><dd class="col-sm-8">{% if progress.configured %}{{ progress.mode_display }}{% else %}<span data-key="tareas.progress.not_configured">No configurado</span>{% endif %}</dd>
+                <dt class="col-sm-4"><span data-key="tareas.progress.percentage">Porcentaje</span></dt><dd class="col-sm-8">{{ progress.percentage }}%</dd>
+                <dt class="col-sm-4"><span data-key="tareas.progress.weighted">Calculado ponderado</span></dt><dd class="col-sm-8">{{ progress.weighted_percentage }}%</dd>
             </dl>
             <div class="col-12 col-lg-4">
                 <div class="d-flex flex-column gap-2">
@@ -46,7 +46,7 @@
                 {% for hito in hitos %}
                 <tr>
                     <td>{{ hito.nombre }}</td>
-                    <td>{{ hito.responsable.username }}</td>
+                    <td>{{ hito.responsable_username }}</td>
                     <td>{{ hito.cumplimiento }}%</td>
                     <td>{{ hito.peso }}</td>
                     <td>{% if hito.anulado %}<span data-key="tareas.milestones.cancelled">Anulado</span>{% elif hito.completado %}<span data-key="tareas.milestones.completed">Completado</span>{% else %}<span data-key="tareas.milestones.active">Activo</span>{% endif %}</td>

@@ -37,12 +37,17 @@ class HitoForm(forms.ModelForm):
 
 
 class HitoCrearForm(forms.ModelForm):
-    def __init__(self, *args, tarea=None, **kwargs):
+    def __init__(self, *args, tarea=None, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
+        empresa = empresa or (tarea.empresa if tarea is not None else None)
         if tarea is None:
             self.fields["responsable"].queryset = self.fields["responsable"].queryset.none()
         else:
-            self.fields["responsable"].queryset = get_valid_users_for_empresa(tarea.empresa).filter(
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
+                is_active=True
+            )
+        if empresa is not None and tarea is None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
                 is_active=True
             )
 
@@ -61,10 +66,11 @@ class HitoReasignacionForm(forms.Form):
     responsable = forms.ModelChoiceField(queryset=Hito._meta.get_field("responsable").remote_field.model.objects.none())
     motivo = forms.CharField(required=True, strip=True)
 
-    def __init__(self, *args, tarea=None, **kwargs):
+    def __init__(self, *args, tarea=None, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if tarea is not None:
-            self.fields["responsable"].queryset = get_valid_users_for_empresa(tarea.empresa).filter(
+        empresa = empresa or (tarea.empresa if tarea is not None else None)
+        if empresa is not None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(empresa).filter(
                 is_active=True
             )
 
@@ -283,7 +289,7 @@ class ResponsableTareaForm(forms.Form):
         required=False,
     )
 
-    def __init__(self, *args, tarea=None, empresa=None, **kwargs):
+    def __init__(self, *args, tarea=None, empresa=None, responsable_id=None, estado=None, **kwargs):
         super().__init__(*args, **kwargs)
         if empresa is None and tarea is not None:
             empresa = tarea.empresa
@@ -296,6 +302,10 @@ class ResponsableTareaForm(forms.Form):
             self.initial["responsable"] = tarea.responsable_id
             if tarea.estado != Tarea.Estado.BORRADOR:
                 self.fields["responsable"].required = True
+        elif responsable_id is not None:
+            self.initial["responsable"] = responsable_id
+            if estado != Tarea.Estado.BORRADOR:
+                self.fields["responsable"].required = True
 
 
 class MiniTareaCreateForm(forms.ModelForm):
@@ -306,11 +316,12 @@ class MiniTareaCreateForm(forms.ModelForm):
             "descripcion": forms.TextInput(attrs={"maxlength": 200}),
         }
 
-    def __init__(self, *args, tarea=None, **kwargs):
+    def __init__(self, *args, tarea=None, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
+        empresa = empresa or (tarea.empresa if tarea is not None else None)
         self.fields["persona"].queryset = (
-            get_valid_users_for_empresa(tarea.empresa, active_only=True)
-            if tarea is not None
+            get_valid_users_for_empresa(empresa, active_only=True)
+            if empresa is not None
             else User.objects.none()
         )
 
@@ -401,7 +412,13 @@ class TareaForm(forms.ModelForm):
     )
 
     def __init__(self, *args, **kwargs):
+        self.active_company = kwargs.pop("active_company", None)
         super().__init__(*args, **kwargs)
+        if self.active_company is not None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(
+                self.active_company,
+                active_only=True,
+            )
         self.fields["fecha_tope"].required = True
         widget_classes = {
             "titulo": "form-control w-100",
@@ -419,6 +436,19 @@ class TareaForm(forms.ModelForm):
         if self.instance and self.instance.estado != Tarea.Estado.BORRADOR:
             self.fields["fecha_tope"].disabled = True
 
+    def clean_responsable(self):
+        responsable = self.cleaned_data.get("responsable")
+        if responsable is None or self.active_company is None:
+            return responsable
+        if not get_valid_users_for_empresa(
+            self.active_company,
+            active_only=True,
+        ).filter(pk=responsable.pk).exists():
+            raise forms.ValidationError(
+                "El responsable debe estar activo y pertenecer a la Empresa activa."
+            )
+        return responsable
+
     class Meta:
         model = Tarea
         fields = ["titulo", "descripcion", "prioridad", "responsable", "fecha_tope"]
@@ -426,6 +456,50 @@ class TareaForm(forms.ModelForm):
             "descripcion": forms.Textarea(attrs={"rows": 4}),
             "fecha_tope": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class TaskEditForm(forms.Form):
+    """Backend-neutral validation/presentation form for editing an existing task."""
+
+    titulo = forms.CharField(max_length=200)
+    descripcion = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
+    prioridad = forms.ChoiceField(choices=Tarea.Prioridad.choices, required=False)
+    responsable = forms.ModelChoiceField(queryset=User.objects.none(), required=False)
+    fecha_tope = forms.DateField(
+        required=True,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        active_company = kwargs.pop("active_company", None)
+        task_state = kwargs.pop("task_state", Tarea.Estado.BORRADOR)
+        self.task_state = task_state
+        super().__init__(*args, **kwargs)
+        if active_company is not None:
+            self.fields["responsable"].queryset = get_valid_users_for_empresa(
+                active_company,
+                active_only=True,
+            )
+        self.fields["fecha_tope"].disabled = task_state != Tarea.Estado.BORRADOR
+        for field_name, class_names in {
+            "titulo": "form-control w-100",
+            "descripcion": "form-control w-100",
+            "prioridad": "form-select w-100",
+            "responsable": "form-select w-100",
+            "fecha_tope": "form-control w-100",
+        }.items():
+            widget = self.fields[field_name].widget
+            widget.attrs["class"] = " ".join(
+                dict.fromkeys(f"{widget.attrs.get('class', '')} {class_names}".split())
+            )
+
+    def clean_responsable(self):
+        responsable = self.cleaned_data.get("responsable")
+        if responsable is None and self.task_state != Tarea.Estado.BORRADOR:
+            raise forms.ValidationError(
+                "La tarea operativa debe conservar un responsable."
+            )
+        return responsable
 
 
 class ReunionRevisionForm(forms.ModelForm):

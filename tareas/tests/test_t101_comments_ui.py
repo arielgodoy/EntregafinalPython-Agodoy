@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.utils import timezone
 from pathlib import Path
 
-from tareas.models import Tarea
+from tareas.models import Tarea, TareaConnectionRole
 from tareas.services.assignment import add_participant
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
@@ -12,6 +12,9 @@ class T101CommentsUiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = create_empresa(codigo="T101", descripcion="Empresa T101")
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
         cls.participante = create_user(username="t101-participante")
         cls.no_vinculado = create_user(username="t101-no-vinculado")
         cls.solo_lectura = create_user(username="t101-lector")

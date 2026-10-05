@@ -1,7 +1,7 @@
 # Contract: Tareas Connection Roles
 
 **Feature**: Tareas Internas
-**Status**: Documental; no implementado
+**Status**: Implementado para configuración; bootstrap Base Tareas en preparación
 
 ## Alcance
 
@@ -89,3 +89,23 @@ No existe fallback silencioso a `default`.
 `CertificadoSIIRepository` documenta el patron de consumo, pero no es una dependencia de
 Tareas. `gestiondte` permanece como APPLICATION_APP de referencia y no como infraestructura
 comun.
+
+## Storage operacional y bootstrap
+
+`BASE_TAREAS` es el storage operacional completo de Tareas y contiene las 38 tablas
+propias actuales más la tabla through automática de `Reprogramacion.causas` (39 tablas
+operacionales). `AUDITORIA_TAREAS` no recibe tablas en esta fase.
+
+El bootstrap MySQL de `BASE_TAREAS` ejecuta un SQL congelado generado y revisado desde los
+modelos actuales mediante un service propio de `tareas`, excluye `TareaConnectionRole` y
+no crea tablas SYSTEM/CORE ni maestros externos. Las relaciones externas conservan sus
+columnas `_id` sin FK física; las relaciones entre tablas de Tareas sí conservan sus
+constraints internas.
+
+El precedente conceptual es `CertificadoSIIRepository` de Gestión DTE: resolver primero,
+usar ORM `.using(alias)` para Django y SQL parametrizado con `open_mysql_connection()` para
+MySQL. No existe dependencia runtime con `gestiondte`.
+
+El bootstrap inicial está separado de `BASE_TAREAS_RUNTIME_STORAGE`, que permanece
+`PENDING` y será una futura abstracción Storage/Repository con transacciones por agregado.
+La evolución automática del schema MySQL también queda como deuda futura separada.

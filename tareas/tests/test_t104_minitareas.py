@@ -16,6 +16,7 @@ from tareas.models import (
     MiniTarea,
     MiniTareaEvento,
     Tarea,
+    TareaConnectionRole,
     TareaParticipante,
 )
 from tareas.services.closure import (
@@ -32,6 +33,9 @@ class MiniTareaT104Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.empresa = Empresa.objects.create(codigo="T104", descripcion="T104")
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
         cls.otra_empresa = Empresa.objects.create(codigo="T104B", descripcion="T104 B")
         cls.creador = User.objects.create_user("t104_creador", email="creador@example.test")
         cls.responsable = User.objects.create_user("t104_responsable", email="responsable@example.test")
@@ -283,7 +287,8 @@ class MiniTareaT104Tests(TestCase):
         activate_company(client, self.empresa)
         detail = client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, 'data-key="tareas.minitareas.attachments_count">archivos')
+        self.assertContains(detail, 'data-key="tareas.minitareas.attachment">Evidencia')
+        self.assertContains(detail, 'class="task-detail__mini-evidence"')
         history = client.get(
             reverse("tareas:historial_minitarea", args=[tarea.pk, mini_tarea.pk])
         )

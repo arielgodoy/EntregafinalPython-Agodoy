@@ -5,7 +5,7 @@ from datetime import date
 from django.test import TestCase
 from django.urls import reverse
 
-from tareas.models import Tarea
+from tareas.models import Tarea, TareaConnectionRole
 from tareas.services.hierarchy import add_child
 from tareas.services.lifecycle import annul_task, transition_task
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
@@ -18,6 +18,9 @@ class HierarchyViewsTests(TestCase):
         cls.otra_empresa = create_empresa(codigo="HV2", descripcion="Empresa externa")
         cls.user = create_user(username="hierarchy_view_user")
         assign_permission(cls.user, cls.empresa, "Tareas", ingresar=True)
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
 
     def setUp(self):
         self.client.login(username="hierarchy_view_user", password="password-prueba")

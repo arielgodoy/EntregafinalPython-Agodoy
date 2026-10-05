@@ -69,11 +69,42 @@
                 {% for error in item.form.database_name.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
               </div>
             {% endif %}
+            {% if item.role == 'BASE_TAREAS' and can_install_base_tareas %}
+              <button
+                type="button"
+                class="btn btn-outline-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#baseTareasSchemaModal"
+                data-key="tareas.connection_roles.bootstrap.button"
+              >Crear estructura Base Tareas</button>
+            {% endif %}
           </section>
           {% endfor %}
           <button type="submit" class="btn btn-success" data-key="buttons.save">Guardar</button>
         </form>
       </div>
+      {% if can_install_base_tareas %}
+        <div class="modal fade" id="baseTareasSchemaModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" data-key="tareas.connection_roles.bootstrap.button">Crear estructura Base Tareas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body" data-key="tareas.connection_roles.bootstrap.confirmation">
+                Se creará la estructura operacional de Tareas en la base '{{ base_tareas_database_name }}'. Las tablas existentes no serán eliminadas.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
+                <form method="post" action="{% url 'tareas:base_tareas_schema_install' %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-primary" data-key="tareas.connection_roles.bootstrap.confirm">Confirmar creación</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>

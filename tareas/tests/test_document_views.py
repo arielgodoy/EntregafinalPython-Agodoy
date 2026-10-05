@@ -4,7 +4,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from tareas.models import DocumentoHistorial, DocumentoTarea, EvidenciaCierre, FormatoArchivo
+from tareas.models import (
+    DocumentoHistorial,
+    DocumentoTarea,
+    EvidenciaCierre,
+    FormatoArchivo,
+    TareaConnectionRole,
+)
 from tareas.services.documents import create_document
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user, simple_jpeg_upload
 
@@ -15,6 +21,9 @@ class DocumentViewsTests(TestCase):
         cls.empresa = create_empresa(codigo="DV1")
         cls.otra_empresa = create_empresa(codigo="DV2")
         cls.usuario = create_user(username="document-view-user")
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
         assign_permission(cls.usuario, cls.empresa, "Tareas - Documentos y evidencia", modificar=True)
         cls.tarea = create_tarea(cls.empresa, cls.usuario, titulo="Tarea documentos")
         cls.tarea_externa = create_tarea(cls.otra_empresa, cls.usuario, titulo="Documento externo")

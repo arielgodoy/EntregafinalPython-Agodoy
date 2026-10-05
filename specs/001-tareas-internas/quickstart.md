@@ -32,6 +32,36 @@ se describen escenarios de verificación end-to-end.
 
 Estos escenarios son futuros y no implican implementacion en esta actualizacion documental.
 
+### Bootstrap Base Tareas MySQL
+
+El bootstrap inicial administra únicamente `BASE_TAREAS` cuando su fuente es
+`MYSQL_CONFIG`. No administra `AUDITORIA_TAREAS`, `LEGACY_MYSQL`,
+`AUDITORIA_LEGACY` ni `TareaConnectionRole`.
+
+La estructura se deriva de las 39 tablas operacionales propias actuales. Las referencias
+externas conservan IDs sin FK física; las relaciones internas conservan constraints.
+La acción usa supervisor, POST/CSRF, `open_mysql_connection()` y es idempotente mediante
+DDL no destructivo. No ejecuta `migrate` ni SQL recibido desde el frontend.
+
+La validación manual queda pendiente y no debe ejecutar DDL real automáticamente:
+
+```text
+Tareas -> Conexiones SQL -> Base tareas -> MYSQL
+-> mysqldjango -> database=tareas -> Crear estructura Base Tareas
+```
+
+Las claves i18n nuevas de bootstrap (`tareas.connection_roles.bootstrap.button`,
+`confirmation` y `confirm`) requieren incorporación coordinada en los catálogos globales.
+Esta fase no modifica `static/lang/en.json` ni `static/lang/sp.json` por el boundary y por
+los cambios históricos unstaged existentes.
+
+### Storage runtime futuro
+
+`BASE_TAREAS_RUNTIME_STORAGE=PENDING`. El bootstrap no cambia los QuerySets funcionales
+ni agrega `.using()` dispersos. Una fase posterior implementará una abstracción propia de
+Storage/Repository con resolver Django/MySQL y transacciones por agregado, sin modificar
+routers, `DATABASES` ni infraestructura SYSTEM/CORE.
+
 1. Entorno local del proyecto activo (venv, dependencias ya instaladas según README).
 2. Migraciones de la fase habilitada aplicadas:
    ```powershell

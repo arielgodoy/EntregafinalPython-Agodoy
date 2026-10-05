@@ -5,27 +5,29 @@ from django.db import IntegrityError, transaction
 from tareas.models import CorrelativoEmpresa, CorrelativoTodoEmpresa
 
 
-def reserve_next_number(empresa_id):
+def reserve_next_number(empresa_id, *, using=None):
     """Reserve one number for a company; publishing never calls this function."""
-    with transaction.atomic():
+    manager = CorrelativoEmpresa.objects.using(using) if using else CorrelativoEmpresa.objects
+    atomic_kwargs = {"using": using} if using else {}
+    with transaction.atomic(**atomic_kwargs):
         try:
-            sequence = CorrelativoEmpresa.objects.select_for_update().get(
+            sequence = manager.select_for_update().get(
                 empresa_id=empresa_id
             )
         except CorrelativoEmpresa.DoesNotExist:
             try:
-                with transaction.atomic():
-                    sequence = CorrelativoEmpresa.objects.create(
+                with transaction.atomic(**atomic_kwargs):
+                    sequence = manager.create(
                         empresa_id=empresa_id,
                         siguiente_numero=1,
                     )
             except IntegrityError:
-                sequence = CorrelativoEmpresa.objects.select_for_update().get(
+                sequence = manager.select_for_update().get(
                     empresa_id=empresa_id
                 )
         number = sequence.siguiente_numero
         sequence.siguiente_numero = number + 1
-        sequence.save(update_fields=["siguiente_numero"])
+        sequence.save(using=using, update_fields=["siguiente_numero"])
         return number
 
 

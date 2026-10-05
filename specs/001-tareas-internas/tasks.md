@@ -219,6 +219,28 @@ existen imports funcionales desde `gestiondte`.
 - [ ] T122 [US8] Validar los escenarios de conexiones SQL del `quickstart.md` y actualizar únicamente evidencia documental.
 - [ ] T123 [US8] Revisar diff, boundary, ausencia de cambios en router/DATABASES/settings/Gestión DTE y cerrar la documentación de la fase.
 
+## Phase 10: BASE_TAREAS MySQL Bootstrap
+
+**Goal**: preparar el bootstrap idempotente del storage operacional completo de Tareas,
+siguiendo conceptualmente el precedente `CertificadoSIIRepository` sin depender de
+`gestiondte` ni modificar infraestructura externa.
+
+- [x] T124 [US8] Actualizar el contrato de ownership y storage: 38 modelos propios más una tabla through automática, Option A para referencias externas, `TareaConnectionRole` excluido, auditoría/Legacy futuros y runtime storage separado.
+- [x] T125 [US8] Reconstruir el schema actual desde `tareas/models.py` y todas sus migraciones; validar inventario, tablas, índices, constraints, relaciones internas y referencias externas.
+- [x] T126 [US8] Generar y congelar `tareas/sql/base_tareas_schema.sql` desde una preview MySQL del SchemaEditor; el runtime ejecuta únicamente el SQL revisado, excluye tablas externas y FKs cross-storage, y no contiene operaciones destructivas.
+- [x] T127 [US8] Implementar el service de bootstrap que resuelva `BASE_TAREAS`, valide Empresa 00/database_name, use `open_mysql_connection`, maneje commit/rollback y sanitice errores.
+- [x] T128 [US8] Implementar endpoint POST supervisor, CSRF, modal y botón visible únicamente para `BASE_TAREAS` con fuente MySQL.
+- [x] T129 [US8] Añadir tests de inventario, DDL, exclusiones, FKs, idempotencia, resolver, Empresa 00, permisos, CSRF, errores y ausencia de imports `gestiondte`.
+- [ ] T130 [US8] Preparar y documentar la validación manual contra MySQL real sin ejecutarla automáticamente ni ejecutar DDL durante tests.
+- [ ] T131 [US8] Diseñar e implementar `BASE_TAREAS Runtime Storage Abstraction` con repositories/backend Django y MySQL y transacciones por agregado; no usar router global como primera opción.
+- [x] T131.2A [US8] Congelar el contrato de Crear Tarea, validar responsable activo/perteneciente a la Empresa activa y extraer la persistencia Django detrás de un storage propio, sin fallback MYSQL.
+- [x] T131.2B [US8] Implementar el backend MYSQL de creación de borradores bajo el mismo contrato, con una transacción única para correlativo y Tarea; mantener pendiente la prueba manual de escritura real.
+- [x] T132.2A [US8] Caracterizar el Listado de Tareas y extraer su lectura al storage Django con DTOs, scope de Empresa, filtros, orden, summary y MYSQL explícitamente pendiente sin fallback.
+- [x] T132.2B [US8] Implementar el backend MYSQL del Listado bajo el contrato `TaskListResult` y resolver referencias externas en bloque; mantener pendiente la confirmación visual manual.
+- [ ] T132 [US8] Definir el schema y routing futuro de `AUDITORIA_TAREAS`.
+- [ ] T133 [US8] Definir validaciones futuras mediante `LEGACY_MYSQL`.
+- [ ] T134 [US8] Definir evolución/versionado del schema MySQL de `BASE_TAREAS` antes de producción madura.
+
 ### Regla transversal de cierre i18n
 
 Ninguna task nueva que agregue o modifique UI puede marcarse `[x]` sin ejecutar el

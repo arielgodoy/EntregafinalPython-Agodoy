@@ -297,7 +297,7 @@ class Tarea(models.Model):
             from .services.correlativos import reserve_next_number
 
             with transaction.atomic(using=kwargs.get("using")):
-                self.correlativo = f"B{reserve_next_number(self.empresa_id):07d}"
+                self.correlativo = f"B{reserve_next_number(self.empresa_id, using=kwargs.get("using")):07d}"
                 return super().save(*args, **kwargs)
         return super().save(*args, **kwargs)
 

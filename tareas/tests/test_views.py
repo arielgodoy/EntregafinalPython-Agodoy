@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
-from tareas.models import Tarea, TareaParticipante
+from tareas.models import Tarea, TareaConnectionRole, TareaParticipante
 
 
 class TareasViewsBase(TestCase):
@@ -23,6 +23,11 @@ class TareasViewsBase(TestCase):
         cls.responsable = User.objects.create_user(username="resp", password="pass")
         cls.vista_tareas = Vista.objects.create(nombre="Tareas")
         cls.vista_ciclo = Vista.objects.create(nombre="Tareas - Ciclo de vida")
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS",
+            source_type="DJANGO",
+            django_alias="default",
+        )
 
     def _login(self, empresa=None):
         self.client.login(username="user1", password="pass")

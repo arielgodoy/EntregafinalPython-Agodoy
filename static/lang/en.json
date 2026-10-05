@@ -1218,6 +1218,8 @@
     "menu.tareas.list": "Task List",
     "menu.tareas.create": "Create Task",
     "menu.tareas.dashboard": "My Milestones and Tasks",
+    "tareas.minitareas.status": "Status",
+    "tareas.fechas.al_dia": "On schedule",
     "menu.tareas.connections": "SQL Connections",
     "tareas.connection_roles.title": "Task SQL Connections",
     "tareas.connection_roles.heading": "Tasks - SQL Connections",

@@ -7,6 +7,8 @@ Patrones vigentes reutilizados:
 """
 
 import logging
+from dataclasses import replace
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 from django.contrib import messages
@@ -15,7 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q, prefetch_related_objects
-from django.http import Http404, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.dateparse import parse_datetime
@@ -24,7 +26,7 @@ from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
 
 from acounts.models import Avatar
-from access_control.models import Empresa
+from access_control.models import Empresa, Permiso, Vista
 from access_control.decorators import verificar_permiso
 from access_control.services.permissions import (
     get_valid_users_for_empresa,
@@ -56,6 +58,7 @@ from .forms import (
     ReunionRevisionForm,
     ReunionTareaForm,
     TareaForm,
+    TaskEditForm,
     TareaConnectionRoleForm,
 )
 from .models import (
@@ -78,10 +81,7 @@ from .services.context import get_active_company_id
 from .services.assignment import assign_responsible, add_participant, remove_participant
 from .services.authorization import can_manage_task
 from .services.closure import (
-    can_close_mini_task,
     can_create_mini_task,
-    can_delete_mini_task,
-    can_reopen_mini_task,
     close_mini_task,
     create_mini_task,
     delete_mini_task,
@@ -133,6 +133,38 @@ from .services.links import (
     revoke_task_link,
 )
 from .services.connection_roles import get_tarea_connection_status
+from .services.task_storage import (
+    CreateTaskDraftInput,
+    TaskStorageError,
+    TaskStorageBackendNotImplemented,
+    TaskListFilters,
+    DjangoTaskStorage,
+    EditTaskNotFound,
+    LifecycleSimilarityUnsupported,
+    MySQLTaskStorage,
+    TaskEditData,
+    UpdateTaskCommand,
+    create_task_draft,
+    ensure_existing_task_backend_supported,
+    resolve_edit_storage,
+    resolve_list_storage,
+)
+from .services.detail_storage import (
+    DetailTaskNotFound,
+    DjangoTaskDetailStorage,
+    TaskDetailSections,
+    TaskStorageBackendNotImplemented,
+    resolve_detail_storage,
+)
+from .services.closure_storage import ClosureCommand, resolve_closure_storage
+from .services.hierarchy_lifecycle_storage import (
+    HierarchyLifecycleCommand,
+    resolve_hierarchy_lifecycle_storage,
+)
+from .services.base_tareas_schema import (
+    BaseTareasSchemaInstallError,
+    install_base_tareas_schema,
+)
 from .services.progress import (
     create_milestone,
     complete_milestone,
@@ -299,6 +331,254 @@ def _mini_task_event_attachments(evento, puede_supervisar):
     return [_comment_document_data(adjunto.documento) for adjunto in comentario.adjuntos.all()]
 
 
+def _detail_mini_task_policy(core, hierarchy, mini_task, actor, empresa):
+    if not actor or not actor.is_active:
+        return replace(
+            mini_task,
+            puede_cerrar_t104=False,
+            puede_reabrir_t104=False,
+            puede_eliminar_t105=False,
+        )
+    can_modify = user_has_permission_for_empresa(
+        user=actor,
+        empresa=empresa,
+        vista_nombre="Tareas",
+        accion="modificar",
+    )
+    is_supervisor = user_has_permission_for_empresa(
+        user=actor,
+        empresa=empresa,
+        vista_nombre="Tareas",
+        accion="supervisor",
+    )
+    operational = core.estado in {Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}
+    allowed_responsible = actor.pk == core.responsable_id or is_supervisor
+    return replace(
+        mini_task,
+        puede_cerrar_t104=bool(
+            can_modify
+            and (actor.pk == mini_task.persona_id or allowed_responsible)
+            and operational
+            and not hierarchy.effectively_annulled
+            and not mini_task.hecho
+        ),
+        puede_reabrir_t104=bool(
+            can_modify
+            and allowed_responsible
+            and operational
+            and not hierarchy.effectively_annulled
+            and mini_task.hecho
+        ),
+        puede_eliminar_t105=bool(
+            can_modify
+            and allowed_responsible
+            and operational
+            and not hierarchy.effectively_annulled
+            and not mini_task.hecho
+            and not mini_task.eventos_t104
+        ),
+    )
+
+
+def _detail_milestone_context(detail_result, empresa, actor, **form_overrides):
+    core = detail_result.core
+    explicit_roles = {
+        item.rol for item in detail_result.participants if item.user_id == actor.pk
+    }
+    actor_is_valid = bool(
+        actor
+        and actor.is_active
+        and get_valid_users_for_empresa(empresa).filter(pk=actor.pk).exists()
+    )
+    manager = bool(
+        actor_is_valid
+        and (
+            actor.pk in {core.creada_por_id, core.responsable_id}
+            or explicit_roles.intersection(
+                {
+                    TareaParticipante.Rol.RESPONSABLE_LIDER,
+                    TareaParticipante.Rol.SUPERVISOR,
+                    TareaParticipante.Rol.AUTORIZADOR,
+                }
+            )
+            or user_has_permission_for_empresa(
+                user=actor,
+                empresa=empresa,
+                vista_nombre="Tareas - Hitos",
+                accion="supervisor",
+            )
+            or user_has_permission_for_empresa(
+                user=actor,
+                empresa=empresa,
+                vista_nombre="Tareas - Hitos",
+                accion="autorizar",
+            )
+        )
+    )
+    milestones = []
+    for milestone in detail_result.milestones:
+        capability = (
+            "manage"
+            if manager
+            else "progress"
+            if actor_is_valid and milestone.responsable_id == actor.pk
+            else "read"
+        )
+        milestones.append(
+            replace(
+                milestone,
+                puede_gestionar=capability == "manage",
+                puede_actualizar=capability in {"progress", "manage"},
+                puede_completar=(
+                    capability in {"progress", "manage"}
+                    and not milestone.completado
+                ),
+            )
+        )
+    return {
+        "hitos": tuple(milestones),
+        "progress": detail_result.progress,
+        "avance": detail_result.progress,
+        "avance_calculado": (
+            detail_result.progress.weighted_percentage
+            if detail_result.progress is not None
+            else "0.00"
+        ),
+        "hito_form": form_overrides.get(
+            "hito_form", HitoCrearForm(empresa=empresa)
+        ),
+        "responsables_validos": HitoCrearForm(empresa=empresa).fields[
+            "responsable"
+        ].queryset,
+        "editar_form": form_overrides.get("editar_form", HitoForm()),
+        "reasignar_form": form_overrides.get(
+            "reasignar_form", HitoReasignacionForm(empresa=empresa)
+        ),
+        "completar_form": form_overrides.get("completar_form", CompletarHitoForm()),
+        "modal_abierto_hito_id": form_overrides.get("modal_abierto_hito_id"),
+        "modal_abierto_accion": form_overrides.get("modal_abierto_accion"),
+        "manual_form": form_overrides.get("manual_form", AvanceManualForm()),
+        "ponderado_form": form_overrides.get(
+            "ponderado_form", AvancePonderadoForm()
+        ),
+    }
+
+
+def _detail_document_context(detail_result, **form_overrides):
+    return {
+        "documentos": detail_result.documents,
+        "evidencias": detail_result.closure_evidence,
+        "document_form": form_overrides.get("document_form", DocumentoForm()),
+        "evidencia_registro_form": form_overrides.get(
+            "evidencia_registro_form", EvidenciaRegistroForm()
+        ),
+    }
+
+
+def _detail_task_presentation(core, empresa):
+    responsable = (
+        SimpleNamespace(
+            pk=core.responsable_id,
+            username=core.responsable_username,
+        )
+        if core.responsable_id
+        else None
+    )
+    return SimpleNamespace(
+        pk=core.id,
+        empresa_id=core.empresa_id,
+        titulo=core.titulo,
+        descripcion=core.descripcion,
+        correlativo=core.correlativo,
+        estado=core.estado,
+        prioridad=core.prioridad,
+        anulada=core.anulada,
+        fechas_pendientes_confirmacion=core.fechas_pendientes_confirmacion,
+        requiere_evidencia_cierre=core.requiere_evidencia_cierre,
+        fecha_creacion=core.fecha_creacion,
+        fecha_publicacion=core.fecha_publicacion,
+        fecha_asignacion=core.fecha_asignacion,
+        fecha_tope=core.fecha_tope,
+        fecha_cumplimiento=core.fecha_cumplimiento,
+        responsable_id=core.responsable_id,
+        responsable=responsable,
+        empresa=empresa,
+        creada_por_id=core.creada_por_id,
+    )
+
+
+def _detail_effective_participant_ids(detail_result):
+    ids = {detail_result.core.creada_por_id, detail_result.core.responsable_id}
+    ids.update(item.user_id for item in detail_result.participants)
+    ids.update(item.persona_id for item in detail_result.mini_tasks)
+    ids.update(
+        item.responsable_id
+        for item in detail_result.milestones
+        if not item.anulado
+    )
+    return {item_id for item_id in ids if item_id is not None}
+
+
+def _detail_can_manage_task(detail_result, actor, empresa):
+    return bool(
+        actor
+        and actor.is_active
+        and get_valid_users_for_empresa(empresa, active_only=True)
+        .filter(pk=actor.pk)
+        .exists()
+        and user_has_permission_for_empresa(
+            user=actor,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="modificar",
+        )
+        and (
+            actor.pk == detail_result.core.creada_por_id
+            or user_has_permission_for_empresa(
+                user=actor,
+                empresa=empresa,
+                vista_nombre="Tareas",
+                accion="supervisor",
+            )
+        )
+    )
+
+
+def _detail_can_create_minitask(detail_result, actor, empresa):
+    is_supervisor = user_has_permission_for_empresa(
+        user=actor,
+        empresa=empresa,
+        vista_nombre="Tareas",
+        accion="supervisor",
+    )
+    return bool(
+        actor
+        and actor.is_active
+        and user_has_permission_for_empresa(
+            user=actor,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="crear",
+        )
+        and (actor.pk == detail_result.core.responsable_id or is_supervisor)
+        and detail_result.core.estado in {Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}
+        and not detail_result.hierarchy.effectively_annulled
+    )
+
+
+class ExistingTaskBackendGuardMixin:
+    """Block Django-only existing-task flows before their ORM lookup."""
+
+    backend_guard_operation = "existing_task_operation"
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            ensure_existing_task_backend_supported(self.backend_guard_operation)
+        except TaskStorageBackendNotImplemented as exc:
+            return HttpResponse(str(exc), status=503)
+        return super().dispatch(request, *args, **kwargs)
+
+
 class TareaEmpresaQuerysetMixin:
     """Restringe el queryset a la empresa activa de la sesión."""
 
@@ -317,55 +597,41 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
 
-    def get_queryset(self):
-        queryset = super().get_queryset().prefetch_related(
-            "participantes__usuario__avatar"
+    def get(self, request, *args, **kwargs):
+        empresa_id = _get_empresa_id(request)
+        filters = TaskListFilters(
+            search=request.GET.get("tarea_busqueda", "").strip(),
+            estado=request.GET.get("estado", "").strip(),
+            prioridad=request.GET.get("prioridad", "").strip(),
         )
-        search = self.request.GET.get("tarea_busqueda", "").strip()
-        estado = self.request.GET.get("estado", "").strip()
-        prioridad = self.request.GET.get("prioridad", "").strip()
-        if search:
-            queryset = queryset.filter(
-                Q(correlativo__icontains=search)
-                | Q(titulo__icontains=search)
-                | Q(descripcion__icontains=search)
-                | Q(responsable__username__icontains=search)
+        context = {
+            "tareas_busqueda": filters.search,
+            "tareas_estado": filters.estado,
+            "tareas_prioridad": filters.prioridad,
+            "tarea_estados": Tarea.Estado.choices,
+            "tarea_prioridades": Tarea.Prioridad.choices,
+            "tareas": (),
+            "tareas_summary": {
+                "total": 0,
+                "activas": 0,
+                "gestion": 0,
+                "cerradas": 0,
+            },
+        }
+        try:
+            result = resolve_list_storage().list_tasks(
+                empresa_id=empresa_id,
+                filters=filters,
             )
-        if estado in {value for value, _label in Tarea.Estado.choices}:
-            queryset = queryset.filter(estado=estado)
-        if prioridad in {value for value, _label in Tarea.Prioridad.choices}:
-            queryset = queryset.filter(prioridad=prioridad)
-        return queryset.order_by("-fecha_creacion")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        summary = TareaEmpresaQuerysetMixin.get_queryset(self).aggregate(
-            total=Count("pk"),
-            activas=Count("pk", filter=Q(estado=Tarea.Estado.ACTIVA)),
-            gestion=Count("pk", filter=Q(estado=Tarea.Estado.GESTION)),
-            cerradas=Count("pk", filter=Q(estado=Tarea.Estado.CERRADA)),
-        )
-        context["tareas_summary"] = summary
-        context["tareas_busqueda"] = self.request.GET.get("tarea_busqueda", "")
-        context["tareas_estado"] = self.request.GET.get("estado", "")
-        context["tareas_prioridad"] = self.request.GET.get("prioridad", "")
-        context["tarea_estados"] = Tarea.Estado.choices
-        context["tarea_prioridades"] = Tarea.Prioridad.choices
-        for tarea in context["tareas"]:
-            participantes = []
-            seen_ids = {tarea.responsable_id}
-            if tarea.creada_por_id not in seen_ids:
-                participantes.append({"usuario": tarea.creada_por, "rol": "CREADOR"})
-                seen_ids.add(tarea.creada_por_id)
-            for participante in tarea.participantes.all():
-                if participante.usuario_id not in seen_ids:
-                    participantes.append(
-                        {"usuario": participante.usuario, "rol": participante.rol}
-                    )
-                    seen_ids.add(participante.usuario_id)
-            tarea.participantes_visibles = participantes[:4]
-            tarea.participantes_restantes = max(0, len(participantes) - 4)
-        return context
+        except TaskStorageBackendNotImplemented as exc:
+            context["storage_error"] = str(exc)
+            return render(request, self.template_name, context, status=503)
+        except TaskStorageError as exc:
+            context["storage_error"] = str(exc)
+            return render(request, self.template_name, context, status=503)
+        context["tareas"] = result.items
+        context["tareas_summary"] = result.summary
+        return render(request, self.template_name, context)
 
 
 class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -387,9 +653,40 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
         ]
 
     def _context(self, forms):
+        connection_status = get_tarea_connection_status()
+        base_tareas_status = next(
+            (
+                item
+                for item in connection_status["roles"]
+                if item["role"] == "BASE_TAREAS"
+            ),
+            None,
+        )
+        vista = Vista.objects.filter(nombre=self.vista_nombre).first()
+        empresa_id = self.request.session.get("empresa_id")
+        can_install_base_tareas = bool(
+            base_tareas_status
+            and base_tareas_status["status"] == "configured"
+            and base_tareas_status["source_type"] == "MYSQL_CONFIG"
+            and base_tareas_status["metadata"].get("database_name")
+            and vista
+            and empresa_id
+            and Permiso.objects.filter(
+                usuario=self.request.user,
+                empresa_id=empresa_id,
+                vista=vista,
+                supervisor=True,
+            ).exists()
+        )
         return {
             "role_forms": forms,
-            "connection_status": get_tarea_connection_status(),
+            "connection_status": connection_status,
+            "can_install_base_tareas": can_install_base_tareas,
+            "base_tareas_database_name": (
+                base_tareas_status["metadata"].get("database_name")
+                if base_tareas_status
+                else None
+            ),
             "vista_nombre": self.vista_nombre,
         }
 
@@ -424,6 +721,24 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
             for item in forms:
                 item["form"].save()
         messages.success(request, "La configuración de conexiones SQL fue guardada.")
+        return redirect(reverse("tareas:conexiones_sql"))
+
+
+@method_decorator(
+    verificar_permiso("Tareas - Conexiones SQL", "supervisor"),
+    name="dispatch",
+)
+class BaseTareasSchemaInstallView(LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            install_base_tareas_schema()
+        except BaseTareasSchemaInstallError:
+            messages.error(request, "tareas.connection_roles.bootstrap.error")
+        else:
+            messages.success(
+                request,
+                "tareas.connection_roles.bootstrap.success",
+            )
         return redirect(reverse("tareas:conexiones_sql"))
 
 
@@ -559,37 +874,85 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
     vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
 
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except TaskStorageBackendNotImplemented:
+            return HttpResponse(
+                "El backend MYSQL de Detail aún no está implementado.",
+                status=503,
+            )
+        except TaskStorageError:
+            return HttpResponse(
+                "No se pudo leer el almacenamiento de tareas configurado.",
+                status=503,
+            )
+
+    def get_object(self, queryset=None):
+        empresa_id = _get_empresa_id(self.request)
+        try:
+            empresa = Empresa.objects.get(pk=empresa_id)
+        except Empresa.DoesNotExist as exc:
+            raise Http404 from exc
+        puede_ver_hitos = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=empresa,
+            vista_nombre="Tareas - Hitos",
+            accion="ingresar",
+        )
+        puede_ver_documentos = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=empresa,
+            vista_nombre="Tareas - Documentos y evidencia",
+            accion="modificar",
+        )
+        try:
+            result = resolve_detail_storage().get_task_detail(
+                task_id=self.kwargs["pk"],
+                empresa_id=empresa_id,
+                sections=TaskDetailSections(
+                    milestones=puede_ver_hitos,
+                    documents=puede_ver_documentos,
+                ),
+            )
+        except DetailTaskNotFound as exc:
+            raise Http404 from exc
+        self.detail_result = result
+        self.detail_empresa = empresa
+        return _detail_task_presentation(result.core, empresa)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        parent = get_parent(self.object)
-        context["tarea_padre"] = (
-            parent if parent and parent.empresa_id == self.object.empresa_id else None
+        context["detail_core"] = self.detail_result.core
+        hierarchy = self.detail_result.hierarchy
+        context["tarea_padre"] = hierarchy.parent
+        context["tareas_hijas"] = hierarchy.children
+        context["tarea_anulada_efectivamente"] = hierarchy.effectively_annulled
+        effective_ids = _detail_effective_participant_ids(self.detail_result)
+        comentarios_vinculado = (
+            self.request.user.is_active and self.request.user.pk in effective_ids
         )
-        context["tareas_hijas"] = get_children(self.object).filter(
-            empresa_id=self.object.empresa_id
-        )
-        context["tarea_anulada_efectivamente"] = is_effectively_annulled(self.object)
-        comentarios_vinculado = _comment_actor_is_linked(self.object, self.request.user)
-        comentarios_puede_ver = self.request.user.is_active and _comment_actor_has_permission(
-            self.object,
-            self.request.user,
-            "ingresar",
+        comentarios_puede_ver = self.request.user.is_active and user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.detail_empresa,
+            vista_nombre="Tareas",
+            accion="ingresar",
         )
         comentarios_puede_crear = comentarios_vinculado and user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas",
             accion="crear",
         )
         comentarios_puede_modificar = comentarios_vinculado and user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas",
             accion="modificar",
         )
         comentarios_puede_supervisar = comentarios_vinculado and user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas",
             accion="supervisor",
         )
@@ -599,7 +962,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
         context["comentarios_puede_modificar"] = comentarios_puede_modificar
         context["comentarios_puede_supervisar"] = comentarios_puede_supervisar
         comentarios_lifecycle_interactivo = (
-            self.object.estado
+            self.detail_result.core.estado
             in {
                 Tarea.Estado.ACTIVA,
                 Tarea.Estado.GESTION,
@@ -616,13 +979,14 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             comentarios_puede_modificar
             and comentarios_lifecycle_interactivo
         )
-        context["puede_administrar_tarea"] = can_manage_task(
-            tarea=self.object,
-            actor=self.request.user,
+        context["puede_administrar_tarea"] = _detail_can_manage_task(
+            self.detail_result,
+            self.request.user,
+            self.detail_empresa,
         )
         context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas",
             accion="modificar",
         )
@@ -630,138 +994,117 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
             "evidencia_config_form",
             EvidenciaConfigForm(
                 initial={
-                    "requiere_evidencia_cierre": self.object.requiere_evidencia_cierre
+                    "requiere_evidencia_cierre": self.detail_result.core.requiere_evidencia_cierre
                 }
             ),
         )
-        context["enlaces"] = list(
-            self.object.enlaces.select_related(
-                "destinatario", "creado_por", "revocado_por"
-            ).order_by("-fecha_creacion")
-        )
-        ahora = timezone.now()
-        for enlace in context["enlaces"]:
-            enlace.estado_t060 = (
-                "REVOCADO"
-                if enlace.revocado_at is not None
-                else "EXPIRADO"
-                if enlace.fecha_expiracion <= ahora
-                else "ACTIVO"
-            )
+        context["enlaces"] = self.detail_result.links
         context["destinatarios_enlace"] = get_valid_users_for_empresa(
-            self.object.empresa, active_only=True
+            self.detail_empresa, active_only=True
         ).exclude(pk=self.request.user.pk)
-        participantes_explicitos = list(
-            self.object.participantes.select_related("usuario").order_by("usuario__username")
-        )
+        participantes_explicitos = self.detail_result.participants
         context["participantes_explicitos"] = participantes_explicitos
-        implicit_ids = {self.object.creada_por_id, self.object.responsable_id}
-        explicit_ids = {item.usuario_id for item in participantes_explicitos}
+        implicit_ids = {
+            self.detail_result.core.creada_por_id,
+            self.detail_result.core.responsable_id,
+        }
+        explicit_ids = {item.user_id for item in participantes_explicitos}
         context["participantes_elegibles"] = get_valid_users_for_empresa(
-            self.object.empresa, active_only=True
+            self.detail_empresa, active_only=True
         ).exclude(pk__in=implicit_ids | explicit_ids)
         context["puede_administrar_participantes"] = context["puede_administrar_tarea"]
         context["participante_form"] = kwargs.get(
             "participante_form",
-            ParticipanteTareaAdminForm(empresa=self.object.empresa, active_only=True),
+            ParticipanteTareaAdminForm(empresa=self.detail_empresa, active_only=True),
         )
         context["responsable_form"] = kwargs.get(
             "responsable_form",
-            ResponsableTareaForm(tarea=self.object),
+            ResponsableTareaForm(
+                empresa=self.detail_empresa,
+                responsable_id=self.detail_result.core.responsable_id,
+                estado=self.detail_result.core.estado,
+            ),
         )
         context["responsables_validos"] = get_valid_users_for_empresa(
-            self.object.empresa,
+            self.detail_empresa,
             active_only=True,
         )
-        puede_supervisar_adjuntos = _comment_actor_has_permission(
-            self.object,
-            self.request.user,
-            "supervisor",
+        puede_supervisar_adjuntos = user_has_permission_for_empresa(
+            user=self.request.user,
+            empresa=self.detail_empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
         )
-        eventos_prefetch = Prefetch(
-            "eventos",
-            queryset=(
-                MiniTareaEvento.objects.select_related("actor", "comentario_feed")
-                .prefetch_related("comentario_feed__adjuntos__documento")
-            ),
-            to_attr="eventos_t104",
-        )
-        mini_tareas = list(
-            self.object.mini_tareas.select_related("persona").prefetch_related(
-                eventos_prefetch
-            )
-        )
-        for mini_tarea in mini_tareas:
-            for evento in mini_tarea.eventos_t104:
-                evento.adjuntos_t104 = _mini_task_event_attachments(
-                    evento,
-                    puede_supervisar_adjuntos,
+        mini_tareas = []
+        for mini_tarea in self.detail_result.mini_tasks:
+            if not puede_supervisar_adjuntos:
+                visible_attachments = tuple(
+                    event_attachments
+                    for event in reversed(mini_tarea.eventos_t104)
+                    if event.tipo == MiniTareaEvento.Tipo.CIERRE
+                    and not event.comentario_oculto
+                    for event_attachments in [event.attachments]
                 )
-            mini_tarea.ultimo_cierre_adjuntos_t104 = []
-            if mini_tarea.hecho:
-                ultimo_cierre = next(
-                    (
-                        evento
-                        for evento in reversed(mini_tarea.eventos_t104)
-                        if evento.tipo == MiniTareaEvento.Tipo.CIERRE
+                mini_tarea = replace(
+                    mini_tarea,
+                    ultimo_cierre_adjuntos_t104=(
+                        visible_attachments[0] if visible_attachments else ()
                     ),
-                    None,
                 )
-                if ultimo_cierre is not None:
-                    mini_tarea.ultimo_cierre_adjuntos_t104 = ultimo_cierre.adjuntos_t104
-            mini_tarea.puede_cerrar_t104 = can_close_mini_task(
-                tarea=self.object,
-                mini_tarea=mini_tarea,
-                actor=self.request.user,
+            mini_tareas.append(
+                _detail_mini_task_policy(
+                    self.detail_result.core,
+                    self.detail_result.hierarchy,
+                    mini_tarea,
+                    self.request.user,
+                    self.detail_empresa,
+                )
             )
-            mini_tarea.puede_reabrir_t104 = can_reopen_mini_task(
-                tarea=self.object,
-                mini_tarea=mini_tarea,
-                actor=self.request.user,
-            )
-            mini_tarea.puede_eliminar_t105 = can_delete_mini_task(
-                tarea=self.object,
-                mini_tarea=mini_tarea,
-                actor=self.request.user,
-            )
-        context["mini_tareas"] = mini_tareas
-        context["puede_crear_minitarea"] = can_create_mini_task(
-            tarea=self.object,
-            actor=self.request.user,
+        context["mini_tareas"] = tuple(mini_tareas)
+        context["puede_crear_minitarea"] = _detail_can_create_minitask(
+            self.detail_result,
+            self.request.user,
+            self.detail_empresa,
         )
         context["mini_tarea_create_form"] = MiniTareaCreateForm(
-            tarea=self.object,
+            empresa=self.detail_empresa,
         )
         context["mini_tarea_destinatarios"] = get_valid_users_for_empresa(
-            self.object.empresa,
+            self.detail_empresa,
             active_only=True,
-        ).filter(
-            pk__in=effective_participant_ids(self.object)
-        ).exclude(pk=self.request.user.pk).order_by("username")
+        ).filter(pk__in=_detail_effective_participant_ids(self.detail_result)).exclude(
+            pk=self.request.user.pk
+        ).order_by("username")
         context["puede_ver_hitos"] = user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas - Hitos",
             accion="ingresar",
         )
         if context["puede_ver_hitos"]:
-            context.update(_build_hitos_context(self.object, self.request.user))
+            context.update(
+                _detail_milestone_context(
+                    self.detail_result,
+                    self.detail_empresa,
+                    self.request.user,
+                )
+            )
             context["hitos_action_url"] = reverse(
                 "tareas:hitos_tarea",
-                kwargs={"pk": self.object.pk},
+                kwargs={"pk": self.detail_result.core.id},
             )
             context["hitos_return_to_detail"] = True
         context["puede_ver_documentos"] = user_has_permission_for_empresa(
             user=self.request.user,
-            empresa=self.object.empresa,
+            empresa=self.detail_empresa,
             vista_nombre="Tareas - Documentos y evidencia",
             accion="modificar",
         )
         if context["puede_ver_documentos"]:
-            context.update(_build_document_context(self.object))
+            context.update(_detail_document_context(self.detail_result))
             context["documents_action_url"] = reverse(
                 "tareas:documentos_tarea",
-                kwargs={"pk": self.object.pk},
+                kwargs={"pk": self.detail_result.core.id},
             )
             context["documents_return_to_detail"] = True
             context.setdefault("documentos_tab_activo", False)
@@ -769,22 +1112,27 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
+        try:
+            ensure_existing_task_backend_supported("evidencia_configuracion")
+        except TaskStorageBackendNotImplemented as exc:
+            return HttpResponse(str(exc), status=503)
+        task = get_object_or_404(self.get_queryset(), pk=kwargs["pk"])
         form = EvidenciaConfigForm(request.POST)
         if form.is_valid():
             configure_closure_evidence(
-                tarea=self.object,
+                tarea=task,
                 usuario=request.user,
                 requiere_evidencia_cierre=form.cleaned_data["requiere_evidencia_cierre"],
             )
             messages.success(request, "tareas.messages.evidence_configuration_updated")
-            return redirect("tareas:detalle_tarea", pk=self.object.pk)
+            return redirect("tareas:detalle_tarea", pk=task.pk)
+        self.object = self.get_object()
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
         return self.render_to_response(context)
 
 
-class MiniTareaEndpointMixin:
+class MiniTareaEndpointMixin(ExistingTaskBackendGuardMixin):
     def get_tarea(self, request, tarea_id):
         return get_object_or_404(
             Tarea.objects.select_related("empresa", "responsable"),
@@ -962,7 +1310,7 @@ class HistorialMiniTareaView(
         )
 
 
-class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareaComentariosView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     crear_permiso_faltante = False
 
@@ -1383,7 +1731,7 @@ class DesvincularParticipanteView(TareaComentariosView):
         )
 
 
-class VincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class VincularParticipanteDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
@@ -1420,7 +1768,7 @@ class VincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMixin,
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
-class DesvincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class DesvincularParticipanteDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
@@ -1447,7 +1795,7 @@ class DesvincularParticipanteDetalleView(VerificarPermisoMixin, LoginRequiredMix
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
-class AdministrarResponsableDetalleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class AdministrarResponsableDetalleView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
@@ -1476,7 +1824,7 @@ class AdministrarResponsableDetalleView(VerificarPermisoMixin, LoginRequiredMixi
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
-class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -1524,7 +1872,7 @@ class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
 
 
-class AbrirEnlaceTareaView(LoginRequiredMixin, View):
+class AbrirEnlaceTareaView(ExistingTaskBackendGuardMixin, LoginRequiredMixin, View):
     template_name = "tareas/enlace_tarea_lectura.html"
 
     def get(self, request, token):
@@ -1540,7 +1888,7 @@ class AbrirEnlaceTareaView(LoginRequiredMixin, View):
         return render(request, self.template_name, {"tarea": enlace.tarea})
 
 
-class RevocarEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class RevocarEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -1571,56 +1919,172 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        empresa_id = _get_empresa_id(self.request)
+        kwargs["active_company"] = get_object_or_404(Empresa, pk=empresa_id)
+        return kwargs
+
     def form_valid(self, form):
-        form.instance.empresa_id = _get_empresa_id(self.request)
-        form.instance.creada_por = self.request.user
-        response = super().form_valid(form)
-        if self.object.responsable is not None:
-            emit_task_event(
-                tarea=self.object,
-                event="asignacion",
-                recipients=task_recipients(
-                    self.object,
-                    actor=self.request.user,
-                    include_responsible=True,
-                ),
-                title="Tarea asignada",
-                body="Se te asignó una nueva tarea.",
+        empresa = self.get_form_kwargs()["active_company"]
+        data = CreateTaskDraftInput(
+            titulo=form.cleaned_data["titulo"],
+            descripcion=form.cleaned_data.get("descripcion", ""),
+            prioridad=(
+                form.cleaned_data.get("prioridad") or Tarea.Prioridad.NORMAL
+            ),
+            responsable_id=(
+                form.cleaned_data["responsable"].pk
+                if form.cleaned_data.get("responsable") is not None
+                else None
+            ),
+            fecha_tope=form.cleaned_data["fecha_tope"],
+        )
+        try:
+            result = create_task_draft(
+                data,
+                active_company=empresa,
                 actor=self.request.user,
             )
-        return response
+        except (TaskStorageError, ValidationError) as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
+        self.object = result.task
+        return redirect("tareas:detalle_tarea", pk=result.id)
 
 
-class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, UpdateView):
-    model = Tarea
-    form_class = TareaForm
+class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
-    def dispatch(self, request, *args, **kwargs):
-        _require_task_administration(self.get_object(), request.user)
-        return super().dispatch(request, *args, **kwargs)
+    def _empresa(self):
+        return get_object_or_404(Empresa, pk=_get_empresa_id(self.request))
 
-    def form_valid(self, form):
-        campos_relevantes = {"responsable", "fecha_tope", "prioridad"}
-        cambio_relevante = bool(campos_relevantes.intersection(form.changed_data))
-        response = super().form_valid(form)
-        if cambio_relevante:
-            emit_task_event(
-                tarea=self.object,
-                event="cambio_relevante",
-                recipients=task_recipients(
-                    self.object,
-                    actor=self.request.user,
-                    include_responsible=True,
-                    participant_roles=list(TareaParticipante.Rol),
+    def _load(self):
+        try:
+            return resolve_edit_storage().get_task_for_edit(
+                task_id=self.kwargs["pk"],
+                empresa_id=self._empresa().pk,
+            )
+        except EditTaskNotFound as exc:
+            raise Http404 from exc
+
+    def _presentation(self, data, empresa):
+        return SimpleNamespace(
+            pk=data.id,
+            estado=data.estado,
+            titulo=data.titulo,
+            descripcion=data.descripcion,
+            prioridad=data.prioridad,
+            responsable_id=data.responsable_id,
+            fecha_tope=data.fecha_tope,
+            empresa=empresa,
+        )
+
+    def _form(self, data, *, bound_data=None):
+        empresa = self._empresa()
+        initial = {
+            "titulo": data.titulo,
+            "descripcion": data.descripcion,
+            "prioridad": data.prioridad,
+            "responsable": data.responsable_id,
+            "fecha_tope": data.fecha_tope,
+        }
+        return TaskEditForm(
+            bound_data,
+            initial=initial,
+            active_company=empresa,
+            task_state=data.estado,
+        )
+
+    def _render(self, data, form):
+        return render(
+            self.request,
+            self.template_name,
+            {"object": self._presentation(data, self._empresa()), "form": form},
+        )
+
+    def get(self, request, *args, **kwargs):
+        data = self._load()
+        return self._render(data, self._form(data))
+
+    def post(self, request, *args, **kwargs):
+        data = self._load()
+        form = self._form(data, bound_data=request.POST)
+        if not form.is_valid():
+            return self._render(data, form)
+        command = UpdateTaskCommand(
+            task_id=data.id,
+            empresa_id=data.empresa_id,
+            titulo=form.cleaned_data["titulo"],
+            descripcion=form.cleaned_data["descripcion"],
+            prioridad=form.cleaned_data["prioridad"] or Tarea.Prioridad.NORMAL,
+            responsable_id=(
+                form.cleaned_data["responsable"].pk
+                if form.cleaned_data["responsable"] is not None
+                else None
+            ),
+            fecha_tope=form.cleaned_data["fecha_tope"],
+        )
+        storage = resolve_edit_storage()
+        try:
+            updated = storage.update_task(command)
+        except EditTaskNotFound as exc:
+            raise Http404 from exc
+        if isinstance(storage, DjangoTaskStorage):
+            task = Tarea.objects.using(storage.alias).get(
+                pk=updated.id,
+                empresa_id=updated.empresa_id,
+            )
+            relevant = {"responsable", "fecha_tope", "prioridad"}.intersection(
+                form.changed_data
+            )
+            if relevant:
+                emit_task_event(
+                    tarea=task,
+                    event="cambio_relevante",
+                    recipients=task_recipients(
+                        task,
+                        actor=request.user,
+                        include_responsible=True,
+                        participant_roles=list(TareaParticipante.Rol),
+                    ),
+                    title="Cambio relevante en la tarea",
+                    body="Se actualizó información funcional de la tarea.",
+                    actor=request.user,
+                )
+        elif isinstance(storage, MySQLTaskStorage) and {"responsable", "fecha_tope", "prioridad"}.intersection(form.changed_data):
+            detail = resolve_detail_storage().get_task_detail(
+                task_id=updated.id,
+                empresa_id=updated.empresa_id,
+                sections=TaskDetailSections(
+                    mini_tasks=False,
+                    links=False,
+                    milestones=False,
+                    documents=False,
                 ),
+            )
+            recipient_ids = {
+                item.user_id
+                for item in detail.participants
+                if item.rol in {role for role, _label in TareaParticipante.Rol.choices}
+            }
+            if detail.core.responsable_id is not None:
+                recipient_ids.add(detail.core.responsable_id)
+            recipients = list(
+                User.objects.using("default").filter(pk__in=recipient_ids)
+                .exclude(pk=request.user.pk)
+            )
+            emit_task_event(
+                tarea=SimpleNamespace(pk=updated.id, empresa=self._empresa()),
+                event="cambio_relevante",
+                recipients=recipients,
                 title="Cambio relevante en la tarea",
                 body="Se actualizó información funcional de la tarea.",
-                actor=self.request.user,
+                actor=request.user,
             )
-        return response
+        return redirect("tareas:detalle_tarea", pk=updated.id)
 
 
 class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
@@ -1630,12 +2094,13 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
     permiso_requerido = "modificar"
 
     def post(self, request, *args, **kwargs):
-        tarea = self.get_queryset().filter(pk=kwargs["pk"]).first()
-        if tarea is None:
-            from django.http import Http404
-
-            raise Http404
-        if tarea.estado == Tarea.Estado.BORRADOR:
+        storage = resolve_edit_storage()
+        empresa_id = _get_empresa_id(request)
+        task_id = kwargs["pk"]
+        if isinstance(storage, DjangoTaskStorage):
+            tarea = self.get_queryset().filter(pk=task_id).first()
+            if tarea is None:
+                raise Http404
             try:
                 evaluations = evaluate_task_similarity(
                     tarea=tarea,
@@ -1654,16 +2119,28 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
                 messages.warning(request, "tareas.messages.publication_requires_similarity_review")
                 return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
         try:
-            publish_task(tarea, request.user)
+            result = storage.publish_task(
+                task_id=task_id,
+                empresa_id=empresa_id,
+                actor_id=request.user.pk,
+            )
+        except EditTaskNotFound as exc:
+            raise Http404 from exc
+        except LifecycleSimilarityUnsupported as exc:
+            return HttpResponse(str(exc), status=503)
+        except TaskStorageError as exc:
+            messages.error(request, str(exc))
+            return redirect("tareas:detalle_tarea", pk=task_id)
         except ValidationError as e:
             mensaje = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
             messages.error(request, mensaje)
+            return redirect("tareas:detalle_tarea", pk=task_id)
         else:
             messages.success(request, "tareas.messages.task_published")
-        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        return redirect("tareas:detalle_tarea", pk=result.task_id)
 
 
-class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class SimilitudTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     template_name = "tareas/tarea_similitud.html"
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
@@ -1693,7 +2170,7 @@ class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
         )
 
 
-class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class ConfirmarSimilitudView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
@@ -1745,6 +2222,69 @@ class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
     vista_nombre = "Tareas - Ciclo de vida"
 
     def post(self, request, *args, **kwargs):
+        if self.accion in {"anular", "reactivar"}:
+            storage = resolve_hierarchy_lifecycle_storage()
+            command = HierarchyLifecycleCommand(
+                task_id=kwargs["pk"],
+                empresa_id=_get_empresa_id(request),
+                actor_id=request.user.pk,
+                motivo=request.POST.get("motivo", "").strip(),
+            )
+            try:
+                result = storage.annul(command) if self.accion == "anular" else storage.reactivate(command)
+            except EditTaskNotFound as exc:
+                raise Http404 from exc
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("tareas:detalle_tarea", pk=command.task_id)
+            except TaskStorageError as exc:
+                messages.error(request, str(exc))
+                return redirect("tareas:detalle_tarea", pk=command.task_id)
+            messages.success(request, "tareas.messages.lifecycle_action_applied")
+            return redirect("tareas:detalle_tarea", pk=result.task_id)
+        if self.accion in {"completar", "aprobar", "rechazar"}:
+            storage = resolve_closure_storage()
+            command = ClosureCommand(
+                task_id=kwargs["pk"],
+                empresa_id=_get_empresa_id(request),
+                actor_id=request.user.pk,
+                comentario=request.POST.get("comentario", "").strip(),
+            )
+            try:
+                if self.accion == "completar":
+                    result = storage.complete(command)
+                elif self.accion == "aprobar":
+                    result = storage.approve(command)
+                else:
+                    result = storage.reject(command)
+            except EditTaskNotFound as exc:
+                raise Http404 from exc
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("tareas:detalle_tarea", pk=command.task_id)
+            except TaskStorageError as exc:
+                messages.error(request, str(exc))
+                return redirect("tareas:detalle_tarea", pk=command.task_id)
+            messages.success(request, "tareas.messages.lifecycle_action_applied")
+            return redirect("tareas:detalle_tarea", pk=result.task_id)
+        if self.accion == "gestion":
+            storage = resolve_edit_storage()
+            try:
+                result = storage.enter_management(
+                    task_id=kwargs["pk"],
+                    empresa_id=_get_empresa_id(request),
+                    actor_id=request.user.pk,
+                )
+            except EditTaskNotFound as exc:
+                raise Http404 from exc
+            except TaskStorageError as exc:
+                messages.error(request, str(exc))
+                return redirect("tareas:detalle_tarea", pk=kwargs["pk"])
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("tareas:detalle_tarea", pk=kwargs["pk"])
+            messages.success(request, "tareas.messages.lifecycle_action_applied")
+            return redirect("tareas:detalle_tarea", pk=result.task_id)
         tarea = self.get_queryset().filter(pk=kwargs["pk"]).first()
         if tarea is None:
             from django.http import Http404
@@ -1820,9 +2360,13 @@ def _build_hitos_context(tarea, actor, **form_overrides):
         "responsables_validos": HitoCrearForm(tarea=tarea).fields["responsable"].queryset,
         "avance": avance,
         "avance_calculado": weighted_progress(tarea),
-        "hito_form": form_overrides.get("hito_form", HitoCrearForm(tarea=tarea)),
+        "hito_form": form_overrides.get(
+            "hito_form", HitoCrearForm(empresa=tarea.empresa)
+        ),
         "editar_form": form_overrides.get("editar_form", HitoForm()),
-        "reasignar_form": form_overrides.get("reasignar_form", HitoReasignacionForm(tarea=tarea)),
+        "reasignar_form": form_overrides.get(
+            "reasignar_form", HitoReasignacionForm(empresa=tarea.empresa)
+        ),
         "completar_form": form_overrides.get("completar_form", CompletarHitoForm()),
         "modal_abierto_hito_id": form_overrides.get("modal_abierto_hito_id"),
         "modal_abierto_accion": form_overrides.get("modal_abierto_accion"),
@@ -1831,7 +2375,7 @@ def _build_hitos_context(tarea, actor, **form_overrides):
     }
 
 
-class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class HitosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Hitos"
     permiso_requerido = "ingresar"
 
@@ -2044,10 +2588,20 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuer
 
 
 def _build_document_context(tarea, **form_overrides):
+    detail_result = DjangoTaskDetailStorage("default").get_task_detail(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        sections=TaskDetailSections(
+            mini_tasks=False,
+            links=False,
+            milestones=False,
+            documents=True,
+        ),
+    )
     return {
         "tarea": tarea,
-        "documentos": tarea.documentos.all().prefetch_related("historial__usuario"),
-        "evidencias": tarea.evidencias_cierre.select_related("usuario").order_by("-fecha", "-pk"),
+        "documentos": detail_result.documents,
+        "evidencias": detail_result.closure_evidence,
         "document_form": form_overrides.get("document_form", DocumentoForm()),
         "evidencia_registro_form": form_overrides.get(
             "evidencia_registro_form", EvidenciaRegistroForm()
@@ -2055,7 +2609,7 @@ def _build_document_context(tarea, **form_overrides):
     }
 
 
-class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Documentos y evidencia"
     permiso_requerido = "modificar"
 
@@ -2080,6 +2634,17 @@ class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpres
         detail_view.args = ()
         detail_view.kwargs = {"pk": tarea.pk}
         detail_view.object = tarea
+        detail_view.detail_empresa = tarea.empresa
+        detail_view.detail_result = DjangoTaskDetailStorage("default").get_task_detail(
+            task_id=tarea.pk,
+            empresa_id=tarea.empresa_id,
+            sections=TaskDetailSections(
+                mini_tasks=False,
+                links=False,
+                milestones=False,
+                documents=True,
+            ),
+        )
         context = detail_view.get_context_data(object=tarea)
         context.update(_build_document_context(tarea, **forms))
         context["puede_ver_documentos"] = True
@@ -2166,7 +2731,7 @@ class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reu
     permiso_requerido = "ingresar"
 
 
-class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
@@ -2190,7 +2755,7 @@ class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return render(request, self.template_name, {"form": form})
 
 
-class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
+class DetalleReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_detalle.html"
     context_object_name = "reunion"
@@ -2204,7 +2769,7 @@ class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reun
         return context
 
 
-class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class EditarReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
@@ -2229,7 +2794,7 @@ class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reuni
         return render(request, self.template_name, {"form": form, "object": reunion})
 
 
-class ReunionRevisionActionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class ReunionRevisionActionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 

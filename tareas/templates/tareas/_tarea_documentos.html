@@ -15,13 +15,13 @@
                         <tbody>
                         {% for documento in documentos %}
                         <tr>
-                            <td>{{ documento.get_tipo_display }}</td>
-                            <td>{{ documento.get_formato_archivo_display }}</td>
-                            <td>{% if documento.archivo %}{% with nombre_archivo=documento.archivo.name|cut:"tareas/documentos/" %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.archivo.url }}" target="_blank" rel="noopener" title="{{ nombre_archivo }}"><i class="ri-file-line me-1" aria-hidden="true"></i>{{ nombre_archivo }}</a>{% endwith %}{% elif documento.url %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.url }}" target="_blank" rel="noopener" title="{{ documento.url }}"><i class="ri-external-link-line me-1" aria-hidden="true"></i><span data-key="tareas.documents.link_source">Enlace</span></a>{% else %}<span>—</span>{% endif %}</td>
+                            <td>{{ documento.tipo_display }}</td>
+                            <td>{{ documento.formato_archivo_display }}</td>
+                            <td>{% if documento.archivo_url %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.archivo_url }}" target="_blank" rel="noopener" title="{{ documento.nombre_archivo }}"><i class="ri-file-line me-1" aria-hidden="true"></i>{{ documento.nombre_archivo }}</a>{% elif documento.url %}<a class="text-body text-truncate d-inline-block task-detail__document-source" href="{{ documento.url }}" target="_blank" rel="noopener" title="{{ documento.url }}"><i class="ri-external-link-line me-1" aria-hidden="true"></i><span data-key="tareas.documents.link_source">Enlace</span></a>{% else %}<span>—</span>{% endif %}</td>
                             <td>{{ documento.fecha_documento|date:"Y-m-d" }}</td>
                             <td>{% if documento.fecha_vencimiento %}{{ documento.fecha_vencimiento|date:"Y-m-d" }}{% else %}-{% endif %}</td>
-                            <td>{{ documento.usuario.username }}</td>
-                            <td>{% for evento in documento.historial.all %}{{ evento.accion }} {{ evento.fecha|date:"Y-m-d H:i" }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span data-key="tareas.documents.no_history">Sin historial</span>{% endfor %}</td>
+                            <td>{{ documento.usuario_username }}</td>
+                            <td>{% for evento in documento.historial %}{{ evento.accion }} {{ evento.fecha|date:"Y-m-d H:i" }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span data-key="tareas.documents.no_history">Sin historial</span>{% endfor %}</td>
                         </tr>
                         {% endfor %}
                         </tbody>
@@ -47,9 +47,9 @@
                         <tbody>
                         {% for evidencia in evidencias %}
                         <tr>
-                            <td>{{ evidencia.get_formato_archivo_display }}</td>
-                            <td>{% if evidencia.archivo %}<a href="{{ evidencia.archivo.url }}" target="_blank" rel="noopener">{{ evidencia.archivo.name|cut:"tareas/evidencias/" }}</a>{% else %}<a href="{{ evidencia.url }}" target="_blank" rel="noopener">{{ evidencia.url }}</a>{% endif %}</td>
-                            <td>{{ evidencia.usuario.username }}</td>
+                            <td>{{ evidencia.formato_archivo_display }}</td>
+                            <td>{% if evidencia.archivo_url %}<a href="{{ evidencia.archivo_url }}" target="_blank" rel="noopener">{{ evidencia.nombre_archivo }}</a>{% else %}<a href="{{ evidencia.url }}" target="_blank" rel="noopener">{{ evidencia.url }}</a>{% endif %}</td>
+                            <td>{{ evidencia.usuario_username }}</td>
                             <td>{{ evidencia.fecha|date:"Y-m-d H:i" }}</td>
                         </tr>
                         {% endfor %}

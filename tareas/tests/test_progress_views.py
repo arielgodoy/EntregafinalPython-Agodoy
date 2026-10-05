@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 
-from tareas.models import Avance, Hito, Tarea
+from tareas.models import Avance, Hito, Tarea, TareaConnectionRole
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
 
 
@@ -13,6 +13,9 @@ class ProgressViewsTests(TestCase):
         cls.empresa = create_empresa(codigo="PV1")
         cls.otra_empresa = create_empresa(codigo="PV2")
         cls.usuario = create_user(username="progress-view-user")
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
         assign_permission(cls.usuario, cls.empresa, "Tareas - Hitos", ingresar=True, modificar=True)
         cls.tarea = create_tarea(
             cls.empresa,

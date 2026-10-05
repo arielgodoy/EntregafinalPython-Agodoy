@@ -7,6 +7,26 @@
 Esta entidad se documenta para la futura feature de conexiones y no autoriza crear el
 modelo real todavía. Su alcance es `GLOBAL POR APP`.
 
+## Storage de Tareas
+
+`BASE_TAREAS` es el storage operacional configurable de la aplicación. Todas las tablas
+propias operacionales actuales de `tareas` pertenecen a este storage: 38 modelos propios
+y la tabla through automática de `Reprogramacion.causas`, 39 tablas en total.
+
+`TareaConnectionRole` es configuración para resolver el storage y no forma parte del
+bootstrap operacional. `AUDITORIA_TAREAS` permanece reservado y no recibe tablas.
+
+Para MySQL, las referencias a `auth.User`, `access_control.Empresa`,
+`organizacion.Local`, `organizacion.Departamento` y `proveedores.Proveedor` conservan sus
+IDs e índices cuando corresponda, pero no crean FKs físicas cross-storage ni copian los
+maestros. Las relaciones entre tablas propias de Tareas sí mantienen FKs, índices,
+unicidad y constraints internos.
+
+El SQL congelado se genera/verifica desde el estado actual de modelos y migraciones, pero
+el bootstrap runtime no usa `SchemaEditor` ni ejecuta `migrate` sobre la conexión dinámica.
+La evolución posterior del schema MySQL requiere un contrato/versionado futuro y no se
+implementa en el bootstrap inicial.
+
 | Campo | Tipo conceptual | Reglas |
 |---|---|---|
 | `role` | choice/string | Único global; exactamente `BASE_TAREAS`, `AUDITORIA_TAREAS`, `LEGACY_MYSQL`, `LEGACY_AUDITORIA` |

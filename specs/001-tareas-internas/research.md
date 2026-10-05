@@ -186,6 +186,29 @@ proveedores Django distintos vigentes sin sumar rondas.
 - **Alternatives considered**: usar la empresa activa, globalizar Settings o crear una
   capa de asignaciones; quedan fuera de esta feature.
 
+### D21. Bootstrap Base Tareas y storage runtime
+
+- **Decision**: el bootstrap inicial de `BASE_TAREAS` ejecuta SQL MySQL congelado desde
+  una preview de SchemaEditor, excluye `TareaConnectionRole` y elimina únicamente FKs
+  hacia tablas externas. Las relaciones internas permanecen físicas. El runtime storage
+  queda separado y pendiente.
+- **Rationale**: `CertificadoSIIRepository` demuestra la frontera resolver/repository y
+  backend Django/MySQL sin modificar SYSTEM/CORE; el SchemaEditor permite mantener el
+  schema actual sin duplicar manualmente 39 definiciones.
+- **Alternatives considered**: `migrate` sobre conexión dinámica, router global, copiar
+  maestros externos, importar `gestiondte` o implementar CRUD MySQL completo ahora;
+  rechazadas.
+
+### D22. Transacciones y evolución MySQL
+
+- **Decision**: el bootstrap ejecuta DDL no destructivo y maneja commit/rollback del
+  connection wrapper, pero no promete atomicidad DDL del motor. Las transacciones por
+  agregado pertenecen a la futura abstracción Storage/Repository.
+- **Rationale**: el precedente de certificados no coordina siempre operaciones múltiples;
+  Tareas no debe ampliar esa debilidad al runtime futuro.
+- **Alternatives considered**: migrador externo o versionado SQL en T124-T130; diferidos
+  a una task de evolución separada.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
