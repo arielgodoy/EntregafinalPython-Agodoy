@@ -6,11 +6,13 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from tareas.models import EvaluacionSimilitud, Tarea
+from tareas.tests.factories import configure_task_storage
 
 
 class T060SimilarityViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = Empresa.objects.create(codigo="T60", descripcion="Empresa T060")
         cls.usuario = User.objects.create_user("t060_user", password="pass")
         cls.responsable = User.objects.create_user("t060_resp", password="pass")

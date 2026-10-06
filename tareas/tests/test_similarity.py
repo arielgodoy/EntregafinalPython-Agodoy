@@ -16,11 +16,13 @@ from tareas.services.similarity import (
     get_similarity_threshold,
     set_similarity_threshold,
 )
+from tareas.tests.factories import configure_task_storage
 
 
 class SimilarityTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa A")
         cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.usuario = User.objects.create_user(username="similitud", password="x")

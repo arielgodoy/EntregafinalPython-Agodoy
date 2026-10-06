@@ -3,10 +3,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from difflib import SequenceMatcher
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.utils import timezone
 
 from tareas.models import EvaluacionSimilitud, Tarea, UmbralSimilitudEmpresa
+from tareas.services.similarity_storage import resolve_similarity_storage
 
 
 CANDIDATE_STATES = frozenset(
@@ -48,34 +48,33 @@ def _validate_threshold(threshold):
 
 
 def get_similarity_threshold(empresa):
-    configuration = UmbralSimilitudEmpresa.objects.filter(empresa=empresa).only(
-        "porcentaje"
-    ).first()
+    storage = resolve_similarity_storage()
+    with storage.atomic() as unit:
+        configuration = unit.get_threshold(empresa.pk)
     if configuration is None:
         return DEFAULT_SIMILARITY_THRESHOLD
     return configuration.porcentaje
 
 
-@transaction.atomic
 def set_similarity_threshold(*, empresa, porcentaje, actor):
     if empresa is None or empresa.pk is None:
         raise ValidationError("La Empresa es obligatoria.")
     if actor is None or actor.pk is None:
         raise ValidationError("El actor es obligatorio.")
     porcentaje = _validate_threshold(porcentaje)
-    configuration = UmbralSimilitudEmpresa.objects.filter(empresa=empresa).first()
-    if configuration is None:
-        configuration = UmbralSimilitudEmpresa(
-            empresa=empresa,
-            porcentaje=porcentaje,
-            actualizado_por=actor,
-        )
-    else:
-        configuration.porcentaje = porcentaje
-        configuration.actualizado_por = actor
-    configuration.full_clean()
-    configuration.save()
-    return configuration
+    storage = resolve_similarity_storage()
+    with storage.atomic() as unit:
+        configuration = unit.get_threshold(empresa.pk)
+        if configuration is None:
+            configuration = UmbralSimilitudEmpresa(
+                empresa=empresa,
+                porcentaje=porcentaje,
+                actualizado_por=actor,
+            )
+        else:
+            configuration.porcentaje = porcentaje
+            configuration.actualizado_por = actor
+        return unit.save_threshold(configuration)
 
 
 def _compatible_scope(tarea, candidata):
@@ -90,25 +89,12 @@ def _compatible_scope(tarea, candidata):
     return False
 
 
-def _candidate_queryset(tarea):
-    return (
-        Tarea.objects.filter(
-            empresa_id=tarea.empresa_id,
-            estado__in=CANDIDATE_STATES,
-            anulada=False,
-        )
-        .exclude(pk=tarea.pk)
-        .order_by("pk")
-    )
-
-
-def _persist_evaluation(*, tarea, candidata, porcentaje, threshold):
-    evaluation = (
-        EvaluacionSimilitud.objects.filter(
-            tarea=tarea,
-            tarea_candidata=candidata,
-        )
-        .first()
+def _persist_evaluation(*, unit, tarea, candidata, porcentaje, threshold):
+    evaluation = unit.get_evaluation_for_pair(
+        tarea.pk,
+        candidata.pk,
+        tarea,
+        candidata,
     )
     if evaluation is None:
         evaluation = EvaluacionSimilitud(
@@ -118,62 +104,67 @@ def _persist_evaluation(*, tarea, candidata, porcentaje, threshold):
     evaluation.porcentaje = porcentaje
     evaluation.umbral_aplicado = threshold
     evaluation.supera_umbral = porcentaje >= threshold
-    evaluation.full_clean()
-    if evaluation.pk:
-        evaluation.save(
-            update_fields=[
-                "porcentaje",
-                "umbral_aplicado",
-                "supera_umbral",
-            ]
-        )
-    else:
-        evaluation.save()
-    return evaluation
+    return unit.save_evaluation(
+        evaluation,
+        update_fields=(
+            ["porcentaje", "umbral_aplicado", "supera_umbral"]
+            if evaluation.pk
+            else None
+        ),
+    )
 
 
-@transaction.atomic
 def evaluate_task_similarity(*, tarea, threshold):
     if tarea.pk is None or tarea.empresa_id is None:
         raise ValidationError("La Tarea evaluada debe existir y pertenecer a una Empresa.")
     threshold = _validate_threshold(threshold)
-    candidates = [
-        candidata
-        for candidata in _candidate_queryset(tarea)
-        if _compatible_scope(tarea, candidata)
-    ]
-    for candidata in candidates:
-        _persist_evaluation(
-            tarea=tarea,
-            candidata=candidata,
-            porcentaje=_similarity_percentage(tarea, candidata),
-            threshold=threshold,
-        )
-    return list(
-        EvaluacionSimilitud.objects.filter(tarea=tarea)
-        .select_related("tarea_candidata")
-        .order_by("-porcentaje", "tarea_candidata_id")
-    )
+    storage = resolve_similarity_storage()
+    with storage.atomic() as unit:
+        operational_task = unit.get_task(tarea.pk, company_id=tarea.empresa_id)
+        candidates = [
+            candidate
+            for candidate in unit.candidate_tasks(operational_task, CANDIDATE_STATES)
+            if _compatible_scope(operational_task, candidate)
+        ]
+        for candidate in candidates:
+            _persist_evaluation(
+                unit=unit,
+                tarea=operational_task,
+                candidata=candidate,
+                porcentaje=_similarity_percentage(operational_task, candidate),
+                threshold=threshold,
+            )
+        return unit.list_evaluations(operational_task.pk)
 
 
 def confirm_similarity(*, evaluacion, decision, actor):
     if decision not in EvaluacionSimilitud.Decision.values:
         raise ValidationError("La decisión de similitud no es válida.")
-    if evaluacion.tarea.empresa_id != evaluacion.tarea_candidata.empresa_id:
-        raise ValidationError("Las Tareas deben pertenecer a la misma Empresa.")
-    if decision == EvaluacionSimilitud.Decision.PENDIENTE:
-        evaluacion.decision = decision
-        evaluacion.confirmada_por = None
-        evaluacion.confirmada_at = None
-        evaluacion.full_clean()
-        evaluacion.save(update_fields=["decision", "confirmada_por", "confirmada_at"])
-        return evaluacion
-    if actor is None or not actor.is_active:
-        raise ValidationError("La confirmación requiere un usuario activo.")
+    storage = resolve_similarity_storage()
+    with storage.atomic() as unit:
+        evaluation = unit.get_evaluation(evaluacion.pk)
+        if evaluation.tarea.empresa_id != evaluation.tarea_candidata.empresa_id:
+            raise ValidationError("Las Tareas deben pertenecer a la misma Empresa.")
+        if decision != EvaluacionSimilitud.Decision.PENDIENTE:
+            if actor is None or not actor.is_active:
+                raise ValidationError("La confirmación requiere un usuario activo.")
+        if decision == EvaluacionSimilitud.Decision.PENDIENTE:
+            evaluation.decision = decision
+            evaluation.confirmada_por = None
+            evaluation.confirmada_at = None
+            unit.save_evaluation(
+                evaluation,
+                update_fields=["decision", "confirmada_por", "confirmada_at"],
+            )
+            evaluacion.tarea = evaluation.tarea
+            evaluacion.tarea_candidata = evaluation.tarea_candidata
+            evaluacion.decision = evaluation.decision
+            evaluacion.confirmada_por = evaluation.confirmada_por
+            evaluacion.confirmada_at = evaluation.confirmada_at
+            return evaluacion
 
-    with transaction.atomic():
-        tarea = Tarea.objects.select_for_update().get(pk=evaluacion.tarea_id)
-        candidata = Tarea.objects.get(pk=evaluacion.tarea_candidata_id)
+        tarea = unit.get_task(evaluation.tarea_id, lock=True)
+        candidata = unit.get_task(evaluation.tarea_candidata_id)
         if decision == EvaluacionSimilitud.Decision.MISMO_PROBLEMA:
             if tarea.todo_origen_id:
                 raise ValidationError(
@@ -183,24 +174,26 @@ def confirm_similarity(*, evaluacion, decision, actor):
                 raise ValidationError(
                     "La Tarea ya tiene otro origen canónico directo."
                 )
-            existing_origin = (
-                EvaluacionSimilitud.objects.filter(
-                    tarea=tarea,
-                    decision=EvaluacionSimilitud.Decision.MISMO_PROBLEMA,
-                )
-                .exclude(pk=evaluacion.pk)
-                .exists()
-            )
-            if existing_origin and tarea.tarea_origen_id != candidata.pk:
+            if (
+                unit.has_confirmed_origin(tarea.pk, evaluation.pk)
+                and tarea.tarea_origen_id != candidata.pk
+            ):
                 raise ValidationError(
                     "Solo una evaluación puede establecer el origen canónico directo."
                 )
-            tarea.tarea_origen = candidata
-            tarea.full_clean()
-            tarea.save(update_fields=["tarea_origen"])
-        evaluacion.decision = decision
-        evaluacion.confirmada_por = actor
-        evaluacion.confirmada_at = timezone.now()
-        evaluacion.full_clean()
-        evaluacion.save(update_fields=["decision", "confirmada_por", "confirmada_at"])
-    return evaluacion
+            unit.save_task_origin(tarea, candidata)
+        evaluation.tarea = tarea
+        evaluation.tarea_candidata = candidata
+        evaluation.decision = decision
+        evaluation.confirmada_por = actor
+        evaluation.confirmada_at = timezone.now()
+        unit.save_evaluation(
+            evaluation,
+            update_fields=["decision", "confirmada_por", "confirmada_at"],
+        )
+        evaluacion.tarea = evaluation.tarea
+        evaluacion.tarea_candidata = evaluation.tarea_candidata
+        evaluacion.decision = evaluation.decision
+        evaluacion.confirmada_por = evaluation.confirmada_por
+        evaluacion.confirmada_at = evaluation.confirmada_at
+        return evaluacion
