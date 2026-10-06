@@ -1,9 +1,8 @@
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.utils import timezone
 
-from tareas.models import Tarea, Todo, TodoEvento
-from tareas.services.hierarchy import is_effectively_annulled
+from tareas.models import Tarea, Todo
+from tareas.services.todo_storage import resolve_todo_storage
 
 
 def _validate_same_company(todo, user):
@@ -18,21 +17,23 @@ def create_todo(empresa, usuario, titulo, descripcion="", todo_anterior=None):
             raise ValidationError("El episodio anterior debe pertenecer a la misma empresa.")
         if todo_anterior.estado != Todo.Estado.CERRADO:
             raise ValidationError("El episodio anterior debe estar cerrado.")
-    with transaction.atomic():
-        todo = Todo.objects.create(
-            empresa=empresa,
-            creada_por=usuario,
-            titulo=titulo,
-            descripcion=descripcion,
-            todo_anterior=todo_anterior,
-        )
-        TodoEvento.objects.create(todo=todo, tipo=TodoEvento.Tipo.CREADO, usuario=usuario)
-    return todo
+    todo = Todo(
+        empresa=empresa,
+        creada_por=usuario,
+        titulo=titulo,
+        descripcion=descripcion,
+        todo_anterior=todo_anterior,
+    )
+    return resolve_todo_storage().create_todo(todo, usuario)
 
 
-def _has_pending_originated_tasks(todo):
-    for task in todo.tareas_origen.select_related("empresa"):
-        if task.estado == Tarea.Estado.CERRADA or is_effectively_annulled(task):
+def _has_pending_originated_tasks(todo, storage):
+    if todo.pk is None:
+        raise ValueError("The TO-DO must be saved before checking originated tasks.")
+    for task_id, state in storage.get_originated_tasks(todo.pk):
+        if state == Tarea.Estado.CERRADA:
+            continue
+        if any(storage.get_task_annulment_chain(task_id)):
             continue
         return True
     return False
@@ -40,22 +41,17 @@ def _has_pending_originated_tasks(todo):
 
 def close_todo(todo, usuario, comentario=""):
     _validate_same_company(todo, usuario)
+    storage = resolve_todo_storage()
     if todo.pk:
-        todo.refresh_from_db(fields=["estado"])
+        todo.estado = storage.get_todo_state(todo.pk)
     if todo.estado == Todo.Estado.CERRADO:
         raise ValidationError("El TO-DO ya está cerrado y no puede reabrirse.")
-    if _has_pending_originated_tasks(todo):
+    if _has_pending_originated_tasks(todo, storage):
         raise ValidationError("No se puede cerrar un TO-DO con Tareas originadas pendientes.")
-    with transaction.atomic():
-        todo.estado = Todo.Estado.CERRADO
-        todo.cerrada_por = usuario
-        todo.fecha_cierre = timezone.now()
-        todo.comentario_cierre = comentario
-        todo.save(update_fields=["estado", "cerrada_por", "fecha_cierre", "comentario_cierre"])
-        TodoEvento.objects.create(
-            todo=todo,
-            tipo=TodoEvento.Tipo.CERRADO,
-            usuario=usuario,
-            comentario=comentario,
-        )
+    todo.estado = Todo.Estado.CERRADO
+    todo.cerrada_por = usuario
+    todo.fecha_cierre = timezone.now()
+    todo.comentario_cierre = comentario
+    with storage.atomic() as unit:
+        unit.save_closed_todo(todo, usuario)
     return todo
