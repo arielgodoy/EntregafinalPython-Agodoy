@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
-from django.db import transaction
 
 from tareas.models import Tarea, Todo, TodoEvento
+from tareas.services.origin_storage import resolve_origin_storage
 
 
 def create_task_from_todo(todo, usuario, titulo, descripcion="", comentario="", **kwargs):
@@ -11,20 +11,14 @@ def create_task_from_todo(todo, usuario, titulo, descripcion="", comentario="", 
         raise ValidationError("La Tarea debe pertenecer a la empresa del TO-DO.")
     if kwargs.get("tarea_origen") is not None or "todo_origen" in kwargs:
         raise ValidationError("Una Tarea originada desde TO-DO no puede tener otro origen canónico.")
-    with transaction.atomic():
-        task = Tarea.objects.create(
-            titulo=titulo,
-            descripcion=descripcion,
-            empresa=todo.empresa,
-            creada_por=usuario,
-            todo_origen=todo,
-            **{key: value for key, value in kwargs.items() if key != "empresa"},
-        )
-        TodoEvento.objects.create(
-            todo=todo,
-            tipo=TodoEvento.Tipo.TAREA_CREADA,
-            usuario=usuario,
-            comentario=comentario,
-            tarea=task,
-        )
-    return task
+    task = Tarea(
+        titulo=titulo,
+        descripcion=descripcion,
+        empresa=todo.empresa,
+        creada_por=usuario,
+        todo_origen=todo,
+        **{key: value for key, value in kwargs.items() if key != "empresa"},
+    )
+    storage = resolve_origin_storage()
+    with storage.atomic() as unit:
+        return unit.create_task_from_todo(task, usuario, comentario)
