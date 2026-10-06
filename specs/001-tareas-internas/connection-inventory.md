@@ -19,6 +19,10 @@
 - `ACTIONABLE_ACCESS_SITES = 6`
 - `MANUAL = 0`
 - `CANONICAL_PENDING_RESIDUES = 4`
+- `CANONICAL_RESIDUES = 4`
+- `PENDING = 3`
+- `BLOCKED = 1`
+- `CLOSED = 0`
 
 Six access sites are not six residues. The six sites are grouped into four
 semantic connection transformations.
@@ -41,7 +45,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R001
 
-- `STATUS = PENDING`
+- `STATUS = BLOCKED`
 - `PRIORITY = P1`
 - `FAMILY = Views/list/detail compatibility`
 - `FILE = tareas/views.py`
@@ -50,6 +54,11 @@ These blocks are not pending and must not be reinterpreted.
 - `CURRENT_ACCESS = Direct Tarea.objects`
 - `EXPECTED_FRONTIER = Existing task/detail/list storage`
 - `COMPLEXITY = EXTENDED`
+- `BLOCKED_AT_COMMIT = 17eb1852e3c7000881c9d728923d876140532b62`
+- `BLOCKER = Historical consumers require a real lazy Django QuerySet while the MYSQL_CONFIG task frontier exposes backend-neutral TaskListResult.`
+- `CONNECTION_ONLY_TRANSFORMATION_FEASIBLE = NO`
+- `FUNCTIONAL_CONTRACT_FROZEN = YES`
+- `REVISIT = Post-Tareas connection architecture/private-router contract design.`
 
 ### T135-R002
 
@@ -103,6 +112,6 @@ Rows are never deleted; only status and evidence may change.
 
 ## Next
 
-- `NEXT_RESIDUE = T135-R001`
+- `NEXT_RESIDUE = T135-R002`
 
 No implementation of R001 is included in this inventory checkpoint.
