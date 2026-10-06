@@ -8,7 +8,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, PerfilAcceso, UsuarioPerfilEmpresa, Vista
-from tareas.models import EnlaceTarea, EventoAccesoEnlace, Tarea, TareaParticipante
+from tareas.models import (
+    EnlaceTarea,
+    EventoAccesoEnlace,
+    Tarea,
+    TareaConnectionRole,
+    TareaParticipante,
+)
 from tareas.services.links import (
     TaskLinkAccessError,
     create_task_link,
@@ -20,6 +26,11 @@ from tareas.services.links import (
 class TaskLinkServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS",
+            source_type="DJANGO",
+            django_alias="default",
+        )
         cls.empresa = Empresa.objects.create(codigo="L01", descripcion="Empresa enlaces")
         cls.otra_empresa = Empresa.objects.create(codigo="L02", descripcion="Otra empresa")
         cls.creador = User.objects.create_user("link_creator", email="creator@example.test")

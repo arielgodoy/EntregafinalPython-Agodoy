@@ -138,6 +138,7 @@ from .services.links import (
     create_task_link,
     resolve_task_link,
     revoke_task_link,
+    revoke_task_link_by_id,
 )
 from .services.connection_roles import get_tarea_connection_status
 from .services.task_storage import (
@@ -1913,18 +1914,14 @@ class AdministrarResponsableDetalleView(ParticipantAdministrationView):
         ))
 
 
-class CrearEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
 
     def post(self, request, tarea_id):
         empresa_id = _get_empresa_id(request)
-        tarea = get_object_or_404(
-            Tarea.objects.select_related("empresa"),
-            pk=tarea_id,
-            empresa_id=empresa_id,
-        )
+        empresa = get_object_or_404(Empresa, pk=empresa_id)
         destinatario_id = request.POST.get("destinatario_id")
         if not destinatario_id:
             return JsonResponse(
@@ -1937,12 +1934,13 @@ class CrearEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin,
             fecha_expiracion = timezone.make_aware(fecha_expiracion)
         try:
             enlace, token = create_task_link(
-                tarea=tarea,
+                tarea_id=tarea_id,
+                empresa=empresa,
                 destinatario=destinatario,
                 creado_por=request.user,
                 fecha_expiracion=fecha_expiracion,
             )
-        except ValidationError:
+        except (ValidationError, TaskStorageError):
             return JsonResponse(
                 {"success": False, "message_key": "tareas.links.create_error"},
                 status=400,
@@ -1961,7 +1959,7 @@ class CrearEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin,
         )
 
 
-class AbrirEnlaceTareaView(ExistingTaskBackendGuardMixin, LoginRequiredMixin, View):
+class AbrirEnlaceTareaView(LoginRequiredMixin, View):
     template_name = "tareas/enlace_tarea_lectura.html"
 
     def get(self, request, token):
@@ -1977,21 +1975,18 @@ class AbrirEnlaceTareaView(ExistingTaskBackendGuardMixin, LoginRequiredMixin, Vi
         return render(request, self.template_name, {"tarea": enlace.tarea})
 
 
-class RevocarEnlaceTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
+class RevocarEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
 
     def post(self, request, enlace_id):
         empresa_id = _get_empresa_id(request)
-        enlace = get_object_or_404(
-            EnlaceTarea.objects.select_related("tarea", "tarea__empresa"),
-            pk=enlace_id,
-            tarea__empresa_id=empresa_id,
-        )
         try:
-            revoke_task_link(enlace=enlace, actor=request.user)
-        except ValidationError:
+            revoke_task_link_by_id(
+                link_id=enlace_id, empresa_id=empresa_id, actor=request.user,
+            )
+        except (ValidationError, TaskStorageError):
             return JsonResponse(
                 {"success": False, "message_key": "tareas.links.revoke_error"},
                 status=400,

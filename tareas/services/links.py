@@ -1,9 +1,10 @@
 import hashlib
 import logging
 import secrets
+from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
@@ -11,7 +12,14 @@ from access_control.services.permissions import get_valid_users_for_empresa
 from acounts.services.email_service import send_email_for_purpose
 from notificaciones.services import create_notification
 
-from tareas.models import EnlaceTarea, EventoAccesoEnlace, Tarea
+from tareas.models import EnlaceTarea, EventoAccesoEnlace
+from access_control.models import Empresa
+from tareas.services.shared_link_storage import (
+    SharedLinkCreateCommand,
+    SharedLinkRevokeCommand,
+    DjangoSharedLinkStorage,
+    resolve_shared_link_storage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,74 +89,83 @@ def _notify_link_created(enlace, token, creado_por):
         logger.exception("T058 email notification failed for link=%s", enlace.pk)
 
 
-def create_task_link(*, tarea, destinatario, creado_por, fecha_expiracion):
+def create_task_link(*, tarea=None, tarea_id=None, empresa=None, destinatario, creado_por, fecha_expiracion):
     now = timezone.now()
-    if tarea is None or not tarea.pk or not Tarea.objects.filter(
-        pk=tarea.pk,
-        empresa_id=tarea.empresa_id,
-    ).exists():
+    if tarea is not None:
+        tarea_id = tarea.pk
+        empresa = tarea.empresa
+    if not tarea_id or empresa is None:
         raise ValidationError("La Tarea debe existir.")
     if fecha_expiracion is None or fecha_expiracion <= now:
         raise ValidationError("La fecha de expiracion debe ser futura.")
-    if not _is_valid_company_user(tarea.empresa, destinatario):
+    if not _is_valid_company_user(empresa, destinatario):
         raise ValidationError("El destinatario no pertenece a la Empresa.")
-    if not _is_valid_company_user(tarea.empresa, creado_por):
+    if not _is_valid_company_user(empresa, creado_por):
         raise ValidationError("El creador no pertenece a la Empresa.")
 
+    storage = resolve_shared_link_storage()
     for _ in range(3):
         token = secrets.token_urlsafe(32)
         try:
-            with transaction.atomic():
-                enlace = EnlaceTarea.objects.create(
-                    tarea=tarea,
-                    destinatario=destinatario,
-                    creado_por=creado_por,
-                    token_hash=_hash_token(token),
-                    fecha_expiracion=fecha_expiracion,
-                )
+            result = storage.create(SharedLinkCreateCommand(
+                task_id=tarea_id,
+                empresa_id=empresa.pk,
+                destinatario_id=destinatario.pk,
+                creado_por_id=creado_por.pk,
+                fecha_expiracion=fecha_expiracion,
+                token=token,
+                token_hash=_hash_token(token),
+            ))
             break
         except IntegrityError:
             continue
     else:
         raise ValidationError("No fue posible generar un token unico.")
 
-    _notify_link_created(enlace, token, creado_por)
-    return enlace, token
+    if result.record is not None:
+        _notify_link_created(result.record, result.token, creado_por)
+        return result.record, result.token
+    task_ref = result.tarea
+    link_ref = SimpleNamespace(
+        pk=result.id, tarea=task_ref, destinatario=destinatario,
+        fecha_expiracion=result.fecha_expiracion,
+    )
+    _notify_link_created(link_ref, result.token, creado_por)
+    return link_ref, result.token
 
 
 def resolve_task_link(*, token, usuario, empresa):
-    enlace = EnlaceTarea.objects.select_related(
-        "tarea", "tarea__empresa", "destinatario"
-    ).filter(token_hash=_hash_token(token)).first()
-    if enlace is None:
-        raise TaskLinkAccessError("RECHAZADO_TOKEN_INVALIDO")
-
-    if (
-        not getattr(usuario, "is_authenticated", False)
-        or usuario.pk != enlace.destinatario_id
-        or not _is_valid_company_user(enlace.tarea.empresa, usuario)
-    ):
-        _record_access(enlace, usuario, EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO)
+    if not getattr(usuario, "is_authenticated", False):
         raise TaskLinkAccessError(EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO)
-    if getattr(empresa, "pk", empresa) != enlace.tarea.empresa_id:
-        _record_access(enlace, usuario, EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA)
-        raise TaskLinkAccessError(EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA)
-    if enlace.fecha_expiracion <= timezone.now():
-        _record_access(enlace, usuario, EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO)
-        raise TaskLinkAccessError(EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO)
-    if enlace.revocado_at is not None:
-        _record_access(enlace, usuario, EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO)
-        raise TaskLinkAccessError(EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO)
-
-    _record_access(enlace, usuario, EventoAccesoEnlace.Resultado.ACCESO_OK)
-    return enlace
+    empresa_id = getattr(empresa, "pk", empresa)
+    try:
+        result = resolve_shared_link_storage().resolve(token, usuario.pk, empresa_id)
+    except ValidationError as exc:
+        raise TaskLinkAccessError(str(exc)) from exc
+    if result.__class__.__name__ == "SharedLinkAccessResult":
+        return SimpleNamespace(tarea=result.task, pk=result.link_id)
+    return result
 
 
 def revoke_task_link(*, enlace, actor):
     if not _is_valid_company_user(enlace.tarea.empresa, actor):
         raise ValidationError("El actor no pertenece a la Empresa.")
-    if enlace.revocado_at is None:
-        enlace.revocado_at = timezone.now()
-        enlace.revocado_por = actor
-        enlace.save(update_fields=["revocado_at", "revocado_por"])
+    storage = resolve_shared_link_storage()
+    if isinstance(storage, DjangoSharedLinkStorage):
+        current = getattr(enlace, "revocado_at", None)
+        if current is None:
+            enlace.revocado_at = timezone.now()
+            enlace.revocado_por = actor
+            enlace.save(using=storage.alias, update_fields=["revocado_at", "revocado_por"])
+        return enlace
+    storage.revoke(SharedLinkRevokeCommand(enlace.pk, enlace.tarea.empresa_id, actor.pk))
     return enlace
+
+
+def revoke_task_link_by_id(*, link_id, empresa_id, actor):
+    empresa = Empresa.objects.using("default").get(pk=empresa_id)
+    if not _is_valid_company_user(empresa, actor):
+        raise ValidationError("El actor no pertenece a la Empresa.")
+    resolve_shared_link_storage().revoke(
+        SharedLinkRevokeCommand(link_id, empresa_id, actor.pk)
+    )
