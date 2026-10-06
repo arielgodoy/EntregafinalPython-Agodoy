@@ -22,12 +22,13 @@ from tareas.services.quotations import (
     open_next_quotation_round,
     update_quotation_status,
 )
-from tareas.tests.factories import assign_permission, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_user
 
 
 class MiniTaskClosureTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = Empresa.objects.create(codigo="T31", descripcion="T031")
         cls.creador = create_user("t31_creador")
         cls.responsable = create_user("t31_responsable")

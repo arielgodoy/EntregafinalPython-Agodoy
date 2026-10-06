@@ -12,12 +12,13 @@ from tareas.services.documents import (
     register_closure_evidence,
     update_document,
 )
-from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
 class DocumentTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        configure_task_storage()
         cls.empresa = create_empresa()
         cls.usuario = create_user(username="documents-user")
         cls.tarea = create_tarea(cls.empresa, cls.usuario)

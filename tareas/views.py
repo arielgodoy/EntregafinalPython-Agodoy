@@ -164,6 +164,11 @@ from .services.detail_storage import (
     resolve_detail_storage,
 )
 from .services.closure_storage import ClosureCommand, resolve_closure_storage
+from .services.document_storage import (
+    DocumentCreateCommand,
+    EvidenceCreateCommand,
+    resolve_document_storage,
+)
 from .services.reprogramming_storage import (
     ALLOWED_REPROGRAMMING_STATES,
     ReprogramTaskCommand,
@@ -2744,7 +2749,7 @@ class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 
 def _build_document_context(tarea, **form_overrides):
-    detail_result = DjangoTaskDetailStorage("default").get_task_detail(
+    detail_result = resolve_detail_storage().get_task_detail(
         task_id=tarea.pk,
         empresa_id=tarea.empresa_id,
         sections=TaskDetailSections(
@@ -2765,15 +2770,37 @@ def _build_document_context(tarea, **form_overrides):
     }
 
 
-class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas - Documentos y evidencia"
     permiso_requerido = "modificar"
 
     def get_tarea(self, pk):
-        return get_object_or_404(self.get_queryset(), pk=pk)
+        try:
+            self.detail_result = resolve_detail_storage().get_task_detail(
+                task_id=pk,
+                empresa_id=_get_empresa_id(self.request),
+                sections=TaskDetailSections(
+                    mini_tasks=False,
+                    links=False,
+                    milestones=False,
+                    documents=True,
+                ),
+            )
+        except DetailTaskNotFound as exc:
+            raise Http404 from exc
+        self.detail_empresa = Empresa.objects.get(pk=self.detail_result.core.empresa_id)
+        return _detail_task_presentation(self.detail_result.core, self.detail_empresa)
 
     def get_context(self, tarea, **forms):
-        return _build_document_context(tarea, **forms)
+        return {
+            "tarea": tarea,
+            "documentos": self.detail_result.documents,
+            "evidencias": self.detail_result.closure_evidence,
+            "document_form": forms.get("document_form", DocumentoForm()),
+            "evidencia_registro_form": forms.get(
+                "evidencia_registro_form", EvidenciaRegistroForm()
+            ),
+        }
 
     def redirect_after_post(self, request, tarea):
         if request.POST.get("next") == "detalle":
@@ -2791,7 +2818,7 @@ class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, 
         detail_view.kwargs = {"pk": tarea.pk}
         detail_view.object = tarea
         detail_view.detail_empresa = tarea.empresa
-        detail_view.detail_result = DjangoTaskDetailStorage("default").get_task_detail(
+        detail_view.detail_result = resolve_detail_storage().get_task_detail(
             task_id=tarea.pk,
             empresa_id=tarea.empresa_id,
             sections=TaskDetailSections(
@@ -2802,7 +2829,7 @@ class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, 
             ),
         )
         context = detail_view.get_context_data(object=tarea)
-        context.update(_build_document_context(tarea, **forms))
+        context.update(self.get_context(tarea, **forms))
         context["puede_ver_documentos"] = True
         context["documents_action_url"] = reverse(
             "tareas:documentos_tarea",
@@ -2818,21 +2845,23 @@ class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, 
 
     def post(self, request, pk):
         tarea = self.get_tarea(pk)
+        storage = resolve_document_storage()
         accion = request.POST.get("accion")
         if accion == "documento":
             form = DocumentoForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    create_document(
-                        tarea=tarea,
-                        usuario=request.user,
+                    storage.create_document(DocumentCreateCommand(
+                        tarea_id=tarea.pk,
+                        empresa_id=tarea.empresa_id,
+                        usuario_id=request.user.pk,
                         tipo=form.cleaned_data["tipo"],
                         formato_archivo=form.cleaned_data["formato_archivo"],
                         archivo=form.cleaned_data["archivo"],
                         url=form.cleaned_data["url"],
                         fecha_documento=form.cleaned_data["fecha_documento"],
                         fecha_vencimiento=form.cleaned_data["fecha_vencimiento"],
-                    )
+                    ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                     return self.render_invalid(request, tarea, document_form=form)
@@ -2843,13 +2872,14 @@ class DocumentosTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, 
             form = EvidenciaRegistroForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    register_closure_evidence(
-                        tarea=tarea,
-                        usuario=request.user,
+                    storage.register_evidence(EvidenceCreateCommand(
+                        tarea_id=tarea.pk,
+                        empresa_id=tarea.empresa_id,
+                        usuario_id=request.user.pk,
                         formato_archivo=form.cleaned_data["formato_archivo"],
                         archivo=form.cleaned_data["archivo"],
                         url=form.cleaned_data["url"],
-                    )
+                    ))
                 except ValidationError as exc:
                     if hasattr(exc, "message_dict"):
                         for campo, mensajes in exc.message_dict.items():

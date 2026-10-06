@@ -1,3 +1,4 @@
+from tareas.services.document_storage import resolve_document_storage
 """Closure rules for mini-tasks (T031/T104)."""
 
 from django.core.exceptions import ValidationError
@@ -200,9 +201,9 @@ def validate_closure_requirements(tarea):
             "DESCENDANTS_PENDING: No se puede cerrar una tarea con descendientes operativos pendientes."
         )
 
-    evidencia_valida = any(
-        _is_valid_closure_evidence(evidencia)
-        for evidencia in EvidenciaCierre.objects.filter(tarea=tarea)
+    evidencia_valida = resolve_document_storage().has_valid_closure_evidence(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
     )
     if tarea.requiere_evidencia_cierre and not evidencia_valida:
         errores.append(

@@ -8,10 +8,18 @@ from tareas.models import (
     DocumentoTarea,
     EvidenciaCierre,
     TareaParticipante,
+    Tarea,
 )
 from tareas.services.assignment import _validate_user_in_task_company
 from tareas.services.image_processing import optimize_uploaded_image
 from tareas.services.notifications import emit_task_event, task_recipients
+from tareas.services.document_storage import (
+    DocumentCreateCommand,
+    DocumentUpdateCommand,
+    EvidenceCreateCommand,
+    DjangoDocumentStorage,
+    resolve_document_storage,
+)
 
 
 def _history_data(documento, usuario, accion):
@@ -35,26 +43,14 @@ def create_document(
     estado="",
     emit_notification=True,
 ):
-    with transaction.atomic():
-        _validate_user_in_task_company(tarea, usuario)
-        archivo = optimize_uploaded_image(archivo, formato_archivo)
-        datos = {
-            "tarea": tarea,
-            "tipo": tipo,
-            "formato_archivo": formato_archivo,
-            "usuario": usuario,
-            "archivo": archivo or "",
-            "url": url or "",
-            "fecha_vencimiento": fecha_vencimiento,
-            "estado": estado,
-        }
-        if fecha_documento is not None:
-            datos["fecha_documento"] = fecha_documento
-        documento = DocumentoTarea(**datos)
-        documento.full_clean()
-        documento.save()
-        DocumentoHistorial.objects.create(**_history_data(documento, usuario, "CREADO"))
-    if emit_notification:
+    storage = resolve_document_storage()
+    result = storage.create_document(DocumentCreateCommand(
+        tarea_id=tarea.pk, empresa_id=tarea.empresa_id, usuario_id=usuario.pk,
+        tipo=tipo, formato_archivo=formato_archivo, archivo=archivo, url=url,
+        fecha_documento=fecha_documento, fecha_vencimiento=fecha_vencimiento,
+        estado=estado,
+    ))
+    if emit_notification and isinstance(storage, DjangoDocumentStorage) and isinstance(tarea, Tarea):
         emit_task_event(
             tarea=tarea,
             event="documento_agregado",
@@ -69,60 +65,42 @@ def create_document(
             body="Se agregó un documento a la tarea.",
             actor=usuario,
         )
-    return documento
+    return result
 
 
-@transaction.atomic
 def update_document(documento, usuario, **changes):
-    _validate_user_in_task_company(documento.tarea, usuario)
-    campos = {
-        "tipo",
-        "formato_archivo",
-        "archivo",
-        "url",
-        "fecha_documento",
-        "fecha_vencimiento",
-        "estado",
-    }
-    desconocidos = set(changes) - campos
-    if desconocidos:
-        raise ValidationError("El documento contiene campos no editables.")
-
-    for campo, valor in changes.items():
-        setattr(documento, campo, valor or "" if campo in {"archivo", "url"} else valor)
-    documento.full_clean()
-    documento.save()
-    DocumentoHistorial.objects.create(**_history_data(documento, usuario, "ACTUALIZADO"))
-    return documento
+    storage = resolve_document_storage()
+    result = storage.update_document(DocumentUpdateCommand(
+        documento_id=documento.pk,
+        tarea_id=documento.tarea_id,
+        empresa_id=documento.tarea.empresa_id,
+        usuario_id=usuario.pk,
+        changes=changes,
+    ))
+    return result
 
 
-@transaction.atomic
 def configure_closure_evidence(*, tarea, usuario, requiere_evidencia_cierre):
-    _validate_user_in_task_company(tarea, usuario)
-    tarea.requiere_evidencia_cierre = bool(requiere_evidencia_cierre)
-    tarea.save(update_fields=["requiere_evidencia_cierre"])
+    storage = resolve_document_storage()
+    storage.configure_evidence(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        usuario_id=usuario.pk,
+        required=requiere_evidencia_cierre,
+    )
     return tarea
 
 
-@transaction.atomic
 def register_closure_evidence(
     *, tarea, usuario, formato_archivo, archivo=None, url="", documento=None
 ):
-    _validate_user_in_task_company(tarea, usuario)
-    archivo = optimize_uploaded_image(archivo, formato_archivo)
-    if documento is not None and documento.tarea_id != tarea.pk:
-        raise ValidationError("El documento no pertenece a la tarea.")
-    if documento is not None and not archivo and not url:
-        archivo = documento.archivo or None
-        url = documento.url
-    evidencia = EvidenciaCierre(
-        tarea=tarea,
-        documento=documento,
+    storage = resolve_document_storage()
+    return storage.register_evidence(EvidenceCreateCommand(
+        tarea_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        usuario_id=usuario.pk,
         formato_archivo=formato_archivo,
-        archivo=archivo or "",
-        url=url or "",
-        usuario=usuario,
-    )
-    evidencia.full_clean()
-    evidencia.save()
-    return evidencia
+        archivo=archivo,
+        url=url,
+        documento_id=documento.pk if documento is not None else None,
+    ))
