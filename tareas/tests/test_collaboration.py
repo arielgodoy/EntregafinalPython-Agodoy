@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, PerfilAcceso, UsuarioPerfilEmpresa, Vista
 from organizacion.models import Local, OrganizationalSource
-from tareas.models import ReunionRevision, Tarea
+from tareas.models import ReunionRevision, Tarea, TareaConnectionRole
 from tareas.services.links import create_task_link, resolve_task_link
 from tareas.services.meetings import add_meeting_participant, convene_meeting, create_meeting
 
@@ -16,6 +16,10 @@ from tareas.services.meetings import add_meeting_participant, convene_meeting, c
 class T061CollaborationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.update_or_create(
+            role="BASE_TAREAS",
+            defaults={"source_type": "DJANGO", "django_alias": "default"},
+        )
         cls.empresa = Empresa.objects.create(codigo="C61", descripcion="Empresa colaboración")
         cls.otra_empresa = Empresa.objects.create(codigo="C62", descripcion="Otra empresa")
         cls.usuario = User.objects.create_user("collab_creator", email="creator@example.test")

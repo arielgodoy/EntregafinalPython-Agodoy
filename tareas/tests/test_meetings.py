@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from access_control.models import Empresa, Permiso, Vista
 from organizacion.models import Departamento, Local, OrganizationalSource
-from tareas.models import ReunionRevision, Tarea
+from tareas.models import ReunionRevision, Tarea, TareaConnectionRole
 from tareas.services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
@@ -20,6 +20,10 @@ from tareas.services.meetings import (
 class MeetingServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.update_or_create(
+            role="BASE_TAREAS",
+            defaults={"source_type": "DJANGO", "django_alias": "default"},
+        )
         cls.empresa = Empresa.objects.create(codigo="M55", descripcion="Empresa reunión")
         cls.user = User.objects.create_user(username="meeting_creator", email="creator@example.test")
         cls.participant = User.objects.create_user(username="meeting_participant", email="participant@example.test")
