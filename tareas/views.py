@@ -140,6 +140,7 @@ from .services.links import (
     revoke_task_link,
     revoke_task_link_by_id,
 )
+from .services.comment_storage import CommentPageCommand, resolve_comment_storage
 from .services.connection_roles import get_tarea_connection_status
 from .services.task_storage import (
     CreateTaskDraftInput,
@@ -233,15 +234,13 @@ def _require_task_administration(tarea, actor):
 
 
 def _unlinked_comment_page(*, tarea, before_comment=None):
-    queryset = Comentario.objects.filter(tarea=tarea)
-    if before_comment is not None:
-        queryset = queryset.filter(
-            Q(created_at__lt=before_comment.created_at)
-            | Q(created_at=before_comment.created_at, pk__lt=before_comment.pk)
-        )
-    comentarios = list(queryset.order_by("-created_at", "-pk")[:COMMENT_PAGE_SIZE])
-    comentarios.reverse()
-    return comentarios
+    storage = resolve_comment_storage()
+    command = CommentPageCommand(
+        tarea.pk, tarea.empresa_id, 0,
+        before_id=before_comment.pk if before_comment is not None else None,
+        page_size=COMMENT_PAGE_SIZE,
+    )
+    return storage.list(command)
 
 
 def _comment_document_data(documento):
@@ -262,6 +261,9 @@ def _comment_document_data(documento):
 
 
 def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
+    def related_items(value):
+        return value.all() if hasattr(value, "all") else value
+
     es_autor = comentario.autor_id == usuario.pk
     puede_ver_contenido = puede_supervisar or not comentario.oculto
     puede_ver_historial = puede_supervisar or (es_autor and not comentario.oculto)
@@ -275,12 +277,12 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
         }
 
     adjuntos = []
-    for adjunto in comentario.adjuntos.all():
+    for adjunto in related_items(comentario.adjuntos):
         adjuntos.append(_comment_document_data(adjunto.documento))
 
     historial = []
     if puede_ver_historial:
-        for version in comentario.versiones.all():
+        for version in related_items(comentario.versiones):
             historial.append(
                 {
                     "evento": version.evento,
@@ -294,7 +296,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
                     "motivo": version.motivo,
                     "adjuntos": [
                         _comment_document_data(relacion.documento)
-                        for relacion in version.documentos.all()
+                        for relacion in related_items(version.documentos)
                     ],
                 }
             )
@@ -1457,11 +1459,31 @@ class TareaComentariosView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin,
             return _comment_error_response(status=500)
 
     def get_tarea(self, request, tarea_id):
-        return get_object_or_404(
-            Tarea.objects.select_related("empresa"),
-            pk=tarea_id,
-            empresa_id=_get_empresa_id(request),
+        empresa_id = _get_empresa_id(request)
+        try:
+            detail = resolve_detail_storage().get_task_detail(
+                task_id=tarea_id,
+                empresa_id=empresa_id,
+                sections=TaskDetailSections(
+                    milestones=False, documents=False, links=False,
+                ),
+            )
+        except DetailTaskNotFound as exc:
+            raise Http404 from exc
+        empresa = get_object_or_404(Empresa, pk=empresa_id)
+        core = detail.core
+        effective_ids = set(detail.effective_user_ids)
+        effective_ids.update(participant.user_id for participant in detail.participants)
+        effective_ids.update(
+            item for item in (core.creada_por_id, core.responsable_id) if item is not None
         )
+        tarea = SimpleNamespace(
+            pk=core.id, empresa_id=core.empresa_id, empresa=empresa,
+            estado=core.estado, anulada=core.anulada,
+            responsable_id=core.responsable_id, creada_por_id=core.creada_por_id,
+            _tareas_effective_user_ids=effective_ids,
+        )
+        return tarea
 
 
 class ListarComentariosView(TareaComentariosView):
@@ -1490,16 +1512,12 @@ class ListarComentariosView(TareaComentariosView):
                 return _comment_error_response()
             if after_id < 0:
                 return _comment_error_response()
-            queryset = Comentario.objects.filter(tarea=tarea)
-            if updated_cursor is not None:
-                queryset = queryset.filter(
-                    Q(pk__gt=after_id)
-                    | Q(updated_at__gt=updated_cursor)
-                    | Q(updated_at=updated_cursor, pk__gt=updated_after_id)
-                )
-            else:
-                queryset = queryset.filter(pk__gt=after_id)
-            comentarios = list(queryset.order_by("created_at", "pk"))
+            comentarios = resolve_comment_storage().list(CommentPageCommand(
+                tarea.pk, tarea.empresa_id, request.user.pk,
+                after_id=after_id, page_size=COMMENT_PAGE_SIZE,
+                updated_after=updated_cursor,
+                updated_after_id=updated_after_id,
+            ))
             prefetch_related_objects(
                 comentarios,
                 "autor__avatar",
@@ -1556,9 +1574,8 @@ class ListarComentariosView(TareaComentariosView):
                 before_id = int(before)
             except (TypeError, ValueError):
                 return _comment_error_response()
-            before_comment = get_object_or_404(
-                Comentario.objects.filter(tarea=tarea),
-                pk=before_id,
+            before_comment = resolve_comment_storage().get(
+                before_id, tarea.pk, tarea.empresa_id,
             )
             if comentarios_vinculado:
                 try:
@@ -1687,7 +1704,6 @@ class CrearComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
-        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
         avatar = Avatar.objects.filter(user_id=request.user.pk).first()
         request.user.avatar = avatar
         comentario.autor = request.user
@@ -1697,7 +1713,6 @@ class CrearComentarioView(TareaComentariosView):
             vista_nombre="Tareas",
             accion="supervisor",
         )
-        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,
@@ -1723,10 +1738,8 @@ class EditarComentarioView(TareaComentariosView):
         tarea = self.get_tarea(request, tarea_id)
         if not _comment_actor_is_linked(tarea, request.user):
             return _comment_error_response(status=403)
-        comentario = get_object_or_404(
-            Comentario.objects.select_related("autor"),
-            pk=comentario_id,
-            tarea=tarea,
+        comentario = resolve_comment_storage().get(
+            comentario_id, tarea.pk, tarea.empresa_id,
         )
         if comentario.autor_id != request.user.pk:
             return _comment_error_response(status=403)
@@ -1746,14 +1759,12 @@ class EditarComentarioView(TareaComentariosView):
             comentario = edit_comment(**cambios)
         except ValidationError:
             return _comment_error_response()
-        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
             empresa=tarea.empresa,
             vista_nombre="Tareas",
             accion="supervisor",
         )
-        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,
@@ -1770,10 +1781,8 @@ class _CambiarVisibilidadComentarioView(TareaComentariosView):
         tarea = self.get_tarea(request, tarea_id)
         if not _comment_actor_is_linked(tarea, request.user):
             return _comment_error_response(status=403)
-        comentario = get_object_or_404(
-            Comentario.objects.select_related("autor"),
-            pk=comentario_id,
-            tarea=tarea,
+        comentario = resolve_comment_storage().get(
+            comentario_id, tarea.pk, tarea.empresa_id,
         )
         form = MotivoComentarioForm(request.POST)
         if not form.is_valid():
@@ -1786,8 +1795,6 @@ class _CambiarVisibilidadComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
-        comentario = Comentario.objects.select_related("autor").get(pk=comentario.pk)
-        prefetch_related_objects([comentario], "autor__avatar")
         return JsonResponse(
             {
                 "success": True,

@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
 from tareas.services.reading import COMMENT_PAGE_SIZE
+from tareas.services.comment_storage import resolve_comment_storage
+from tareas.services.document_storage import resolve_document_storage
 
 from .models import (
     Comentario,
@@ -172,7 +174,11 @@ class ComentarioForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.tarea = tarea
         if tarea is not None:
-            self.fields["documentos"].queryset = DocumentoTarea.objects.filter(tarea=tarea)
+            document_storage = resolve_document_storage()
+            if hasattr(document_storage, "alias"):
+                self.fields["documentos"].queryset = DocumentoTarea.objects.using(
+                    document_storage.alias,
+                ).filter(tarea_id=tarea.pk)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -234,12 +240,14 @@ class ReconocerComentariosForm(forms.Form):
                 "tareas.messages.generic_error",
                 code="tareas.messages.generic_error",
             )
-        encontrados = set(
-            Comentario.objects.filter(
-                tarea=self.tarea,
-                pk__in=comentario_ids,
-            ).values_list("pk", flat=True)
-        )
+        storage = resolve_comment_storage()
+        encontrados = set()
+        for comentario_id in comentario_ids:
+            try:
+                storage.get(comentario_id, self.tarea.pk, self.tarea.empresa_id)
+            except Exception:
+                continue
+            encontrados.add(comentario_id)
         if encontrados != set(comentario_ids):
             raise forms.ValidationError(
                 "tareas.messages.generic_error",

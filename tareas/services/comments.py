@@ -1,5 +1,7 @@
 """Domain services for task comments (T098)."""
 
+import logging
+from contextlib import nullcontext
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -22,9 +24,16 @@ from tareas.services.documents import create_document
 from tareas.services.hierarchy import is_effectively_annulled
 from tareas.services.notifications import emit_task_event
 from tareas.services.participants import effective_participant_ids, is_effective_participant
+from tareas.services.comment_storage import (
+    CommentCreateCommand,
+    CommentEditCommand,
+    CommentVisibilityCommand,
+    resolve_comment_storage,
+)
 
 
 _UNSET = object()
+logger = logging.getLogger(__name__)
 _OPERATIONAL_STATES = {
     Tarea.Estado.ACTIVA,
     Tarea.Estado.GESTION,
@@ -32,15 +41,9 @@ _OPERATIONAL_STATES = {
 }
 
 
-def _current_task(tarea_id):
-    try:
-        return (
-            Tarea.objects.select_for_update()
-            .select_related("empresa")
-            .get(pk=tarea_id)
-        )
-    except Tarea.DoesNotExist as exc:
-        raise ValidationError("La tarea no existe.") from exc
+def _current_task(tarea_id, empresa_id=None):
+    storage = resolve_comment_storage()
+    return storage.task(tarea_id, empresa_id)
 
 
 def _validate_actor(tarea, usuario, accion):
@@ -135,7 +138,15 @@ def _next_content_version(comentario):
 
 
 def _schedule_comment_event(*, tarea, event, actor):
-    recipient_ids = effective_participant_ids(tarea)
+    if hasattr(tarea, "_state"):
+        recipient_ids = effective_participant_ids(tarea)
+    else:
+        recipient_ids = {
+            user_id for user_id in (
+                getattr(tarea, "creador_id", None),
+                getattr(tarea, "responsable_id", None),
+            ) if user_id is not None
+        }
     recipients = list(
         User.objects.filter(pk__in=recipient_ids, is_active=True).exclude(pk=actor.pk)
     )
@@ -146,46 +157,43 @@ def _schedule_comment_event(*, tarea, event, actor):
         "comentario_restaurado": "Comentario restaurado en la tarea",
     }
     body = titles[event]
-    transaction.on_commit(
-        lambda: emit_task_event(
-            tarea=tarea,
-            event=event,
-            recipients=recipients,
-            title=titles[event],
-            body=body,
-            actor=actor,
-        )
-    )
+    def notify_after_commit():
+        try:
+            emit_task_event(
+                tarea=tarea,
+                event=event,
+                recipients=recipients,
+                title=titles[event],
+                body=body,
+                actor=actor,
+            )
+        except Exception:
+            logger.exception("Comment notification failed: task=%s event=%s", tarea.pk, event)
+
+    transaction.on_commit(notify_after_commit)
 
 
-@transaction.atomic
 def create_comment(*, tarea, usuario, contenido="", documentos=None, documentos_nuevos=None):
-    tarea_actual = _current_task(tarea.pk)
+    tarea_actual = _current_task(tarea.pk, tarea.empresa_id)
     _validate_actor(tarea_actual, usuario, "crear")
     _validate_operational_task(tarea_actual)
-    documentos_finales = _resolve_documents(
-        tarea=tarea_actual,
-        usuario=usuario,
-        documentos=documentos,
-        documentos_nuevos=documentos_nuevos,
-    )
-    _ensure_content_or_documents(contenido, documentos_finales)
-
-    comentario = Comentario.objects.create(
-        tarea=tarea_actual,
-        autor=usuario,
-        contenido=contenido or "",
-    )
-    _replace_current_documents(comentario, documentos_finales)
-    _create_version(
-        comentario=comentario,
-        evento=ComentarioVersion.Evento.CREADO,
-        actor=usuario,
-        contenido=comentario.contenido,
-        motivo="",
-        documentos=documentos_finales,
-        numero=1,
-    )
+    storage = resolve_comment_storage()
+    atomic = transaction.atomic(using=storage.alias) if hasattr(storage, "alias") else nullcontext()
+    with atomic:
+        documentos_finales = _resolve_documents(
+            tarea=tarea_actual,
+            usuario=usuario,
+            documentos=documentos,
+            documentos_nuevos=documentos_nuevos,
+        )
+        _ensure_content_or_documents(contenido, documentos_finales)
+        comentario = storage.create(CommentCreateCommand(
+            task_id=tarea_actual.pk,
+            empresa_id=tarea_actual.empresa_id,
+            author_id=usuario.pk,
+            content=contenido or "",
+            document_ids=tuple(documento.pk for documento in documentos_finales),
+        ), documents=documentos_finales)
     _schedule_comment_event(
         tarea=tarea_actual,
         event="comentario_agregado",
@@ -210,32 +218,19 @@ def _create_mini_task_close_comment(
         f"Comentario: {comentario_cierre}"
     )
     _ensure_content_or_documents(contenido, documentos)
-    comentario = Comentario.objects.create(
-        tarea=tarea,
-        autor=usuario,
-        contenido=contenido,
-    )
-    _replace_current_documents(comentario, documentos)
-    _create_version(
-        comentario=comentario,
-        evento=ComentarioVersion.Evento.CREADO,
-        actor=usuario,
-        contenido=comentario.contenido,
-        motivo="",
-        documentos=documentos,
-        numero=1,
-    )
-    return comentario
+    storage = resolve_comment_storage()
+    return storage.create(CommentCreateCommand(
+        task_id=tarea.pk, empresa_id=tarea.empresa_id, author_id=usuario.pk,
+        content=contenido, document_ids=tuple(documento.pk for documento in documentos),
+    ), documents=documentos)
 
 
-@transaction.atomic
 def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, documentos_nuevos=None):
-    comentario_actual = (
-        Comentario.objects.select_for_update()
-        .select_related("tarea__empresa")
-        .get(pk=comentario.pk)
+    storage = resolve_comment_storage()
+    comentario_actual = storage.get(
+        comentario.pk, comentario.tarea_id, comentario.tarea.empresa_id,
     )
-    tarea_actual = _current_task(comentario_actual.tarea_id)
+    tarea_actual = _current_task(comentario_actual.tarea_id, comentario_actual.tarea.empresa_id)
     _validate_actor(tarea_actual, usuario, "modificar")
     _validate_operational_task(tarea_actual)
     if comentario_actual.autor_id != usuario.pk:
@@ -246,11 +241,9 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
         raise ValidationError("La ventana de edición del Comentario expiró.")
 
     contenido_final = comentario_actual.contenido if contenido is _UNSET else (contenido or "")
-    documentos_actuales = list(comentario_actual.adjuntos.values_list("documento", flat=True))
+    documentos_actuales = list(storage.document_ids_for_comment(comentario_actual.pk))
     if documentos is _UNSET:
-        documentos_base = list(
-            DocumentoTarea.objects.filter(pk__in=documentos_actuales, tarea=tarea_actual)
-        )
+        documentos_base = storage.documents(tarea_actual.pk, documentos_actuales)
     else:
         documentos_base = list(documentos or [])
     documentos_finales = _resolve_documents(
@@ -261,18 +254,15 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
     )
     _ensure_content_or_documents(contenido_final, documentos_finales)
 
-    comentario_actual.contenido = contenido_final
-    comentario_actual.save(update_fields=["contenido", "updated_at"])
-    _replace_current_documents(comentario_actual, documentos_finales)
-    _create_version(
-        comentario=comentario_actual,
-        evento=ComentarioVersion.Evento.EDITADO,
-        actor=usuario,
-        contenido=comentario_actual.contenido,
-        motivo="",
-        documentos=documentos_finales,
-        numero=_next_content_version(comentario_actual),
-    )
+    storage = resolve_comment_storage()
+    comentario_actual = storage.edit(CommentEditCommand(
+        comment_id=comentario_actual.pk,
+        task_id=tarea_actual.pk,
+        empresa_id=tarea_actual.empresa_id,
+        actor_id=usuario.pk,
+        content=contenido_final,
+        document_ids=tuple(documento.pk for documento in documentos_finales),
+    ), documents=documentos_finales)
     _schedule_comment_event(
         tarea=tarea_actual,
         event="comentario_editado",
@@ -281,7 +271,6 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
     return comentario_actual
 
 
-@transaction.atomic
 def hide_comment(*, comentario, usuario, motivo):
     return _set_visibility(
         comentario=comentario,
@@ -292,7 +281,6 @@ def hide_comment(*, comentario, usuario, motivo):
     )
 
 
-@transaction.atomic
 def restore_comment(*, comentario, usuario, motivo):
     return _set_visibility(
         comentario=comentario,
@@ -304,12 +292,11 @@ def restore_comment(*, comentario, usuario, motivo):
 
 
 def _set_visibility(*, comentario, usuario, motivo, evento, oculto):
-    comentario_actual = (
-        Comentario.objects.select_for_update()
-        .select_related("tarea__empresa")
-        .get(pk=comentario.pk)
+    storage = resolve_comment_storage()
+    comentario_actual = storage.get(
+        comentario.pk, comentario.tarea_id, comentario.tarea.empresa_id,
     )
-    tarea_actual = _current_task(comentario_actual.tarea_id)
+    tarea_actual = _current_task(comentario_actual.tarea_id, comentario_actual.tarea.empresa_id)
     _validate_actor(tarea_actual, usuario, "supervisor")
     _validate_operational_task(tarea_actual)
     motivo_limpio = (motivo or "").strip()
@@ -318,23 +305,14 @@ def _set_visibility(*, comentario, usuario, motivo, evento, oculto):
     if comentario_actual.oculto == oculto:
         raise ValidationError("El Comentario ya tiene ese estado.")
 
-    documentos = list(
-        DocumentoTarea.objects.filter(
-            adjuntos_comentarios__comentario=comentario_actual,
-            tarea=tarea_actual,
-        )
-    )
-    comentario_actual.oculto = oculto
-    comentario_actual.save(update_fields=["oculto", "updated_at"])
-    _create_version(
-        comentario=comentario_actual,
-        evento=evento,
-        actor=usuario,
-        contenido=comentario_actual.contenido,
+    comentario_actual = storage.set_visibility(CommentVisibilityCommand(
+        comment_id=comentario_actual.pk,
+        task_id=tarea_actual.pk,
+        empresa_id=tarea_actual.empresa_id,
+        actor_id=usuario.pk,
         motivo=motivo_limpio,
-        documentos=documentos,
-        numero=None,
-    )
+        oculto=oculto,
+    ))
     _schedule_comment_event(
         tarea=tarea_actual,
         event=("comentario_ocultado" if oculto else "comentario_restaurado"),
