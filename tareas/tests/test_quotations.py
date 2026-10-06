@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from proveedores.models import Proveedor
-from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion
+from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion, TareaConnectionRole
 from tareas.services.quotations import (
     add_quotation_document,
     close_quotation_round,
@@ -25,6 +25,10 @@ from tareas.tests.factories import create_empresa, create_tarea, create_user, si
 class QuotationRoundTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.update_or_create(
+            role="BASE_TAREAS",
+            defaults={"source_type": "DJANGO", "django_alias": "default"},
+        )
         cls.empresa = create_empresa(codigo="Q44")
         cls.usuario = create_user(username="quotations-user")
         cls.tarea = create_tarea(cls.empresa, cls.usuario)
@@ -99,6 +103,10 @@ class QuotationRoundTests(TestCase):
 class QuotationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.update_or_create(
+            role="BASE_TAREAS",
+            defaults={"source_type": "DJANGO", "django_alias": "default"},
+        )
         cls.empresa = create_empresa(codigo="Q45")
         cls.usuario = create_user(username="quotation-user")
         cls.proveedor = Proveedor.objects.create(nombre="Proveedor de prueba")
