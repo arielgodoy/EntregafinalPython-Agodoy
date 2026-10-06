@@ -118,7 +118,6 @@ class DjangoTodoUnit:
             )
             if updated == 0:
                 raise Todo.DoesNotExist
-            todo._state.db = self.alias
         TodoEvento(
             todo_id=todo.pk,
             tipo=TodoEvento.Tipo.CERRADO,
@@ -206,7 +205,6 @@ class MySQLTodoUnit:
         )
         todo.pk = self.cursor.lastrowid
         todo._state.adding = False
-        todo._state.db = None
         return todo
 
     def _insert_event(self, todo, usuario, tipo, comentario=""):
