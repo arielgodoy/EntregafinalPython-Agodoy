@@ -9,6 +9,7 @@ from tareas.models import (
     CorrelativoEmpresa,
     Tarea,
     TareaCierre,
+    TareaConnectionRole,
     TareaTransicion,
 )
 from tareas.services.lifecycle import (
@@ -24,6 +25,9 @@ from tareas.services.lifecycle import (
 class Phase2LifecycleTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
+        )
         cls.empresa = Empresa.objects.create(codigo="P2", descripcion="Phase 2")
         cls.creator = User.objects.create_user(username="p2_creator", password="x")
         cls.responsible = User.objects.create_user(username="p2_resp", password="x")

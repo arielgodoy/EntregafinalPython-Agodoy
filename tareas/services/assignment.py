@@ -17,6 +17,7 @@ from tareas.services.participant_storage import (
     AddParticipantCommand,
     ReassignResponsibleCommand,
     RemoveParticipantCommand,
+    MarkTaskReadCommand,
     resolve_participant_storage,
 )
 
@@ -62,15 +63,13 @@ def remove_participant(tarea, user, *, actor):
 def mark_task_read(tarea, user, *, leido=True):
     """Record read/unread state independently for a user and task."""
     _validate_user_in_task_company(tarea, user)
-    lectura, _created = TareaLectura.objects.update_or_create(
-        tarea=tarea,
-        usuario=user,
-        defaults={
-            "leido": leido,
-            "fecha_lectura": timezone.now() if leido else None,
-        },
-    )
-    return lectura
+    storage = resolve_participant_storage()
+    return storage.mark_task_read(MarkTaskReadCommand(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        user_id=user.pk,
+        leido=leido,
+    ))
 
 
 def assign_responsible(tarea, new_responsible, changed_by, motivo=""):

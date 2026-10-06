@@ -15,6 +15,11 @@ from tareas.services.closure import validate_closure_requirements
 from tareas.services.hierarchy import get_descendants
 from tareas.models import Tarea, TareaCierre, TareaParticipante, TareaTransicion
 from tareas.services.notifications import emit_task_event, task_recipients
+from tareas.services.task_storage import (
+    DjangoTaskStorage,
+    TaskStorageError,
+    resolve_edit_storage,
+)
 
 
 _ALLOWED = {
@@ -27,6 +32,13 @@ _ALLOWED = {
         Tarea.Estado.GESTION,
     },
 }
+
+
+def _django_task_storage(tarea):
+    storage = resolve_edit_storage()
+    if not isinstance(storage, DjangoTaskStorage) or tarea._state.db != storage.alias:
+        raise TaskStorageError("tareas.messages.generic_error")
+    return storage
 
 
 def _raise_si_anulada(tarea):
@@ -62,10 +74,22 @@ def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
             f"Transición no permitida: {tarea.estado} -> {destino}."
         )
     origen = tarea.estado
+    storage = _django_task_storage(tarea)
+    if destino == Tarea.Estado.GESTION and origen == Tarea.Estado.ACTIVA:
+        storage.enter_management(
+            task_id=tarea.pk,
+            empresa_id=tarea.empresa_id,
+            actor_id=usuario.pk,
+        )
+        tarea.refresh_from_db(using=storage.alias)
+        return TareaTransicion.objects.using(storage.alias).filter(
+            tarea_id=tarea.pk,
+            estado_destino=destino,
+        ).order_by("-pk").first()
     tarea.estado = destino
     tarea.full_clean()
-    tarea.save(update_fields=["estado"])
-    return TareaTransicion.objects.create(
+    tarea.save(using=storage.alias, update_fields=["estado"])
+    return TareaTransicion.objects.using(storage.alias).create(
         tarea=tarea,
         estado_origen=origen,
         estado_destino=destino,
@@ -77,17 +101,23 @@ def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
 
 def publish_task(tarea, usuario):
     _raise_si_anulada(tarea)
-    with transaction.atomic():
-        tarea.publicar(usuario=usuario)
+    storage = _django_task_storage(tarea)
+    storage.publish_task(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        actor_id=usuario.pk,
+    )
+    tarea.refresh_from_db(using=storage.alias)
     return tarea
 
 
 def complete_task(tarea, usuario):
     _raise_si_anulada(tarea)
-    with transaction.atomic():
+    storage = _django_task_storage(tarea)
+    with transaction.atomic(using=storage.alias):
         tarea.cierre_completado = True
         tarea.fecha_cumplimiento = timezone.now()
-        tarea.save(update_fields=["cierre_completado", "fecha_cumplimiento"])
+        tarea.save(using=storage.alias, update_fields=["cierre_completado", "fecha_cumplimiento"])
         transition = transition_task(
             tarea,
             Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
@@ -113,7 +143,8 @@ def complete_task(tarea, usuario):
 def approve_closure(tarea, usuario, comentario=""):
     _raise_si_anulada(tarea)
     validate_closure_requirements(tarea)
-    with transaction.atomic():
+    storage = _django_task_storage(tarea)
+    with transaction.atomic(using=storage.alias):
         transition = transition_task(
             tarea,
             Tarea.Estado.CERRADA,
@@ -122,8 +153,8 @@ def approve_closure(tarea, usuario, comentario=""):
             comentario,
         )
         tarea.cierre_completado = True
-        tarea.save(update_fields=["cierre_completado"])
-        TareaCierre.objects.create(
+        tarea.save(using=storage.alias, update_fields=["cierre_completado"])
+        TareaCierre.objects.using(storage.alias).create(
             tarea=tarea,
             usuario=usuario,
             resultado=TareaCierre.Resultado.APROBADO,
@@ -147,7 +178,8 @@ def approve_closure(tarea, usuario, comentario=""):
 
 def reject_closure(tarea, usuario, comentario=""):
     _raise_si_anulada(tarea)
-    with transaction.atomic():
+    storage = _django_task_storage(tarea)
+    with transaction.atomic(using=storage.alias):
         transition = transition_task(
             tarea,
             Tarea.Estado.GESTION,
@@ -157,8 +189,8 @@ def reject_closure(tarea, usuario, comentario=""):
         )
         tarea.cierre_completado = True
         tarea.fecha_cumplimiento = None
-        tarea.save(update_fields=["cierre_completado", "fecha_cumplimiento"])
-        TareaCierre.objects.create(
+        tarea.save(using=storage.alias, update_fields=["cierre_completado", "fecha_cumplimiento"])
+        TareaCierre.objects.using(storage.alias).create(
             tarea=tarea,
             usuario=usuario,
             resultado=TareaCierre.Resultado.RECHAZADO,
@@ -190,10 +222,11 @@ def annul_task(tarea, usuario, motivo=""):
         raise ValidationError("La tarea ya está anulada.")
     if tarea.estado == Tarea.Estado.BORRADOR:
         raise ValidationError("Una tarea en borrador no puede anularse.")
-    with transaction.atomic():
+    storage = _django_task_storage(tarea)
+    with transaction.atomic(using=storage.alias):
         tarea.anulada = True
-        tarea.save(update_fields=["anulada"])
-        TareaTransicion.objects.create(
+        tarea.save(using=storage.alias, update_fields=["anulada"])
+        TareaTransicion.objects.using(storage.alias).create(
             tarea=tarea,
             estado_origen=tarea.estado,
             estado_destino=tarea.estado,
@@ -209,10 +242,11 @@ def reactivate_task(tarea, usuario, motivo=""):
     """Reactiva la tarea poniendo `anulada=False`; NO restaura ni cambia el estado."""
     if not tarea.anulada:
         raise ValidationError("La tarea no está anulada.")
-    with transaction.atomic():
+    storage = _django_task_storage(tarea)
+    with transaction.atomic(using=storage.alias):
         tarea.anulada = False
-        tarea.save(update_fields=["anulada"])
-        TareaTransicion.objects.create(
+        tarea.save(using=storage.alias, update_fields=["anulada"])
+        TareaTransicion.objects.using(storage.alias).create(
             tarea=tarea,
             estado_origen=tarea.estado,
             estado_destino=tarea.estado,

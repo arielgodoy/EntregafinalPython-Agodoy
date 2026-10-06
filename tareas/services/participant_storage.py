@@ -60,6 +60,14 @@ class RemoveParticipantCommand:
 
 
 @dataclass(frozen=True)
+class MarkTaskReadCommand:
+    task_id: int
+    empresa_id: int
+    user_id: int
+    leido: bool = True
+
+
+@dataclass(frozen=True)
 class ChangeParticipantRoleCommand:
     task_id: int
     empresa_id: int
@@ -269,6 +277,9 @@ class _ParticipantStorage:
     def change_participant_role(self, command):
         return self._execute(command)
 
+    def mark_task_read(self, command):
+        raise NotImplementedError
+
     def edit_task(self, command, *, actor_id, reason):
         return self.reassign_responsible(ReassignResponsibleCommand(
             command.task_id, command.empresa_id, actor_id, command.responsable_id,
@@ -364,6 +375,18 @@ class DjangoParticipantStorage(_ParticipantStorage):
         TareaReasignacion.objects.using(self.alias).bulk_create([row])
         return row.pk
 
+    def mark_task_read(self, command):
+        with transaction.atomic(using=self.alias):
+            reading, _created = TareaLectura.objects.using(self.alias).update_or_create(
+                tarea_id=command.task_id,
+                usuario_id=command.user_id,
+                defaults={
+                    "leido": command.leido,
+                    "fecha_lectura": timezone.now() if command.leido else None,
+                },
+            )
+        return reading
+
 
 class MySQLParticipantStorage(_ParticipantStorage):
     def __init__(self, config, database_name):
@@ -396,6 +419,25 @@ class MySQLParticipantStorage(_ParticipantStorage):
         if result.changed:
             _notify(command, result, priority, uuid4().hex)
         return result
+
+    def mark_task_read(self, command):
+        try:
+            with open_mysql_connection(
+                self.connection_config, database_name=self.database_name
+            ) as connection:
+                cursor = connection.cursor()
+                try:
+                    cursor.execute("START TRANSACTION")
+                    reading = _MySQLMutation(cursor).mark_task_read(command)
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+                finally:
+                    cursor.close()
+            return reading
+        except Exception as exc:
+            raise TaskStorageError("tareas.assignment.errors.storage") from exc
 
 
 class _MySQLMutation:
@@ -493,6 +535,35 @@ class _MySQLMutation:
              command.actor_id, timezone.now(), reason),
         )
         return self.cursor.lastrowid
+
+    def mark_task_read(self, command):
+        self.cursor.execute(
+            "SELECT id FROM tareas_tarealectura WHERE tarea_id=%s AND usuario_id=%s FOR UPDATE",
+            (command.task_id, command.user_id),
+        )
+        row = self.cursor.fetchone()
+        fecha = timezone.now() if command.leido else None
+        if row is None:
+            self.cursor.execute(
+                "INSERT INTO tareas_tarealectura "
+                "(tarea_id, usuario_id, leido, fecha_lectura) VALUES (%s,%s,%s,%s)",
+                (command.task_id, command.user_id, command.leido, fecha),
+            )
+            return SimpleNamespace(
+                pk=self.cursor.lastrowid,
+                tarea_id=command.task_id,
+                usuario_id=command.user_id,
+                leido=command.leido,
+                fecha_lectura=fecha,
+            )
+        self.cursor.execute(
+            "UPDATE tareas_tarealectura SET leido=%s, fecha_lectura=%s WHERE id=%s",
+            (command.leido, fecha, row[0]),
+        )
+        return SimpleNamespace(
+            pk=row[0], tarea_id=command.task_id, usuario_id=command.user_id,
+            leido=command.leido, fecha_lectura=fecha,
+        )
 
 
 def resolve_participant_storage():
