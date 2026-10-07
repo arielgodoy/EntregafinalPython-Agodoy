@@ -5,14 +5,13 @@ consuming the existing access_control user/company helpers without modifying the
 """
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
 from django.utils import timezone
 
 from access_control.services.permissions import (
     get_valid_users_for_empresa,
 )
 from tareas.models import Tarea, TareaLectura, TareaParticipante, TareaReasignacion
-from tareas.services.notifications import emit_task_event, task_recipients
+from tareas.services.notifications import emit_task_event
 from tareas.services.participant_storage import (
     AddParticipantCommand,
     ReassignResponsibleCommand,
@@ -20,6 +19,7 @@ from tareas.services.participant_storage import (
     MarkTaskReadCommand,
     resolve_participant_storage,
 )
+from tareas.services.assignment_storage import resolve_assignment_storage
 
 
 def _validate_active_user(user):
@@ -131,35 +131,44 @@ def create_independent_tasks_for_responsibles(
             f"Falta nombre propio para responsables: {missing_titles}."
         )
 
-    with transaction.atomic():
-        tareas = []
-        for responsable in responsables:
-            tarea = Tarea.objects.create(
-                titulo=str(titulos_por_usuario[responsable.pk]).strip(),
-                descripcion=descripcion,
-                prioridad=prioridad,
-                empresa=empresa,
-                creada_por=creada_por,
-                responsable=responsable,
+    assignments = [
+        {
+            "titulo": str(titulos_por_usuario[responsable.pk]).strip(),
+            "descripcion": descripcion,
+            "prioridad": prioridad,
+            "responsable_id": responsable.pk,
+            "fecha_comun": fecha_comun,
+            "motivo": motivo,
+        }
+        for responsable in responsables
+    ]
+    results = resolve_assignment_storage().create(
+        empresa_id=empresa.pk,
+        creador_id=creada_por.pk,
+        assignments=assignments,
+    )
+    tareas = []
+    for result, responsable in zip(results, responsables):
+        tarea = result.task
+        if tarea is None:
+            tarea = Tarea(
+                id=result.id,
+                titulo=result.titulo,
+                descripcion=result.descripcion,
+                prioridad=result.prioridad,
+                correlativo=result.correlativo,
+                empresa_id=empresa.pk,
+                creada_por_id=creada_por.pk,
+                responsable_id=responsable.pk,
             )
-            TareaReasignacion.objects.create(
-                tarea=tarea,
-                responsable_anterior=None,
-                responsable_nuevo=responsable,
-                usuario=creada_por,
-                fecha=fecha_comun,
-                motivo=motivo,
-            )
-            tareas.append(tarea)
-    for tarea in tareas:
+            tarea.empresa = empresa
+            tarea.creada_por = creada_por
+            tarea.responsable = responsable
+        tareas.append(tarea)
         emit_task_event(
             tarea=tarea,
             event="asignacion",
-            recipients=task_recipients(
-                tarea,
-                actor=creada_por,
-                include_responsible=True,
-            ),
+            recipients=[responsable],
             title="Tarea asignada",
             body="Se te asignó una nueva tarea.",
             actor=creada_por,
