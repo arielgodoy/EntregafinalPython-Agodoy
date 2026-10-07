@@ -3,7 +3,6 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth.models import User
-from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -18,6 +17,7 @@ from ..models import (
     Tarea,
     TareaParticipante,
 )
+from .dashboard_storage import DashboardTask, resolve_dashboard_storage
 
 
 PUBLISHED_STATES = (
@@ -49,64 +49,45 @@ class DashboardPermissionError(PermissionError):
     pass
 
 
-def _operational_queryset(queryset):
-    return queryset.filter(anulada=False, estado__in=PUBLISHED_STATES)
-
-
-def _apply_task_filters(queryset, filters=None):
-    filters = filters or {}
-    if filters.get("empresa_id") is not None:
-        queryset = queryset.filter(empresa_id=filters["empresa_id"])
-    if filters.get("departamento_id") is not None:
-        queryset = queryset.filter(
-            tipo_ambito=Tarea.Ambito.DEPARTAMENTO,
-            departamento_id=filters["departamento_id"],
-        )
-    if filters.get("usuario_id") is not None:
-        queryset = queryset.filter(responsable_id=filters["usuario_id"])
-    if filters.get("estado") in PUBLISHED_STATES:
-        queryset = queryset.filter(estado=filters["estado"])
-    if filters.get("prioridad") in Tarea.Prioridad.values:
-        queryset = queryset.filter(prioridad=filters["prioridad"])
-    return queryset
-
-
 def _decimal_hours(duration):
     hours = Decimal(str(duration.total_seconds())) / Decimal("3600")
     return hours.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def get_kpis(*, queryset, reference_date=None, reference_now=None):
-    """Calculate the eight T059 KPI from an already scoped task queryset."""
+def get_kpis(*, tasks=None, queryset=None, reference_date=None, reference_now=None):
+    """Calculate the eight T059 KPI from an already scoped task collection."""
     reference_date = reference_date or timezone.localdate()
     reference_now = reference_now or timezone.now()
-    operational = _operational_queryset(queryset)
-    open_tasks = operational.filter(estado__in=OPEN_STATES)
+    if tasks is None:
+        tasks = tuple(_dashboard_task_from_model(task) for task in (queryset or ()))
+    operational = tuple(task for task in tasks if not task.anulada)
+    open_tasks = tuple(task for task in operational if task.estado in OPEN_STATES)
 
     by_state = OrderedDict(
-        (state, operational.filter(estado=state).count())
+        (state, sum(task.estado == state for task in operational))
         for state in PUBLISHED_STATES
     )
-    overdue = open_tasks.filter(
-        fecha_tope__isnull=False,
-        fecha_tope__lt=reference_date,
-        fecha_cumplimiento__isnull=True,
-    ).count()
-    due_soon = open_tasks.filter(
-        fecha_tope__isnull=False,
-        fecha_tope__gte=reference_date,
-        fecha_tope__lte=reference_date + timedelta(days=7),
-        fecha_cumplimiento__isnull=True,
-    ).count()
+    overdue = sum(
+        task.fecha_tope is not None
+        and task.fecha_tope < reference_date
+        and task.fecha_cumplimiento is None
+        for task in open_tasks
+    )
+    due_soon = sum(
+        task.fecha_tope is not None
+        and reference_date <= task.fecha_tope <= reference_date + timedelta(days=7)
+        and task.fecha_cumplimiento is None
+        for task in open_tasks
+    )
 
     movement_cutoff = reference_now - timedelta(days=7)
     from .movement_storage import resolve_movement_storage
     movement_storage = resolve_movement_storage()
-    task_rows = list(open_tasks.values("pk", "empresa_id"))
+    task_rows = [(task.pk, task.empresa_id) for task in open_tasks]
     movements = {}
-    for empresa_id in {row["empresa_id"] for row in task_rows}:
+    for empresa_id in {row[1] for row in task_rows}:
         empresa_task_ids = [
-            row["pk"] for row in task_rows if row["empresa_id"] == empresa_id
+            row[0] for row in task_rows if row[1] == empresa_id
         ]
         movements.update({
             item.task_id: item
@@ -115,8 +96,8 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
             )
         })
     without_movement = 0
-    for row in task_rows:
-        movement = movements.get(row["pk"])
+    for task_id, _empresa_id in task_rows:
+        movement = movements.get(task_id)
         if movement is None:
             continue
         timestamps = [
@@ -132,22 +113,21 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
         if timestamps and max(timestamps) <= movement_cutoff:
             without_movement += 1
 
-    load_rows = (
-        open_tasks.filter(responsable_id__isnull=False)
-        .values("responsable_id", "responsable__username")
-        .annotate(cantidad=Count("pk"))
-        .order_by("responsable__username", "responsable_id")
-    )
+    load_counts = {}
+    for task in open_tasks:
+        if task.responsable_id is not None:
+            key = (task.responsable_username, task.responsable_id)
+            load_counts[key] = load_counts.get(key, 0) + 1
     load = [
         {
-            "responsable_id": row["responsable_id"],
-            "username": row["responsable__username"],
-            "cantidad": row["cantidad"],
+            "responsable_id": responsable_id,
+            "username": username,
+            "cantidad": cantidad,
         }
-        for row in load_rows
+        for (username, responsable_id), cantidad in sorted(load_counts.items())
     ]
 
-    total_published = operational.count()
+    total_published = len(operational)
     closed = by_state[Tarea.Estado.CERRADA]
     compliance = (
         (Decimal(closed) * Decimal("100") / Decimal(total_published))
@@ -155,12 +135,13 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
         else Decimal("0.00")
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    closing_rows = operational.filter(
-        estado=Tarea.Estado.CERRADA,
-        fecha_publicacion__isnull=False,
-        fecha_cumplimiento__isnull=False,
-    ).values_list("fecha_publicacion", "fecha_cumplimiento")
-    durations = [completed - published for published, completed in closing_rows]
+    durations = [
+        task.fecha_cumplimiento - task.fecha_publicacion
+        for task in operational
+        if task.estado == Tarea.Estado.CERRADA
+        and task.fecha_publicacion is not None
+        and task.fecha_cumplimiento is not None
+    ]
     average_closing_time = (
         sum(
             (Decimal(str(duration.total_seconds())) for duration in durations),
@@ -180,9 +161,10 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
         "atrasadas": overdue,
         "proximas_vencer": due_soon,
         "sin_movimiento": without_movement,
-        "esperando_aprobacion": operational.filter(
-            estado=Tarea.Estado.PENDIENTE_APROBACION_CIERRE
-        ).count(),
+        "esperando_aprobacion": sum(
+            task.estado == Tarea.Estado.PENDIENTE_APROBACION_CIERRE
+            for task in operational
+        ),
         "carga_por_responsable": load,
         "cumplimiento": compliance,
         "tiempo_promedio_cierre_horas": average_closing_time,
@@ -265,15 +247,40 @@ def _authorized_companies(*, user):
     ).distinct().order_by("codigo", "pk")
 
 
-def _dashboard_queryset(*, empresa_id, filters=None):
-    queryset = Tarea.objects.all()
+def _dashboard_tasks(*, empresa_id=None, empresa_ids=None, filters=None):
+    storage_filters = dict(filters or {})
     if empresa_id is not None:
-        queryset = queryset.filter(empresa_id=empresa_id)
-    return _apply_task_filters(queryset, filters)
+        storage_filters["empresa_id"] = empresa_id
+    if empresa_ids is not None:
+        storage_filters["empresa_ids"] = tuple(empresa_ids)
+    return resolve_dashboard_storage().list_dashboard_tasks(filters=storage_filters)
+
+
+def _dashboard_task_from_model(task):
+    return DashboardTask(
+        id=task.pk,
+        empresa_id=task.empresa_id,
+        correlativo=task.correlativo,
+        titulo=task.titulo,
+        descripcion=task.descripcion,
+        estado=task.estado,
+        prioridad=task.prioridad,
+        anulada=bool(task.anulada),
+        responsable_id=task.responsable_id,
+        responsable_username=task.responsable.username if task.responsable_id else "",
+        fecha_tope=task.fecha_tope,
+        fecha_publicacion=task.fecha_publicacion,
+        fecha_cumplimiento=task.fecha_cumplimiento,
+        tipo_ambito=task.tipo_ambito,
+        local_id=task.local_id,
+        local_label=str(task.local) if task.local_id else "",
+        departamento_id=task.departamento_id,
+        departamento_label=str(task.departamento) if task.departamento_id else "",
+    )
 
 
 def _company_row(empresa, queryset):
-    summary = get_kpis(queryset=queryset)
+    summary = get_kpis(tasks=queryset)
     return {
         "empresa_id": empresa.pk,
         "codigo": empresa.codigo,
@@ -294,31 +301,29 @@ def _task_row(tarea):
         "descripcion": tarea.descripcion,
         "estado": tarea.estado,
         "prioridad": tarea.prioridad,
-        "responsable": str(tarea.responsable) if tarea.responsable else "",
+        "responsable": tarea.responsable_username,
         "responsable_id": tarea.responsable_id,
         "fecha_tope": tarea.fecha_tope,
         "fecha_publicacion": tarea.fecha_publicacion,
         "tipo_ambito": tarea.tipo_ambito,
-        "local": str(tarea.local) if tarea.local_id else "",
-        "departamento": str(tarea.departamento) if tarea.departamento_id else "",
+        "local": tarea.local_label,
+        "departamento": tarea.departamento_label,
         "url_detalle": reverse("tareas:detalle_tarea", kwargs={"pk": tarea.pk}),
     }
 
 
 def get_general_dashboard(*, user, filters=None):
     companies = list(_authorized_companies(user=user))
-    queryset = _dashboard_queryset(
-        empresa_id=None,
-        filters=filters,
-    ).filter(empresa_id__in=[empresa.pk for empresa in companies])
+    company_ids = [empresa.pk for empresa in companies]
+    tasks = _dashboard_tasks(empresa_ids=company_ids, filters=filters)
     return {
         "dimension_actual": "General",
         "filters": filters or {},
-        "kpis": get_kpis(queryset=queryset),
+        "kpis": get_kpis(tasks=tasks),
         "rows": [
             _company_row(
                 empresa,
-                _dashboard_queryset(empresa_id=empresa.pk, filters=filters),
+                _dashboard_tasks(empresa_id=empresa.pk, filters=filters),
             )
             for empresa in companies
         ],
@@ -340,24 +345,20 @@ def _require_supervisor(*, user, empresa_id):
 
 def get_company_dashboard(*, user, empresa_id, filters=None):
     empresa = _require_supervisor(user=user, empresa_id=empresa_id)
-    queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=filters)
+    tasks = _dashboard_tasks(empresa_id=empresa.pk, filters=filters)
     from organizacion.models import Departamento
 
     departamentos = Departamento.objects.filter(empresa=empresa).order_by("codigo", "pk")
-    outside_tasks = list(
-        queryset.filter(departamento_id__isnull=True)
-        .filter(
-            Q(tipo_ambito=Tarea.Ambito.LOCAL)
-            | Q(tipo_ambito__isnull=True)
-            | Q(tipo_ambito="")
-        )
-        .select_related("responsable", "local")
-    )
+    outside_tasks = [
+        task for task in tasks
+        if task.departamento_id is None
+        and task.tipo_ambito in (Tarea.Ambito.LOCAL, None, "")
+    ]
     return {
         "dimension_actual": "Empresa",
         "empresa": empresa,
         "filters": filters or {},
-        "kpis": get_kpis(queryset=queryset),
+        "kpis": get_kpis(tasks=tasks),
         "rows": [
             {
                 "departamento_id": departamento.pk,
@@ -389,31 +390,34 @@ def get_department_dashboard(*, user, empresa_id, departamento_id, filters=None)
     if departamento is None:
         raise DashboardPermissionError("Departamento no pertenece a la Empresa.")
     local_filters = dict(filters or {}, departamento_id=departamento.pk)
-    queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=local_filters)
-    responsible_rows = (
-        queryset.filter(tipo_ambito=Tarea.Ambito.DEPARTAMENTO)
-        .filter(departamento_id=departamento.pk, responsable_id__isnull=False)
-        .values("responsable_id", "responsable__username")
-        .distinct()
-        .order_by("responsable__username", "responsable_id")
+    tasks = _dashboard_tasks(empresa_id=empresa.pk, filters=local_filters)
+    responsible_rows = sorted(
+        {
+            (task.responsable_id, task.responsable_username)
+            for task in tasks
+            if task.tipo_ambito == Tarea.Ambito.DEPARTAMENTO
+            and task.departamento_id == departamento.pk
+            and task.responsable_id is not None
+        },
+        key=lambda row: (row[1], row[0]),
     )
     return {
         "dimension_actual": "Departamento",
         "empresa": empresa,
         "departamento": departamento,
         "filters": local_filters,
-        "kpis": get_kpis(queryset=queryset),
+        "kpis": get_kpis(tasks=tasks),
         "rows": [
             {
-                "usuario_id": row["responsable_id"],
-                "usuario": row["responsable__username"],
+                "usuario_id": responsable_id,
+                "usuario": username,
                 "url_name": "tareas:dashboard_general_usuario",
                 "url_kwargs": {
                     "empresa_id": empresa.pk,
-                    "usuario_id": row["responsable_id"],
+                    "usuario_id": responsable_id,
                 },
             }
-            for row in responsible_rows
+            for responsable_id, username in responsible_rows
         ],
         "links": {"usuario": "tareas:dashboard_general_usuario"},
     }
@@ -427,16 +431,13 @@ def get_user_dashboard(*, user, empresa_id, usuario_id, filters=None):
     if target is None:
         raise DashboardPermissionError("Usuario no pertenece a la Empresa.")
     local_filters = dict(filters or {}, usuario_id=target.pk)
-    queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=local_filters)
-    tasks = queryset.filter(responsable=target).select_related(
-        "responsable", "local", "departamento"
-    )
+    tasks = _dashboard_tasks(empresa_id=empresa.pk, filters=local_filters)
     return {
         "dimension_actual": "Usuario",
         "empresa": empresa,
         "usuario": target,
         "filters": local_filters,
-        "kpis": get_kpis(queryset=queryset),
+        "kpis": get_kpis(tasks=tasks),
         "rows": [_task_row(tarea) for tarea in tasks],
         "links": {"tarea": "tareas:detalle_tarea"},
     }
@@ -444,10 +445,8 @@ def get_user_dashboard(*, user, empresa_id, usuario_id, filters=None):
 
 def get_task_dashboard(*, user, empresa_id, tarea_id, filters=None):
     empresa = _require_supervisor(user=user, empresa_id=empresa_id)
-    queryset = _dashboard_queryset(empresa_id=empresa.pk, filters=filters)
-    tarea = queryset.select_related(
-        "empresa", "responsable", "departamento", "local"
-    ).filter(pk=tarea_id).first()
+    tasks = _dashboard_tasks(empresa_id=empresa.pk, filters=filters)
+    tarea = next((task for task in tasks if task.pk == tarea_id), None)
     if tarea is None:
         raise DashboardPermissionError("Tarea no pertenece a la Empresa o no es operativa.")
     return {
@@ -455,7 +454,7 @@ def get_task_dashboard(*, user, empresa_id, tarea_id, filters=None):
         "empresa": empresa,
         "tarea": tarea,
         "filters": filters or {},
-        "kpis": get_kpis(queryset=queryset.filter(pk=tarea.pk)),
+        "kpis": get_kpis(tasks=(tarea,)),
         "rows": [_task_row(tarea)],
         "links": {
             "detalle": reverse("tareas:detalle_tarea", kwargs={"pk": tarea.pk})
