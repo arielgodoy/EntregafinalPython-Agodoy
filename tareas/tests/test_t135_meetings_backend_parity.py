@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, time
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -190,6 +190,46 @@ class MeetingBackendParityTests(TestCase):
             ),
         ):
             self.assertIsInstance(resolve_meeting_storage(), DjangoMeetingStorage)
+
+    def test_django_list_and_detail_preserve_company_and_order(self):
+        with patch.object(
+            meeting_storage,
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ):
+            storage = resolve_meeting_storage()
+            meetings = storage.list_meetings(self.company.pk)
+            detail = storage.get_meeting(self.meeting.pk)
+
+        self.assertEqual([meeting.pk for meeting in meetings], [self.meeting.pk])
+        self.assertEqual(detail.empresa_id, self.company.pk)
+        self.assertEqual(storage.list_meetings(self.company.pk + 1), [])
+
+    def test_mysql_list_and_detail_preserve_company_and_order(self):
+        with self.mysql_backend():
+            storage = meeting_storage.MySQLMeetingStorage(object(), "meetings_test")
+            meetings = storage.list_meetings(self.company.pk)
+            detail = storage.get_meeting(self.connection.meeting_id)
+
+        self.assertEqual([meeting.pk for meeting in meetings], [self.connection.meeting_id])
+        self.assertEqual(detail.empresa_id, self.company.pk)
+
+    @patch("tareas.views.resolve_meeting_storage")
+    def test_http_list_reaches_storage_when_backend_is_mysql_config(self, resolve_storage):
+        storage = MagicMock()
+        storage.list_meetings.return_value = []
+        resolve_storage.return_value = storage
+        self.client.force_login(self.creator)
+        session = self.client.session
+        session["empresa_id"] = self.company.pk
+        session.save()
+
+        response = self.client.get("/tareas/reuniones/")
+
+        self.assertEqual(response.status_code, 200)
+        storage.list_meetings.assert_called_once_with(self.company.pk)
 
     def test_mysql_agenda_participant_and_completion_do_not_write_default(self):
         with self.mysql_backend():

@@ -70,6 +70,13 @@ class DjangoMeetingStorage:
         except ReunionRevision.DoesNotExist as exc:
             raise MeetingNotFound("La reunión no existe en BASE_TAREAS.") from exc
 
+    def list_meetings(self, empresa_id):
+        return list(
+            ReunionRevision.objects.using(self.alias)
+            .filter(empresa_id=empresa_id)
+            .select_related("empresa", "local", "departamento", "tarea_planificada", "creada_por")
+        )
+
     def get_task(self, task_id):
         try:
             return Tarea.objects.using(self.alias).get(pk=task_id)
@@ -211,6 +218,20 @@ class MySQLMeetingStorage:
         meeting.creada_por = _default_related(User, meeting.creada_por_id)
         meeting.tarea_planificada = self._task(meeting.tarea_planificada_id)
         return meeting
+
+    def list_meetings(self, empresa_id):
+        with self._connection() as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT id FROM tareas_reunionrevision "
+                    "WHERE empresa_id=%s ORDER BY id",
+                    (empresa_id,),
+                )
+                meeting_ids = [row[0] for row in cursor.fetchall()]
+            finally:
+                cursor.close()
+        return [self.get_meeting(meeting_id) for meeting_id in meeting_ids]
 
     def get_agenda(self, meeting_id):
         with self._connection() as connection:

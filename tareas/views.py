@@ -134,6 +134,7 @@ from .services.meetings import (
     mark_meeting_completed,
     update_meeting,
 )
+from .services.meeting_storage import MeetingNotFound, resolve_meeting_storage
 from .services.links import (
     TaskLinkAccessError,
     create_task_link,
@@ -2911,10 +2912,21 @@ class ReunionEmpresaQuerysetMixin:
     def get_queryset(self):
         empresa_id = _get_empresa_id(self.request)
         if not empresa_id:
-            return ReunionRevision.objects.none()
-        return ReunionRevision.objects.filter(empresa_id=empresa_id).select_related(
-            "empresa", "local", "departamento", "tarea_planificada", "creada_por"
-        )
+            return []
+        return resolve_meeting_storage().list_meetings(empresa_id)
+
+    def get_meeting(self, pk):
+        try:
+            meeting = resolve_meeting_storage().get_meeting(pk)
+        except MeetingNotFound:
+            raise Http404
+        if meeting.empresa_id != _get_empresa_id(self.request):
+            raise Http404
+        meeting._prefetched_objects_cache = {
+            "agenda": resolve_meeting_storage().get_agenda(meeting.pk),
+            "participantes": resolve_meeting_storage().get_participants(meeting.pk),
+        }
+        return meeting
 
 
 class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, ListView):
@@ -2925,7 +2937,7 @@ class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reu
     permiso_requerido = "ingresar"
 
 
-class CrearReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
@@ -2949,12 +2961,15 @@ class CrearReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMi
         return render(request, self.template_name, {"form": form})
 
 
-class DetalleReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
+class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_detalle.html"
     context_object_name = "reunion"
     vista_nombre = "Tareas"
     permiso_requerido = "ingresar"
+
+    def get_object(self, queryset=None):
+        return self.get_meeting(self.kwargs["pk"])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2963,13 +2978,13 @@ class DetalleReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermiso
         return context
 
 
-class EditarReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
 
     def get_reunion(self, pk):
-        return get_object_or_404(self.get_queryset(), pk=pk)
+        return self.get_meeting(pk)
 
     def get(self, request, pk):
         reunion = self.get_reunion(pk)
@@ -2988,12 +3003,12 @@ class EditarReunionRevisionView(ExistingTaskBackendGuardMixin, VerificarPermisoM
         return render(request, self.template_name, {"form": form, "object": reunion})
 
 
-class ReunionRevisionActionView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class ReunionRevisionActionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
     def post(self, request, pk):
-        reunion = get_object_or_404(self.get_queryset(), pk=pk)
+        reunion = self.get_meeting(pk)
         try:
             accion = request.POST.get("accion")
             if accion == "CONVOCAR":
