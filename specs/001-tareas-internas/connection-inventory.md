@@ -20,8 +20,8 @@
 - `MANUAL = 0`
 - `CANONICAL_PENDING_RESIDUES = 4`
 - `CANONICAL_RESIDUES = 4`
-- `PENDING = 2`
-- `BLOCKED = 1`
+- `PENDING = 1`
+- `BLOCKED = 2`
 - `CLOSED = 1`
 
 Six access sites are not six residues. The six sites are grouped into four
@@ -118,7 +118,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R003
 
-- `STATUS = PENDING`
+- `STATUS = BLOCKED`
 - `PRIORITY = P1`
 - `FAMILY = KPI/dashboard`
 - `FILE = tareas/services/kpi.py`
@@ -127,6 +127,7 @@ These blocks are not pending and must not be reinterpreted.
 - `CURRENT_ACCESS = Direct Tarea/participant ORM`
 - `EXPECTED_FRONTIER = Backend-aware dashboard source`
 - `COMPLEXITY = EXTENDED`
+- `BLOCKER = _personal_task_queryset combina Tarea y participación mediante ORM Django; no existe actualmente una frontera backend-neutral suficiente para MYSQL_CONFIG y preservarla requiere adaptar la composición KPI/dashboard, fuera del alcance de transformación mecánica de conexiones T135.`
 
 ### T135-R004
 
