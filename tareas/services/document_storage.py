@@ -33,6 +33,24 @@ class DocumentCreateCommand:
 
 
 @dataclass(frozen=True)
+class DocumentReference:
+    id: int
+    tarea_id: int
+    empresa_id: int
+    tipo: str = ""
+    formato_archivo: str = ""
+    url: str = ""
+    archivo: str = ""
+
+    @property
+    def pk(self):
+        return self.id
+
+    def __str__(self):
+        return f"DocumentoTarea object ({self.id})"
+
+
+@dataclass(frozen=True)
 class EvidenceCreateCommand:
     tarea_id: int
     empresa_id: int
@@ -67,6 +85,45 @@ class DjangoDocumentStorage:
         if not get_valid_users_for_empresa(empresa, active_only=True).filter(pk=actor.pk).exists():
             raise ValidationError("El usuario no pertenece a la Empresa activa.")
         return actor
+
+    def list_task_documents(self, *, task_id, empresa_id):
+        self._task(task_id, empresa_id)
+        return tuple(
+            DocumentReference(
+                id=document.pk,
+                tarea_id=document.tarea_id,
+                empresa_id=empresa_id,
+                tipo=document.tipo,
+                formato_archivo=document.formato_archivo,
+                url=document.url,
+                archivo=document.archivo.name if document.archivo else "",
+            )
+            for document in DocumentoTarea.objects.using(self.alias)
+            .filter(tarea_id=task_id)
+            .order_by("pk")
+        )
+
+    def get_task_documents(self, *, task_id, empresa_id, document_ids):
+        document_ids = tuple(document_ids)
+        self._task(task_id, empresa_id)
+        documents = DocumentoTarea.objects.using(self.alias).filter(
+            tarea_id=task_id, pk__in=document_ids,
+        ).order_by("pk")
+        references = tuple(
+            DocumentReference(
+                id=document.pk,
+                tarea_id=document.tarea_id,
+                empresa_id=empresa_id,
+                tipo=document.tipo,
+                formato_archivo=document.formato_archivo,
+                url=document.url,
+                archivo=document.archivo.name if document.archivo else "",
+            )
+            for document in documents
+        )
+        if len(references) != len(set(document_ids)):
+            raise ValidationError("El documento no pertenece a la tarea.")
+        return references
 
     def create_document(self, command: DocumentCreateCommand):
         tarea = self._task(command.tarea_id, command.empresa_id)
@@ -194,6 +251,48 @@ class MySQLDocumentStorage:
         empresa = Empresa.objects.using("default").get(pk=empresa_id)
         if not get_valid_users_for_empresa(empresa, active_only=True).filter(pk=usuario_id).exists():
             raise ValidationError("El usuario no pertenece a la Empresa activa.")
+
+    @staticmethod
+    def _document_reference(row, empresa_id):
+        return DocumentReference(
+            id=row[0], tarea_id=row[1], empresa_id=empresa_id,
+            tipo=row[2], formato_archivo=row[3], url=row[4] or "", archivo=row[5] or "",
+        )
+
+    def list_task_documents(self, *, task_id, empresa_id):
+        with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
+            cursor = connection.cursor()
+            try:
+                self._task(cursor, task_id, empresa_id)
+                cursor.execute(
+                    "SELECT id,tarea_id,tipo,formato_archivo,url,archivo "
+                    "FROM tareas_documentotarea WHERE tarea_id=%s ORDER BY id",
+                    (task_id,),
+                )
+                return tuple(self._document_reference(row, empresa_id) for row in cursor.fetchall())
+            finally:
+                cursor.close()
+
+    def get_task_documents(self, *, task_id, empresa_id, document_ids):
+        document_ids = tuple(document_ids)
+        if not document_ids:
+            return ()
+        with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
+            cursor = connection.cursor()
+            try:
+                self._task(cursor, task_id, empresa_id)
+                placeholders = ",".join(["%s"] * len(document_ids))
+                cursor.execute(
+                    "SELECT id,tarea_id,tipo,formato_archivo,url,archivo "
+                    f"FROM tareas_documentotarea WHERE tarea_id=%s AND id IN ({placeholders}) ORDER BY id",
+                    (task_id, *document_ids),
+                )
+                references = tuple(self._document_reference(row, empresa_id) for row in cursor.fetchall())
+            finally:
+                cursor.close()
+        if len(references) != len(set(document_ids)):
+            raise ValidationError("El documento no pertenece a la tarea.")
+        return references
 
     @staticmethod
     def _path(uploaded):

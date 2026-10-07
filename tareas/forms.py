@@ -158,9 +158,9 @@ def _validate_comment_files(archivos, existing_count=0):
 
 class ComentarioForm(forms.Form):
     contenido = forms.CharField(required=False, strip=False, widget=forms.Textarea)
-    documentos = forms.ModelMultipleChoiceField(
-        queryset=DocumentoTarea.objects.none(),
+    documentos = forms.MultipleChoiceField(
         required=False,
+        widget=forms.SelectMultiple,
     )
     archivos = MultipleFileField(required=False)
     tipo_documento = forms.ChoiceField(
@@ -175,10 +175,32 @@ class ComentarioForm(forms.Form):
         self.tarea = tarea
         if tarea is not None:
             document_storage = resolve_document_storage()
-            if hasattr(document_storage, "alias"):
-                self.fields["documentos"].queryset = DocumentoTarea.objects.using(
-                    document_storage.alias,
-                ).filter(tarea_id=tarea.pk)
+            documents = document_storage.list_task_documents(
+                task_id=tarea.pk,
+                empresa_id=tarea.empresa_id,
+            )
+            self.fields["documentos"].choices = [
+                (str(document.pk), str(document)) for document in documents
+            ]
+
+    def clean_documentos(self):
+        document_ids = self.cleaned_data.get("documentos") or []
+        if not document_ids:
+            return []
+        if self.tarea is None:
+            raise forms.ValidationError("El documento no pertenece a la tarea.")
+        document_storage = resolve_document_storage()
+        try:
+            documents = document_storage.get_task_documents(
+                task_id=self.tarea.pk,
+                empresa_id=self.tarea.empresa_id,
+                document_ids=tuple(int(document_id) for document_id in document_ids),
+            )
+        except (TypeError, ValueError, forms.ValidationError):
+            raise forms.ValidationError("El documento no pertenece a la tarea.") from None
+        if len(documents) != len(document_ids):
+            raise forms.ValidationError("El documento no pertenece a la tarea.")
+        return list(documents)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -187,7 +209,7 @@ class ComentarioForm(forms.Form):
         try:
             _validate_comment_files(
                 archivos,
-                existing_count=documentos.count() if documentos is not None else 0,
+                existing_count=len(documentos) if documentos is not None else 0,
             )
         except forms.ValidationError as exc:
             self.add_error("archivos", exc)
@@ -591,11 +613,47 @@ class ReunionTareaForm(forms.ModelForm):
 
     def __init__(self, *args, empresa=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["tarea"].queryset = (
-            Tarea.objects.filter(empresa=empresa)
-            if empresa is not None
-            else self.fields["tarea"].queryset.none()
+        self._empresa_id = empresa.pk if empresa is not None else None
+        model_field = self.fields["tarea"]
+        field = forms.ChoiceField(
+            required=model_field.required,
+            label=model_field.label,
+            help_text=model_field.help_text,
+            widget=model_field.widget,
         )
+        self.fields["tarea"] = field
+        if empresa is None:
+            field.choices = ()
+            return
+
+        from tareas.services.task_storage import TaskListFilters, resolve_list_storage
+
+        tasks = resolve_list_storage().list_tasks(
+            empresa_id=self._empresa_id,
+            filters=TaskListFilters(),
+        ).items
+        state_labels = dict(Tarea.Estado.choices)
+        field.choices = [
+            (str(task.id), f"{task.titulo} ({state_labels.get(task.estado, task.estado)})")
+            for task in tasks
+        ]
+
+    def clean_tarea(self):
+        task_id = self.cleaned_data["tarea"]
+        if self._empresa_id is None:
+            raise forms.ValidationError("Seleccione una tarea válida.")
+        from tareas.services.meeting_storage import MeetingStorageError, resolve_meeting_storage
+
+        try:
+            task = resolve_meeting_storage().get_task(int(task_id))
+        except (MeetingStorageError, ValueError, TypeError):
+            raise forms.ValidationError("Seleccione una tarea válida.") from None
+        if task.empresa_id != self._empresa_id:
+            raise forms.ValidationError("Seleccione una tarea válida.")
+        return task
+
+    def _post_clean(self):
+        return None
 
 
 class TareaConnectionRoleForm(forms.ModelForm):

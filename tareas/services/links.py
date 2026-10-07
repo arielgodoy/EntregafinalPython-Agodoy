@@ -45,14 +45,6 @@ def _is_valid_company_user(empresa, usuario):
     )
 
 
-def _record_access(enlace, usuario, resultado):
-    return EventoAccesoEnlace.objects.create(
-        enlace=enlace,
-        usuario=usuario if getattr(usuario, "is_authenticated", False) else None,
-        resultado=resultado,
-    )
-
-
 def _notify_link_created(enlace, token, creado_por):
     url = reverse("tareas:enlace_tarea", kwargs={"token": token})
     title = f"Enlace compartido: {enlace.tarea.titulo}"

@@ -21,6 +21,7 @@ from tareas.models import (
     TareaLectura,
 )
 from tareas.services.connection_roles import resolve_operational_backend
+from tareas.services.document_storage import resolve_document_storage
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
 
@@ -337,10 +338,13 @@ class DjangoCommentStorage:
             comentario_id=comment_id,
         ).values_list("documento_id", flat=True))
 
-    def documents(self, task_id, document_ids):
-        return list(DocumentoTarea.objects.using(self.alias).filter(
-            tarea_id=task_id, pk__in=document_ids,
-        ))
+    def documents(self, task_id, document_ids, empresa_id):
+        task = self.task(task_id, empresa_id)
+        return resolve_document_storage().get_task_documents(
+            task_id=task_id,
+            empresa_id=task.empresa_id,
+            document_ids=document_ids,
+        )
 
     def reading(self, command):
         reading, _ = TareaLectura.objects.using(self.alias).get_or_create(
@@ -669,8 +673,13 @@ class MySQLCommentStorage:
                     )
         return self._execute(operation)
 
-    def documents(self, task_id, document_ids):
-        return ()
+    def documents(self, task_id, document_ids, empresa_id):
+        task = self.task(task_id, empresa_id)
+        return resolve_document_storage().get_task_documents(
+            task_id=task_id,
+            empresa_id=task.empresa_id,
+            document_ids=document_ids,
+        )
 
     def create(self, command, *, documents=()):
         def operation(cursor):
@@ -700,10 +709,14 @@ class MySQLCommentStorage:
                 "INSERT INTO tareas_comentarioadjunto (comentario_id, documento_id) VALUES (%s,%s)",
                 (comment_id, document_id),
             )
-            cursor.execute(
-                "INSERT INTO tareas_comentarioversiondocumento (version_id, documento_id) VALUES (%s,%s)",
-                (version_id, document_id),
-            )
+            self._insert_version_document_link(cursor, version_id, document_id)
+
+    @staticmethod
+    def _insert_version_document_link(cursor, version_id, document_id):
+        cursor.execute(
+            "INSERT INTO tareas_comentarioversiondocumento (version_id, documento_id) VALUES (%s,%s)",
+            (version_id, document_id),
+        )
 
     def _materialize_comment(self, cursor, row):
         comment_id = row[0]
@@ -776,6 +789,17 @@ class MySQLCommentStorage:
                 "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (command.comment_id, "EDITADO", number, command.content, command.actor_id, timezone.now(), ""),
             )
+            version_id = cursor.lastrowid
+            cursor.execute(
+                "DELETE FROM tareas_comentarioadjunto WHERE comentario_id=%s",
+                (command.comment_id,),
+            )
+            self._insert_document_links(
+                cursor,
+                command.comment_id,
+                version_id,
+                command.document_ids,
+            )
             cursor.execute("SELECT id,tarea_id,autor_id,contenido,created_at,updated_at,oculto FROM tareas_comentario WHERE id=%s", (comment.id,))
             return self._materialize_comment(cursor, cursor.fetchone())
         return self._execute(operation)
@@ -791,6 +815,12 @@ class MySQLCommentStorage:
             if row is None:
                 raise EditTaskNotFound
             comment = _comment_dto(row)
+            cursor.execute(
+                "SELECT documento_id FROM tareas_comentarioadjunto "
+                "WHERE comentario_id=%s ORDER BY id",
+                (command.comment_id,),
+            )
+            document_ids = tuple(item[0] for item in cursor.fetchall())
             event = "OCULTADO" if command.oculto else "RESTAURADO"
             cursor.execute(
                 "UPDATE tareas_comentario SET oculto=%s, updated_at=%s WHERE id=%s AND tarea_id=%s",
@@ -802,6 +832,9 @@ class MySQLCommentStorage:
                 "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (command.comment_id, event, None, comment.content, command.actor_id, timezone.now(), command.motivo),
             )
+            version_id = cursor.lastrowid
+            for document_id in document_ids:
+                self._insert_version_document_link(cursor, version_id, document_id)
             cursor.execute("SELECT id,tarea_id,autor_id,contenido,created_at,updated_at,oculto FROM tareas_comentario WHERE id=%s", (comment.id,))
             return self._materialize_comment(cursor, cursor.fetchone())
         return self._execute(operation)

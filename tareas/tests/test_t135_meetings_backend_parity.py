@@ -9,9 +9,11 @@ from django.test import TestCase
 
 from access_control.models import Empresa, Permiso, Vista
 from organizacion.models import Local, OrganizationalSource
+from tareas.forms import ComentarioForm, ReunionTareaForm
 from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Tarea
 from tareas.services import meeting_storage
 from tareas.services.connection_roles import BackendContext, TareaConnectionRoleNotFoundError
+from tareas.services.document_storage import DocumentReference
 from tareas.services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
@@ -168,6 +170,27 @@ class MeetingBackendParityTests(TestCase):
         self.mysql_connection_patch.start()
         self.addCleanup(self.mysql_connection_patch.stop)
 
+    def test_comment_form_materializes_backend_neutral_document_choices(self):
+        storage = MagicMock()
+        storage.list_task_documents.return_value = (
+            DocumentReference(11, self.task.pk, self.company.pk),
+        )
+        storage.get_task_documents.return_value = storage.list_task_documents.return_value
+        with patch("tareas.forms.resolve_document_storage", return_value=storage):
+            form = ComentarioForm(data={"documentos": ["11"]}, tarea=self.task)
+            self.assertTrue(form.is_valid())
+            self.assertEqual(form.cleaned_data["documentos"][0].pk, 11)
+            storage.get_task_documents.assert_called_once()
+
+    def test_comment_form_rejects_document_outside_task(self):
+        storage = MagicMock()
+        storage.list_task_documents.return_value = ()
+        storage.get_task_documents.side_effect = ValueError
+        with patch("tareas.forms.resolve_document_storage", return_value=storage):
+            form = ComentarioForm(data={"documentos": ["99"]}, tarea=self.task)
+            self.assertFalse(form.is_valid())
+            self.assertIn("documentos", form.errors)
+
     @contextmanager
     def open_mysql_connection(self, *args, **kwargs):
         yield self.connection
@@ -190,6 +213,105 @@ class MeetingBackendParityTests(TestCase):
             ),
         ):
             self.assertIsInstance(resolve_meeting_storage(), DjangoMeetingStorage)
+
+    def test_reunion_task_form_returns_backend_task(self):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ), patch(
+            "tareas.services.meeting_storage.resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ):
+            form = ReunionTareaForm(
+                {"tarea": str(self.task.pk), "orden": "1", "comentario_revision": ""},
+                empresa=self.company,
+            )
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertEqual(form.cleaned_data["tarea"].pk, self.task.pk)
+
+    def test_reunion_task_form_rejects_task_from_another_company(self):
+        other_company = Empresa.objects.create(codigo="M136", descripcion="Other company")
+        other_task = Tarea.objects.create(
+            titulo="Other company task",
+            correlativo="A1360001",
+            empresa=other_company,
+            creada_por=self.creator,
+            responsable=self.creator,
+            fecha_tope=date(2026, 10, 2),
+        )
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ):
+            form = ReunionTareaForm(
+                {"tarea": str(other_task.pk), "orden": "1", "comentario_revision": ""},
+                empresa=self.company,
+            )
+
+            self.assertFalse(form.is_valid())
+        self.assertIn("tarea", form.errors)
+
+    def test_reunion_task_form_rejects_invalid_task_id(self):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ):
+            form = ReunionTareaForm(
+                {"tarea": "999999", "orden": "1", "comentario_revision": ""},
+                empresa=self.company,
+            )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("tarea", form.errors)
+
+    def test_reunion_task_form_requires_task(self):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
+        ):
+            form = ReunionTareaForm(
+                {"orden": "1", "comentario_revision": ""},
+                empresa=self.company,
+            )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("tarea", form.errors)
+
+    def test_reunion_task_form_uses_mysql_storage_contract(self):
+        mysql_task = SimpleNamespace(
+            id=9001,
+            titulo="MySQL task",
+            estado=Tarea.Estado.ACTIVA,
+        )
+        mysql_entity = SimpleNamespace(pk=mysql_task.id, empresa_id=self.company.pk)
+        list_storage = SimpleNamespace(
+            list_tasks=lambda **kwargs: SimpleNamespace(items=(mysql_task,)),
+        )
+        meeting_storage_stub = SimpleNamespace(get_task=lambda task_id: mysql_entity)
+        with patch(
+            "tareas.services.task_storage.resolve_list_storage",
+            return_value=list_storage,
+        ), patch(
+            "tareas.services.meeting_storage.resolve_meeting_storage",
+            return_value=meeting_storage_stub,
+        ):
+            form = ReunionTareaForm(
+                {"tarea": str(mysql_task.id), "orden": "1", "comentario_revision": ""},
+                empresa=self.company,
+            )
+
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertEqual(form.cleaned_data["tarea"].pk, mysql_task.id)
 
     def test_django_list_and_detail_preserve_company_and_order(self):
         with patch.object(

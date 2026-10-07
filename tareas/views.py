@@ -118,7 +118,7 @@ from .services.documents import (
     create_document,
     register_closure_evidence,
 )
-from .services.notifications import emit_task_event, task_recipients
+from .services.notifications import emit_task_event
 from .services.participants import effective_participant_ids, is_effective_participant
 from .services.similarity import (
     confirm_similarity,
@@ -2171,29 +2171,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 form.add_error(None, error)
             return self._render(data, form)
         updated = storage.get_task_for_edit(task_id=data.id, empresa_id=data.empresa_id)
-        if isinstance(storage, DjangoTaskStorage):
-            task = Tarea.objects.using(storage.alias).get(
-                pk=updated.id,
-                empresa_id=updated.empresa_id,
-            )
-            relevant = {"fecha_tope", "prioridad"}.intersection(
-                form.changed_data
-            )
-            if relevant:
-                emit_task_event(
-                    tarea=task,
-                    event="cambio_relevante",
-                    recipients=task_recipients(
-                        task,
-                        actor=request.user,
-                        include_responsible=True,
-                        participant_roles=list(TareaParticipante.Rol),
-                    ),
-                    title="Cambio relevante en la tarea",
-                    body="Se actualizó información funcional de la tarea.",
-                    actor=request.user,
-                )
-        elif isinstance(storage, MySQLTaskStorage) and {"fecha_tope", "prioridad"}.intersection(form.changed_data):
+        if isinstance(storage, (DjangoTaskStorage, MySQLTaskStorage)) and {"fecha_tope", "prioridad"}.intersection(form.changed_data):
             detail = resolve_detail_storage().get_task_detail(
                 task_id=updated.id,
                 empresa_id=updated.empresa_id,
@@ -2203,6 +2181,14 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                     milestones=False,
                     documents=False,
                 ),
+            )
+            task = SimpleNamespace(
+                pk=updated.id,
+                empresa=self._empresa(),
+                prioridad=updated.prioridad,
+                responsable=User.objects.using("default").filter(
+                    pk=detail.core.responsable_id
+                ).first(),
             )
             recipient_ids = {
                 item.user_id
@@ -2216,9 +2202,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
                 .exclude(pk=request.user.pk)
             )
             emit_task_event(
-                tarea=SimpleNamespace(
-                    pk=updated.id, empresa=self._empresa(), prioridad=updated.prioridad,
-                ),
+                tarea=task,
                 event="cambio_relevante",
                 recipients=recipients,
                 title="Cambio relevante en la tarea",

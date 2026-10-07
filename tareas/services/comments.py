@@ -13,7 +13,6 @@ from access_control.services.permissions import user_has_permission_for_empresa
 from tareas.models import (
     Comentario,
     ComentarioVersion,
-    DocumentoTarea,
     Tarea,
 )
 from tareas.services.assignment import _validate_user_in_task_company
@@ -27,6 +26,7 @@ from tareas.services.comment_storage import (
     CommentVisibilityCommand,
     resolve_comment_storage,
 )
+from tareas.services.document_storage import DocumentReference
 
 
 _UNSET = object()
@@ -71,23 +71,30 @@ def _resolve_documents(*, tarea, usuario, documentos, documentos_nuevos):
     if len(existentes) + len(nuevos_specs) > 5:
         raise ValidationError("Un Comentario admite como máximo cinco adjuntos.")
     for documento in existentes:
-        if not isinstance(documento, DocumentoTarea) or not documento.pk:
+        if not getattr(documento, "pk", None) or not getattr(documento, "tarea_id", None):
             raise ValidationError("Cada adjunto debe ser un DocumentoTarea existente.")
         if documento.tarea_id != tarea.pk:
+            raise ValidationError("El documento no pertenece a la tarea.")
+        if getattr(documento, "empresa_id", tarea.empresa_id) != tarea.empresa_id:
             raise ValidationError("El documento no pertenece a la tarea.")
 
     nuevos = []
     for datos in nuevos_specs:
         if not isinstance(datos, dict):
             raise ValidationError("La definición del documento no es válida.")
-        nuevos.append(
-            create_document(
-                tarea=tarea,
-                usuario=usuario,
-                emit_notification=False,
-                **datos,
-            )
+        nuevo = create_document(
+            tarea=tarea,
+            usuario=usuario,
+            emit_notification=False,
+            **datos,
         )
+        if isinstance(nuevo, int):
+            nuevo = DocumentReference(
+                id=nuevo,
+                tarea_id=tarea.pk,
+                empresa_id=tarea.empresa_id,
+            )
+        nuevos.append(nuevo)
 
     documentos_finales = existentes + nuevos
     ids = [documento.pk for documento in documentos_finales]
@@ -207,7 +214,11 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
     contenido_final = comentario_actual.contenido if contenido is _UNSET else (contenido or "")
     documentos_actuales = list(storage.document_ids_for_comment(comentario_actual.pk))
     if documentos is _UNSET:
-        documentos_base = storage.documents(tarea_actual.pk, documentos_actuales)
+        documentos_base = storage.documents(
+            tarea_actual.pk,
+            documentos_actuales,
+            tarea_actual.empresa_id,
+        )
     else:
         documentos_base = list(documentos or [])
     documentos_finales = _resolve_documents(
