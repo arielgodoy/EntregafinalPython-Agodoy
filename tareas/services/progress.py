@@ -20,7 +20,7 @@ def _scope(tarea, actor):
 
 def _legacy_storage(tarea):
     storage = resolve_milestone_storage()
-    if not isinstance(storage, DjangoMilestoneStorage) or tarea._state.db != storage.alias:
+    if not isinstance(storage, DjangoMilestoneStorage):
         raise TaskStorageError("tareas.messages.generic_error")
     return storage
 
@@ -94,7 +94,7 @@ def create_milestone(tarea, nombre, cumplimiento=0, peso=1, responsable=None, ac
 def _mutate(hito, actor, command_type, **values):
     # Use IDs only; storage reloads persisted-before even if a ModelForm mutated hito.
     storage = resolve_milestone_storage()
-    if not isinstance(storage, DjangoMilestoneStorage) or hito._state.db != storage.alias:
+    if not isinstance(storage, DjangoMilestoneStorage):
         raise TaskStorageError("tareas.messages.generic_error")
     task = Tarea.objects.using(storage.alias).only("empresa_id").get(pk=hito.tarea_id)
     scope = _scope(task, actor)
