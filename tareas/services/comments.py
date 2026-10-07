@@ -7,15 +7,12 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
 from django.utils import timezone
 
 from access_control.services.permissions import user_has_permission_for_empresa
 from tareas.models import (
     Comentario,
-    ComentarioAdjunto,
     ComentarioVersion,
-    ComentarioVersionDocumento,
     DocumentoTarea,
     Tarea,
 )
@@ -104,39 +101,6 @@ def _ensure_content_or_documents(contenido, documentos):
         raise ValidationError("El Comentario requiere texto o al menos un adjunto.")
 
 
-def _replace_current_documents(comentario, documentos):
-    comentario.adjuntos.all().delete()
-    ComentarioAdjunto.objects.bulk_create(
-        [
-            ComentarioAdjunto(comentario=comentario, documento=documento)
-            for documento in documentos
-        ]
-    )
-
-
-def _create_version(*, comentario, evento, actor, contenido, motivo, documentos, numero):
-    version = ComentarioVersion.objects.create(
-        comentario=comentario,
-        evento=evento,
-        numero_version=numero,
-        contenido=contenido,
-        actor=actor,
-        motivo=motivo,
-    )
-    ComentarioVersionDocumento.objects.bulk_create(
-        [
-            ComentarioVersionDocumento(version=version, documento=documento)
-            for documento in documentos
-        ]
-    )
-    return version
-
-
-def _next_content_version(comentario):
-    current = comentario.versiones.aggregate(Max("numero_version"))["numero_version__max"]
-    return (current or 0) + 1
-
-
 def _schedule_comment_event(*, tarea, event, actor):
     if hasattr(tarea, "_state"):
         recipient_ids = effective_participant_ids(tarea)
@@ -148,7 +112,7 @@ def _schedule_comment_event(*, tarea, event, actor):
             ) if user_id is not None
         }
     recipients = list(
-        User.objects.filter(pk__in=recipient_ids, is_active=True).exclude(pk=actor.pk)
+        User.objects.using("default").filter(pk__in=recipient_ids, is_active=True).exclude(pk=actor.pk)
     )
     titles = {
         "comentario_agregado": "Nuevo comentario en la tarea",

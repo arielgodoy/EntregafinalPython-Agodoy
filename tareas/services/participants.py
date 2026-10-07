@@ -10,6 +10,7 @@ def _effective_ids(tarea):
         sections=TaskDetailSections(mini_tasks=True, milestones=True),
     )
     ids = set(detail.effective_user_ids)
+    ids.update(participant.user_id for participant in detail.participants)
     ids.update((detail.core.creada_por_id, detail.core.responsable_id))
     return {user_id for user_id in ids if user_id is not None}
 
