@@ -67,21 +67,24 @@ def task_recipients(
     if include_responsible:
         users.append(tarea.responsable)
 
-    from tareas.services.detail_storage import TaskDetailSections, resolve_detail_storage
-
     roles = set(participant_roles or [])
-    detail = resolve_detail_storage().get_task_detail(
-        task_id=tarea.pk,
-        empresa_id=tarea.empresa_id,
-        sections=TaskDetailSections(milestones=False, documents=False, links=False),
-    )
-    participant_ids = [
-        participant.user_id
-        for participant in detail.participants
-        if not roles or participant.rol in roles
-    ]
-    users_by_id = get_user_model().objects.using("default").in_bulk(participant_ids)
+    participant_ids = []
+    users_by_id = {}
     if participant_roles is not None:
+        from tareas.services.detail_storage import TaskDetailSections, resolve_detail_storage
+
+        empresa_id = getattr(tarea, "empresa_id", None) or tarea.empresa.pk
+        detail = resolve_detail_storage().get_task_detail(
+            task_id=tarea.pk,
+            empresa_id=empresa_id,
+            sections=TaskDetailSections(milestones=False, documents=False, links=False),
+        )
+        participant_ids = [
+            participant.user_id
+            for participant in detail.participants
+            if not roles or participant.rol in roles
+        ]
+        users_by_id = get_user_model().objects.using("default").in_bulk(participant_ids)
         users.extend(users_by_id[user_id] for user_id in participant_ids if user_id in users_by_id)
 
     recipients = {}
@@ -127,7 +130,6 @@ def emit_task_event(
         try:
             notify_task_event(
                 tarea=tarea,
-                destinatario=recipient,
                 titulo=title,
                 cuerpo=body,
                 actor=actor,
