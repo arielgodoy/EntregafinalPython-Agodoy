@@ -147,7 +147,7 @@ class CommentsReadingBackendParityTests(TestCase):
 
     def test_invalid_backend_fails_closed(self):
         with patch(
-            "tareas.services.comment_storage.get_tarea_connection",
+            "tareas.services.comment_storage.resolve_operational_backend",
             side_effect=RuntimeError("missing backend"),
         ):
             with self.assertRaises(RuntimeError):

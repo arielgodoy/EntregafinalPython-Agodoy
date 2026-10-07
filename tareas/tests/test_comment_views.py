@@ -12,6 +12,7 @@ from django.utils import timezone
 from tareas.models import Comentario, DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
 from tareas.services.assignment import add_participant
 from tareas.services.comments import create_comment, edit_comment, hide_comment, restore_comment
+from tareas.services.connection_roles import BackendContext
 from tareas.services.documents import create_document
 from tareas.tests.factories import (
     assign_permission,
@@ -114,19 +115,20 @@ class CommentsMysqlHttpGuardTests(TestCase):
             effective_user_ids=(self.usuario.pk,),
             participants=(),
         )
-        source = {"type": "MYSQL_CONFIG", "database_name": "configured_tasks"}
+        context = BackendContext(
+            logical_role="BASE_TAREAS",
+            backend_type="MYSQL_CONFIG",
+            mysql_connection=object(),
+            database_name="configured_tasks",
+        )
         return (
             patch(
                 "tareas.views.resolve_detail_storage",
                 return_value=SimpleNamespace(get_task_detail=lambda **kwargs: detail),
             ),
             patch(
-                "tareas.services.comment_storage.get_tarea_connection",
-                return_value=source,
-            ),
-            patch(
-                "tareas.services.comment_storage.get_tarea_mysql_connection",
-                return_value=object(),
+                "tareas.services.comment_storage.resolve_operational_backend",
+                return_value=context,
             ),
             patch(
                 "tareas.services.comment_storage.open_mysql_connection",
@@ -136,7 +138,7 @@ class CommentsMysqlHttpGuardTests(TestCase):
 
     def test_get_mysql_config_reaches_comment_storage_instead_of_legacy_guard(self):
         patches = self._mysql_frontier()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             response = self.client.get(
                 reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
                 HTTP_X_REQUESTED_WITH="XMLHttpRequest",
@@ -147,7 +149,7 @@ class CommentsMysqlHttpGuardTests(TestCase):
 
     def test_post_mysql_config_reaches_comment_storage_instead_of_legacy_guard(self):
         patches = self._mysql_frontier()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             response = self.client.post(
                 reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
                 {"contenido": "No debe persistir en esta prueba"},

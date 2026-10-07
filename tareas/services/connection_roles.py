@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.conf import settings
 from django.db import connections
 
@@ -31,6 +33,35 @@ class TareaConnectionInactiveError(TareaConnectionError):
 
 class TareaConnectionSourceError(TareaConnectionError):
     pass
+
+
+@dataclass(frozen=True)
+class BackendContext:
+    logical_role: str
+    backend_type: str
+    django_alias: str | None = None
+    mysql_connection: SettingsMySQLConnection | None = None
+    database_name: str | None = None
+    vendor: str | None = None
+
+    def as_legacy_mapping(self) -> dict[str, object]:
+        if self.backend_type == "DJANGO":
+            return {
+                "type": self.backend_type,
+                "alias": self.django_alias,
+                "vendor": self.vendor,
+                "classification": DatabaseClassification.SYSTEM.value,
+            }
+        connection = self.mysql_connection
+        return {
+            "type": self.backend_type,
+            "connection_id": connection.pk if connection is not None else None,
+            "empresa_id": connection.empresa_id if connection is not None else None,
+            "empresa_codigo": connection.empresa.codigo if connection is not None else None,
+            "nombre_logico": connection.nombre_logico if connection is not None else None,
+            "engine": connection.engine if connection is not None else None,
+            "database_name": self.database_name,
+        }
 
 
 def _database_vendor(alias: str, config: dict) -> str:
@@ -161,7 +192,7 @@ def get_tarea_connection_status() -> dict[str, object]:
     }
 
 
-def get_tarea_connection(role: str) -> dict[str, object]:
+def resolve_operational_backend(role: str) -> BackendContext:
     if role not in REQUIRED_CONNECTION_ROLES:
         raise TareaConnectionRoleNotFoundError(f"Rol de Tareas desconocido: {role!r}.")
 
@@ -185,12 +216,12 @@ def get_tarea_connection(role: str) -> dict[str, object]:
             raise TareaConnectionAliasUnavailableError(
                 f"El alias Django del rol {role!r} no está disponible como SYSTEM."
             )
-        return {
-            "type": "DJANGO",
-            "alias": metadata["alias"],
-            "vendor": metadata["vendor"],
-            "classification": metadata["classification"],
-        }
+        return BackendContext(
+            logical_role=role,
+            backend_type="DJANGO",
+            django_alias=metadata["alias"],
+            vendor=metadata["vendor"],
+        )
 
     if role_config.source_type != "MYSQL_CONFIG":
         raise TareaConnectionSourceError(
@@ -215,21 +246,22 @@ def get_tarea_connection(role: str) -> dict[str, object]:
         raise TareaConnectionSourceError(
             f"El rol {role!r} no tiene una base de datos válida configurada."
         )
-    return {
-        "type": "MYSQL_CONFIG",
-        "connection_id": connection.pk,
-        "empresa_id": connection.empresa_id,
-        "empresa_codigo": connection.empresa.codigo,
-        "nombre_logico": connection.nombre_logico,
-        "engine": connection.engine,
-        "database_name": database_name,
-    }
+    return BackendContext(
+        logical_role=role,
+        backend_type="MYSQL_CONFIG",
+        mysql_connection=connection,
+        database_name=database_name,
+    )
+
+
+def get_tarea_connection(role: str) -> dict[str, object]:
+    return resolve_operational_backend(role).as_legacy_mapping()
 
 
 def get_tarea_mysql_connection(role: str) -> SettingsMySQLConnection:
-    source = get_tarea_connection(role)
-    if source["type"] != "MYSQL_CONFIG":
+    context = resolve_operational_backend(role)
+    if context.backend_type != "MYSQL_CONFIG" or context.mysql_connection is None:
         raise TareaConnectionSourceError(
             f"El rol {role!r} no utiliza una conexión MYSQL_CONFIG."
         )
-    return SettingsMySQLConnection.objects.get(pk=source["connection_id"])
+    return context.mysql_connection

@@ -1,5 +1,6 @@
 from pathlib import Path
 import inspect
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -11,7 +12,13 @@ from access_control.models import Empresa, Permiso, Vista
 from settings.models import SettingsMySQLConnection
 from tareas.forms import TareaConnectionRoleForm
 from tareas.models import TareaConnectionRole
+from tareas.services.comment_storage import (
+    DjangoCommentStorage,
+    MySQLCommentStorage,
+    resolve_comment_storage,
+)
 from tareas.services.connection_roles import (
+    BackendContext,
     TASKS_CONNECTIONS_COMPANY_CODE,
     TareaConnectionAliasUnavailableError,
     TareaConnectionInactiveError,
@@ -19,6 +26,16 @@ from tareas.services.connection_roles import (
     TareaConnectionSourceError,
     get_active_mysql_connection_catalog,
     get_tarea_connection,
+    get_tarea_mysql_connection,
+    resolve_operational_backend,
+)
+from tareas.services.task_storage import (
+    DjangoTaskListStorage,
+    DjangoTaskStorage,
+    MySQLTaskListStorage,
+    MySQLTaskStorage,
+    resolve_create_storage,
+    resolve_list_storage,
 )
 
 
@@ -179,6 +196,102 @@ class TareaConnectionRoleResolverTests(TestCase):
 
     def test_resolver_scope_is_global_and_accepts_only_role(self):
         self.assertEqual(tuple(inspect.signature(get_tarea_connection).parameters), ("role",))
+
+    def test_backend_context_for_django_alias_is_explicit_and_immutable(self):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS",
+            source_type="DJANGO",
+            django_alias="default",
+        )
+        with patch(
+            "tareas.services.connection_roles.get_system_database_catalog",
+            return_value=({"alias": "default", "vendor": "sqlite", "classification": "SYSTEM"},),
+        ):
+            context = resolve_operational_backend("BASE_TAREAS")
+
+        self.assertIsInstance(context, BackendContext)
+        self.assertEqual(context.backend_type, "DJANGO")
+        self.assertEqual(context.django_alias, "default")
+        self.assertIsNone(context.mysql_connection)
+        with self.assertRaises(AttributeError):
+            context.django_alias = "default2"
+
+    def test_mysql_wrapper_uses_one_context_resolution(self):
+        TareaConnectionRole.objects.create(
+            role="LEGACY_MYSQL",
+            source_type="MYSQL_CONFIG",
+            mysql_connection=self.connection,
+        )
+        with patch(
+            "tareas.services.connection_roles.resolve_operational_backend",
+            wraps=resolve_operational_backend,
+        ) as resolver:
+            resolved = get_tarea_mysql_connection("LEGACY_MYSQL")
+
+        self.assertEqual(resolved.pk, self.connection.pk)
+        resolver.assert_called_once_with("LEGACY_MYSQL")
+
+    def test_invalid_source_fails_closed(self):
+        invalid_manager = SimpleNamespace(
+            select_related=lambda *args, **kwargs: SimpleNamespace(
+                get=lambda **lookup: SimpleNamespace(source_type="INVALID")
+            )
+        )
+        with patch("tareas.services.connection_roles.TareaConnectionRole.objects", invalid_manager):
+            with self.assertRaises(TareaConnectionSourceError):
+                resolve_operational_backend("BASE_TAREAS")
+
+
+class PilotStorageResolverTests(SimpleTestCase):
+    def setUp(self):
+        self.django_context = BackendContext(
+            logical_role="BASE_TAREAS",
+            backend_type="DJANGO",
+            django_alias="default",
+            vendor="sqlite",
+        )
+        self.mysql_context = BackendContext(
+            logical_role="BASE_TAREAS",
+            backend_type="MYSQL_CONFIG",
+            mysql_connection=object(),
+            database_name="tareas",
+        )
+
+    def test_task_resolvers_select_django_adapters(self):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=self.django_context,
+        ):
+            self.assertIsInstance(resolve_create_storage(), DjangoTaskStorage)
+            self.assertIsInstance(resolve_list_storage(), DjangoTaskListStorage)
+
+    def test_task_resolvers_select_mysql_adapters(self):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            return_value=self.mysql_context,
+        ):
+            self.assertIsInstance(resolve_create_storage(), MySQLTaskStorage)
+            self.assertIsInstance(resolve_list_storage(), MySQLTaskListStorage)
+
+    def test_comment_resolver_selects_django_adapter(self):
+        with patch(
+            "tareas.services.comment_storage.resolve_operational_backend",
+            return_value=self.django_context,
+        ):
+            storage = resolve_comment_storage()
+
+        self.assertIsInstance(storage, DjangoCommentStorage)
+        self.assertEqual(storage.alias, "default")
+
+    def test_comment_resolver_selects_mysql_adapter(self):
+        with patch(
+            "tareas.services.comment_storage.resolve_operational_backend",
+            return_value=self.mysql_context,
+        ):
+            storage = resolve_comment_storage()
+
+        self.assertIsInstance(storage, MySQLCommentStorage)
+        self.assertEqual(storage.database_name, "tareas")
 
 
 class TareaConnectionRoleFormTests(TestCase):

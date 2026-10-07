@@ -20,7 +20,7 @@ from tareas.models import (
     Tarea,
     TareaLectura,
 )
-from tareas.services.connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from tareas.services.connection_roles import resolve_operational_backend
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
 
@@ -867,11 +867,11 @@ class MySQLCommentStorage:
 
 
 def resolve_comment_storage():
-    source = get_tarea_connection("BASE_TAREAS")
-    if source["type"] == "DJANGO":
-        return DjangoCommentStorage(source["alias"])
-    if source["type"] == "MYSQL_CONFIG":
+    context = resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type == "DJANGO":
+        return DjangoCommentStorage(context.django_alias)
+    if context.backend_type == "MYSQL_CONFIG":
         return MySQLCommentStorage(
-            get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"],
+            context.mysql_connection, context.database_name,
         )
     raise TaskStorageError("El backend de BASE_TAREAS no es válido.")

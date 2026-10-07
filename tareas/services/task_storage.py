@@ -20,7 +20,7 @@ from access_control.services.permissions import get_valid_users_for_empresa
 from .connection_roles import (
     TareaConnectionError,
     get_tarea_connection,
-    get_tarea_mysql_connection,
+    resolve_operational_backend,
 )
 from ..models import Empresa, Tarea, TareaTransicion
 from .notifications import emit_task_event, task_recipients
@@ -1159,13 +1159,13 @@ MySQLTaskStorage.enter_management = _mysql_enter_management
 
 def resolve_edit_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            return DjangoTaskStorage(source["alias"])
-        if source["type"] == "MYSQL_CONFIG":
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            return DjangoTaskStorage(context.django_alias)
+        if context.backend_type == "MYSQL_CONFIG":
             return MySQLTaskStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"),
-                source["database_name"],
+                context.mysql_connection,
+                context.database_name,
             )
         raise TaskStorageError("tareas.assignment.errors.backend")
     except Exception as exc:
@@ -1175,46 +1175,30 @@ def resolve_edit_storage():
 
 def resolve_create_storage() -> DjangoTaskStorage | MySQLTaskStorage:
     try:
-        source = get_tarea_connection("BASE_TAREAS")
+        context = resolve_operational_backend("BASE_TAREAS")
     except TareaConnectionError as exc:
         raise TaskStorageError(
             "No se pudo resolver el backend de BASE_TAREAS."
         ) from exc
-    if source["type"] == "MYSQL_CONFIG":
-        try:
-            return MySQLTaskStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"),
-                source["database_name"],
-            )
-        except TareaConnectionError as exc:
-            raise TaskStorageError(
-                "No se pudo resolver la conexión MYSQL de BASE_TAREAS."
-            ) from exc
-    if source["type"] != "DJANGO":
+    if context.backend_type == "MYSQL_CONFIG":
+        return MySQLTaskStorage(context.mysql_connection, context.database_name)
+    if context.backend_type != "DJANGO":
         raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
-    return DjangoTaskStorage(source["alias"])
+    return DjangoTaskStorage(context.django_alias)
 
 
 def resolve_list_storage() -> DjangoTaskListStorage | MySQLTaskListStorage:
     try:
-        source = get_tarea_connection("BASE_TAREAS")
+        context = resolve_operational_backend("BASE_TAREAS")
     except TareaConnectionError as exc:
         raise TaskStorageError(
             "No se pudo resolver el backend de BASE_TAREAS."
         ) from exc
-    if source["type"] == "MYSQL_CONFIG":
-        try:
-            return MySQLTaskListStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"),
-                source["database_name"],
-            )
-        except TareaConnectionError as exc:
-            raise TaskStorageError(
-                "No se pudo resolver la conexión MYSQL de BASE_TAREAS."
-            ) from exc
-    if source["type"] != "DJANGO":
+    if context.backend_type == "MYSQL_CONFIG":
+        return MySQLTaskListStorage(context.mysql_connection, context.database_name)
+    if context.backend_type != "DJANGO":
         raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
-    return DjangoTaskListStorage(source["alias"])
+    return DjangoTaskListStorage(context.django_alias)
 
 
 def create_task_draft(
