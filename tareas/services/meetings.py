@@ -202,10 +202,14 @@ def remove_meeting_participant(*, reunion, usuario):
     return storage.remove_participant(reunion.pk, usuario.pk)
 
 
-@transaction.atomic
 def convene_meeting(reunion, *, actor=None):
-    original_reunion = reunion
     storage = resolve_meeting_storage()
+    with transaction.atomic(using=storage.alias):
+        return _convene_meeting(reunion, actor=actor, storage=storage)
+
+
+def _convene_meeting(reunion, *, actor=None, storage):
+    original_reunion = reunion
     reunion = storage.get_meeting(reunion.pk)
     if reunion.convocada_at is not None:
         raise ValidationError("La reunión ya fue convocada.")

@@ -2,7 +2,6 @@
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
@@ -64,7 +63,6 @@ def get_previous_comment_page(*, tarea, usuario, before_comment):
     )
 
 
-@transaction.atomic
 def recognize_loaded_comments(*, tarea, usuario, comentario_ids):
     _validate_user_in_task_company(tarea, usuario)
     loaded_ids = list(comentario_ids)
@@ -77,14 +75,12 @@ def recognize_loaded_comments(*, tarea, usuario, comentario_ids):
     ))
 
 
-@transaction.atomic
 def open_inactivity_pause(*, lectura, at=None):
     return resolve_comment_storage().open_pause(ReadingCommand(
         lectura.tarea_id, lectura.tarea.empresa_id, lectura.usuario_id, at,
     ))
 
 
-@transaction.atomic
 def close_inactivity_pause(*, lectura, at=None):
     return resolve_comment_storage().close_pause(ReadingCommand(
         lectura.tarea_id, lectura.tarea.empresa_id, lectura.usuario_id, at,

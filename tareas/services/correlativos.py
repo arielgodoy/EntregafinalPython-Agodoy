@@ -31,25 +31,27 @@ def reserve_next_number(empresa_id, *, using=None):
         return number
 
 
-def reserve_next_todo_number(empresa_id):
+def reserve_next_todo_number(empresa_id, *, using=None):
     """Reserve a TD number without sharing the Tarea sequence."""
-    with transaction.atomic():
+    manager = CorrelativoTodoEmpresa.objects.using(using) if using else CorrelativoTodoEmpresa.objects
+    atomic_kwargs = {"using": using} if using else {}
+    with transaction.atomic(**atomic_kwargs):
         try:
-            sequence = CorrelativoTodoEmpresa.objects.select_for_update().get(
+            sequence = manager.select_for_update().get(
                 empresa_id=empresa_id
             )
         except CorrelativoTodoEmpresa.DoesNotExist:
             try:
-                with transaction.atomic():
-                    sequence = CorrelativoTodoEmpresa.objects.create(
+                with transaction.atomic(**atomic_kwargs):
+                    sequence = manager.create(
                         empresa_id=empresa_id,
                         siguiente_numero=1,
                     )
             except IntegrityError:
-                sequence = CorrelativoTodoEmpresa.objects.select_for_update().get(
+                sequence = manager.select_for_update().get(
                     empresa_id=empresa_id
                 )
         number = sequence.siguiente_numero
         sequence.siguiente_numero = number + 1
-        sequence.save(update_fields=["siguiente_numero"])
+        sequence.save(using=using, update_fields=["siguiente_numero"])
         return number

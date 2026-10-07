@@ -1143,8 +1143,9 @@ class Todo(models.Model):
                 raise ValidationError("Un TO-DO requiere empresa para reservar correlativo.")
             from .services.correlativos import reserve_next_todo_number
 
-            with transaction.atomic(using=kwargs.get("using")):
-                self.correlativo = f"TD{reserve_next_todo_number(self.empresa_id):07d}"
+            using = kwargs.get("using")
+            with transaction.atomic(using=using):
+                self.correlativo = f"TD{reserve_next_todo_number(self.empresa_id, using=using):07d}"
                 return super().save(*args, **kwargs)
         return super().save(*args, **kwargs)
 
