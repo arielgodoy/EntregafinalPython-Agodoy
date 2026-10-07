@@ -70,6 +70,19 @@ These blocks are not pending and must not be reinterpreted.
 - `CLEANUP = PASS`
 - `EVENT_PATH = PASS` (no `TaskDTO.prioridad` error observed)
 
+### T135C-FIX6 Comments MySQL Participant Parity Checkpoint
+
+- `STATUS = CLOSED`
+- `SCOPE = Explicit participant parity in MySQLCommentStorage.task`
+- `HISTORICAL_EFFECTIVE_PARTICIPANT_RULE = creator + responsible + explicit participants`
+- `MYSQL_EXPLICIT_PARTICIPANT_PARITY = PASS`
+- `TASK6_USER1_HTTP_CREATE = PASS` (`200`, JSON `success=true`)
+- `TASK6_HTTP_LOAD = PASS` (`200`, JSON `success=true`, temporary comment returned)
+- `NON_PARTICIPANT_FAIL_CLOSED = PASS`
+- `TASK_DTO_PRIORIDAD_PARITY = PASS`
+- `EVENT_PATH = PASS`
+- `CLEANUP = PASS`
+
 ## Pending Inventory
 
 ### T135-R001

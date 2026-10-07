@@ -1,5 +1,6 @@
 from datetime import date
 from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -22,8 +23,10 @@ from tareas.services.comment_storage import (
     RecognizeCommentsCommand,
     ReadingCommand,
     resolve_comment_storage,
+    TaskDTO,
 )
 from tareas.services.comments import create_comment
+from tareas.services.participants import is_effective_participant
 from tareas.services.task_storage import TaskStorageError
 
 
@@ -160,6 +163,9 @@ class CommentsReadingBackendParityTests(TestCase):
             def fetchone(self):
                 return (7, self.default_empresa_id, "GESTION", "URGENTE", 0, 11, 12)
 
+            def fetchall(self):
+                return [(13,)]
+
             def close(self):
                 pass
 
@@ -179,6 +185,63 @@ class CommentsReadingBackendParityTests(TestCase):
             task = storage.task(7, self.default_empresa.pk)
 
         self.assertEqual(task.prioridad, "URGENTE")
+        self.assertEqual(task._tareas_effective_user_ids, {11, 12, 13})
+
+    def test_mysql_task_dto_participant_parity_is_fail_closed(self):
+        task = TaskDTO(
+            id=7,
+            empresa_id=self.default_empresa.pk,
+            estado="GESTION",
+            prioridad="NORMAL",
+            anulada=False,
+            creador_id=11,
+            responsable_id=12,
+            empresa=self.default_empresa,
+            explicit_participant_ids=(13,),
+        )
+
+        self.assertTrue(is_effective_participant(task, SimpleNamespace(pk=11)))
+        self.assertTrue(is_effective_participant(task, SimpleNamespace(pk=12)))
+        self.assertTrue(is_effective_participant(task, SimpleNamespace(pk=13)))
+        self.assertFalse(is_effective_participant(task, SimpleNamespace(pk=14)))
+
+    def test_mysql_comment_service_allows_explicit_participant_only(self):
+        participant = self.default_user
+        non_participant = User.objects.create_user("comment-parity-outsider")
+        task = TaskDTO(
+            id=7,
+            empresa_id=self.default_empresa.pk,
+            estado="GESTION",
+            prioridad="NORMAL",
+            anulada=False,
+            creador_id=11,
+            responsable_id=12,
+            empresa=self.default_empresa,
+            explicit_participant_ids=(participant.pk,),
+        )
+        storage = type("Storage", (), {
+            "task": lambda _self, task_id, empresa_id: task,
+            "create": lambda _self, command, **kwargs: SimpleNamespace(
+                contenido=command.content,
+            ),
+        })()
+        with patch("tareas.services.comments.resolve_comment_storage", return_value=storage), \
+             patch("tareas.services.comments.is_effectively_annulled", return_value=False), \
+             patch("tareas.services.comments.user_has_permission_for_empresa", return_value=True), \
+             patch("tareas.services.comments._schedule_comment_event"):
+            created = create_comment(
+                tarea=task,
+                usuario=participant,
+                contenido="Participante explícito",
+            )
+            with self.assertRaises(ValidationError):
+                create_comment(
+                    tarea=task,
+                    usuario=non_participant,
+                    contenido="No permitido",
+                )
+
+        self.assertEqual(created.contenido, "Participante explícito")
 
     def test_notification_is_after_storage_commit(self):
         events = []

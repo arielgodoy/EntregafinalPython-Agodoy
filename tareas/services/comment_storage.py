@@ -191,6 +191,7 @@ class TaskDTO:
     creador_id: int | None
     responsable_id: int | None
     empresa: object
+    explicit_participant_ids: tuple = ()
 
     @property
     def pk(self):
@@ -198,16 +199,28 @@ class TaskDTO:
 
     @property
     def _tareas_effective_user_ids(self):
-        return {
+        ids = {
             user_id for user_id in (self.creador_id, self.responsable_id)
             if user_id is not None
         }
+        ids.update(self.explicit_participant_ids)
+        return ids
 
 
-def _task_dto(row):
+def _task_dto(row, explicit_participant_ids=()):
     task_id, empresa_id, state, priority, annulled, creator_id, responsible_id = row
     empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
-    return TaskDTO(task_id, empresa_id, state, priority, bool(annulled), creator_id, responsible_id, empresa)
+    return TaskDTO(
+        task_id,
+        empresa_id,
+        state,
+        priority,
+        bool(annulled),
+        creator_id,
+        responsible_id,
+        empresa,
+        tuple(explicit_participant_ids),
+    )
 
 
 def _comment_dto(row, versions=(), attachments=()):
@@ -470,13 +483,23 @@ class MySQLCommentStorage:
                         (task_id, empresa_id),
                     )
                     row = cursor.fetchone()
+                    participant_ids = self._participant_ids(cursor, task_id)
                 finally:
                     cursor.close()
         except Exception as exc:
             raise TaskStorageError("No se pudo resolver la Tarea en BASE_TAREAS.") from exc
         if row is None:
             raise EditTaskNotFound
-        return _task_dto(row)
+        return _task_dto(row, participant_ids)
+
+    @staticmethod
+    def _participant_ids(cursor, task_id):
+        cursor.execute(
+            "SELECT usuario_id FROM tareas_tareaparticipante "
+            "WHERE tarea_id=%s ORDER BY usuario_id",
+            (task_id,),
+        )
+        return tuple(row[0] for row in cursor.fetchall())
 
     def _execute(self, operation):
         try:
@@ -506,7 +529,7 @@ class MySQLCommentStorage:
         row = cursor.fetchone()
         if row is None:
             raise EditTaskNotFound
-        return _task_dto(row)
+        return _task_dto(row, self._participant_ids(cursor, task_id))
 
     def document_ids_for_comment(self, comment_id):
         def operation(cursor):
