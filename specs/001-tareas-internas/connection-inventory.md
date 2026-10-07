@@ -27,6 +27,108 @@
 Six access sites are not six residues. The six sites are grouped into four
 semantic connection transformations.
 
+## T135 Private Boundary Contract — Phase A
+
+### Architectural Requirement
+
+- `ALL_OPERATIONAL_ACCESS_BEHIND_PRIVATE_BOUNDARY = REQUIRED`
+- `CONFIG_ONLY_BACKEND_CHANGE = REQUIRED`
+- `DIRECT_OPERATIONAL_DATABASE_DEPENDENCY = FORBIDDEN`
+- `OBSERVABLE_BEHAVIOR_FROZEN = YES`
+- `INTERNAL_ORM_REPLACEABLE = YES`
+
+The frozen contract is the observable behavior: public inputs, results,
+identity, filters, ordering, company/user scopes, permissions, validation,
+states, observable errors, transactions, side effects, HTTP, templates, UX,
+and business rules.
+
+QuerySets, lazy evaluation, `.objects`, `.using()`, `select_related`,
+`prefetch_related`, related managers, `Q`, `Subquery`, `OuterRef`, `annotate`,
+`values`, `values_list`, `get_object_or_404`, `.filter().first()`, and ORM
+chaining are implementation mechanisms, not functional contracts by
+themselves.
+
+### Revised Transformation Rule
+
+> Una transformación de conexión puede adaptar consumidores internos,
+> reemplazar QuerySets por resultados backend-neutral y sustituir operaciones
+> ORM por primitives/adapters equivalentes, siempre que preserve exactamente
+> el comportamiento funcional observable.
+
+No se permite conservar un acceso operacional directo únicamente porque
+históricamente utilizaba Django ORM. Si una construcción ORM impide operar
+sobre otro backend, debe encapsularse o reemplazarse detrás de la frontera
+privada; no debe declararse funcionalidad inmutable salvo evidencia contractual.
+
+### Private Boundary Responsibilities
+
+- `PRIVATE_CONNECTION_RESOLVER`: resuelve rol lógico, backend,
+	alias/configuración, database name, capacidades, fail-closed y ausencia de
+	fallback. No contiene negocio.
+- `STORAGE_ADAPTER`: ejecuta primitives equivalentes, usando ORM encapsulado
+	para `DJANGO_ALIAS` y SQL parametrizado/DTOs para `MYSQL_CONFIG`, incluyendo
+	relaciones operacionales y transacciones del backend.
+- `BUSINESS_SERVICE`: conserva reglas, permisos, estados, filtros funcionales,
+	fórmulas KPI, validaciones y side effects. No conoce ubicación física.
+- `VIEW`: conserva HTTP, sesión, autorización, templates y UX; consume
+	servicios/primitives backend-independent y no decide ubicación física.
+
+Interfaces comunes deben expresar operaciones funcionales como
+`get_task`, `find_task`, `list_tasks`, `exists_task`, `list_personal_tasks`,
+`latest_movements`, `list_comments` y `create_comment`, no
+`get_queryset_for_*`.
+
+### Backend and DTO Rules
+
+- `DJANGO_ALIAS` puede implementar primitives con ORM, QuerySets y subqueries
+	dentro de su adapter.
+- `MYSQL_CONFIG` debe implementar las mismas primitives con SQL parametrizado,
+	DTOs backend-neutral, relaciones completas y transacciones equivalentes.
+- Un DTO debe materializar todos los atributos, relaciones, colecciones, roles
+	e identidades externas que observe su consumidor, incluidos eventos y
+	notificaciones.
+- La paridad debe cubrir creador, responsable, participante explícito y no
+	participante cuando la operación dependa de roles.
+- Los guards deben basarse en capacidades reales de la frontera, nunca en el
+	supuesto histórico de que una operación es Django-only.
+
+### Data, Transactions and Fail-Closed
+
+Los datos operacionales de Tareas atraviesan la frontera privada. `User`,
+`Empresa`, `Permiso`, `Vista`, `Proveedor` y demás referencias canónicas
+externas pueden conservarse por ID y resolverse mediante servicios públicos;
+no se requieren joins físicos cross-database ni copias de SYSTEM/CORE.
+
+- `DJANGO_ALIAS_TRANSACTION = transaction.atomic(using=resolved_alias)`
+- `MYSQL_CONFIG_TRANSACTION = transacción explícita sobre la conexión resuelta`
+- `CROSS_BACKEND_OPERATIONAL_TRANSACTION = FORBIDDEN`
+- `IMPLICIT_DEFAULT = FORBIDDEN`
+- `SILENT_FALLBACK = FORBIDDEN`
+- `_state.db` como routing = `FORBIDDEN`
+
+Si el rol, conexión o backend requerido no puede resolverse, la operación
+debe fallar cerrada.
+
+`DATABASE_ROUTERS` de Django por sí solos no constituyen esta frontera porque
+`MYSQL_CONFIG` puede no ser un alias Django. Un router Django futuro puede
+complementar aliases/model routing, pero debe convivir con el resolver privado.
+
+### Future Server and Migration Plan
+
+Tareas debe poder cambiar a una base/servidor dedicado mediante configuración
+y despliegue de su schema operacional, sin reescribir reglas funcionales.
+
+- `PHASE_A`: formalizar este contrato backend-independent.
+- `PHASE_B`: consolidar la frontera/resolver privado.
+- `PHASE_C`: reabrir y migrar R001/R003/R004.
+- `PHASE_D`: ejecutar Full Tareas Connection Integrity Gate.
+- `PHASE_E`: corregir residuos encontrados.
+- `PHASE_F`: certificar Tareas backend-independent.
+- `PHASE_G`: extraer contrato reusable para APPLICATION_APPS.
+- `PHASE_H`: aplicar posteriormente a gestiondte y demás apps.
+
+No se implementa ninguna fase posterior en este checkpoint.
+
 ## Closed History
 
 | Block | Commit | Status |
@@ -98,6 +200,9 @@ These blocks are not pending and must not be reinterpreted.
 - `COMPLEXITY = EXTENDED`
 - `BLOCKED_AT_COMMIT = 17eb1852e3c7000881c9d728923d876140532b62`
 - `BLOCKER = Historical consumers require a real lazy Django QuerySet while the MYSQL_CONFIG task frontier exposes backend-neutral TaskListResult.`
+- `CLASSIFICATION = LEGACY_ORM_COUPLING`
+- `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
+- `REOPEN_IN_PHASE_C = YES`
 - `CONNECTION_ONLY_TRANSFORMATION_FEASIBLE = NO`
 - `FUNCTIONAL_CONTRACT_FROZEN = YES`
 - `REVISIT = Post-Tareas connection architecture/private-router contract design.`
@@ -128,6 +233,9 @@ These blocks are not pending and must not be reinterpreted.
 - `EXPECTED_FRONTIER = Backend-aware dashboard source`
 - `COMPLEXITY = EXTENDED`
 - `BLOCKER = _personal_task_queryset combina Tarea y participación mediante ORM Django; no existe actualmente una frontera backend-neutral suficiente para MYSQL_CONFIG y preservarla requiere adaptar la composición KPI/dashboard, fuera del alcance de transformación mecánica de conexiones T135.`
+- `CLASSIFICATION = LEGACY_ORM_COUPLING`
+- `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
+- `REOPEN_IN_PHASE_C = YES`
 
 ### T135-R004
 
@@ -141,6 +249,9 @@ These blocks are not pending and must not be reinterpreted.
 - `EXPECTED_FRONTIER = Backend-aware movement queries`
 - `COMPLEXITY = EXTENDED`
 - `BLOCKER = _movement_queryset depende de un Django QuerySet lazy con Subquery/OuterRef sobre transiciones e historial documental. MYSQL_CONFIG no dispone actualmente de una frontera backend-neutral que preserve ese contrato sin adaptar la composición KPI/dashboard.`
+- `CLASSIFICATION = LEGACY_ORM_COUPLING`
+- `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
+- `REOPEN_IN_PHASE_C = YES`
 
 ## Accounting Rule
 
