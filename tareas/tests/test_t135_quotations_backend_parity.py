@@ -12,6 +12,7 @@ from django.test import TestCase
 from proveedores.models import Proveedor
 from tareas.models import Cotizacion, RondaCotizacion, Tarea, TareaConnectionRole
 from tareas.services import quotation_storage
+from tareas.services.connection_roles import BackendContext
 from tareas.services.quotation_storage import (
     DjangoQuotationStorage,
     MySQLQuotationStorage,
@@ -134,19 +135,17 @@ class QuotationBackendParityTests(TestCase):
 
     @contextmanager
     def configured_mysql(self):
-        source = {"type": "MYSQL_CONFIG", "database_name": "quotation_test"}
-        with patch.object(quotation_storage, "get_tarea_connection", return_value=source):
-            with patch.object(
-                quotation_storage,
-                "get_tarea_mysql_connection",
-                return_value=object(),
-            ):
-                yield
+        context = BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=object(), database_name="quotation_test",
+        )
+        with patch.object(quotation_storage, "resolve_operational_backend", return_value=context):
+            yield
 
     def test_resolver_selects_configured_django_alias(self):
-        with patch.object(quotation_storage, "get_tarea_connection", return_value={
-            "type": "DJANGO", "alias": "default",
-        }):
+        with patch.object(quotation_storage, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+        )):
             self.assertIsInstance(quotation_storage.resolve_quotation_storage(), DjangoQuotationStorage)
 
     def test_mysql_round_quotation_status_and_document_operations(self):
@@ -264,7 +263,7 @@ class QuotationBackendParityTests(TestCase):
             quotation_storage.TareaConnectionError("not configured"),
             RuntimeError("invalid configuration"),
         ):
-            with patch.object(quotation_storage, "get_tarea_connection", side_effect=error):
+            with patch.object(quotation_storage, "resolve_operational_backend", side_effect=error):
                 with patch.object(
                     Tarea.objects,
                     "using",

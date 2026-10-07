@@ -167,7 +167,7 @@ class MySQLSharedLinkStorageTests(TestCase):
 class SharedLinkStorageResolutionTests(TestCase):
     def test_missing_base_tareas_role_fails_closed(self):
         with patch(
-            "tareas.services.shared_link_storage.get_tarea_connection",
+            "tareas.services.shared_link_storage.resolve_operational_backend",
             side_effect=TareaConnectionError("missing role"),
         ):
             with self.assertRaises(TareaConnectionError):
@@ -175,8 +175,8 @@ class SharedLinkStorageResolutionTests(TestCase):
 
     def test_invalid_backend_fails_closed(self):
         with patch(
-            "tareas.services.shared_link_storage.get_tarea_connection",
-            return_value={"type": "UNKNOWN"},
+            "tareas.services.shared_link_storage.resolve_operational_backend",
+            return_value=type("Context", (), {"backend_type": "UNKNOWN"})(),
         ):
             with self.assertRaises(storage.TaskStorageError):
                 storage.resolve_shared_link_storage()

@@ -10,6 +10,7 @@ from django.test import TestCase
 from access_control.models import Empresa
 from tareas.models import EvaluacionSimilitud, Tarea, TareaConnectionRole
 from tareas.services import similarity_storage
+from tareas.services.connection_roles import BackendContext
 from tareas.services.similarity import (
     confirm_similarity,
     evaluate_task_similarity,
@@ -166,20 +167,20 @@ class SimilarityBackendParityTests(TestCase):
 
     @contextmanager
     def configured_mysql(self):
-        source = {"type": "MYSQL_CONFIG", "database_name": "similarity_test"}
-        with patch.object(similarity_storage, "get_tarea_connection", return_value=source):
-            with patch.object(
-                similarity_storage,
-                "get_tarea_mysql_connection",
-                return_value=object(),
-            ):
-                yield
+        context = BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=object(), database_name="similarity_test",
+        )
+        with patch.object(similarity_storage, "resolve_operational_backend", return_value=context):
+            yield
 
     def test_resolver_uses_configured_django_alias(self):
         with patch.object(
             similarity_storage,
-            "get_tarea_connection",
-            return_value={"type": "DJANGO", "alias": "default"},
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
         ):
             self.assertIsInstance(resolve_similarity_storage(), DjangoSimilarityStorage)
 
@@ -264,7 +265,7 @@ class SimilarityBackendParityTests(TestCase):
     def test_missing_role_fails_closed_without_using_default_storage(self):
         with patch.object(
             similarity_storage,
-            "get_tarea_connection",
+            "resolve_operational_backend",
             side_effect=TareaConnectionRoleNotFoundError("missing"),
         ):
             with self.assertRaises(SimilarityStorageError):

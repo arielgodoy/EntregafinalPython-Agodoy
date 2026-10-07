@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import resolve_operational_backend
 from .lifecycle import annul_task, reactivate_task
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError
@@ -205,12 +205,12 @@ class MySQLHierarchyLifecycleStorage:
 
 
 def resolve_hierarchy_lifecycle_storage():
-    source = get_tarea_connection("BASE_TAREAS")
-    if source["type"] == "DJANGO":
-        return DjangoHierarchyLifecycleStorage(source["alias"])
-    if source["type"] == "MYSQL_CONFIG":
+    context = resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type == "DJANGO":
+        return DjangoHierarchyLifecycleStorage(context.django_alias)
+    if context.backend_type == "MYSQL_CONFIG":
         return MySQLHierarchyLifecycleStorage(
-            get_tarea_mysql_connection("BASE_TAREAS"),
-            source["database_name"],
+            context.mysql_connection,
+            context.database_name,
         )
     raise TaskStorageError("El backend de BASE_TAREAS no es válido.")

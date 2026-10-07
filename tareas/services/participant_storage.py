@@ -20,7 +20,7 @@ from access_control.services.permissions import (
 from settings.services.mysql_connections import open_mysql_connection
 
 from ..models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion, TareaRelacion
-from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import resolve_operational_backend
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError, UpdateTaskCommand
 
@@ -568,12 +568,12 @@ class _MySQLMutation:
 
 def resolve_participant_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            return DjangoParticipantStorage(source["alias"])
-        if source["type"] == "MYSQL_CONFIG":
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            return DjangoParticipantStorage(context.django_alias)
+        if context.backend_type == "MYSQL_CONFIG":
             return MySQLParticipantStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"]
+                context.mysql_connection, context.database_name
             )
     except Exception:
         logger.error("Participant backend resolution failed")

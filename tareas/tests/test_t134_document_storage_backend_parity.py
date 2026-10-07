@@ -81,7 +81,7 @@ class DocumentStorageBackendParityTests(TestCase):
         self.assertIn("empresa_id=%s", cursor.execute.call_args_list[0].args[0])
         connection.commit.assert_called_once()
 
-    @patch("tareas.services.document_storage.get_tarea_connection", side_effect=TareaConnectionError("missing role"))
+    @patch("tareas.services.document_storage.resolve_operational_backend", side_effect=TareaConnectionError("missing role"))
     def test_missing_role_fails_closed(self, _resolver):
         with self.assertRaises(TaskStorageError):
             resolve_document_storage()

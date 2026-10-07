@@ -11,7 +11,7 @@ from django.utils import timezone
 from access_control.services.permissions import get_valid_users_for_empresa
 from django.contrib.auth.models import User
 
-from .connection_roles import TareaConnectionError, get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .image_processing import optimize_uploaded_image
 from .task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
@@ -369,15 +369,15 @@ class MySQLDocumentStorage:
 
 def resolve_document_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
+        context = resolve_operational_backend("BASE_TAREAS")
     except TareaConnectionError as exc:
         raise TaskStorageError("No se pudo resolver BASE_TAREAS para Documentos/Evidencia.") from exc
-    if source["type"] == "DJANGO":
-        return DjangoDocumentStorage(source["alias"])
-    if source["type"] == "MYSQL_CONFIG":
+    if context.backend_type == "DJANGO":
+        return DjangoDocumentStorage(context.django_alias)
+    if context.backend_type == "MYSQL_CONFIG":
         return MySQLDocumentStorage(
-            get_tarea_mysql_connection("BASE_TAREAS"),
-            source["database_name"],
+            context.mysql_connection,
+            context.database_name,
         )
     raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
 

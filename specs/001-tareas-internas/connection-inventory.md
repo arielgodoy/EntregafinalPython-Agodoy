@@ -129,6 +129,28 @@ y despliegue de su schema operacional, sin reescribir reglas funcionales.
 
 No se implementa ninguna fase posterior en este checkpoint.
 
+### T135 Private Boundary — Phase B2 Resolver Adoption
+
+- `B2_PRIVATE_RESOLVER_ADOPTION = COMPLETE`
+- `ALL_STORAGE_RESOLVERS_USE_PRIVATE_ENTRYPOINT = YES`
+- `UNEXPECTED_RESOLVER_RESIDUE = 0`
+- `DJANGO_ALIAS_RESOLUTION = PASS`
+- `MYSQL_CONFIG_RESOLUTION = PASS`
+- `NO_IMPLICIT_DEFAULT_INTRODUCED = YES`
+- `NO_SILENT_FALLBACK_INTRODUCED = YES`
+- `FAIL_CLOSED = YES`
+- `EXISTING_ADAPTERS_CONTINUE_WORKING = YES`
+- `FUNCTIONAL_LOGIC_CHANGED = NO`
+- `DTO_CHANGED = NO`
+- `SCHEMA_CHANGED = NO`
+- `SYSTEM_CORE_CHANGED = NO`
+
+All storage resolver families now consume the private operational entrypoint.
+Remaining `get_tarea_connection`/`get_tarea_mysql_connection` references are
+limited to compatibility wrapper implementation, the explicit legacy task
+guard, and technical schema/reference-data helpers. R001, R003, and R004 are
+unchanged and remain `BLOCKED / REOPEN_PHASE_C`.
+
 ## Closed History
 
 | Block | Commit | Status |

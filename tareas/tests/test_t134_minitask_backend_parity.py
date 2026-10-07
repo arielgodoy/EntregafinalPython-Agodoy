@@ -21,6 +21,7 @@ from tareas.models import (
     TareaParticipante, TareaRelacion,
 )
 from tareas.services import minitask_storage as storage
+from tareas.services.connection_roles import BackendContext
 from tareas.services.closure import validate_closure_requirements
 from tareas.services.task_storage import TaskStorageError
 from tareas.tests.factories import activate_company, assign_permission
@@ -586,7 +587,7 @@ class MiniTaskParityTests(TestCase):
         self.client.force_login(self.responsible)
         activate_company(self.client, self.company)
         for error in (RuntimeError("secret"), storage.ValidationError("invalid alias")):
-            with patch.object(storage, "get_tarea_connection", side_effect=error):
+            with patch.object(storage, "resolve_operational_backend", side_effect=error):
                 with self.assertRaises(TaskStorageError):
                     storage.resolve_minitask_storage()
                 with patch.object(Tarea.objects, "get", side_effect=AssertionError("fallback")):

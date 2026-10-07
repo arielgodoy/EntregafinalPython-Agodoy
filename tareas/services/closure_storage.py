@@ -10,7 +10,7 @@ from django.utils import timezone
 from .closure import validate_closure_requirements
 from .lifecycle import approve_closure, complete_task, reject_closure
 from .task_storage import EditTaskNotFound, TaskStorageError
-from .connection_roles import TareaConnectionError, get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import resolve_operational_backend
 from settings.services.mysql_connections import open_mysql_connection
 from ..models import Empresa, Tarea, TareaCierre
 from .notifications import emit_task_event
@@ -247,9 +247,9 @@ class MySQLClosureStorage:
 
 
 def resolve_closure_storage():
-    source = get_tarea_connection("BASE_TAREAS")
-    if source["type"] == "DJANGO":
-        return DjangoClosureStorage(source["alias"])
-    if source["type"] == "MYSQL_CONFIG":
-        return MySQLClosureStorage(get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"])
+    context = resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type == "DJANGO":
+        return DjangoClosureStorage(context.django_alias)
+    if context.backend_type == "MYSQL_CONFIG":
+        return MySQLClosureStorage(context.mysql_connection, context.database_name)
     raise TaskStorageError("El backend de BASE_TAREAS no es válido.")

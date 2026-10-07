@@ -23,7 +23,7 @@ from tareas.services.reprogramming_storage import (
     ReprogramTaskCommand, django_reprogramming_detail, mysql_reprogramming_detail,
     reprogram_task, resolve_reprogramming_storage,
 )
-from tareas.services.connection_roles import TareaConnectionRoleNotFoundError
+from tareas.services.connection_roles import BackendContext, TareaConnectionRoleNotFoundError
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
 from tareas.tests.factories import activate_company, assign_permission, create_user
 
@@ -37,13 +37,18 @@ class ReprogrammingFixture(TestCase):
         cls.creator = create_user("rp-creator")
         cls.responsible = create_user("rp-responsible")
         cls.participant = create_user("rp-participant")
+        cls.role = TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
+        )
+        for codigo, nombre in (
+            ("IMPOSIBILIDAD_TECNICA", "Imposibilidad técnica"),
+            ("ATRASO_IMPORTACION", "Atraso importación"),
+        ):
+            CausaAtraso.objects.create(codigo=codigo, nombre=nombre)
         cls.inactive = create_user("rp-inactive")
         cls.inactive.is_active = False
         cls.inactive.save(update_fields=["is_active"])
         assign_permission(cls.actor, cls.empresa, "Tareas", ingresar=True, modificar=True)
-        cls.role = TareaConnectionRole.objects.create(
-            role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
-        )
         cls.causes = tuple(CausaAtraso.objects.order_by("codigo")[:2])
 
     def setUp(self):
@@ -190,14 +195,14 @@ class ReprogrammingTests(ReprogrammingFixture):
                         reprogram_task(self.command)
                 self.assert_unchanged()
 
-    @patch("tareas.services.reprogramming_storage.get_tarea_connection")
+    @patch("tareas.services.reprogramming_storage.resolve_operational_backend")
     def test_no_fallback(self, resolve):
         resolve.side_effect = TareaConnectionRoleNotFoundError("missing")
         with self.assertRaisesMessage(TaskStorageError, "backend"):
             reprogram_task(self.command)
         self.assert_unchanged()
 
-    @patch("tareas.services.detail_storage.get_tarea_connection")
+    @patch("tareas.services.detail_storage.resolve_operational_backend")
     def test_detail_configuration_error_has_no_fallback(self, resolve):
         resolve.side_effect = TareaConnectionRoleNotFoundError("missing")
         with self.assertRaises(TaskStorageError):
@@ -437,9 +442,11 @@ class MySQLReprogrammingTests(ReprogrammingFixture):
         fake = self.fake()
         self.client.force_login(self.actor)
         activate_company(self.client, self.empresa)
-        with patch("tareas.services.reprogramming_storage.get_tarea_connection",
-                   return_value={"type": "MYSQL_CONFIG", "database_name": "tareas"}), \
-             patch("tareas.services.reprogramming_storage.get_tarea_mysql_connection"), \
+        with patch("tareas.services.reprogramming_storage.resolve_operational_backend",
+                   return_value=BackendContext(
+                       logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+                       mysql_connection=object(), database_name="tareas",
+                   )), \
              patch("tareas.services.reprogramming_storage.open_mysql_connection",
                    return_value=nullcontext(fake)), \
              patch("tareas.services.reprogramming_storage._notify"), \
@@ -624,15 +631,16 @@ class MySQLReprogrammingTests(ReprogrammingFixture):
         self.assertContains(response, 'value="700"')
         self.assertNotContains(response, self.causes[0].nombre)
 
-    @patch("tareas.services.reprogramming_storage.get_tarea_mysql_connection")
-    @patch("tareas.services.reprogramming_storage.get_tarea_connection")
-    def test_mysql_resolver_uses_existing_role(self, resolve, config):
-        resolve.return_value = {"type": "MYSQL_CONFIG", "database_name": "tareas"}
+    @patch("tareas.services.reprogramming_storage.resolve_operational_backend")
+    def test_mysql_resolver_uses_existing_role(self, resolve):
+        resolve.return_value = BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=object(), database_name="tareas",
+        )
         storage = resolve_reprogramming_storage()
         self.assertIsInstance(storage, MySQLReprogrammingStorage)
         self.assertEqual(storage.database_name, "tareas")
         resolve.assert_called_once_with("BASE_TAREAS")
-        config.assert_called_once_with("BASE_TAREAS")
 
 
 class DjangoReprogrammingAliasTests(ReprogrammingFixture):
@@ -655,6 +663,10 @@ class DjangoReprogrammingAliasTests(ReprogrammingFixture):
         other.save(using=alias)
         self.role.django_alias = alias
         self.role.save(update_fields=["django_alias"])
+        for cause in self.causes:
+            CausaAtraso.objects.using(alias).create(
+                pk=cause.pk, codigo=cause.codigo, nombre=cause.nombre,
+            )
         result = reprogram_task(self.command)
         other.refresh_from_db(using=alias)
         self.assertEqual(other.fecha_tope, self.command.fecha_tope_nueva)

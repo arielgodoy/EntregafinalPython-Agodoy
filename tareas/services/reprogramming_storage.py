@@ -18,7 +18,7 @@ from access_control.services.permissions import (
 from settings.services.mysql_connections import open_mysql_connection
 
 from ..models import CausaAtraso, Reprogramacion, Tarea, TareaParticipante, TareaRelacion
-from .connection_roles import TareaConnectionError, get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError
 
@@ -303,12 +303,12 @@ class MySQLReprogrammingStorage:
 
 def resolve_reprogramming_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            return DjangoReprogrammingStorage(source["alias"])
-        if source["type"] == "MYSQL_CONFIG":
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            return DjangoReprogrammingStorage(context.django_alias)
+        if context.backend_type == "MYSQL_CONFIG":
             return MySQLReprogrammingStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"]
+                context.mysql_connection, context.database_name
             )
     except TareaConnectionError as exc:
         raise TaskStorageError("tareas.reprogramming.errors.backend") from exc

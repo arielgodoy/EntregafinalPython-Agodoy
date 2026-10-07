@@ -20,8 +20,7 @@ from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion, Tarea
 from tareas.services.connection_roles import (
     TareaConnectionError,
-    get_tarea_connection,
-    get_tarea_mysql_connection,
+    resolve_operational_backend,
 )
 from tareas.services.image_processing import optimize_uploaded_image
 
@@ -809,15 +808,15 @@ class MySQLQuotationStorage:
 
 def resolve_quotation_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            alias = source.get("alias")
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            alias = context.django_alias
             if not alias or alias not in settings.DATABASES:
                 raise QuotationStorageError("El alias Django de BASE_TAREAS no está disponible.")
             return DjangoQuotationStorage(alias)
-        if source["type"] == "MYSQL_CONFIG":
-            config = get_tarea_mysql_connection("BASE_TAREAS")
-            database_name = source.get("database_name")
+        if context.backend_type == "MYSQL_CONFIG":
+            config = context.mysql_connection
+            database_name = context.database_name
             if not database_name:
                 raise QuotationStorageError("La base de BASE_TAREAS no está configurada.")
             return MySQLQuotationStorage(config, database_name)

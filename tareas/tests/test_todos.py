@@ -13,6 +13,7 @@ from tareas.models import CorrelativoEmpresa, Tarea, Todo, TodoEvento
 from tareas.services.origin import create_task_from_todo
 from tareas.services.todos import close_todo, create_todo
 from tareas.services import todo_storage
+from tareas.services.connection_roles import BackendContext
 from tareas.services.connection_roles import TareaConnectionRoleNotFoundError
 from tareas.services.todo_storage import (
     DjangoTodoStorage,
@@ -275,20 +276,20 @@ class TodoBackendParityTests(TestCase):
 
     @contextmanager
     def configured_mysql(self):
-        source = {"type": "MYSQL_CONFIG", "database_name": "todos_test"}
-        with patch.object(todo_storage, "get_tarea_connection", return_value=source):
-            with patch.object(
-                todo_storage,
-                "get_tarea_mysql_connection",
-                return_value=object(),
-            ):
-                yield
+        context = BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=object(), database_name="todos_test",
+        )
+        with patch.object(todo_storage, "resolve_operational_backend", return_value=context):
+            yield
 
     def test_resolver_selects_configured_storage(self):
         with patch.object(
             todo_storage,
-            "get_tarea_connection",
-            return_value={"type": "DJANGO", "alias": "default"},
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
         ):
             self.assertIsInstance(resolve_todo_storage(), DjangoTodoStorage)
         with self.configured_mysql():
@@ -433,7 +434,7 @@ class TodoBackendParityTests(TestCase):
     def test_missing_connection_role_fails_closed(self):
         with patch.object(
             todo_storage,
-            "get_tarea_connection",
+            "resolve_operational_backend",
             side_effect=TareaConnectionRoleNotFoundError("missing"),
         ):
             with self.assertRaises(TodoStorageError):

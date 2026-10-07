@@ -16,8 +16,7 @@ from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Tarea
 from tareas.services.connection_roles import (
     TareaConnectionError,
-    get_tarea_connection,
-    get_tarea_mysql_connection,
+    resolve_operational_backend,
 )
 
 logger = logging.getLogger(__name__)
@@ -420,15 +419,15 @@ def _participant_instance(row, meeting):
 
 def resolve_meeting_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            alias = source.get("alias")
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            alias = context.django_alias
             if not alias or alias not in settings.DATABASES:
                 raise MeetingStorageError("El alias Django de BASE_TAREAS no está disponible.")
             return DjangoMeetingStorage(alias)
-        if source["type"] == "MYSQL_CONFIG":
-            connection = get_tarea_mysql_connection("BASE_TAREAS")
-            database_name = source.get("database_name")
+        if context.backend_type == "MYSQL_CONFIG":
+            connection = context.mysql_connection
+            database_name = context.database_name
             if not database_name:
                 raise MeetingStorageError("La base de BASE_TAREAS no está configurada.")
             return MySQLMeetingStorage(connection, database_name)

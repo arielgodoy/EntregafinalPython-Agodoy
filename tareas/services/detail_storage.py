@@ -28,8 +28,7 @@ from ..models import (
     TareaParticipante,
     TareaRelacion,
 )
-from .connection_roles import TareaConnectionError, get_tarea_connection
-from .connection_roles import get_tarea_mysql_connection
+from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .task_storage import TaskStorageBackendNotImplemented, TaskStorageError
 from .reprogramming_storage import (
     ReprogrammingCause,
@@ -1174,19 +1173,19 @@ class MySQLTaskDetailStorage:
 
 def resolve_detail_storage() -> DjangoTaskDetailStorage:
     try:
-        source = get_tarea_connection("BASE_TAREAS")
+        context = resolve_operational_backend("BASE_TAREAS")
     except TareaConnectionError as exc:
         raise TaskStorageError("No se pudo resolver el almacenamiento de tareas.") from exc
-    if source["type"] == "MYSQL_CONFIG":
+    if context.backend_type == "MYSQL_CONFIG":
         try:
             return MySQLTaskDetailStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"),
-                source["database_name"],
+                context.mysql_connection,
+                context.database_name,
             )
         except TareaConnectionError as exc:
             raise TaskStorageError(
                 "No se pudo resolver el almacenamiento de tareas."
             ) from exc
-    if source["type"] != "DJANGO":
+    if context.backend_type != "DJANGO":
         raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
-    return DjangoTaskDetailStorage(source["alias"])
+    return DjangoTaskDetailStorage(context.django_alias)

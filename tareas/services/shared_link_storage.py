@@ -12,7 +12,7 @@ from access_control.services.permissions import get_valid_users_for_empresa
 from django.contrib.auth.models import User
 from tareas.models import EnlaceTarea, EventoAccesoEnlace, Tarea
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
-from tareas.services.connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from tareas.services.connection_roles import resolve_operational_backend
 from settings.services.mysql_connections import open_mysql_connection
 
 
@@ -208,9 +208,9 @@ class MySQLSharedLinkStorage:
 
 
 def resolve_shared_link_storage():
-    source=get_tarea_connection("BASE_TAREAS")
-    if source["type"]=="DJANGO": return DjangoSharedLinkStorage(source["alias"])
-    if source["type"]=="MYSQL_CONFIG": return MySQLSharedLinkStorage(get_tarea_mysql_connection("BASE_TAREAS"),source["database_name"])
+    context=resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type=="DJANGO": return DjangoSharedLinkStorage(context.django_alias)
+    if context.backend_type=="MYSQL_CONFIG": return MySQLSharedLinkStorage(context.mysql_connection,context.database_name)
     raise TaskStorageError("El backend de BASE_TAREAS no es válido.")
 
 

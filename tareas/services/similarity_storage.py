@@ -17,8 +17,7 @@ from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import EvaluacionSimilitud, Tarea, UmbralSimilitudEmpresa
 from tareas.services.connection_roles import (
     TareaConnectionError,
-    get_tarea_connection,
-    get_tarea_mysql_connection,
+    resolve_operational_backend,
 )
 
 
@@ -438,17 +437,16 @@ class MySQLSimilarityStorage:
 
 def resolve_similarity_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            alias = source.get("alias")
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            alias = context.django_alias
             if not alias or alias not in settings.DATABASES:
                 raise SimilarityStorageError(
                     "El alias Django de BASE_TAREAS no está disponible."
                 )
             return DjangoSimilarityStorage(alias)
-        if source["type"] == "MYSQL_CONFIG":
-            connection = get_tarea_mysql_connection("BASE_TAREAS")
-            return MySQLSimilarityStorage(connection, source["database_name"])
+        if context.backend_type == "MYSQL_CONFIG":
+            return MySQLSimilarityStorage(context.mysql_connection, context.database_name)
         raise SimilarityStorageError(
             "El tipo de almacenamiento de BASE_TAREAS no está soportado."
         )

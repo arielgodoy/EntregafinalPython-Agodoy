@@ -21,7 +21,7 @@ from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import (
     Avance, Hito, HitoEvidencia, HitoHistorial, Tarea, TareaParticipante,
 )
-from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import resolve_operational_backend
 from .image_processing import optimize_uploaded_image
 from .progress_storage import (
     calculate_weighted_progress, progress_percentage, refresh_weighted_progress,
@@ -772,11 +772,11 @@ class _MySQLAdapter:
 
 def resolve_milestone_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            return DjangoMilestoneStorage(source["alias"])
-        if source["type"] == "MYSQL_CONFIG":
-            return MySQLMilestoneStorage(get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"])
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            return DjangoMilestoneStorage(context.django_alias)
+        if context.backend_type == "MYSQL_CONFIG":
+            return MySQLMilestoneStorage(context.mysql_connection, context.database_name)
     except Exception:
         logger.error("Hito BASE_TAREAS resolution failed")
         raise TaskStorageError(ERROR_KEY) from None

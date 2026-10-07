@@ -11,7 +11,7 @@ from access_control.models import Empresa, Permiso, Vista
 from organizacion.models import Local, OrganizationalSource
 from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Tarea
 from tareas.services import meeting_storage
-from tareas.services.connection_roles import TareaConnectionRoleNotFoundError
+from tareas.services.connection_roles import BackendContext, TareaConnectionRoleNotFoundError
 from tareas.services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
@@ -174,18 +174,20 @@ class MeetingBackendParityTests(TestCase):
 
     @contextmanager
     def mysql_backend(self):
-        source = {"type": "MYSQL_CONFIG", "database_name": "meetings_test"}
-        with patch.object(meeting_storage, "get_tarea_connection", return_value=source):
-            with patch.object(
-                meeting_storage, "get_tarea_mysql_connection", return_value=object()
-            ):
-                yield
+        context = BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=object(), database_name="meetings_test",
+        )
+        with patch.object(meeting_storage, "resolve_operational_backend", return_value=context):
+            yield
 
     def test_resolver_uses_configured_django_alias(self):
         with patch.object(
             meeting_storage,
-            "get_tarea_connection",
-            return_value={"type": "DJANGO", "alias": "default"},
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="default",
+            ),
         ):
             self.assertIsInstance(resolve_meeting_storage(), DjangoMeetingStorage)
 
@@ -290,36 +292,36 @@ class MeetingBackendParityTests(TestCase):
     def test_create_meeting_keeps_existing_mysql_lifecycle_block(self):
         with patch.object(
             meeting_storage,
-            "get_tarea_connection",
-            return_value={"type": "MYSQL_CONFIG", "database_name": "meetings_test"},
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+                mysql_connection=object(), database_name="meetings_test",
+            ),
         ):
             with patch.object(
-                meeting_storage, "get_tarea_mysql_connection", return_value=object()
+                Tarea.objects,
+                "create",
+                side_effect=AssertionError("must not create a default task"),
             ):
-                with patch.object(
-                    Tarea.objects,
-                    "create",
-                    side_effect=AssertionError("must not create a default task"),
-                ):
-                    with self.assertRaises(TaskStorageError):
-                        create_meeting(
-                            empresa=self.company,
-                            creada_por=self.creator,
-                            titulo="Blocked meeting",
-                            descripcion="",
-                            fecha_hora_programada=datetime.combine(
-                                date(2026, 10, 3), time(10)
-                            ),
-                            modalidad=ReunionRevision.Modalidad.ZOOM,
-                            lugar_o_enlace="https://example.test/blocked",
-                            tipo_ambito=ReunionRevision.TipoAmbito.LOCAL,
-                            local=self.local,
-                        )
+                with self.assertRaises(TaskStorageError):
+                    create_meeting(
+                        empresa=self.company,
+                        creada_por=self.creator,
+                        titulo="Blocked meeting",
+                        descripcion="",
+                        fecha_hora_programada=datetime.combine(
+                            date(2026, 10, 3), time(10)
+                        ),
+                        modalidad=ReunionRevision.Modalidad.ZOOM,
+                        lugar_o_enlace="https://example.test/blocked",
+                        tipo_ambito=ReunionRevision.TipoAmbito.LOCAL,
+                        local=self.local,
+                    )
 
     def test_missing_backend_fails_closed(self):
         with patch.object(
             meeting_storage,
-            "get_tarea_connection",
+            "resolve_operational_backend",
             side_effect=TareaConnectionRoleNotFoundError("missing"),
         ):
             with patch.object(

@@ -17,6 +17,7 @@ from tareas.models import (
     TareaParticipante, TareaRelacion,
 )
 from tareas.services import milestone_storage as storage
+from tareas.services.connection_roles import BackendContext
 from tareas.services.task_storage import TaskStorageError
 from tareas.tests.factories import assign_permission
 
@@ -557,24 +558,24 @@ class MilestoneProgressParityTests(TestCase):
 
     def test_resolver_fail_closed_without_operational_lookup(self):
         for error in (RuntimeError("secret"), ValidationError("inactive")):
-            with patch.object(storage, "get_tarea_connection", side_effect=error):
+            with patch.object(storage, "resolve_operational_backend", side_effect=error):
                 with patch.object(Tarea.objects, "using", side_effect=AssertionError("fallback")):
                     with self.assertRaises(TaskStorageError):
                         storage.resolve_milestone_storage()
 
     def test_resolver_selects_configured_source_not_default(self):
-        with patch.object(storage, "get_tarea_connection", return_value={
-            "type": "DJANGO", "alias": "company_tasks",
-        }):
+        with patch.object(storage, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="company_tasks",
+        )):
             self.assertEqual(storage.resolve_milestone_storage().alias, "company_tasks")
         config = object()
-        with patch.object(storage, "get_tarea_connection", return_value={
-            "type": "MYSQL_CONFIG", "database_name": "configured_tasks",
-        }):
-            with patch.object(storage, "get_tarea_mysql_connection", return_value=config):
-                resolved = storage.resolve_milestone_storage()
-                self.assertIs(resolved.connection_config, config)
-                self.assertEqual(resolved.database_name, "configured_tasks")
+        with patch.object(storage, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=config, database_name="configured_tasks",
+        )):
+            resolved = storage.resolve_milestone_storage()
+            self.assertIs(resolved.connection_config, config)
+            self.assertEqual(resolved.database_name, "configured_tasks")
 
     def test_mysql_connection_failure_sanitized_and_no_default_fallback(self):
         @contextmanager

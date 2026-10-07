@@ -24,7 +24,7 @@ from tareas.models import (
     ComentarioVersionDocumento, DocumentoHistorial, DocumentoTarea, Hito,
     MiniTarea, MiniTareaEvento, Tarea, TareaLectura, TareaParticipante, TareaRelacion,
 )
-from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import resolve_operational_backend
 from .image_processing import optimize_uploaded_image
 from .notifications import emit_task_event, send_task_email
 from .task_storage import TaskStorageError
@@ -568,12 +568,12 @@ class _MySQLMutation:
 
 def resolve_minitask_storage():
     try:
-        source = get_tarea_connection("BASE_TAREAS")
-        if source["type"] == "DJANGO":
-            return DjangoMiniTaskStorage(source["alias"])
-        if source["type"] == "MYSQL_CONFIG":
+        context = resolve_operational_backend("BASE_TAREAS")
+        if context.backend_type == "DJANGO":
+            return DjangoMiniTaskStorage(context.django_alias)
+        if context.backend_type == "MYSQL_CONFIG":
             return MySQLMiniTaskStorage(
-                get_tarea_mysql_connection("BASE_TAREAS"), source["database_name"],
+                context.mysql_connection, context.database_name,
             )
         raise ValueError("Unsupported source")
     except Exception:

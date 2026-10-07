@@ -14,7 +14,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, Vista
-from tareas.models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaReasignacion, TareaRelacion
+from tareas.models import Comentario, Tarea, TareaConnectionRole, TareaLectura, TareaParticipante, TareaReasignacion, TareaRelacion
+from tareas.services.connection_roles import BackendContext
 from tareas.services import participant_storage as service
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError, UpdateTaskCommand
 
@@ -38,6 +39,9 @@ class ParticipantStorageTests(TestCase):
         cls.task = Tarea.objects.create(
             titulo="Original", empresa=cls.empresa, creada_por=cls.creator,
             responsable=cls.old, fecha_tope=date(2026, 12, 1),
+        )
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
         )
 
     def setUp(self):
@@ -440,7 +444,7 @@ class ParticipantStorageTests(TestCase):
             (service.change_participant_role, service.ChangeParticipantRoleCommand(
                 self.task.pk, self.empresa.pk, self.creator.pk, self.target.pk, "PARTICIPANTE")),
         ]
-        with patch.object(service, "get_tarea_connection", side_effect=RuntimeError("secret")), \
+        with patch.object(service, "resolve_operational_backend", side_effect=RuntimeError("secret")), \
                 patch.object(service.Tarea.objects, "using") as lookup, \
                 self.assertLogs(service.logger, level="ERROR") as logs:
             for function, command in commands:
@@ -453,18 +457,21 @@ class ParticipantStorageTests(TestCase):
         self.assertEqual(self.task.responsable_id, self.old.pk)
 
     def test_resolver_routes_django_mysql_and_rejects_unknown(self):
-        with patch.object(service, "get_tarea_connection", return_value={
-            "type": "DJANGO", "alias": "operational",
-        }):
+        with patch.object(service, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="DJANGO", django_alias="operational",
+        )):
             self.assertEqual(service.resolve_participant_storage().alias, "operational")
         config = object()
-        with patch.object(service, "get_tarea_connection", return_value={
-            "type": "MYSQL_CONFIG", "database_name": "tasks",
-        }), patch.object(service, "get_tarea_mysql_connection", return_value=config):
+        with patch.object(service, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
+            mysql_connection=config, database_name="tasks",
+        )):
             storage = service.resolve_participant_storage()
             self.assertIs(storage.connection_config, config)
             self.assertEqual(storage.database_name, "tasks")
-        with patch.object(service, "get_tarea_connection", return_value={"type": "unknown"}):
+        with patch.object(service, "resolve_operational_backend", return_value=BackendContext(
+            logical_role="BASE_TAREAS", backend_type="unknown",
+        )):
             with self.assertRaises(TaskStorageError):
                 service.resolve_participant_storage()
         with patch.object(service, "resolve_participant_storage", side_effect=RuntimeError("secret")), \

@@ -9,6 +9,7 @@ from access_control.models import Empresa
 from tareas.models import Tarea, Todo, TodoEvento
 from tareas.services.origin import create_task_from_todo
 from tareas.services import origin_storage
+from tareas.services.connection_roles import BackendContext
 
 
 class _OriginSQLiteConnection:
@@ -108,9 +109,14 @@ class OriginDomainTests(TestCase):
             pass
         with patch.object(
             origin_storage,
-            "get_tarea_connection",
-            return_value={"type": "MYSQL_CONFIG", "database_name": "origin_test"},
-        ), patch.object(origin_storage, "get_tarea_mysql_connection", return_value=object()), patch.object(
+            "resolve_operational_backend",
+            return_value=BackendContext(
+                logical_role="BASE_TAREAS",
+                backend_type="MYSQL_CONFIG",
+                mysql_connection=object(),
+                database_name="origin_test",
+            ),
+        ), patch.object(
             origin_storage,
             "open_mysql_connection",
             return_value=_OriginConnectionContext(connection),
