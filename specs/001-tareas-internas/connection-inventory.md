@@ -20,8 +20,8 @@
 - `MANUAL = 0`
 - `CANONICAL_PENDING_RESIDUES = 4`
 - `CANONICAL_RESIDUES = 4`
-- `PENDING = 1`
-- `BLOCKED = 2`
+- `PENDING = 0`
+- `BLOCKED = 3`
 - `CLOSED = 1`
 
 Six access sites are not six residues. The six sites are grouped into four
@@ -131,7 +131,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R004
 
-- `STATUS = PENDING`
+- `STATUS = BLOCKED`
 - `PRIORITY = P1`
 - `FAMILY = KPI/dashboard`
 - `FILE = tareas/services/kpi.py`
@@ -140,6 +140,7 @@ These blocks are not pending and must not be reinterpreted.
 - `CURRENT_ACCESS = Django Subquery/OuterRef`
 - `EXPECTED_FRONTIER = Backend-aware movement queries`
 - `COMPLEXITY = EXTENDED`
+- `BLOCKER = _movement_queryset depende de un Django QuerySet lazy con Subquery/OuterRef sobre transiciones e historial documental. MYSQL_CONFIG no dispone actualmente de una frontera backend-neutral que preserve ese contrato sin adaptar la composición KPI/dashboard.`
 
 ## Accounting Rule
 
@@ -157,7 +158,30 @@ Rows are never deleted; only status and evidence may change.
 
 ## Next
 
-- `NEXT_RESIDUE = T135-R003`
+- `NEXT_RESIDUE = FINAL_TAREAS_CONNECTION_INTEGRITY_GATE`
+
+## T135 Classification Checkpoint
+
+- `T135_PENDING_ZERO = YES`
+- `FINAL_TAREAS_CONNECTION_INTEGRITY_GATE = PENDING`
+- `T135_FULL_APP_CERTIFIED = NO`
+
+The future integrity gate must reserve, at minimum:
+
+- `OLD_DATA_ACCESS`
+- `MISSING_BACKEND_PRIMITIVES`
+- `LEGACY_BACKEND_GUARDS`
+- `DTO_CONTRACT_PARITY`
+- `RELATED_MANAGER_PARITY`
+- `RELATIONSHIP_PARITY`
+- `ROLE_VARIANT_PARITY`
+- `EVENT_COMPOSITION_PARITY`
+- `HTTP_END_TO_END_PARITY`
+- `FAIL_CLOSED_CONTAMINATION`
+
+Blocked residues `R001`, `R003`, and `R004` are inputs to the later private
+Tareas router/frontier contract. No private router is created or designed in
+this checkpoint.
 
 No implementation of R001 is included in this inventory checkpoint.
 
