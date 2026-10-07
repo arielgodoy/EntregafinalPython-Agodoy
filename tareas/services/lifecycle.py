@@ -36,8 +36,12 @@ _ALLOWED = {
 
 def _django_task_storage(tarea):
     storage = resolve_edit_storage()
-    if not isinstance(storage, DjangoTaskStorage) or tarea._state.db != storage.alias:
+    if not isinstance(storage, DjangoTaskStorage):
         raise TaskStorageError("tareas.messages.generic_error")
+    try:
+        storage.get_task_for_edit(task_id=tarea.pk, empresa_id=tarea.empresa_id)
+    except Exception as exc:
+        raise TaskStorageError("tareas.messages.generic_error") from exc
     return storage
 
 
