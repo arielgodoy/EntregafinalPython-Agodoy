@@ -1134,8 +1134,10 @@ class Todo(models.Model):
         return f"{self.correlativo}: {self.titulo}"
 
     def save(self, *args, **kwargs):
+        using = kwargs.get("using")
         if self.pk and self.estado == self.Estado.ABIERTO:
-            original = type(self).objects.filter(pk=self.pk).only("estado").first()
+            manager = type(self).objects.using(using) if using else type(self).objects
+            original = manager.filter(pk=self.pk).only("estado").first()
             if original and original.estado == self.Estado.CERRADO:
                 raise ValidationError("Un TO-DO cerrado no puede reabrirse.")
         if self._state.adding and not self.correlativo:
@@ -1143,7 +1145,6 @@ class Todo(models.Model):
                 raise ValidationError("Un TO-DO requiere empresa para reservar correlativo.")
             from .services.correlativos import reserve_next_todo_number
 
-            using = kwargs.get("using")
             with transaction.atomic(using=using):
                 self.correlativo = f"TD{reserve_next_todo_number(self.empresa_id, using=using):07d}"
                 return super().save(*args, **kwargs)

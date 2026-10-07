@@ -183,7 +183,10 @@ def set_mini_task_done(mini_tarea, hecho=True):
 
 
 def has_pending_mini_tasks(tarea):
-    return tarea.mini_tareas.filter(hecho=False).exists()
+    from .minitask_storage import resolve_minitask_storage
+    return resolve_minitask_storage().has_pending(
+        task_id=tarea.pk, empresa_id=tarea.empresa_id,
+    )
 
 
 def ensure_no_pending_mini_tasks(tarea):

@@ -2,6 +2,7 @@ import logging
 
 from acounts.services.email_service import send_email_for_purpose
 from notificaciones.services import create_notification
+from django.contrib.auth import get_user_model
 from tareas.models import Tarea, TareaParticipante
 
 logger = logging.getLogger(__name__)
@@ -66,12 +67,22 @@ def task_recipients(
     if include_responsible:
         users.append(tarea.responsable)
 
+    from tareas.services.detail_storage import TaskDetailSections, resolve_detail_storage
+
     roles = set(participant_roles or [])
-    participantes = tarea.participantes.select_related("usuario")
-    if roles:
-        participantes = participantes.filter(rol__in=roles)
+    detail = resolve_detail_storage().get_task_detail(
+        task_id=tarea.pk,
+        empresa_id=tarea.empresa_id,
+        sections=TaskDetailSections(milestones=False, documents=False, links=False),
+    )
+    participant_ids = [
+        participant.user_id
+        for participant in detail.participants
+        if not roles or participant.rol in roles
+    ]
+    users_by_id = get_user_model().objects.using("default").in_bulk(participant_ids)
     if participant_roles is not None:
-        users.extend(participante.usuario for participante in participantes)
+        users.extend(users_by_id[user_id] for user_id in participant_ids if user_id in users_by_id)
 
     recipients = {}
     for user in users:

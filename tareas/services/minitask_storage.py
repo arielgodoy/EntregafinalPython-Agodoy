@@ -311,6 +311,11 @@ class _Queries:
         except DetailTaskNotFound:
             raise MiniTaskNotFound from None
 
+    def has_pending(self, *, task_id, empresa_id):
+        return any(not item.hecho for item in self.detail(
+            task_id=task_id, empresa_id=empresa_id,
+        ).mini_tasks)
+
     def history(self, *, task_id, empresa_id, mini_task_id, actor_id):
         try:
             _identity(empresa_id, actor_id, "ingresar")
