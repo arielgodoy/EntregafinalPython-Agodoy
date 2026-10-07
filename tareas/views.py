@@ -1440,7 +1440,7 @@ class HistorialMiniTareaView(
         )
 
 
-class TareaComentariosView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas"
     crear_permiso_faltante = False
 
@@ -1518,13 +1518,14 @@ class ListarComentariosView(TareaComentariosView):
                 updated_after=updated_cursor,
                 updated_after_id=updated_after_id,
             ))
-            prefetch_related_objects(
-                comentarios,
-                "autor__avatar",
-                "adjuntos__documento",
-                "versiones__actor",
-                "versiones__documentos__documento",
-            )
+            if comentarios and not hasattr(comentarios[0], "author_id"):
+                prefetch_related_objects(
+                    comentarios,
+                    "autor__avatar",
+                    "adjuntos__documento",
+                    "versiones__actor",
+                    "versiones__documentos__documento",
+                )
             comentarios_vinculado = _comment_actor_is_linked(tarea, request.user)
             pendientes = 0
             primer_pendiente = None
@@ -1622,13 +1623,14 @@ class ListarComentariosView(TareaComentariosView):
             primer_pendiente = None
             comentarios_reconocibles = []
 
-        prefetch_related_objects(
-            comentarios,
-            "autor__avatar",
-            "adjuntos__documento",
-            "versiones__actor",
-            "versiones__documentos__documento",
-        )
+        if comentarios and not hasattr(comentarios[0], "author_id"):
+            prefetch_related_objects(
+                comentarios,
+                "autor__avatar",
+                "adjuntos__documento",
+                "versiones__actor",
+                "versiones__documentos__documento",
+            )
 
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
@@ -1706,7 +1708,6 @@ class CrearComentarioView(TareaComentariosView):
             return _comment_error_response()
         avatar = Avatar.objects.filter(user_id=request.user.pk).first()
         request.user.avatar = avatar
-        comentario.autor = request.user
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
             empresa=tarea.empresa,

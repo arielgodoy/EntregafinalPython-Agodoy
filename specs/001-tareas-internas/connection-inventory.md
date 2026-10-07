@@ -41,6 +41,21 @@ semantic connection transformations.
 
 These blocks are not pending and must not be reinterpreted.
 
+### T135C-FIX3 Comments HTTP MySQL Checkpoint
+
+- `STATUS = CLOSED`
+- `SCOPE = Comments HTTP guard only`
+- `GUARD = ExistingTaskBackendGuardMixin removed only from TareaComentariosView`
+- `GLOBAL_GUARD_CHANGED = NO`
+- `BASE_TAREAS = MYSQL_CONFIG`
+- `REAL_HTTP_CREATE = PASS` (`200`, JSON `success=true`)
+- `REAL_HTTP_LOAD = PASS` (`200`, JSON `success=true`, created comment returned)
+- `PHYSICAL_MYSQL_ROW = PASS` (temporary task `3`, author `1`, active company `3`)
+- `CLEANUP = PASS` (temporary comment absent after cleanup)
+- `REGRESSION = PASS` (107 focused Comments/Reading tests)
+- `EVENT_PATH = FAIL` (best-effort notification expects `TaskDTO.prioridad`; outside this connection-only correction)
+- `DTO_COMPATIBILITY = PASS` (MySQL comments now expose the historical View relation interface)
+
 ## Pending Inventory
 
 ### T135-R001

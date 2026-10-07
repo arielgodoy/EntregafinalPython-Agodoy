@@ -1,5 +1,6 @@
 from datetime import timedelta
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -78,6 +79,83 @@ class CommentWebUrlTests(SimpleTestCase):
                 url = reverse(f"tareas:{name}", kwargs=kwargs)
                 self.assertEqual(url, expected_url)
                 self.assertEqual(resolve(url).url_name, name)
+
+
+class CommentsMysqlHttpGuardTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.empresa = create_empresa(codigo="C100MYSQL", descripcion="Empresa Comments MySQL")
+        cls.usuario = create_user(username="comments-mysql-http")
+        assign_permission(cls.usuario, cls.empresa, "Tareas", ingresar=True, crear=True)
+        cls.tarea = create_tarea(
+            cls.empresa,
+            cls.usuario,
+            responsable=cls.usuario,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
+        )
+
+    def setUp(self):
+        self.client.force_login(self.usuario)
+        session = self.client.session
+        session["empresa_id"] = self.empresa.pk
+        session.save()
+
+    def _mysql_frontier(self):
+        detail = SimpleNamespace(
+            core=SimpleNamespace(
+                id=self.tarea.pk,
+                empresa_id=self.empresa.pk,
+                estado=self.tarea.estado,
+                anulada=self.tarea.anulada,
+                creada_por_id=self.usuario.pk,
+                responsable_id=self.usuario.pk,
+            ),
+            effective_user_ids=(self.usuario.pk,),
+            participants=(),
+        )
+        source = {"type": "MYSQL_CONFIG", "database_name": "configured_tasks"}
+        return (
+            patch(
+                "tareas.views.resolve_detail_storage",
+                return_value=SimpleNamespace(get_task_detail=lambda **kwargs: detail),
+            ),
+            patch(
+                "tareas.services.comment_storage.get_tarea_connection",
+                return_value=source,
+            ),
+            patch(
+                "tareas.services.comment_storage.get_tarea_mysql_connection",
+                return_value=object(),
+            ),
+            patch(
+                "tareas.services.comment_storage.open_mysql_connection",
+                side_effect=RuntimeError("test connection unavailable"),
+            ),
+        )
+
+    def test_get_mysql_config_reaches_comment_storage_instead_of_legacy_guard(self):
+        patches = self._mysql_frontier()
+        with patches[0], patches[1], patches[2], patches[3]:
+            response = self.client.get(
+                reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotEqual(response.status_code, 503)
+
+    def test_post_mysql_config_reaches_comment_storage_instead_of_legacy_guard(self):
+        patches = self._mysql_frontier()
+        with patches[0], patches[1], patches[2], patches[3]:
+            response = self.client.post(
+                reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+                {"contenido": "No debe persistir en esta prueba"},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotEqual(response.status_code, 503)
 
 
 class CommentReadViewTests(TestCase):

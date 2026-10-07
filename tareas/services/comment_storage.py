@@ -122,6 +122,15 @@ class CommentDTO:
     def adjuntos(self):
         return self.attachments
 
+    @property
+    def versiones(self):
+        return _CommentRelation(self.versions)
+
+
+class _CommentRelation(tuple):
+    def all(self):
+        return self
+
 
 @dataclass(frozen=True)
 class ReadingDTO:
@@ -166,6 +175,10 @@ class CommentVersionDTO:
     fecha: object
     motivo: str
     documentos: tuple = ()
+
+    @property
+    def actor_id(self):
+        return self.actor.pk
 
 
 @dataclass(frozen=True)
