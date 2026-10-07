@@ -11,12 +11,13 @@ from tareas.models import Tarea, TareaRelacion
 
 
 def get_parent(task):
-    relation = TareaRelacion.objects.filter(hija=task).select_related("padre").first()
-    return relation.padre if relation else None
+    from tareas.services.hierarchy_lifecycle_storage import resolve_hierarchy_lifecycle_storage
+    return resolve_hierarchy_lifecycle_storage().get_parent(task.pk, task.empresa_id)
 
 
 def get_children(task):
-    return Tarea.objects.filter(relaciones_padre__padre=task).order_by("id")
+    from tareas.services.hierarchy_lifecycle_storage import resolve_hierarchy_lifecycle_storage
+    return resolve_hierarchy_lifecycle_storage().get_children(task.pk, task.empresa_id)
 
 
 def get_descendants(task):

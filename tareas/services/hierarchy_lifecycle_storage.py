@@ -13,7 +13,7 @@ from .lifecycle import annul_task, reactivate_task
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
-from ..models import Empresa, Tarea, TareaTransicion
+from ..models import Empresa, Tarea, TareaRelacion, TareaTransicion
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,17 @@ class DjangoHierarchyLifecycleStorage:
             return Tarea.objects.using(self.alias).get(pk=command.task_id, empresa_id=command.empresa_id)
         except Tarea.DoesNotExist as exc:
             raise EditTaskNotFound from exc
+
+    def get_parent(self, task_id, empresa_id=None):
+        relation = TareaRelacion.objects.using(self.alias).filter(
+            hija_id=task_id,
+        ).select_related("padre").first()
+        return relation.padre if relation else None
+
+    def get_children(self, task_id, empresa_id=None):
+        return Tarea.objects.using(self.alias).filter(
+            relaciones_padre__padre_id=task_id,
+        ).order_by("id")
 
     def annul(self, command):
         task = self._task(command)
@@ -78,6 +89,55 @@ class MySQLHierarchyLifecycleStorage:
             )
         except Exception:
             return
+
+    @staticmethod
+    def _task_data(row):
+        if row is None:
+            return None
+        task_id, company_id, state, annulled = row
+        return SimpleNamespace(
+            pk=task_id,
+            empresa_id=company_id,
+            estado=state,
+            anulada=bool(annulled),
+        )
+
+    def get_parent(self, task_id, empresa_id=None):
+        with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT parent.id,parent.empresa_id,parent.estado,parent.anulada "
+                    "FROM tareas_tarearelacion relation "
+                    "JOIN tareas_tarea parent ON parent.id=relation.padre_id "
+                    "JOIN tareas_tarea child ON child.id=relation.hija_id "
+                    "WHERE relation.hija_id=%s "
+                    "AND (%s IS NULL OR child.empresa_id=%s) "
+                    "AND (%s IS NULL OR parent.empresa_id=%s)",
+                    (task_id, empresa_id, empresa_id, empresa_id, empresa_id),
+                )
+                return self._task_data(cursor.fetchone())
+            finally:
+                cursor.close()
+
+    def get_children(self, task_id, empresa_id=None):
+        with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT child.id,child.empresa_id,child.estado,child.anulada "
+                    "FROM tareas_tarearelacion relation "
+                    "JOIN tareas_tarea parent ON parent.id=relation.padre_id "
+                    "JOIN tareas_tarea child ON child.id=relation.hija_id "
+                    "WHERE relation.padre_id=%s "
+                    "AND (%s IS NULL OR parent.empresa_id=%s) "
+                    "AND (%s IS NULL OR child.empresa_id=%s) "
+                    "ORDER BY child.id",
+                    (task_id, empresa_id, empresa_id, empresa_id, empresa_id),
+                )
+                return [self._task_data(row) for row in cursor.fetchall()]
+            finally:
+                cursor.close()
 
     def _change(self, command, *, reactivate: bool):
         action = "REACTIVAR" if reactivate else "ANULAR"

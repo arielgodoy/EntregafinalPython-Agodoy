@@ -5,7 +5,7 @@ from datetime import date
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from tareas.models import Tarea, TareaRelacion
+from tareas.models import Tarea, TareaConnectionRole, TareaRelacion
 from tareas.services.hierarchy import (
     add_child,
     get_children,
@@ -28,6 +28,9 @@ from tareas.tests.factories import assign_permission, create_empresa, create_tar
 class HierarchyPhase3Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
+        TareaConnectionRole.objects.create(
+            role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
+        )
         cls.empresa = create_empresa(codigo="H3", descripcion="Empresa jerarquia")
         cls.otra_empresa = create_empresa(codigo="H4", descripcion="Otra empresa")
         cls.creator = create_user(username="h3_creator")

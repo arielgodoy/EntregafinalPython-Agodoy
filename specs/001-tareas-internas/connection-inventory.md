@@ -20,9 +20,9 @@
 - `MANUAL = 0`
 - `CANONICAL_PENDING_RESIDUES = 4`
 - `CANONICAL_RESIDUES = 4`
-- `PENDING = 3`
+- `PENDING = 2`
 - `BLOCKED = 1`
-- `CLOSED = 0`
+- `CLOSED = 1`
 
 Six access sites are not six residues. The six sites are grouped into four
 semantic connection transformations.
@@ -62,7 +62,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R002
 
-- `STATUS = PENDING`
+- `STATUS = CLOSED`
 - `PRIORITY = P1`
 - `FAMILY = Hierarchy`
 - `FILE = tareas/services/hierarchy.py`
@@ -71,6 +71,8 @@ These blocks are not pending and must not be reinterpreted.
 - `CURRENT_ACCESS = Implicit ORM/default`
 - `EXPECTED_FRONTIER = Hierarchy storage`
 - `COMPLEXITY = EXTENDED`
+- `CLOSED_AT_COMMIT = PENDING_FINAL_COMMIT`
+- `EVIDENCE = Django alias path validated; MYSQL_CONFIG real validation PASS; parent/child identity preserved by Tarea.pk; children ordered by id ASC; no implicit default; no _state.db; no silent fallback; cleanup PASS; one historical View failure confirmed preexisting.`
 
 ### T135-R003
 
@@ -112,6 +114,27 @@ Rows are never deleted; only status and evidence may change.
 
 ## Next
 
-- `NEXT_RESIDUE = T135-R002`
+- `NEXT_RESIDUE = T135-R003`
 
 No implementation of R001 is included in this inventory checkpoint.
+
+## Final Tareas Connection Gate
+
+Before T135/Tareas can be declared fully complete, perform a final
+connection-only audit of the entire `tareas/` app.
+
+The gate must inspect for operational Tareas access that bypasses the
+approved configurable architecture, including implicit default ORM,
+unscoped saves/deletes/refreshes, transactions without an operational
+backend, related managers resolving through default, `_state.db` backend
+selection, direct SQL outside approved adapters, silent default fallback,
+missing `MYSQL_CONFIG` paths, and legacy connection mechanisms superseded
+by the final private Tareas router architecture.
+
+Canonical external references such as `User`, `Empresa`, `Permiso`, `Vista`,
+`SettingsMySQLConnection`, `Proveedor`, and `Avatar` remain external and
+must not be classified as operational Tareas residues merely because they
+use SYSTEM/CORE storage.
+
+This is a future closure gate only. It does not authorize implementation,
+router design, reopening closed residues, or a new audit in this checkpoint.
