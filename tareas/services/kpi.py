@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth.models import User
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -14,11 +14,9 @@ from access_control.services.permissions import (
 )
 
 from ..models import (
-    DocumentoHistorial,
     MiniTarea,
     Tarea,
     TareaParticipante,
-    TareaTransicion,
 )
 
 
@@ -78,19 +76,6 @@ def _decimal_hours(duration):
     return hours.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _movement_queryset(queryset):
-    transition_timestamp = TareaTransicion.objects.filter(
-        tarea_id=OuterRef("pk")
-    ).order_by("-timestamp").values("timestamp")[:1]
-    document_timestamp = DocumentoHistorial.objects.filter(
-        documento__tarea_id=OuterRef("pk")
-    ).order_by("-fecha").values("fecha")[:1]
-    return queryset.annotate(
-        ultimo_transicion=Subquery(transition_timestamp),
-        ultimo_documento=Subquery(document_timestamp),
-    )
-
-
 def get_kpis(*, queryset, reference_date=None, reference_now=None):
     """Calculate the eight T059 KPI from an already scoped task queryset."""
     reference_date = reference_date or timezone.localdate()
@@ -115,24 +100,32 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
     ).count()
 
     movement_cutoff = reference_now - timedelta(days=7)
-    from .milestone_storage import resolve_milestone_storage
-    milestone_storage = resolve_milestone_storage()
-    stale_rows = _movement_queryset(open_tasks).values(
-        "pk",
-        "empresa_id",
-        "fecha_publicacion",
-        "ultimo_transicion",
-        "ultimo_documento",
-    )
+    from .movement_storage import resolve_movement_storage
+    movement_storage = resolve_movement_storage()
+    task_rows = list(open_tasks.values("pk", "empresa_id"))
+    movements = {}
+    for empresa_id in {row["empresa_id"] for row in task_rows}:
+        empresa_task_ids = [
+            row["pk"] for row in task_rows if row["empresa_id"] == empresa_id
+        ]
+        movements.update({
+            item.task_id: item
+            for item in movement_storage.latest_movements(
+                empresa_id=empresa_id, task_ids=empresa_task_ids,
+            )
+        })
     without_movement = 0
-    for row in stale_rows:
+    for row in task_rows:
+        movement = movements.get(row["pk"])
+        if movement is None:
+            continue
         timestamps = [
             value
             for value in (
-                row["fecha_publicacion"],
-                row["ultimo_transicion"],
-                milestone_storage.latest_movement(task_id=row["pk"], empresa_id=row["empresa_id"]),
-                row["ultimo_documento"],
+                movement.publication,
+                movement.transition,
+                movement.milestone,
+                movement.document,
             )
             if value is not None
         ]

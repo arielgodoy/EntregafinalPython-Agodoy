@@ -21,8 +21,8 @@
 - `CANONICAL_PENDING_RESIDUES = 4`
 - `CANONICAL_RESIDUES = 4`
 - `PENDING = 0`
-- `BLOCKED = 2`
-- `CLOSED = 2`
+- `BLOCKED = 1`
+- `CLOSED = 3`
 
 Six access sites are not six residues. The six sites are grouped into four
 semantic connection transformations.
@@ -148,8 +148,9 @@ No se implementa ninguna fase posterior en este checkpoint.
 All storage resolver families now consume the private operational entrypoint.
 Remaining `get_tarea_connection`/`get_tarea_mysql_connection` references are
 limited to compatibility wrapper implementation, the explicit legacy task
-guard, and technical schema/reference-data helpers. R001 and R004 remain
-`BLOCKED / REOPEN_PHASE_C`; R003 is closed by the Phase C1 primitive.
+guard, and technical schema/reference-data helpers. R001 remains
+`BLOCKED / REOPEN_PHASE_C`; R003 and R004 are closed by their Phase C
+primitives.
 
 ## Closed History
 
@@ -266,7 +267,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R004
 
-- `STATUS = BLOCKED`
+- `STATUS = CLOSED`
 - `PRIORITY = P1`
 - `FAMILY = KPI/dashboard`
 - `FILE = tareas/services/kpi.py`
@@ -277,8 +278,12 @@ These blocks are not pending and must not be reinterpreted.
 - `COMPLEXITY = EXTENDED`
 - `BLOCKER = _movement_queryset depende de un Django QuerySet lazy con Subquery/OuterRef sobre transiciones e historial documental. MYSQL_CONFIG no dispone actualmente de una frontera backend-neutral que preserve ese contrato sin adaptar la composición KPI/dashboard.`
 - `CLASSIFICATION = LEGACY_ORM_COUPLING`
-- `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
-- `REOPEN_IN_PHASE_C = YES`
+- `REOPEN_IN_PHASE_C = NO`
+- `R004_LEGACY_ORM_COUPLING_REMOVED = YES`
+- `R004_DJANGO_ALIAS_PARITY = PASS`
+- `R004_MYSQL_CONFIG_PARITY = PASS`
+- `R004_REAL_BACKEND = PASS`
+- `CLOSED_AT = Phase C2`
 
 ## Accounting Rule
 
@@ -317,7 +322,7 @@ The future integrity gate must reserve, at minimum:
 - `HTTP_END_TO_END_PARITY`
 - `FAIL_CLOSED_CONTAMINATION`
 
-Blocked residues `R001` and `R004` are inputs to the later private Tareas
+Blocked residue `R001` is an input to the later private Tareas
 router/frontier contract. No private router is created or designed in this
 checkpoint.
 
