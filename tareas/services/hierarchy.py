@@ -5,7 +5,6 @@ is logical only: child rows are never written when an ancestor is annulled.
 """
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
 
 from tareas.models import Tarea, TareaRelacion
 
@@ -73,8 +72,8 @@ def validate_relation(parent, child):
 
 def add_child(parent, child):
     validate_relation(parent, child)
-    with transaction.atomic():
-        return TareaRelacion.objects.create(padre=parent, hija=child)
+    from tareas.services.hierarchy_lifecycle_storage import resolve_hierarchy_lifecycle_storage
+    return resolve_hierarchy_lifecycle_storage().create_relation(parent.pk, child.pk)
 
 
 def is_effectively_annulled(task):

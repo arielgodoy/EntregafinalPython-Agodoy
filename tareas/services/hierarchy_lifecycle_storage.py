@@ -53,6 +53,12 @@ class DjangoHierarchyLifecycleStorage:
             relaciones_padre__padre_id=task_id,
         ).order_by("id")
 
+    def create_relation(self, parent_id, child_id):
+        with transaction.atomic(using=self.alias):
+            return TareaRelacion.objects.using(self.alias).create(
+                padre_id=parent_id, hija_id=child_id,
+            )
+
     def annul(self, command):
         task = self._task(command)
         actor = User.objects.using("default").get(pk=command.actor_id)
@@ -138,6 +144,25 @@ class MySQLHierarchyLifecycleStorage:
                 return [self._task_data(row) for row in cursor.fetchall()]
             finally:
                 cursor.close()
+
+    def create_relation(self, parent_id, child_id):
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "INSERT INTO tareas_tarearelacion (padre_id,hija_id) VALUES (%s,%s)",
+                    (parent_id, child_id),
+                )
+                relation_id = cursor.lastrowid
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                cursor.close()
+        return SimpleNamespace(id=relation_id, padre_id=parent_id, hija_id=child_id)
 
     def _change(self, command, *, reactivate: bool):
         action = "REACTIVAR" if reactivate else "ANULAR"
