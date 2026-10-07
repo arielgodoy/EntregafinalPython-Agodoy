@@ -59,6 +59,11 @@ class DjangoHierarchyLifecycleStorage:
                 padre_id=parent_id, hija_id=child_id,
             )
 
+    def annulment_timestamp(self, task_id):
+        return TareaTransicion.objects.using(self.alias).filter(
+            tarea_id=task_id, accion_evento="ANULAR",
+        ).order_by("-timestamp").values_list("timestamp", flat=True).first()
+
     def annul(self, command):
         task = self._task(command)
         actor = User.objects.using("default").get(pk=command.actor_id)
@@ -163,6 +168,23 @@ class MySQLHierarchyLifecycleStorage:
             finally:
                 cursor.close()
         return SimpleNamespace(id=relation_id, padre_id=parent_id, hija_id=child_id)
+
+    def annulment_timestamp(self, task_id):
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT timestamp FROM tareas_tareatransicion "
+                    "WHERE tarea_id=%s AND accion_evento=%s "
+                    "ORDER BY timestamp DESC LIMIT 1",
+                    (task_id, "ANULAR"),
+                )
+                row = cursor.fetchone()
+                return row[0] if row else None
+            finally:
+                cursor.close()
 
     def _change(self, command, *, reactivate: bool):
         action = "REACTIVAR" if reactivate else "ANULAR"

@@ -5,7 +5,6 @@ from datetime import date, datetime
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from tareas.models import TareaTransicion
 
 
 def _as_date(value):
@@ -19,12 +18,8 @@ def _as_date(value):
 
 
 def _fecha_anulacion(tarea):
-    return (
-        TareaTransicion.objects.filter(tarea=tarea, accion_evento="ANULAR")
-        .order_by("-timestamp")
-        .values_list("timestamp", flat=True)
-        .first()
-    )
+    from .hierarchy_lifecycle_storage import resolve_hierarchy_lifecycle_storage
+    return resolve_hierarchy_lifecycle_storage().annulment_timestamp(tarea.pk)
 
 
 def _fecha_referencia_efectiva(tarea, fecha_referencia):
