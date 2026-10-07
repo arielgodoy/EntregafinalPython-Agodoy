@@ -212,23 +212,28 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R001
 
-- `STATUS = BLOCKED`
+- `STATUS = CLOSED`
 - `PRIORITY = P1`
 - `FAMILY = Views/list/detail compatibility`
 - `FILE = tareas/views.py`
 - `FUNCTION = TareaEmpresaQuerysetMixin.get_queryset`
 - `ACCESS_SITES = 1`
-- `CURRENT_ACCESS = Direct Tarea.objects`
-- `EXPECTED_FRONTIER = Existing task/detail/list storage`
+- `CURRENT_ACCESS = Backend-neutral task/detail/similarity/document storage`
+- `EXPECTED_FRONTIER = Existing task/detail/list/similarity/document storage`
 - `COMPLEXITY = EXTENDED`
 - `BLOCKED_AT_COMMIT = 17eb1852e3c7000881c9d728923d876140532b62`
-- `BLOCKER = Historical consumers require a real lazy Django QuerySet while the MYSQL_CONFIG task frontier exposes backend-neutral TaskListResult.`
+- `CLOSED_AT_COMMIT = PENDING_C3_CHECKPOINT`
+- `BLOCKER = Superseded by the Phase A contract: QuerySet/laziness was not a functional contract.`
 - `CLASSIFICATION = LEGACY_ORM_COUPLING`
 - `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
 - `REOPEN_IN_PHASE_C = YES`
-- `CONNECTION_ONLY_TRANSFORMATION_FEASIBLE = NO`
+- `CONNECTION_ONLY_TRANSFORMATION_FEASIBLE = YES`
 - `FUNCTIONAL_CONTRACT_FROZEN = YES`
-- `REVISIT = Post-Tareas connection architecture/private-router contract design.`
+- `R001_LEGACY_ORM_COUPLING_REMOVED = YES`
+- `R001_DJANGO_ALIAS_PARITY = PASS`
+- `R001_MYSQL_CONFIG_PARITY = PASS (storage/API parity; public HTTP smoke pending real configured backend)`
+- `R001_HTTP_PARITY = PASS (Django focal suite)`
+- `R001_REAL_BACKEND = PENDING FINAL MYSQL_CONFIG HTTP SMOKE`
 
 ### T135-R002
 
@@ -306,6 +311,7 @@ Rows are never deleted; only status and evidence may change.
 ## T135 Classification Checkpoint
 
 - `T135_PENDING_ZERO = YES`
+- `T135_BLOCKED_ZERO = NO (R001 closed; final integrity gate remains pending)`
 - `FINAL_TAREAS_CONNECTION_INTEGRITY_GATE = PENDING`
 - `T135_FULL_APP_CERTIFIED = NO`
 

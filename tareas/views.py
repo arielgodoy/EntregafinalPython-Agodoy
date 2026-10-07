@@ -125,6 +125,7 @@ from .services.similarity import (
     evaluate_task_similarity,
     get_similarity_threshold,
 )
+from .services.similarity_storage import SimilarityStorageError, resolve_similarity_storage
 from .services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
@@ -616,7 +617,7 @@ def _detail_can_create_minitask(detail_result, actor, empresa):
 
 
 class ExistingTaskBackendGuardMixin:
-    """Block Django-only existing-task flows before their ORM lookup."""
+    """Block legacy existing-task flows before their ORM lookup."""
 
     backend_guard_operation = "existing_task_operation"
 
@@ -628,18 +629,29 @@ class ExistingTaskBackendGuardMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-class TareaEmpresaQuerysetMixin:
-    """Restringe el queryset a la empresa activa de la sesión."""
+def _get_operational_similarity_task(task_id, empresa_id):
+    try:
+        resolve_detail_storage().get_task_detail(
+            task_id=task_id,
+            empresa_id=empresa_id,
+            sections=TaskDetailSections(
+                mini_tasks=False,
+                links=False,
+                milestones=False,
+                documents=False,
+            ),
+        )
+        with resolve_similarity_storage().atomic() as unit:
+            return unit.get_task(task_id, company_id=empresa_id)
+    except DetailTaskNotFound as exc:
+        raise Http404 from exc
+    except (TaskStorageError, SimilarityStorageError) as exc:
+        raise TaskStorageError(
+            "No se pudo leer el almacenamiento de tareas configurado."
+        ) from exc
 
-    def get_queryset(self):
-        empresa_id = _get_empresa_id(self.request)
-        qs = Tarea.objects.select_related("empresa", "responsable", "creada_por")
-        if not empresa_id:
-            return Tarea.objects.none()
-        return qs.filter(empresa_id=empresa_id)
 
-
-class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, ListView):
+class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     model = Tarea
     template_name = "tareas/tarea_lista.html"
     context_object_name = "tareas"
@@ -791,7 +803,7 @@ class BaseTareasSchemaInstallView(LoginRequiredMixin, View):
         return redirect(reverse("tareas:conexiones_sql"))
 
 
-class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/mis_tareas.html"
     vista_nombre = "Tareas - Dashboard personal"
     permiso_requerido = "ingresar"
@@ -924,7 +936,7 @@ class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View
         return render(request, "tareas/dashboard_usuario.html", context)
 
 
-class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, DetailView):
+class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
     model = Tarea
     template_name = "tareas/tarea_detalle.html"
     context_object_name = "tarea"
@@ -1197,20 +1209,21 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQu
 
     @method_decorator(verificar_permiso("Tareas", "modificar"))
     def post(self, request, *args, **kwargs):
-        try:
-            ensure_existing_task_backend_supported("evidencia_configuracion")
-        except TaskStorageBackendNotImplemented as exc:
-            return HttpResponse(str(exc), status=503)
-        task = get_object_or_404(self.get_queryset(), pk=kwargs["pk"])
+        task_id = kwargs["pk"]
+        empresa_id = _get_empresa_id(request)
         form = EvidenciaConfigForm(request.POST)
         if form.is_valid():
-            configure_closure_evidence(
-                tarea=task,
-                usuario=request.user,
-                requiere_evidencia_cierre=form.cleaned_data["requiere_evidencia_cierre"],
-            )
+            try:
+                resolve_document_storage().configure_evidence(
+                    task_id=task_id,
+                    empresa_id=empresa_id,
+                    usuario_id=request.user.pk,
+                    required=form.cleaned_data["requiere_evidencia_cierre"],
+                )
+            except EditTaskNotFound as exc:
+                raise Http404 from exc
             messages.success(request, "tareas.messages.evidence_configuration_updated")
-            return redirect("tareas:detalle_tarea", pk=task.pk)
+            return redirect("tareas:detalle_tarea", pk=task_id)
         self.object = self.get_object()
         context = self.get_context_data(object=self.object)
         context["evidencia_config_form"] = form
@@ -2214,7 +2227,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return redirect("tareas:detalle_tarea", pk=updated.id)
 
 
-class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Publica un borrador (FR-007/FR-008, Q1). Publicación irreversible (Q2)."""
 
     vista_nombre = "Tareas - Ciclo de vida"
@@ -2225,13 +2238,12 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
         empresa_id = _get_empresa_id(request)
         task_id = kwargs["pk"]
         if isinstance(storage, DjangoTaskStorage):
-            tarea = self.get_queryset().filter(pk=task_id).first()
-            if tarea is None:
-                raise Http404
+            tarea = _get_operational_similarity_task(task_id, empresa_id)
+            empresa = Empresa.objects.get(pk=empresa_id)
             try:
                 evaluations = evaluate_task_similarity(
                     tarea=tarea,
-                    threshold=get_similarity_threshold(tarea.empresa),
+                    threshold=get_similarity_threshold(empresa),
                 )
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
@@ -2267,17 +2279,27 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQ
         return redirect("tareas:detalle_tarea", pk=result.task_id)
 
 
-class SimilitudTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
     template_name = "tareas/tarea_similitud.html"
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except TaskStorageError:
+            return HttpResponse(
+                "No se pudo leer el almacenamiento de tareas configurado.",
+                status=503,
+            )
+
     def get(self, request, tarea_id):
-        tarea = get_object_or_404(self.get_queryset(), pk=tarea_id)
+        tarea = _get_operational_similarity_task(tarea_id, _get_empresa_id(request))
+        empresa = Empresa.objects.get(pk=_get_empresa_id(request))
         try:
             evaluations = evaluate_task_similarity(
                 tarea=tarea,
-                threshold=get_similarity_threshold(tarea.empresa),
+                threshold=get_similarity_threshold(empresa),
             )
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
@@ -2297,18 +2319,24 @@ class SimilitudTareaView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, L
         )
 
 
-class ConfirmarSimilitudView(ExistingTaskBackendGuardMixin, VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
     def post(self, request, tarea_id, evaluacion_id):
-        tarea = get_object_or_404(self.get_queryset(), pk=tarea_id)
-        evaluation = get_object_or_404(
-            EvaluacionSimilitud.objects.select_related("tarea", "tarea_candidata"),
-            pk=evaluacion_id,
-            tarea=tarea,
-            supera_umbral=True,
-        )
+        tarea = _get_operational_similarity_task(tarea_id, _get_empresa_id(request))
+        try:
+            with resolve_similarity_storage().atomic() as unit:
+                evaluation = unit.get_evaluation(evaluacion_id)
+                if (
+                    evaluation.tarea_id != tarea.pk
+                    or not evaluation.supera_umbral
+                    or evaluation.tarea.empresa_id != tarea.empresa_id
+                    or evaluation.tarea_candidata.empresa_id != tarea.empresa_id
+                ):
+                    raise Http404
+        except SimilarityStorageError as exc:
+            raise Http404 from exc
         decision = request.POST.get("decision")
         if decision not in {
             EvaluacionSimilitud.Decision.MISMO_PROBLEMA,
@@ -2325,11 +2353,12 @@ class ConfirmarSimilitudView(ExistingTaskBackendGuardMixin, VerificarPermisoMixi
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
             return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
-        pending = EvaluacionSimilitud.objects.filter(
-            tarea=tarea,
-            supera_umbral=True,
-            decision=EvaluacionSimilitud.Decision.PENDIENTE,
-        ).exists()
+        with resolve_similarity_storage().atomic() as unit:
+            pending = any(
+                evaluation.supera_umbral
+                and evaluation.decision == EvaluacionSimilitud.Decision.PENDIENTE
+                for evaluation in unit.list_evaluations(tarea.pk)
+            )
         if pending:
             return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
         try:
@@ -2341,7 +2370,7 @@ class ConfirmarSimilitudView(ExistingTaskBackendGuardMixin, VerificarPermisoMixi
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
-class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresaQuerysetMixin, View):
+class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, View):
     """Protected Phase 2 action endpoint for one task."""
 
     permiso_requerido = "modificar"
@@ -2412,34 +2441,10 @@ class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, TareaEmpresa
                 return redirect("tareas:detalle_tarea", pk=kwargs["pk"])
             messages.success(request, "tareas.messages.lifecycle_action_applied")
             return redirect("tareas:detalle_tarea", pk=result.task_id)
-        tarea = self.get_queryset().filter(pk=kwargs["pk"]).first()
-        if tarea is None:
-            from django.http import Http404
-
-            raise Http404
-        try:
-            if self.accion == "gestion":
-                transition_task(tarea, Tarea.Estado.GESTION, request.user, "INICIAR_GESTION")
-            elif self.accion == "completar":
-                complete_task(tarea, request.user)
-            elif self.accion == "aprobar":
-                approve_closure(tarea, request.user)
-            elif self.accion == "rechazar":
-                reject_closure(tarea, request.user)
-            elif self.accion == "anular":
-                annul_task(tarea, request.user)
-            elif self.accion == "reactivar":
-                reactivate_task(tarea, request.user)
-            else:
-                raise ValidationError(
-                    "tareas.messages.lifecycle_action_not_configured",
-                    code="tareas.messages.lifecycle_action_not_configured",
-                )
-        except ValidationError as exc:
-            messages.error(request, "; ".join(exc.messages))
-        else:
-            messages.success(request, "tareas.messages.lifecycle_action_applied")
-        return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        raise ValidationError(
+            "tareas.messages.lifecycle_action_not_configured",
+            code="tareas.messages.lifecycle_action_not_configured",
+        )
 
 
 class IniciarGestionView(TareaLifecycleView):
