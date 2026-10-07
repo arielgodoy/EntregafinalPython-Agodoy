@@ -186,6 +186,7 @@ class TaskDTO:
     id: int
     empresa_id: int
     estado: str
+    prioridad: str
     anulada: bool
     creador_id: int | None
     responsable_id: int | None
@@ -204,9 +205,9 @@ class TaskDTO:
 
 
 def _task_dto(row):
-    task_id, empresa_id, state, annulled, creator_id, responsible_id = row
+    task_id, empresa_id, state, priority, annulled, creator_id, responsible_id = row
     empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
-    return TaskDTO(task_id, empresa_id, state, bool(annulled), creator_id, responsible_id, empresa)
+    return TaskDTO(task_id, empresa_id, state, priority, bool(annulled), creator_id, responsible_id, empresa)
 
 
 def _comment_dto(row, versions=(), attachments=()):
@@ -464,7 +465,7 @@ class MySQLCommentStorage:
                 cursor = connection.cursor()
                 try:
                     cursor.execute(
-                        "SELECT id, empresa_id, estado, anulada, creada_por_id, responsable_id "
+                        "SELECT id, empresa_id, estado, prioridad, anulada, creada_por_id, responsable_id "
                         "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
                         (task_id, empresa_id),
                     )
@@ -498,7 +499,7 @@ class MySQLCommentStorage:
 
     def _task(self, cursor, task_id, empresa_id):
         cursor.execute(
-            "SELECT id, empresa_id, estado, anulada, creada_por_id, responsable_id "
+            "SELECT id, empresa_id, estado, prioridad, anulada, creada_por_id, responsable_id "
             "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
             (task_id, empresa_id),
         )

@@ -150,6 +150,36 @@ class CommentsReadingBackendParityTests(TestCase):
             with self.assertRaises(RuntimeError):
                 resolve_comment_storage()
 
+    def test_mysql_task_dto_preserves_priority(self):
+        class Cursor:
+            description = ()
+
+            def execute(self, sql, params=()):
+                pass
+
+            def fetchone(self):
+                return (7, self.default_empresa_id, "GESTION", "URGENTE", 0, 11, 12)
+
+            def close(self):
+                pass
+
+        class Connection:
+            def __init__(self, empresa_id):
+                self.cursor_value = Cursor()
+                self.cursor_value.default_empresa_id = empresa_id
+
+            def cursor(self):
+                return self.cursor_value
+
+        storage = MySQLCommentStorage(object(), "configured_tasks")
+        with patch(
+            "tareas.services.comment_storage.open_mysql_connection",
+            return_value=nullcontext(Connection(self.default_empresa.pk)),
+        ):
+            task = storage.task(7, self.default_empresa.pk)
+
+        self.assertEqual(task.prioridad, "URGENTE")
+
     def test_notification_is_after_storage_commit(self):
         events = []
         storage = resolve_comment_storage()

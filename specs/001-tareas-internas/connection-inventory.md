@@ -56,6 +56,20 @@ These blocks are not pending and must not be reinterpreted.
 - `EVENT_PATH = FAIL` (best-effort notification expects `TaskDTO.prioridad`; outside this connection-only correction)
 - `DTO_COMPATIBILITY = PASS` (MySQL comments now expose the historical View relation interface)
 
+### T135C-FIX4 Comments Event DTO Parity Checkpoint
+
+- `STATUS = CLOSED`
+- `SCOPE = MySQL TaskDTO priority parity`
+- `EVENT_FUNCTION = tareas.services.comments._schedule_comment_event`
+- `EVENT_CONSUMER = tareas.services.notifications.emit_task_event`
+- `EVENT_TASK_REQUIRED_ATTRIBUTES = pk, empresa, prioridad`
+- `MYSQL_TASK_DTO_HAS_PRIORIDAD = YES`
+- `PHYSICAL_MYSQL_TAREA_HAS_PRIORIDAD = YES` (`tareas_tarea.id=3`, value `NORMAL`)
+- `REAL_HTTP_CREATE = PASS` (`200`, JSON `success=true`, no DTO priority error)
+- `REAL_HTTP_LOAD = PASS` (`200`, JSON `success=true`, temporary comment returned)
+- `CLEANUP = PASS`
+- `EVENT_PATH = PASS` (no `TaskDTO.prioridad` error observed)
+
 ## Pending Inventory
 
 ### T135-R001
