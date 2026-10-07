@@ -193,6 +193,7 @@ class TaskDTO:
     responsable_id: int | None
     empresa: object
     explicit_participant_ids: tuple = ()
+    additional_effective_user_ids: tuple = ()
 
     @property
     def pk(self):
@@ -205,10 +206,11 @@ class TaskDTO:
             if user_id is not None
         }
         ids.update(self.explicit_participant_ids)
+        ids.update(self.additional_effective_user_ids)
         return ids
 
 
-def _task_dto(row, explicit_participant_ids=()):
+def _task_dto(row, explicit_participant_ids=(), additional_effective_user_ids=()):
     task_id, empresa_id, state, priority, annulled, creator_id, responsible_id = row
     empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
     return TaskDTO(
@@ -221,6 +223,7 @@ def _task_dto(row, explicit_participant_ids=()):
         responsible_id,
         empresa,
         tuple(explicit_participant_ids),
+        tuple(additional_effective_user_ids),
     )
 
 
@@ -488,13 +491,17 @@ class MySQLCommentStorage:
                     )
                     row = cursor.fetchone()
                     participant_ids = self._participant_ids(cursor, task_id)
+                    effective_user_ids = self._additional_effective_user_ids(
+                        cursor,
+                        task_id,
+                    )
                 finally:
                     cursor.close()
         except Exception as exc:
             raise TaskStorageError("No se pudo resolver la Tarea en BASE_TAREAS.") from exc
         if row is None:
             raise EditTaskNotFound
-        return _task_dto(row, participant_ids)
+        return _task_dto(row, participant_ids, effective_user_ids)
 
     @staticmethod
     def _participant_ids(cursor, task_id):
@@ -504,6 +511,25 @@ class MySQLCommentStorage:
             (task_id,),
         )
         return tuple(row[0] for row in cursor.fetchall())
+
+    @staticmethod
+    def _additional_effective_user_ids(cursor, task_id):
+        cursor.execute(
+            "SELECT responsable_id FROM tareas_hito "
+            "WHERE tarea_id=%s AND anulado=0",
+            (task_id,),
+        )
+        user_ids = {
+            row[0] for row in cursor.fetchall() if row[0] is not None
+        }
+        cursor.execute(
+            "SELECT persona_id FROM tareas_minitarea WHERE tarea_id=%s",
+            (task_id,),
+        )
+        user_ids.update(
+            row[0] for row in cursor.fetchall() if row[0] is not None
+        )
+        return tuple(sorted(user_ids))
 
     def _execute(self, operation):
         try:
@@ -533,7 +559,11 @@ class MySQLCommentStorage:
         row = cursor.fetchone()
         if row is None:
             raise EditTaskNotFound
-        return _task_dto(row, self._participant_ids(cursor, task_id))
+        return _task_dto(
+            row,
+            self._participant_ids(cursor, task_id),
+            self._additional_effective_user_ids(cursor, task_id),
+        )
 
     def document_ids_for_comment(self, comment_id):
         def operation(cursor):
@@ -683,12 +713,13 @@ class MySQLCommentStorage:
 
     def create(self, command, *, documents=()):
         def operation(cursor):
-            self._task(cursor, command.task_id, command.empresa_id)
+            task = self._task(cursor, command.task_id, command.empresa_id)
+            now = timezone.now()
             cursor.execute(
                 "INSERT INTO tareas_comentario "
                 "(tarea_id, autor_id, contenido, created_at, updated_at, oculto) "
                 "VALUES (%s,%s,%s,%s,%s,%s)",
-                (command.task_id, command.author_id, command.content, timezone.now(), timezone.now(), False),
+                (command.task_id, command.author_id, command.content, now, now, False),
             )
             comment_id = cursor.lastrowid
             cursor.execute(
@@ -699,6 +730,13 @@ class MySQLCommentStorage:
             )
             version_id = cursor.lastrowid
             self._insert_document_links(cursor, comment_id, version_id, command.document_ids)
+            self._ensure_readings_with_cursor(
+                cursor,
+                task_id=command.task_id,
+                comment_id=comment_id,
+                user_ids=task._tareas_effective_user_ids,
+                created_at=now,
+            )
             cursor.execute("SELECT id, tarea_id, autor_id, contenido, created_at, updated_at, oculto FROM tareas_comentario WHERE id=%s", (comment_id,))
             return self._materialize_comment(cursor, cursor.fetchone())
         return self._execute(operation)
@@ -876,27 +914,44 @@ class MySQLCommentStorage:
 
     def ensure_readings(self, task_id, comment_id, user_ids, created_at):
         def operation(cursor):
-            cursor.execute(
-                "SELECT id FROM tareas_comentario WHERE tarea_id=%s AND "
-                "(created_at < %s OR (created_at=%s AND id < %s)) "
-                "ORDER BY created_at DESC, id DESC LIMIT 1",
-                (task_id, created_at, created_at, comment_id),
+            self._ensure_readings_with_cursor(
+                cursor,
+                task_id=task_id,
+                comment_id=comment_id,
+                user_ids=user_ids,
+                created_at=created_at,
             )
-            predecessor = cursor.fetchone()
-            predecessor_id = predecessor[0] if predecessor else None
-            for user_id in user_ids:
-                cursor.execute(
-                    "SELECT id FROM tareas_tarealectura WHERE tarea_id=%s AND usuario_id=%s",
-                    (task_id, user_id),
-                )
-                if cursor.fetchone() is None:
-                    cursor.execute(
-                        "INSERT INTO tareas_tarealectura "
-                        "(tarea_id, usuario_id, leido, fecha_lectura, comentario_leido_hasta_id) "
-                        "VALUES (%s,%s,%s,%s,%s)",
-                        (task_id, user_id, False, None, predecessor_id),
-                    )
         return self._execute(operation)
+
+    @staticmethod
+    def _ensure_readings_with_cursor(
+        cursor,
+        *,
+        task_id,
+        comment_id,
+        user_ids,
+        created_at,
+    ):
+        cursor.execute(
+            "SELECT id FROM tareas_comentario WHERE tarea_id=%s AND "
+            "(created_at < %s OR (created_at=%s AND id < %s)) "
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
+            (task_id, created_at, created_at, comment_id),
+        )
+        predecessor = cursor.fetchone()
+        predecessor_id = predecessor[0] if predecessor else None
+        for user_id in sorted(set(user_ids)):
+            cursor.execute(
+                "SELECT id FROM tareas_tarealectura WHERE tarea_id=%s AND usuario_id=%s",
+                (task_id, user_id),
+            )
+            if cursor.fetchone() is None:
+                cursor.execute(
+                    "INSERT INTO tareas_tarealectura "
+                    "(tarea_id, usuario_id, leido, fecha_lectura, comentario_leido_hasta_id) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (task_id, user_id, False, None, predecessor_id),
+                )
 
 
 def resolve_comment_storage():

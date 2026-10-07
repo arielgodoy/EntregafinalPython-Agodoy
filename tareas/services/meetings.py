@@ -75,22 +75,36 @@ def create_meeting(*, empresa, creada_por, titulo, descripcion, fecha_hora_progr
         storage = resolve_meeting_storage()
     except MeetingStorageError as exc:
         raise TaskStorageError("tareas.assignment.errors.backend") from exc
-    if not isinstance(storage, DjangoMeetingStorage):
+    if not isinstance(storage, (DjangoMeetingStorage, MySQLMeetingStorage)):
         raise TaskStorageError("tareas.assignment.errors.backend")
-    with transaction.atomic(using=storage.alias):
-        return _create_meeting(
-            storage=storage,
-            empresa=empresa,
-            creada_por=creada_por,
-            titulo=titulo,
-            descripcion=descripcion,
-            fecha_hora_programada=fecha_hora_programada,
-            modalidad=modalidad,
-            lugar_o_enlace=lugar_o_enlace,
-            tipo_ambito=tipo_ambito,
-            local=local,
-            departamento=departamento,
-        )
+    if isinstance(storage, DjangoMeetingStorage):
+        with transaction.atomic(using=storage.alias):
+            return _create_meeting(
+                storage=storage,
+                empresa=empresa,
+                creada_por=creada_por,
+                titulo=titulo,
+                descripcion=descripcion,
+                fecha_hora_programada=fecha_hora_programada,
+                modalidad=modalidad,
+                lugar_o_enlace=lugar_o_enlace,
+                tipo_ambito=tipo_ambito,
+                local=local,
+                departamento=departamento,
+            )
+    return _create_meeting(
+        storage=storage,
+        empresa=empresa,
+        creada_por=creada_por,
+        titulo=titulo,
+        descripcion=descripcion,
+        fecha_hora_programada=fecha_hora_programada,
+        modalidad=modalidad,
+        lugar_o_enlace=lugar_o_enlace,
+        tipo_ambito=tipo_ambito,
+        local=local,
+        departamento=departamento,
+    )
 
 
 def _create_meeting(*, storage, empresa, creada_por, titulo, descripcion,
@@ -110,8 +124,6 @@ def _create_meeting(*, storage, empresa, creada_por, titulo, descripcion,
         local=local,
         departamento=departamento,
     )
-    planned_task.save(using=storage.alias)
-    publish_task(planned_task, creada_por)
     reunion = ReunionRevision(
         empresa=empresa,
         titulo=titulo,
@@ -125,9 +137,18 @@ def _create_meeting(*, storage, empresa, creada_por, titulo, descripcion,
         tarea_planificada=planned_task,
         creada_por=creada_por,
     )
-    reunion.full_clean()
-    reunion.save(using=storage.alias)
-    return reunion
+    if isinstance(storage, DjangoMeetingStorage):
+        planned_task.save(using=storage.alias)
+        publish_task(planned_task, creada_por)
+        reunion.tarea_planificada = planned_task
+        reunion.full_clean()
+        reunion.save(using=storage.alias)
+        return reunion
+    return storage.create_meeting_and_task(
+        meeting=reunion,
+        task=planned_task,
+        actor_id=creada_por.pk,
+    )
 
 
 def update_meeting(reunion, **changes):
@@ -204,8 +225,12 @@ def remove_meeting_participant(*, reunion, usuario):
 
 def convene_meeting(reunion, *, actor=None):
     storage = resolve_meeting_storage()
-    with transaction.atomic(using=storage.alias):
-        return _convene_meeting(reunion, actor=actor, storage=storage)
+    if isinstance(storage, DjangoMeetingStorage):
+        with transaction.atomic(using=storage.alias):
+            return _convene_meeting(reunion, actor=actor, storage=storage)
+    if not isinstance(storage, MySQLMeetingStorage):
+        raise TaskStorageError("tareas.assignment.errors.backend")
+    return _convene_meeting(reunion, actor=actor, storage=storage)
 
 
 def _convene_meeting(reunion, *, actor=None, storage):

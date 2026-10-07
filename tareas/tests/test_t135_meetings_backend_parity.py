@@ -1,11 +1,15 @@
 from contextlib import contextmanager
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.db import connections
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, Vista
 from organizacion.models import Local, OrganizationalSource
@@ -17,6 +21,7 @@ from tareas.services.document_storage import DocumentReference
 from tareas.services.meetings import (
     add_meeting_participant,
     add_task_to_meeting,
+    convene_meeting,
     create_meeting,
     mark_meeting_completed,
     remove_meeting_participant,
@@ -26,9 +31,9 @@ from tareas.services.meetings import (
 from tareas.services.meeting_storage import (
     DjangoMeetingStorage,
     MeetingStorageError,
+    MySQLMeetingStorage,
     resolve_meeting_storage,
 )
-from tareas.services.task_storage import TaskStorageError
 
 
 class _SQLiteCursor:
@@ -57,7 +62,8 @@ class _SQLiteConnection:
                 id INTEGER PRIMARY KEY, titulo TEXT, descripcion TEXT, prioridad TEXT,
                 correlativo TEXT, anulada INTEGER, estado TEXT, responsable_id INTEGER,
                 empresa_id INTEGER, tipo_ambito TEXT, local_id INTEGER,
-                departamento_id INTEGER, creada_por_id INTEGER, fecha_tope TEXT
+                departamento_id INTEGER, creada_por_id INTEGER, fecha_tope TEXT,
+                fecha_publicacion TEXT, fecha_asignacion TEXT
             );
             CREATE TABLE tareas_reunionrevision (
                 id INTEGER PRIMARY KEY, empresa_id INTEGER, titulo TEXT, descripcion TEXT,
@@ -78,12 +84,14 @@ class _SQLiteConnection:
             """
         )
         self.database.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 self.task_id, task.titulo, task.descripcion, task.prioridad, task.correlativo,
                 task.anulada, task.estado, task.responsable_id, task.empresa_id,
                 task.tipo_ambito, task.local_id, task.departamento_id,
                 task.creada_por_id, task.fecha_tope.isoformat(),
+                task.fecha_publicacion.isoformat() if task.fecha_publicacion else None,
+                task.fecha_asignacion.isoformat() if task.fecha_asignacion else None,
             ),
         )
         self.database.execute(
@@ -430,10 +438,15 @@ class MeetingBackendParityTests(TestCase):
 
     def test_mysql_meeting_update_targets_configured_operational_store(self):
         with self.mysql_backend():
-            updated = update_meeting(
-                SimpleNamespace(pk=self.connection.meeting_id),
-                titulo="Updated meeting",
-                descripcion="Updated description",
+            with CaptureQueriesContext(connections["default"]) as default_queries:
+                updated = update_meeting(
+                    SimpleNamespace(pk=self.connection.meeting_id),
+                    titulo="Updated meeting",
+                    descripcion="Updated description",
+                )
+            self.assertFalse(
+                any("tareas_tarea" in query["sql"] for query in default_queries),
+                "MySQL meeting validation must not query the default Tareas table.",
             )
             row = self.connection.database.execute(
                 "SELECT titulo,descripcion FROM tareas_reunionrevision WHERE id=?",
@@ -451,34 +464,155 @@ class MeetingBackendParityTests(TestCase):
                 "Meeting parity",
             )
 
-    def test_create_meeting_keeps_existing_mysql_lifecycle_block(self):
-        with patch.object(
-            meeting_storage,
-            "resolve_operational_backend",
-            return_value=BackendContext(
-                logical_role="BASE_TAREAS", backend_type="MYSQL_CONFIG",
-                mysql_connection=object(), database_name="meetings_test",
+    def test_mysql_task_clean_preserves_published_task_rules_without_default_read(self):
+        published_at = timezone.now().replace(microsecond=0)
+        assigned_at = published_at - timedelta(days=1)
+        self.connection.database.execute(
+            "UPDATE tareas_tarea SET estado=?,fecha_publicacion=?,fecha_asignacion=? "
+            "WHERE id=?",
+            (
+                Tarea.Estado.ACTIVA,
+                published_at.isoformat(),
+                assigned_at.isoformat(),
+                self.connection.task_id,
             ),
+        )
+
+        with self.mysql_backend():
+            storage = resolve_meeting_storage()
+            with CaptureQueriesContext(connections["default"]) as default_queries:
+                task = storage.get_task(self.connection.task_id)
+                task.full_clean(validate_unique=False, validate_constraints=False)
+                task.estado = Tarea.Estado.BORRADOR
+                task.fecha_publicacion = published_at - timedelta(days=2)
+                task.fecha_asignacion = assigned_at - timedelta(days=2)
+                with self.assertRaises(ValidationError) as error:
+                    task.full_clean(validate_unique=False, validate_constraints=False)
+
+            self.assertFalse(
+                any("tareas_tarea" in query["sql"] for query in default_queries),
+                "MySQL task validation must use the persisted snapshot, not default ORM.",
+            )
+            self.assertEqual(
+                error.exception.message_dict,
+                {
+                    "estado": [
+                        "La publicación es irreversible: una tarea publicada no puede volver a borrador."
+                    ],
+                    "fecha_publicacion": ["La fecha de publicación es inmutable."],
+                    "fecha_asignacion": ["La fecha de asignación es inmutable."],
+                },
+            )
+
+    @patch("tareas.services.meeting_storage.open_mysql_connection")
+    def test_create_meeting_mysql_persists_task_and_meeting_atomically(
+        self,
+        open_connection,
+    ):
+        connection = MagicMock()
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (4,)
+        cursor.lastrowid = 9001
+        connection.cursor.return_value = cursor
+        open_connection.return_value.__enter__.return_value = connection
+        storage = MySQLMeetingStorage(object(), "meetings_test")
+
+        with patch(
+            "tareas.services.meetings.resolve_meeting_storage",
+            return_value=storage,
         ):
-            with patch.object(
-                Tarea.objects,
-                "create",
-                side_effect=AssertionError("must not create a default task"),
-            ):
-                with self.assertRaises(TaskStorageError):
-                    create_meeting(
-                        empresa=self.company,
-                        creada_por=self.creator,
-                        titulo="Blocked meeting",
-                        descripcion="",
-                        fecha_hora_programada=datetime.combine(
-                            date(2026, 10, 3), time(10)
-                        ),
-                        modalidad=ReunionRevision.Modalidad.ZOOM,
-                        lugar_o_enlace="https://example.test/blocked",
-                        tipo_ambito=ReunionRevision.TipoAmbito.LOCAL,
-                        local=self.local,
-                    )
+            meeting = create_meeting(
+                empresa=self.company,
+                creada_por=self.creator,
+                titulo="MySQL meeting",
+                descripcion="Operational creation",
+                fecha_hora_programada=datetime.combine(
+                    date(2026, 10, 3), time(10)
+                ),
+                modalidad=ReunionRevision.Modalidad.ZOOM,
+                lugar_o_enlace="https://example.test/mysql-meeting",
+                tipo_ambito=ReunionRevision.TipoAmbito.LOCAL,
+                local=self.local,
+            )
+
+        self.assertEqual(meeting.pk, 9001)
+        self.assertEqual(meeting.tarea_planificada.pk, 9001)
+        self.assertEqual(meeting.tarea_planificada.estado, Tarea.Estado.ACTIVA)
+        self.assertEqual(meeting.tarea_planificada.correlativo, "A0000004")
+        self.assertEqual(connection.cursor.call_count, 1)
+        connection.begin.assert_called_once()
+        connection.commit.assert_called_once()
+        connection.rollback.assert_not_called()
+        sql = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(any("INSERT INTO tareas_tarea" in statement for statement in sql))
+        self.assertTrue(any("INSERT INTO tareas_tareatransicion" in statement for statement in sql))
+        self.assertTrue(any("INSERT INTO tareas_reunionrevision" in statement for statement in sql))
+
+    @patch("tareas.services.meeting_storage.open_mysql_connection")
+    def test_create_meeting_mysql_rolls_back_task_when_meeting_validation_fails(
+        self,
+        open_connection,
+    ):
+        connection = MagicMock()
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (4,)
+        cursor.lastrowid = 9002
+        connection.cursor.return_value = cursor
+        open_connection.return_value.__enter__.return_value = connection
+        storage = MySQLMeetingStorage(object(), "meetings_test")
+
+        with patch(
+            "tareas.services.meetings.resolve_meeting_storage",
+            return_value=storage,
+        ):
+            with self.assertRaises(ValidationError):
+                create_meeting(
+                    empresa=self.company,
+                    creada_por=self.creator,
+                    titulo="",
+                    descripcion="Operational creation",
+                    fecha_hora_programada=datetime.combine(
+                        date(2026, 10, 3), time(10)
+                    ),
+                    modalidad=ReunionRevision.Modalidad.ZOOM,
+                    lugar_o_enlace="https://example.test/mysql-meeting",
+                    tipo_ambito=ReunionRevision.TipoAmbito.LOCAL,
+                    local=self.local,
+                )
+
+        connection.rollback.assert_called_once()
+        connection.commit.assert_not_called()
+
+    @patch("tareas.services.meetings.send_task_email")
+    @patch("tareas.services.meetings.notify_task_event")
+    def test_mysql_convene_uses_storage_transaction_without_django_alias(
+        self,
+        notify_task_event,
+        send_task_email,
+    ):
+        self.participant.email = "meeting-participant@example.test"
+        self.participant.save(update_fields=["email"])
+        with self.mysql_backend():
+            add_meeting_participant(
+                reunion=SimpleNamespace(pk=self.connection.meeting_id),
+                usuario=self.participant,
+            )
+
+            meeting = convene_meeting(
+                SimpleNamespace(pk=self.connection.meeting_id),
+                actor=self.creator,
+            )
+
+        self.assertIsNotNone(meeting.convocada_at)
+        self.assertEqual(
+            self.connection.database.execute(
+                "SELECT convocada_at FROM tareas_reunionrevision WHERE id=?",
+                (self.connection.meeting_id,),
+            ).fetchone()[0],
+            meeting.convocada_at.isoformat(),
+        )
+        notify_task_event.assert_called_once()
+        send_task_email.assert_called_once()
 
     def test_missing_backend_fails_closed(self):
         with patch.object(

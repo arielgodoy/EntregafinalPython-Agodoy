@@ -371,31 +371,39 @@ class Tarea(models.Model):
                 )
 
         if self.pk:
-            original = (
-                Tarea.objects.filter(pk=self.pk)
-                .only("estado", "fecha_publicacion", "fecha_asignacion")
-                .first()
-            )
+            original = getattr(self, "_persisted_clean_values", None)
+            if original is None:
+                persisted = (
+                    Tarea.objects.filter(pk=self.pk)
+                    .only("estado", "fecha_publicacion", "fecha_asignacion")
+                    .first()
+                )
+                if persisted is not None:
+                    original = {
+                        "estado": persisted.estado,
+                        "fecha_publicacion": persisted.fecha_publicacion,
+                        "fecha_asignacion": persisted.fecha_asignacion,
+                    }
             if original is not None:
                 if (
-                    original.estado != self.Estado.BORRADOR
+                    original["estado"] != self.Estado.BORRADOR
                     and self.estado == self.Estado.BORRADOR
                 ):
                     errores["estado"] = (
                         "La publicación es irreversible: una tarea publicada no puede volver a borrador."
                     )
                 if (
-                    original.estado != self.Estado.BORRADOR
-                    and original.fecha_publicacion
-                    and self.fecha_publicacion != original.fecha_publicacion
+                    original["estado"] != self.Estado.BORRADOR
+                    and original["fecha_publicacion"]
+                    and self.fecha_publicacion != original["fecha_publicacion"]
                 ):
                     errores["fecha_publicacion"] = (
                         "La fecha de publicación es inmutable."
                     )
                 if (
-                    original.estado != self.Estado.BORRADOR
-                    and original.fecha_asignacion
-                    and self.fecha_asignacion != original.fecha_asignacion
+                    original["estado"] != self.Estado.BORRADOR
+                    and original["fecha_asignacion"]
+                    and self.fecha_asignacion != original["fecha_asignacion"]
                 ):
                     errores["fecha_asignacion"] = (
                         "La fecha de asignación es inmutable."

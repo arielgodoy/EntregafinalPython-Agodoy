@@ -395,3 +395,118 @@ use SYSTEM/CORE storage.
 
 This is a future closure gate only. It does not authorize implementation,
 router design, reopening closed residues, or a new audit in this checkpoint.
+
+## Post-T135 Corrective A1-A5 Checkpoint
+
+This corrective scope closes the specific publication, meeting-creation,
+meeting-convening, and comment-reading/recipient parity gaps below. It does not
+certify the complete Tareas connection inventory or close the final gate above.
+
+- `A1_PUBLICATION_AFTER_SIMILARITY_REVIEW = IMPLEMENTED`: MySQL lifecycle
+  publication no longer rejects a draft merely because a similar operational
+  task exists. The existing HTTP flow continues to route pending evaluations
+  to similarity review; parity coverage confirms a decided evaluation followed
+  by publication.
+- `A2_MEETING_CREATION = IMPLEMENTED`: MySQL persists the published planned
+  task, its publication transition, and its meeting on one BASE_TAREAS
+  connection and transaction. Meeting validation failure rolls back the task.
+- `A3_MEETING_CONVENING = IMPLEMENTED`: MySQL convening uses the storage
+  transaction and does not assume that MySQL storage has a Django alias.
+- `A4_COMMENT_READINGS = IMPLEMENTED`: MySQL comment, version, attachment links,
+  and effective-participant reading rows are persisted in one storage
+  transaction, matching the Django comment-created signal behavior.
+- `A5_COMMENT_EFFECTIVE_ROLES = IMPLEMENTED`: MySQL comment task DTOs include
+  creator, responsible, explicit participants, owners of non-annulled
+  milestones, and mini-task assignees for participation validation and comment
+  notifications.
+
+The following findings were inspected but deliberately not changed in this
+corrective scope:
+
+- `A6_ON_COMMIT_ALIAS = NO CURRENT VIEW BLOCKER FOUND`: comment notifications
+  register `transaction.on_commit()` on Django's default alias after the
+  configured storage operation returns. Current comment views have no
+  transaction wrapper and `ATOMIC_REQUESTS` is disabled. Reassess if a caller
+  adds an outer transaction whose commit boundary must control this callback.
+- `A7_LEGACY_PROGRESS_API = FAILS_CLOSED`: legacy progress entry points require
+  `DjangoMilestoneStorage`; workspace references are tests, not production
+  views. No behavior change was made.
+- `A8_MODEL_CLEAN_DEFAULT_READ = OPEN AT THIS CHECKPOINT`: `Tarea.clean()` read
+  the existing task through an implicit default ORM queryset. MySQL meeting
+  updates called `full_clean()` on the planned-task DTO/model; this risk is
+  addressed in the separate Corrective B checkpoint below.
+
+No migration, schema, global routing, permission, view, or template changes
+are included in this corrective checkpoint. The final Tareas connection
+integrity gate remains pending.
+
+Verification for this working checkpoint:
+
+- `PY_COMPILE = PASS` for all `tareas/**/*.py` with Python 3.11.
+- `DJANGO_CHECK = PASS` with the historical `ckeditor.W001` warning.
+- Focused corrective selector = `PASS (117 tests)`.
+- `REAL_MYSQL_WRITE_VALIDATION = NOT_RUN`; no isolated non-canonical MySQL
+  database was established for mutation testing.
+- The separately run `test_t054_notifications` module reported 9 errors and 2
+  failures: its mocks/assertions expect `notify_task_event(destinatario=...)`,
+  while the current comment service emits through `emit_task_event(recipients=...)`.
+  The emitter API was not changed in this corrective scope.
+
+## Post-T135 Corrective B — A8 Checkpoint
+
+- `SCOPE = Tarea.clean() operational read during MySQL meeting updates`
+- `A8_REPRODUCED = YES`: the MySQL-backed `update_meeting()` test observed an
+  implicit `tareas_tarea` query on Django's default connection before the fix.
+- `A8_MYSQL_DEFAULT_OPERATIONAL_READ = REMOVED`: `MySQLMeetingStorage` now
+  loads the persisted lifecycle fields needed by `Tarea.clean()` and supplies
+  that snapshot to model validation. The Django ORM path retains its existing
+  read.
+- `PUBLISHED_TASK_RULES = PRESERVED`: focused Django model tests and the
+  MySQL-storage parity test verify the irreversible state and immutable
+  publication/assignment dates.
+- `FOCUSED_TESTS = PASS (118 tests)` with the runtime-only test settings
+  workaround; `test_t054_notifications` was not selected.
+- `PY_COMPILE = PASS` for all `tareas/**/*.py` with Python 3.11.
+- `DJANGO_CHECK = PASS` with the historical `ckeditor.W001` warning.
+- `REAL_MYSQL_VALIDATION = NOT RUN`: a MYSQL_CONFIG connection and safe DEV
+  database were not positively established, so no external database was used.
+- `SCHEMA_OR_MIGRATIONS_CHANGED = NO`; the final Tareas connection integrity
+  gate remains pending.
+
+## Corrective A/B Baseline Reproducibility
+
+The historical Corrective B evidence records `118/118 PASS`. The exact test
+selector was not recorded, so that result cannot be reproduced exactly from
+the available evidence. This is an evidence reproducibility gap; it does not
+invalidate or revise the historical result. Do not reconstruct the historical
+selector by choosing arbitrary tests to reach the same count.
+
+The current reproducible baseline is a new semantic baseline, not a
+retroactive replacement for the historical result:
+
+```text
+HISTORICAL_CORRECTIVE_AB_RESULT = 118/118 PASS
+HISTORICAL_SELECTOR = NOT_RECORDED
+HISTORICAL_RESULT_REPRODUCIBLE_EXACTLY = NO
+
+CURRENT_REPRODUCIBLE_SELECTOR =
+  tareas.tests.test_t134_lifecycle_backend_parity.MySQLLifecycleStorageTests
+  tareas.tests.test_t135_comments_reading_backend_parity.CommentsReadingBackendParityTests
+  tareas.tests.test_t135_meetings_backend_parity.MeetingBackendParityTests
+  tareas.tests.test_t135_similarity_backend_parity.SimilarityBackendParityTests
+CURRENT_REPRODUCIBLE_TEST_COUNT = 43
+CURRENT_REPRODUCIBLE_BASELINE = 43/43 PASS
+FAILURES = 0
+ERRORS = 0
+```
+
+These explicitly named classes cover the directly changed lifecycle and
+similarity publication paths, comment/readings and effective-recipient parity,
+meeting creation/convening, and MySQL meeting validation/default-query
+protection. `tareas.tests.test_t054_notifications` is excluded; it is not used
+to construct or pad this selector. Future checkpoints must record both the
+exact selector and its discovered/executed test count.
+
+This new baseline does not certify Tareas globally. The comment-editing
+finding remains open: `CommentDTO` does not provide the `tarea` attribute
+consumed by `edit_comment()`.

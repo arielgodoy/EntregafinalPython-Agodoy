@@ -158,6 +158,8 @@ Estas deudas siguen registradas para planificación; este documento no las resue
 | Tema | Documento |
 |---|---|
 | Arquitectura | `COPILOT/ARQUITECTURA_APPS.md` |
+| Contrato reusable de conexiones operacionales | `COPILOT/OPERATIONAL_CONNECTION_TRANSFORMATION_CONTRACT.md` |
+| Auditoría reusable de conexiones por APPLICATION_APP | `COPILOT/APPLICATION_CONNECTION_AUDIT_SPEC.md` |
 | Vendor | `COPILOT/REGLAS_CODIGO_VENDOR.md` |
 | Sesiones | `COPILOT/LOGIN_RECUERDAME_SESIONES.md` |
 | Theme | `COPILOT/THEME_PREFERENCES.md` |

@@ -10,7 +10,9 @@ from django.test import TestCase
 from access_control.models import Empresa
 from tareas.models import EvaluacionSimilitud, Tarea, TareaConnectionRole
 from tareas.services import similarity_storage
+from tareas.services import task_storage
 from tareas.services.connection_roles import BackendContext
+from tareas.services.lifecycle import publish_task
 from tareas.services.similarity import (
     confirm_similarity,
     evaluate_task_similarity,
@@ -52,7 +54,13 @@ class _SQLiteConnection:
                 titulo TEXT, descripcion TEXT, prioridad TEXT, estado TEXT,
                 anulada INTEGER, tipo_ambito TEXT, local_id INTEGER,
                 departamento_id INTEGER, todo_origen_id INTEGER,
-                tarea_origen_id INTEGER
+                tarea_origen_id INTEGER, responsable_id INTEGER,
+                fecha_tope TEXT, fecha_asignacion TEXT, fecha_publicacion TEXT
+            );
+            CREATE TABLE tareas_tareatransicion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, tarea_id INTEGER,
+                estado_origen TEXT, estado_destino TEXT, accion_evento TEXT,
+                usuario_id INTEGER, timestamp TEXT, motivo TEXT
             );
             CREATE TABLE tareas_evaluacionsimilitud (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, tarea_id INTEGER,
@@ -126,18 +134,24 @@ class SimilarityBackendParityTests(TestCase):
         self.connection = _SQLiteConnection()
         self.addCleanup(self.connection.close)
         self.connection.database.executemany(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tareas_tarea "
+            "(id,empresa_id,correlativo,titulo,descripcion,prioridad,estado,anulada,"
+            "tipo_ambito,local_id,departamento_id,todo_origen_id,tarea_origen_id,"
+            "responsable_id,fecha_tope,fecha_asignacion,fecha_publicacion) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 (
-                    self.task.pk, self.company.pk, "B135F01", "Operational issue",
+                    self.task.pk, self.company.pk, "B1350001", "Operational issue",
                     "Operational description", Tarea.Prioridad.URGENTE,
                     Tarea.Estado.BORRADOR, 0, "", None, None, None, None,
+                    self.user.pk, "2026-10-01", None, None,
                 ),
                 (
                     self.candidate.pk, self.company.pk, "A135F02",
                     "Operational issue", "Operational description",
                     Tarea.Prioridad.CRITICA, Tarea.Estado.ACTIVA, 0, "",
                     None, None, None, None,
+                    self.user.pk, "2026-10-01", None, None,
                 ),
             ],
         )
@@ -238,6 +252,62 @@ class SimilarityBackendParityTests(TestCase):
             EvaluacionSimilitud.Decision.PENDIENTE,
         )
         self.assertIsNone(self.task.tarea_origen_id)
+
+    def test_mysql_confirmed_similarity_allows_lifecycle_publication(self):
+        with self.configured_mysql():
+            confirm_similarity(
+                evaluacion=self.evaluation,
+                decision=EvaluacionSimilitud.Decision.DISTINTO_PROBLEMA,
+                actor=self.user,
+            )
+
+        context = BackendContext(
+            logical_role="BASE_TAREAS",
+            backend_type="MYSQL_CONFIG",
+            mysql_connection=object(),
+            database_name="similarity_test",
+        )
+        with patch.object(
+            task_storage,
+            "resolve_operational_backend",
+            return_value=context,
+        ), patch.object(
+            task_storage,
+            "open_mysql_connection",
+            self.open_mysql_connection,
+        ), patch.object(
+            task_storage,
+            "get_valid_users_for_empresa",
+        ) as valid_users, patch(
+            "tareas.services.hierarchy.get_parent",
+            return_value=None,
+        ):
+            valid_users.return_value.filter.return_value.exists.return_value = True
+            published = publish_task(self.task, self.user)
+
+        row = self.connection.database.execute(
+            "SELECT estado,correlativo,fecha_publicacion "
+            "FROM tareas_tarea WHERE id=?",
+            (self.task.pk,),
+        ).fetchone()
+        self.assertIs(published, self.task)
+        self.assertEqual(published.estado, Tarea.Estado.ACTIVA)
+        self.assertEqual(row[0:2], (Tarea.Estado.ACTIVA, "A1350001"))
+        self.assertIsNotNone(row[2])
+        self.assertEqual(
+            self.connection.database.execute(
+                "SELECT accion_evento FROM tareas_tareatransicion WHERE tarea_id=?",
+                (self.task.pk,),
+            ).fetchone()[0],
+            "PUBLICAR",
+        )
+        self.assertEqual(
+            self.connection.database.execute(
+                "SELECT decision FROM tareas_evaluacionsimilitud WHERE id=?",
+                (self.evaluation.pk,),
+            ).fetchone()[0],
+            EvaluacionSimilitud.Decision.DISTINTO_PROBLEMA,
+        )
 
     def test_mysql_threshold_is_stored_in_configured_backend(self):
         with self.configured_mysql():

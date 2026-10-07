@@ -7,6 +7,7 @@ from datetime import date, datetime
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -160,7 +161,8 @@ class MySQLMeetingStorage:
                 cursor.execute(
                     "SELECT id,titulo,descripcion,prioridad,correlativo,anulada,estado,"
                     "responsable_id,empresa_id,tipo_ambito,local_id,departamento_id,"
-                    "creada_por_id,fecha_tope FROM tareas_tarea WHERE id=%s",
+                    "creada_por_id,fecha_publicacion,fecha_asignacion,fecha_tope "
+                    "FROM tareas_tarea WHERE id=%s",
                     (task_id,),
                 )
                 row = cursor.fetchone()
@@ -171,17 +173,178 @@ class MySQLMeetingStorage:
         names = (
             "id", "titulo", "descripcion", "prioridad", "correlativo", "anulada", "estado",
             "responsable_id", "empresa_id", "tipo_ambito", "local_id", "departamento_id",
-            "creada_por_id", "fecha_tope",
+            "creada_por_id", "fecha_publicacion", "fecha_asignacion", "fecha_tope",
         )
         task_values = dict(zip(names, row))
+        task_values["fecha_publicacion"] = _as_datetime(task_values["fecha_publicacion"])
+        task_values["fecha_asignacion"] = _as_datetime(task_values["fecha_asignacion"])
         task_values["fecha_tope"] = _as_date(task_values["fecha_tope"])
         task = _mark_persisted(Tarea(**task_values))
+        task._persisted_clean_values = {
+            field: task_values[field]
+            for field in ("estado", "fecha_publicacion", "fecha_asignacion")
+        }
         task.empresa = _default_related(Empresa, task.empresa_id)
         task.creada_por = _default_related(User, task.creada_por_id)
         task.responsable = _default_related(User, task.responsable_id)
         task.local = _default_related(Local, task.local_id)
         task.departamento = _default_related(Departamento, task.departamento_id)
         return task
+
+    def create_meeting_and_task(self, meeting, task, *, actor_id):
+        try:
+            with self._connection() as connection:
+                cursor = connection.cursor()
+                try:
+                    _mysql_transaction(connection)
+                    cursor.execute(
+                        "INSERT INTO tareas_correlativoempresa "
+                        "(empresa_id,siguiente_numero) VALUES (%s,%s) "
+                        "ON DUPLICATE KEY UPDATE empresa_id=empresa_id",
+                        (task.empresa_id, 1),
+                    )
+                    cursor.execute(
+                        "SELECT siguiente_numero FROM tareas_correlativoempresa "
+                        "WHERE empresa_id=%s FOR UPDATE",
+                        (task.empresa_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        raise MeetingStorageError(
+                            "No se pudo reservar el correlativo de Tareas."
+                        )
+                    number = int(row[0])
+                    cursor.execute(
+                        "UPDATE tareas_correlativoempresa SET siguiente_numero=%s "
+                        "WHERE empresa_id=%s",
+                        (number + 1, task.empresa_id),
+                    )
+
+                    now = timezone.now()
+                    draft_correlativo = f"B{number:07d}"
+                    active_correlativo = f"A{number:07d}"
+                    task_fields = (
+                        "titulo,descripcion,prioridad,correlativo,anulada,"
+                        "fechas_pendientes_confirmacion,cierre_completado,"
+                        "requiere_evidencia_cierre,estado,responsable_id,empresa_id,"
+                        "tipo_ambito,local_id,departamento_id,creada_por_id,"
+                        "fecha_creacion,fecha_publicacion,fecha_asignacion,fecha_tope,"
+                        "fecha_cumplimiento,todo_origen_id,tarea_origen_id"
+                    )
+                    cursor.execute(
+                        f"INSERT INTO tareas_tarea ({task_fields}) VALUES "
+                        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            task.titulo,
+                            task.descripcion,
+                            task.prioridad,
+                            draft_correlativo,
+                            False,
+                            False,
+                            False,
+                            False,
+                            Tarea.Estado.BORRADOR,
+                            task.responsable_id,
+                            task.empresa_id,
+                            task.tipo_ambito,
+                            task.local_id,
+                            task.departamento_id,
+                            task.creada_por_id,
+                            now,
+                            None,
+                            None,
+                            task.fecha_tope,
+                            None,
+                            None,
+                            None,
+                        ),
+                    )
+                    task.pk = cursor.lastrowid
+                    task._state.adding = False
+                    task.correlativo = active_correlativo
+                    task.estado = Tarea.Estado.ACTIVA
+                    task.fecha_creacion = now
+                    task.fecha_publicacion = now
+                    task.fecha_asignacion = now
+
+                    meeting.tarea_planificada = task
+                    meeting.full_clean(
+                        exclude=["tarea_planificada"],
+                        validate_unique=False,
+                        validate_constraints=False,
+                    )
+                    cursor.execute(
+                        "UPDATE tareas_tarea SET estado=%s,correlativo=%s,"
+                        "fecha_publicacion=%s,fecha_asignacion=%s "
+                        "WHERE id=%s AND empresa_id=%s",
+                        (
+                            Tarea.Estado.ACTIVA,
+                            active_correlativo,
+                            now,
+                            now,
+                            task.pk,
+                            task.empresa_id,
+                        ),
+                    )
+                    cursor.execute(
+                        "INSERT INTO tareas_tareatransicion "
+                        "(tarea_id,estado_origen,estado_destino,accion_evento,"
+                        "usuario_id,timestamp,motivo) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            task.pk,
+                            Tarea.Estado.BORRADOR,
+                            Tarea.Estado.ACTIVA,
+                            "PUBLICAR",
+                            actor_id,
+                            now,
+                            "",
+                        ),
+                    )
+                    meeting.created_at = now
+                    meeting.updated_at = now
+                    meeting.estado = ReunionRevision.Estado.PLANIFICADA
+                    cursor.execute(
+                        "INSERT INTO tareas_reunionrevision "
+                        "(empresa_id,titulo,descripcion,fecha_hora_programada,"
+                        "modalidad,lugar_o_enlace,tipo_ambito,local_id,"
+                        "departamento_id,tarea_planificada_id,creada_por_id,estado,"
+                        "convocada_at,created_at,updated_at) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (
+                            meeting.empresa_id,
+                            meeting.titulo,
+                            meeting.descripcion,
+                            meeting.fecha_hora_programada,
+                            meeting.modalidad,
+                            meeting.lugar_o_enlace,
+                            meeting.tipo_ambito,
+                            meeting.local_id,
+                            meeting.departamento_id,
+                            task.pk,
+                            meeting.creada_por_id,
+                            meeting.estado,
+                            None,
+                            now,
+                            now,
+                        ),
+                    )
+                    meeting.pk = cursor.lastrowid
+                    meeting._state.adding = False
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+                finally:
+                    cursor.close()
+        except (MeetingStorageError, ValidationError):
+            raise
+        except Exception as exc:
+            logger.error("MySQL meeting and planned-task creation failed.")
+            raise MeetingStorageError(
+                "No se pudo crear la reunión en BASE_TAREAS."
+            ) from exc
+        return meeting
 
     def get_task(self, task_id):
         return self._task(task_id)

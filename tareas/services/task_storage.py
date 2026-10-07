@@ -1199,41 +1199,6 @@ def _mysql_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -
                 if callable(getattr(connection, "begin", None)):
                     connection.begin()
                 cursor.execute(
-                    "SELECT id, titulo, descripcion, tipo_ambito, local_id, departamento_id "
-                    "FROM tareas_tarea WHERE empresa_id=%s AND estado IN (%s,%s,%s,%s) "
-                    "AND anulada=%s AND id<>%s",
-                    (empresa_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, Tarea.Estado.CERRADA, False, task_id),
-                )
-                candidates = cursor.fetchall()
-                cursor.execute(
-                    "SELECT titulo, descripcion, tipo_ambito, local_id, departamento_id "
-                    "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
-                    (task_id, empresa_id),
-                )
-                similarity_task = cursor.fetchone()
-                if similarity_task is None:
-                    raise EditTaskNotFound
-                from tareas.services.similarity import DEFAULT_SIMILARITY_THRESHOLD, _compatible_scope, _similarity_percentage
-                task_for_similarity = SimpleNamespace(
-                    pk=task_id,
-                    titulo=similarity_task[0],
-                    descripcion=similarity_task[1],
-                    tipo_ambito=similarity_task[2],
-                    local_id=similarity_task[3],
-                    departamento_id=similarity_task[4],
-                )
-                for candidate in candidates:
-                    candidate_task = SimpleNamespace(
-                        pk=candidate[0],
-                        titulo=candidate[1],
-                        descripcion=candidate[2],
-                        tipo_ambito=candidate[3],
-                        local_id=candidate[4],
-                        departamento_id=candidate[5],
-                    )
-                    if _compatible_scope(task_for_similarity, candidate_task) and _similarity_percentage(task_for_similarity, candidate_task) >= DEFAULT_SIMILARITY_THRESHOLD:
-                        raise LifecycleSimilarityUnsupported("La publicación MYSQL requiere revisión de similitud.")
-                cursor.execute(
                     "SELECT id, empresa_id, correlativo, anulada, estado, responsable_id, fecha_tope, fecha_asignacion FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
                     (task_id, empresa_id),
                 )

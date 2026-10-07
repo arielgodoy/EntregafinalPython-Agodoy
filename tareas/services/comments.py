@@ -109,7 +109,10 @@ def _ensure_content_or_documents(contenido, documentos):
 
 
 def _schedule_comment_event(*, tarea, event, actor):
-    if hasattr(tarea, "_state"):
+    effective_user_ids = getattr(tarea, "_tareas_effective_user_ids", None)
+    if effective_user_ids is not None:
+        recipient_ids = set(effective_user_ids)
+    elif hasattr(tarea, "_state"):
         recipient_ids = effective_participant_ids(tarea)
     else:
         recipient_ids = {

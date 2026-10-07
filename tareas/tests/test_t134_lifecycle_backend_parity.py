@@ -6,7 +6,8 @@ from django.test import TestCase
 
 from access_control.models import Empresa
 from tareas.models import Tarea
-from tareas.services.task_storage import MySQLTaskStorage, TaskStorageError
+from tareas.services import lifecycle
+from tareas.services.task_storage import MySQLTaskStorage
 
 
 class MySQLLifecycleStorageTests(TestCase):
@@ -88,16 +89,31 @@ class MySQLLifecycleStorageTests(TestCase):
 
     @patch("tareas.services.task_storage.get_valid_users_for_empresa")
     @patch("tareas.services.task_storage.open_mysql_connection")
-    def test_publish_similarity_boundary_is_controlled(self, open_connection, valid_users):
+    @patch("tareas.services.lifecycle._raise_si_anulada")
+    @patch("tareas.services.lifecycle.resolve_edit_storage")
+    def test_lifecycle_publish_mysql_allows_existing_similar_task(
+        self,
+        resolve_storage,
+        _raise_si_anulada,
+        open_connection,
+        valid_users,
+    ):
         valid_users.return_value.filter.return_value.exists.return_value = True
         connection, cursor = self._connection(self._task_row(), candidate=True)
         open_connection.return_value = nullcontext(connection)
+        resolve_storage.return_value = MySQLTaskStorage(self.connection, "tareas")
+        task = Tarea(
+            pk=3,
+            empresa_id=self.empresa.pk,
+            estado=Tarea.Estado.BORRADOR,
+            correlativo="B0000003",
+        )
 
-        with self.assertRaises(TaskStorageError):
-            MySQLTaskStorage(self.connection, "tareas").publish_task(
-                task_id=3,
-                empresa_id=self.empresa.pk,
-                actor_id=2,
-            )
+        published = lifecycle.publish_task(task, type("Actor", (), {"pk": 2})())
 
-        self.assertFalse(connection.commit.called)
+        self.assertIs(published, task)
+        self.assertEqual(published.estado, Tarea.Estado.ACTIVA)
+        self.assertEqual(published.correlativo, "A0000003")
+        self.assertTrue(any("FOR UPDATE" in call.args[0] for call in cursor.execute.call_args_list))
+        self.assertFalse(any("estado IN" in call.args[0] for call in cursor.execute.call_args_list))
+        connection.commit.assert_called_once()

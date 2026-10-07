@@ -177,6 +177,15 @@ está prohibido. Se usa stage selectivo (`git add -- <application>/<archivo>`), 
 
 ## Patron de Roles de Conexion para APPLICATION_APPS
 
+El contrato detallado vigente para transformaciones de conexiones operacionales,
+Control Plane/Data Plane, clasificación y certificación está en
+`COPILOT/OPERATIONAL_CONNECTION_TRANSFORMATION_CONTRACT.md`. Para una auditoría
+por aplicación, usar además `COPILOT/APPLICATION_CONNECTION_AUDIT_SPEC.md`,
+`COPILOT/APPLICATION_CONNECTION_AUDIT_CHECKLIST.md` y
+`COPILOT/APPLICATION_CONNECTION_INVENTORY_TEMPLATE.md`. Esta sección conserva
+el patrón breve de consumo y ownership; no es una fuente de verdad duplicada
+para el contrato completo.
+
 Una APPLICATION_APP que requiera SQL configurable debe seguir esta cadena:
 
 ```text

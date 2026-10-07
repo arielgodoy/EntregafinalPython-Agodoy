@@ -1,7 +1,7 @@
 from datetime import date
 from contextlib import nullcontext
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -25,7 +25,7 @@ from tareas.services.comment_storage import (
     resolve_comment_storage,
     TaskDTO,
 )
-from tareas.services.comments import create_comment
+from tareas.services.comments import _schedule_comment_event, create_comment
 from tareas.services.participants import is_effective_participant
 from tareas.services.task_storage import TaskStorageError
 
@@ -204,6 +204,128 @@ class CommentsReadingBackendParityTests(TestCase):
         self.assertTrue(is_effective_participant(task, SimpleNamespace(pk=12)))
         self.assertTrue(is_effective_participant(task, SimpleNamespace(pk=13)))
         self.assertFalse(is_effective_participant(task, SimpleNamespace(pk=14)))
+
+    def test_mysql_task_dto_includes_milestone_and_mini_task_owners(self):
+        class Cursor:
+            def __init__(self):
+                self.queries = []
+                self.result_sets = iter([[(13,)], [(14,)], [(15,)]])
+
+            def execute(self, sql, params=()):
+                self.queries.append(sql)
+
+            def fetchone(self):
+                return (7, self.default_empresa_id, "GESTION", "URGENTE", 0, 11, 12)
+
+            def fetchall(self):
+                return next(self.result_sets)
+
+            def close(self):
+                pass
+
+        class Connection:
+            def __init__(self, empresa_id):
+                self.cursor_value = Cursor()
+                self.cursor_value.default_empresa_id = empresa_id
+
+            def cursor(self):
+                return self.cursor_value
+
+        connection = Connection(self.default_empresa.pk)
+        storage = MySQLCommentStorage(object(), "configured_tasks")
+        with patch(
+            "tareas.services.comment_storage.open_mysql_connection",
+            return_value=nullcontext(connection),
+        ):
+            task = storage.task(7, self.default_empresa.pk)
+
+        self.assertEqual(task._tareas_effective_user_ids, {11, 12, 13, 14, 15})
+        self.assertTrue(any("FROM tareas_hito" in sql for sql in connection.cursor_value.queries))
+        self.assertTrue(any("FROM tareas_minitarea" in sql for sql in connection.cursor_value.queries))
+
+    def test_mysql_comment_creation_ensures_effective_readings_in_same_transaction(self):
+        task = TaskDTO(
+            id=7,
+            empresa_id=self.default_empresa.pk,
+            estado=Tarea.Estado.GESTION,
+            prioridad=Tarea.Prioridad.NORMAL,
+            anulada=False,
+            creador_id=11,
+            responsable_id=12,
+            empresa=self.default_empresa,
+            explicit_participant_ids=(13,),
+            additional_effective_user_ids=(14, 15),
+        )
+        connection = MagicMock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 20
+        created_at = timezone.now()
+        cursor.fetchone.side_effect = [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (20, 7, 11, "Nuevo comentario", created_at, created_at, False),
+        ]
+        cursor.fetchall.return_value = []
+        storage = MySQLCommentStorage(object(), "configured_tasks")
+        with patch(
+            "tareas.services.comment_storage.open_mysql_connection",
+            return_value=nullcontext(connection),
+        ), patch.object(storage, "_task", return_value=task):
+            comment = storage.create(CommentCreateCommand(
+                task_id=7,
+                empresa_id=self.default_empresa.pk,
+                author_id=11,
+                content="Nuevo comentario",
+            ))
+
+        reading_inserts = [
+            call for call in cursor.execute.call_args_list
+            if "INSERT INTO tareas_tarealectura" in call.args[0]
+        ]
+        self.assertEqual(
+            {call.args[1][1] for call in reading_inserts},
+            {11, 12, 13, 14, 15},
+        )
+        self.assertEqual(comment.contenido, "Nuevo comentario")
+        self.assertEqual(connection.cursor.call_count, 1)
+        connection.commit.assert_called_once()
+        connection.rollback.assert_not_called()
+
+    def test_mysql_comment_notification_uses_effective_roles(self):
+        milestone_owner = User.objects.create_user("comment-milestone-owner")
+        mini_task_assignee = User.objects.create_user("comment-mini-task-assignee")
+        task = TaskDTO(
+            id=7,
+            empresa_id=self.default_empresa.pk,
+            estado=Tarea.Estado.GESTION,
+            prioridad=Tarea.Prioridad.NORMAL,
+            anulada=False,
+            creador_id=self.default_user.pk,
+            responsable_id=self.default_user.pk,
+            empresa=self.default_empresa,
+            additional_effective_user_ids=(
+                milestone_owner.pk,
+                mini_task_assignee.pk,
+            ),
+        )
+
+        with patch("tareas.services.comments.emit_task_event") as emit:
+            with self.captureOnCommitCallbacks(execute=True):
+                _schedule_comment_event(
+                    tarea=task,
+                    event="comentario_agregado",
+                    actor=self.default_user,
+                )
+
+        recipients = emit.call_args.kwargs["recipients"]
+        self.assertEqual(
+            {recipient.pk for recipient in recipients},
+            {milestone_owner.pk, mini_task_assignee.pk},
+        )
 
     def test_mysql_comment_service_allows_explicit_participant_only(self):
         participant = self.default_user

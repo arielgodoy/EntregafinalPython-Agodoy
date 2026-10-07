@@ -45,6 +45,13 @@ def _django_task_storage(tarea):
     return storage
 
 
+def _task_storage():
+    storage = resolve_edit_storage()
+    if not callable(getattr(storage, "publish_task", None)):
+        raise TaskStorageError("tareas.messages.generic_error")
+    return storage
+
+
 def _raise_si_anulada(tarea):
     """Bloquea operaciones de lifecycle mientras la tarea está anulada (flag)."""
     from tareas.services.hierarchy import is_effectively_annulled
@@ -105,13 +112,15 @@ def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
 
 def publish_task(tarea, usuario):
     _raise_si_anulada(tarea)
-    storage = _django_task_storage(tarea)
-    storage.publish_task(
+    result = _task_storage().publish_task(
         task_id=tarea.pk,
         empresa_id=tarea.empresa_id,
         actor_id=usuario.pk,
     )
-    tarea.refresh_from_db(using=storage.alias)
+    tarea.estado = result.state
+    tarea.correlativo = result.correlativo
+    tarea.fecha_publicacion = result.fecha_publicacion
+    tarea.fecha_asignacion = result.fecha_asignacion
     return tarea
 
 

@@ -220,6 +220,15 @@ Esta política no modifica ni debilita ninguna otra regla existente de este índ
 - `COPILOT/ARQUITECTURA_APPS.md`
   - Cargar para tareas que creen, modifiquen o dependan de apps Django, settings, integraciones o cambios transversales.
   - Incluye la regla permanente de **autocontención de APPLICATION_APPS** (una app nueva no modifica otras apps ni archivos globales salvo el registro técnico mínimo, con regla de detención).
+- `COPILOT/OPERATIONAL_CONNECTION_TRANSFORMATION_CONTRACT.md`
+  - Contrato normativo v1.0 propuesto para transformar conexiones operacionales sin cambiar comportamiento.
+  - Cargar junto con la spec/checklist al auditar o transformar el Data Plane de una APPLICATION_APP.
+- `COPILOT/APPLICATION_CONNECTION_AUDIT_SPEC.md`
+  - Workflow read-only inicial y gates para una transformación autorizada posterior; incluye la preparación read-only de GestionDTE.
+- `COPILOT/APPLICATION_CONNECTION_AUDIT_CHECKLIST.md`
+  - Checklist de inventario, paridad, aislamiento físico y certificación.
+- `COPILOT/APPLICATION_CONNECTION_INVENTORY_TEMPLATE.md`
+  - Plantilla para registrar sitios de acceso, backend, clasificación, evidencia y decisiones sin secretos.
 
 ### Theme / Frontend
 
