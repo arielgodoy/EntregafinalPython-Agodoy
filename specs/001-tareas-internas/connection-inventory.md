@@ -21,8 +21,8 @@
 - `CANONICAL_PENDING_RESIDUES = 4`
 - `CANONICAL_RESIDUES = 4`
 - `PENDING = 0`
-- `BLOCKED = 3`
-- `CLOSED = 1`
+- `BLOCKED = 2`
+- `CLOSED = 2`
 
 Six access sites are not six residues. The six sites are grouped into four
 semantic connection transformations.
@@ -120,7 +120,7 @@ y despliegue de su schema operacional, sin reescribir reglas funcionales.
 
 - `PHASE_A`: formalizar este contrato backend-independent.
 - `PHASE_B`: consolidar la frontera/resolver privado.
-- `PHASE_C`: reabrir y migrar R001/R003/R004.
+- `PHASE_C`: reabrir y migrar los residuos bloqueados restantes.
 - `PHASE_D`: ejecutar Full Tareas Connection Integrity Gate.
 - `PHASE_E`: corregir residuos encontrados.
 - `PHASE_F`: certificar Tareas backend-independent.
@@ -148,8 +148,8 @@ No se implementa ninguna fase posterior en este checkpoint.
 All storage resolver families now consume the private operational entrypoint.
 Remaining `get_tarea_connection`/`get_tarea_mysql_connection` references are
 limited to compatibility wrapper implementation, the explicit legacy task
-guard, and technical schema/reference-data helpers. R001, R003, and R004 are
-unchanged and remain `BLOCKED / REOPEN_PHASE_C`.
+guard, and technical schema/reference-data helpers. R001 and R004 remain
+`BLOCKED / REOPEN_PHASE_C`; R003 is closed by the Phase C1 primitive.
 
 ## Closed History
 
@@ -245,7 +245,7 @@ These blocks are not pending and must not be reinterpreted.
 
 ### T135-R003
 
-- `STATUS = BLOCKED`
+- `STATUS = CLOSED`
 - `PRIORITY = P1`
 - `FAMILY = KPI/dashboard`
 - `FILE = tareas/services/kpi.py`
@@ -257,7 +257,12 @@ These blocks are not pending and must not be reinterpreted.
 - `BLOCKER = _personal_task_queryset combina Tarea y participación mediante ORM Django; no existe actualmente una frontera backend-neutral suficiente para MYSQL_CONFIG y preservarla requiere adaptar la composición KPI/dashboard, fuera del alcance de transformación mecánica de conexiones T135.`
 - `CLASSIFICATION = LEGACY_ORM_COUPLING`
 - `BLOCK_REASON_SUPERSEDED_BY_CONTRACT_REVIEW = YES`
-- `REOPEN_IN_PHASE_C = YES`
+- `REOPEN_IN_PHASE_C = NO`
+- `R003_LEGACY_ORM_COUPLING_REMOVED = YES`
+- `R003_DJANGO_ALIAS_PARITY = PASS`
+- `R003_MYSQL_CONFIG_PARITY = PASS`
+- `R003_REAL_BACKEND = PASS`
+- `CLOSED_AT = Phase C1`
 
 ### T135-R004
 
@@ -312,9 +317,9 @@ The future integrity gate must reserve, at minimum:
 - `HTTP_END_TO_END_PARITY`
 - `FAIL_CLOSED_CONTAMINATION`
 
-Blocked residues `R001`, `R003`, and `R004` are inputs to the later private
-Tareas router/frontier contract. No private router is created or designed in
-this checkpoint.
+Blocked residues `R001` and `R004` are inputs to the later private Tareas
+router/frontier contract. No private router is created or designed in this
+checkpoint.
 
 No implementation of R001 is included in this inventory checkpoint.
 

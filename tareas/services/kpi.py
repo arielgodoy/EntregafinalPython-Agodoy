@@ -17,7 +17,6 @@ from ..models import (
     DocumentoHistorial,
     MiniTarea,
     Tarea,
-    TareaLectura,
     TareaParticipante,
     TareaTransicion,
 )
@@ -197,40 +196,20 @@ def get_kpis(*, queryset, reference_date=None, reference_now=None):
     }
 
 
-def _personal_task_queryset(*, empresa_id, user):
-    direct_ids = Tarea.objects.filter(
-        empresa_id=empresa_id,
-        responsable=user,
-    ).values("pk")
-    participant_ids = TareaParticipante.objects.filter(
-        tarea__empresa_id=empresa_id,
-        usuario=user,
-    ).values("tarea_id")
-    return _operational_queryset(
-        Tarea.objects.filter(Q(pk__in=direct_ids) | Q(pk__in=participant_ids))
-    ).select_related(
-        "empresa", "responsable", "creada_por", "local", "departamento"
-    ).distinct()
-
-
 def get_personal_dashboard(*, user, empresa_id, reference_date=None):
     reference_date = reference_date or timezone.localdate()
+    from .task_storage import resolve_list_storage
+
+    task_storage = resolve_list_storage()
     tareas = list(
-        _personal_task_queryset(empresa_id=empresa_id, user=user).order_by(
-            "prioridad", "fecha_tope", "pk"
-        )
+        task_storage.list_personal_tasks(empresa_id=empresa_id, user_id=user.pk)
     )
-    participant_roles = dict(
-        TareaParticipante.objects.filter(
-            tarea_id__in=[tarea.pk for tarea in tareas],
-            usuario=user,
-        ).values_list("tarea_id", "rol")
+    task_ids = [tarea.pk for tarea in tareas]
+    participant_roles = task_storage.personal_participant_roles(
+        task_ids=task_ids, user_id=user.pk,
     )
-    read_status = dict(
-        TareaLectura.objects.filter(
-            tarea_id__in=[tarea.pk for tarea in tareas],
-            usuario=user,
-        ).values_list("tarea_id", "leido")
+    read_status = task_storage.personal_read_status(
+        task_ids=task_ids, user_id=user.pk,
     )
     for tarea in tareas:
         if tarea.responsable_id == user.pk:

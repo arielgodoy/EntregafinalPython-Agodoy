@@ -22,7 +22,7 @@ from .connection_roles import (
     get_tarea_connection,
     resolve_operational_backend,
 )
-from ..models import Empresa, Tarea, TareaTransicion
+from ..models import Empresa, Tarea, TareaLectura, TareaParticipante, TareaTransicion
 from .notifications import emit_task_event, task_recipients
 from settings.services.mysql_connections import open_mysql_connection
 
@@ -123,6 +123,29 @@ class TaskListItem:
     responsable_avatar_url: str = ""
     participantes_visibles: tuple[TaskListParticipant, ...] = ()
     participantes_restantes: int = 0
+
+
+@dataclass
+class PersonalTaskItem:
+    id: int
+    empresa_id: int
+    correlativo: str
+    titulo: str
+    descripcion: str
+    prioridad: str
+    estado: str
+    anulada: bool
+    responsable_id: int | None
+    responsable: object
+    fecha_tope: object
+    fecha_publicacion: object
+    fecha_asignacion: object
+    fecha_cumplimiento: object
+    fecha_creacion: object
+
+    @property
+    def pk(self):
+        return self.id
 
 
 @dataclass(frozen=True)
@@ -695,6 +718,55 @@ class DjangoTaskListStorage:
                 )
             )
         return TaskListResult(tuple(items), summary_values)
+    def list_personal_tasks(self, *, empresa_id: int, user_id: int):
+        queryset = Tarea.objects.using(self.alias).filter(
+            empresa_id=empresa_id,
+            anulada=False,
+            estado__in=(
+                Tarea.Estado.ACTIVA,
+                Tarea.Estado.GESTION,
+                Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                Tarea.Estado.CERRADA,
+            ),
+        ).filter(
+            Q(responsable_id=user_id) | Q(participantes__usuario_id=user_id)
+        ).select_related("responsable").distinct().order_by(
+            "prioridad", "fecha_tope", "pk"
+        )
+        return tuple(
+            PersonalTaskItem(
+                id=task.pk,
+                empresa_id=task.empresa_id,
+                correlativo=task.correlativo,
+                titulo=task.titulo,
+                descripcion=task.descripcion,
+                prioridad=task.prioridad,
+                estado=task.estado,
+                anulada=task.anulada,
+                responsable_id=task.responsable_id,
+                responsable=task.responsable,
+                fecha_tope=task.fecha_tope,
+                fecha_publicacion=task.fecha_publicacion,
+                fecha_asignacion=task.fecha_asignacion,
+                fecha_cumplimiento=task.fecha_cumplimiento,
+                fecha_creacion=task.fecha_creacion,
+            )
+            for task in queryset
+        )
+
+    def personal_participant_roles(self, *, task_ids, user_id: int):
+        return dict(
+            TareaParticipante.objects.using(self.alias).filter(
+                tarea_id__in=task_ids, usuario_id=user_id,
+            ).values_list("tarea_id", "rol")
+        )
+
+    def personal_read_status(self, *, task_ids, user_id: int):
+        return dict(
+            TareaLectura.objects.using(self.alias).filter(
+                tarea_id__in=task_ids, usuario_id=user_id,
+            ).values_list("tarea_id", "leido")
+        )
 
 
 class MySQLTaskListStorage:
@@ -869,6 +941,82 @@ class MySQLTaskListStorage:
                 "cerradas": int(summary_row[3] or 0),
             },
         )
+    def list_personal_tasks(self, *, empresa_id: int, user_id: int):
+        states = (
+            Tarea.Estado.ACTIVA,
+            Tarea.Estado.GESTION,
+            Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+            Tarea.Estado.CERRADA,
+        )
+        sql = (
+            "SELECT t.id, t.empresa_id, t.correlativo, t.titulo, t.descripcion, "
+            "t.prioridad, t.estado, t.anulada, t.responsable_id, "
+            "t.fecha_tope, t.fecha_publicacion, t.fecha_asignacion, "
+            "t.fecha_cumplimiento, t.fecha_creacion "
+            "FROM tareas_tarea t WHERE t.empresa_id=%s AND t.anulada=0 "
+            "AND t.estado IN (%s,%s,%s,%s) "
+            "AND (t.responsable_id=%s OR EXISTS ("
+            "SELECT 1 FROM tareas_tareaparticipante p "
+            "WHERE p.tarea_id=t.id AND p.usuario_id=%s)) "
+            "ORDER BY t.prioridad, t.fecha_tope, t.id"
+        )
+        params = (empresa_id, *states, user_id, user_id)
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+            finally:
+                cursor.close()
+        users = self._fetch_users({row[8] for row in rows if row[8] is not None})
+        return tuple(
+            PersonalTaskItem(
+                id=row[0], empresa_id=row[1], correlativo=row[2], titulo=row[3],
+                descripcion=row[4], prioridad=row[5], estado=row[6], anulada=bool(row[7]),
+                responsable_id=row[8], responsable=users.get(row[8]), fecha_tope=row[9],
+                fecha_publicacion=row[10], fecha_asignacion=row[11],
+                fecha_cumplimiento=row[12], fecha_creacion=row[13],
+            )
+            for row in rows
+        )
+
+    def personal_participant_roles(self, *, task_ids, user_id: int):
+        if not task_ids:
+            return {}
+        placeholders = ", ".join("%s" for _ in task_ids)
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT tarea_id, rol FROM tareas_tareaparticipante "
+                    f"WHERE tarea_id IN ({placeholders}) AND usuario_id=%s",
+                    (*task_ids, user_id),
+                )
+                return {row[0]: row[1] for row in cursor.fetchall()}
+            finally:
+                cursor.close()
+
+    def personal_read_status(self, *, task_ids, user_id: int):
+        if not task_ids:
+            return {}
+        placeholders = ", ".join("%s" for _ in task_ids)
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT tarea_id, leido FROM tareas_tarealectura "
+                    f"WHERE tarea_id IN ({placeholders}) AND usuario_id=%s",
+                    (*task_ids, user_id),
+                )
+                return {row[0]: bool(row[1]) for row in cursor.fetchall()}
+            finally:
+                cursor.close()
 
 
 class MySQLTaskStorage:
