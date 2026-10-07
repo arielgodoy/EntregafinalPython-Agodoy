@@ -178,6 +178,17 @@ class TaskDTO:
     responsable_id: int | None
     empresa: object
 
+    @property
+    def pk(self):
+        return self.id
+
+    @property
+    def _tareas_effective_user_ids(self):
+        return {
+            user_id for user_id in (self.creador_id, self.responsable_id)
+            if user_id is not None
+        }
+
 
 def _task_dto(row):
     task_id, empresa_id, state, annulled, creator_id, responsible_id = row
@@ -433,6 +444,25 @@ class MySQLCommentStorage:
 
     def _connection(self):
         return open_mysql_connection(self.connection_config, database_name=self.database_name)
+
+    def task(self, task_id, empresa_id):
+        try:
+            with self._connection() as connection:
+                cursor = connection.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT id, empresa_id, estado, anulada, creada_por_id, responsable_id "
+                        "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
+                        (task_id, empresa_id),
+                    )
+                    row = cursor.fetchone()
+                finally:
+                    cursor.close()
+        except Exception as exc:
+            raise TaskStorageError("No se pudo resolver la Tarea en BASE_TAREAS.") from exc
+        if row is None:
+            raise EditTaskNotFound
+        return _task_dto(row)
 
     def _execute(self, operation):
         try:
