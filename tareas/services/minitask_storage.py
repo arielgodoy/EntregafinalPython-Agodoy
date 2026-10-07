@@ -334,6 +334,19 @@ class DjangoMiniTaskStorage(_Queries):
         from .detail_storage import DjangoTaskDetailStorage
         return DjangoTaskDetailStorage(self.alias)
 
+    def create_unattributed(self, *, task_id, persona_id, descripcion):
+        now = timezone.now()
+        with transaction.atomic(using=self.alias):
+            mini = MiniTarea.objects.using(self.alias).create(
+                tarea_id=task_id,
+                descripcion=descripcion,
+                persona_id=persona_id,
+                hecho=False,
+                fecha_creacion=now,
+                fecha_completado=None,
+            )
+        return MiniTaskResult(task_id, mini.pk)
+
     def _execute(self, command):
         files = []
         commit_attempted = False
@@ -444,6 +457,28 @@ class MySQLMiniTaskStorage(_Queries):
     def _detail_storage(self):
         from .detail_storage import MySQLTaskDetailStorage
         return MySQLTaskDetailStorage(self.connection_config, self.database_name)
+
+    def create_unattributed(self, *, task_id, persona_id, descripcion):
+        now = timezone.now()
+        with open_mysql_connection(
+            self.connection_config, database_name=self.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "INSERT INTO tareas_minitarea ("
+                    "tarea_id,descripcion,persona_id,hecho,fecha_creacion,fecha_completado"
+                    ") VALUES (%s,%s,%s,%s,%s,%s)",
+                    (task_id, descripcion, persona_id, False, now, None),
+                )
+                mini_id = cursor.lastrowid
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                cursor.close()
+        return MiniTaskResult(task_id, mini_id)
 
     def _execute(self, command):
         files = []

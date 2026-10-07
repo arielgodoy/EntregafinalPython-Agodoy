@@ -37,11 +37,14 @@ def create_mini_task(*, tarea, descripcion, persona, actor=None):
     if not descripcion:
         raise ValidationError("La descripción de la mini-tarea es obligatoria.")
     _validate_user_in_task_company(tarea, persona)
-    return MiniTarea.objects.create(
-        tarea=tarea,
+    from .minitask_storage import resolve_minitask_storage
+    storage = resolve_minitask_storage()
+    result = storage.create_unattributed(
+        task_id=tarea.pk,
+        persona_id=persona.pk,
         descripcion=descripcion,
-        persona=persona,
     )
+    return _mini_compat_result(storage, result, tarea.empresa_id)[0]
 
 
 def can_create_mini_task(*, tarea, actor):
