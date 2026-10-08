@@ -1,15 +1,20 @@
 from datetime import datetime
 from decimal import Decimal
+from contextlib import nullcontext
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
+from django.db.backends.base.base import BaseDatabaseWrapper
 from django.test import SimpleTestCase
+
+from settings.models import SettingsMySQLConnection
 
 from gestiondte.services.rpetc_contabilidad import (
     ContabilidadLegacyError,
     LEGACY_RCV_SCHEMA,
     _normalizar_tipo_sii,
+    _query_factoring_glosa_candidates,
+    _query_movimientos,
     normalizar_folio_legacy,
     normalizar_rut_legacy,
     obtener_estados_contables_cesiones,
@@ -56,6 +61,20 @@ class FakeConnection:
         self.closed = True
 
 
+class FakeDjangoConnection(BaseDatabaseWrapper):
+    alias = "dynamic_accounting"
+
+    def __init__(self, cursor):
+        self.cursor_obj = cursor
+        self.committed = False
+
+    def cursor(self):
+        return self.cursor_obj
+
+    def commit(self):
+        self.committed = True
+
+
 class FakeCesion:
     def __init__(self, pk=1, tipo_doc="33", folio_doc="2587"):
         self.pk = pk
@@ -71,6 +90,19 @@ class FakeCesion:
         self.cesionario_razon_social = "Cesionario SpA"
 
 
+def _mysql_config(db_name="eltit_conta", host="h"):
+    return SettingsMySQLConnection(
+        nombre_logico="contabilidad",
+        engine=SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL,
+        host=host,
+        port=3306,
+        user="u",
+        password="test-only",
+        db_name=db_name,
+        charset="latin1",
+    )
+
+
 class RPETCLegacyServiceTest(SimpleTestCase):
     def test_schema_rcv_es_central_y_no_depende_de_empresa(self):
         self.assertEqual(LEGACY_RCV_SCHEMA, "eltit_conta")
@@ -81,12 +113,149 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         with self.assertRaises(ContabilidadLegacyError):
             _normalizar_tipo_sii("1234")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
-    def test_registra_evento_ced_idempotente_y_parametrizado(self, connect, config):
-        config.return_value = SimpleNamespace(
-            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_a016_resuelve_rol_y_abre_database_schema_actual(self, open_connection, get_role):
+        config = _mysql_config()
+        get_role.return_value = config
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = None
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+        open_connection.return_value = nullcontext(connection)
+
+        registrar_cesiones_contabilidad("09", [FakeCesion()])
+
+        get_role.assert_called_once_with("servercontabilidad")
+        open_connection.assert_called_once_with(config, database_name=LEGACY_RCV_SCHEMA)
+        self.assertIn("`eltit_conta`.`facturasdecompras_eventos_rcv`", cursor.execute.call_args_list[1].args[0])
+        connection.commit.assert_called_once()
+
+    @patch("gestiondte.services.rpetc_contabilidad.transaction.atomic")
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_a016_usa_transaccion_django_si_settings_abre_backend_django(
+        self, open_connection, get_role, atomic
+    ):
+        config = _mysql_config()
+        get_role.return_value = config
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = None
+        connection = FakeDjangoConnection(cursor)
+        open_connection.return_value = nullcontext(connection)
+        atomic.return_value = nullcontext()
+
+        registrar_cesiones_contabilidad("09", [FakeCesion()])
+
+        atomic.assert_called_once_with(using="dynamic_accounting")
+        self.assertFalse(connection.committed)
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_a017_resuelve_rol_y_conserva_schema_empresa(self, open_connection, get_role):
+        config = _mysql_config()
+        get_role.return_value = config
+        cursor = LegacyCursor([
+            ("0763761428", "FC", "0000002587", 1764799.0, "H", None, None, None, "contabilizada", "u", None, None, "DB", "23100026"),
+        ])
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        open_connection.return_value = nullcontext(connection)
+
+        rows = _query_movimientos("09", {("0763761428", "FC", "0000002587", "H", "23100026")})
+
+        get_role.assert_called_once_with("servercontabilidad")
+        open_connection.assert_called_once_with(config)
+        self.assertIn("`eltit_conta09`.`movimientoscontables`", cursor.sql)
+        self.assertEqual(rows[0]["numerodocumento"], "0000002587")
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_a018_resuelve_rol_y_conserva_query_de_glosa(self, open_connection, get_role):
+        config = _mysql_config()
+        get_role.return_value = config
+        cursor = LegacyCursor([])
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        open_connection.return_value = nullcontext(connection)
+
+        rows = _query_factoring_glosa_candidates("10", {("0766826709", Decimal("1764799"))})
+
+        get_role.assert_called_once_with("servercontabilidad")
+        open_connection.assert_called_once_with(config)
+        self.assertIn("`eltit_conta10`.`movimientoscontables`", cursor.sql)
+        self.assertEqual(cursor.params[:4], ["23100026", "D", "DB", "DB"])
+        self.assertEqual(rows, [])
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_cambio_de_configuracion_de_rol_cambia_conexion_sin_cambiar_sql(
+        self, open_connection, get_role
+    ):
+        first_config = _mysql_config(host="conta-one")
+        second_config = _mysql_config(host="conta-two")
+        first_connection = MagicMock()
+        second_connection = MagicMock()
+        first_cursor = LegacyCursor([])
+        second_cursor = LegacyCursor([])
+        first_connection.cursor.return_value.__enter__.return_value = first_cursor
+        second_connection.cursor.return_value.__enter__.return_value = second_cursor
+        get_role.side_effect = [first_config, second_config]
+        open_connection.side_effect = [
+            nullcontext(first_connection),
+            nullcontext(second_connection),
+        ]
+        keys = {("0763761428", "FC", "0000002587", "H", "23100026")}
+
+        _query_movimientos("09", keys)
+        _query_movimientos("09", keys)
+
+        self.assertEqual(
+            [call.args[0] for call in open_connection.call_args_list],
+            [first_config, second_config],
         )
+        self.assertEqual(first_cursor.sql, second_cursor.sql)
+        self.assertEqual(first_cursor.params, second_cursor.params)
+        self.assertEqual(get_role.call_args_list, [
+            call("servercontabilidad"),
+            call("servercontabilidad"),
+        ])
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_resolver_sin_rol_falla_cerrado_sin_abrir_conexion(self, open_connection, get_role):
+        from gestiondte.services.connection_roles import GestionDTERoleNotFoundError
+
+        get_role.side_effect = GestionDTERoleNotFoundError("missing role")
+
+        with self.assertRaises(ContabilidadLegacyError):
+            _query_movimientos("09", {("0763761428", "FC", "0000002587", "H", "23100026")})
+
+        open_connection.assert_not_called()
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("pymysql.connect")
+    def test_b1_a016_no_commitea_si_falla_y_cierra_conexion(self, connect, get_role):
+        get_role.return_value = _mysql_config()
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.execute.side_effect = RuntimeError("database operation failed")
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+        connect.return_value = connection
+
+        with self.assertRaises(ContabilidadLegacyError):
+            registrar_cesiones_contabilidad("09", [FakeCesion()])
+
+        connection.commit.assert_not_called()
+        connection.close.assert_called_once()
+
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
+    def test_registra_evento_ced_idempotente_y_parametrizado(self, connect, config):
+        config.return_value = _mysql_config()
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
         cursor.fetchone.side_effect = [None, (datetime(2026, 7, 2).date(), datetime(2026, 7, 2, 12, 30).time(), "DTE Cedido - Cesionario SpA")]
@@ -109,12 +278,10 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         connection.commit.assert_called()
         self.assertTrue(connection.close.called)
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_evento_ced_actualiza_fecha_hora_y_glosa_sin_duplicar(self, connect, config):
-        config.return_value = SimpleNamespace(
-            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
-        )
+        config.return_value = _mysql_config()
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
         cursor.fetchone.return_value = (datetime(2026, 7, 1).date(), datetime(2026, 7, 1, 8).time(), "Glosa anterior")
@@ -129,12 +296,10 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         self.assertIn("UPDATE `eltit_conta`.`facturasdecompras_eventos_rcv`", update_call.args[0])
         self.assertEqual(update_call.args[1][:3], (datetime(2026, 7, 2).date(), datetime(2026, 7, 2, 12, 30).time(), "DTE Cedido - Cesionario SpA"))
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_empresa_10_usa_misma_tabla_y_discriminador_distinto(self, connect, config):
-        config.return_value = SimpleNamespace(
-            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1",
-        )
+        config.return_value = _mysql_config()
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
         cursor.fetchone.return_value = None
@@ -170,9 +335,9 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         cesion.monto_total = Decimal("1764799")
         cesion.monto_cesion = Decimal("999000")
         rows = [("0763761428", "FC", "0000002587", 1764799.0, "D", None, None, None, "CANCELA DOCUMENTO", "u", None, None, "DB", "23100026")]
-        with patch("gestiondte.services.rpetc_contabilidad._config_legacy") as config, patch("gestiondte.services.rpetc_contabilidad.pymysql.connect") as connect:
+        with patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config") as config, patch("pymysql.connect") as connect:
             connect.return_value = FakeConnection(rows)
-            config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+            config.return_value = _mysql_config()
             result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "PAGADA_PROVEEDOR")
 
@@ -181,9 +346,9 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         cesion.monto_total = Decimal("3122579")
         cesion.monto_cesion = Decimal("3122579")
         rows = [("0763761428", "FC", "0000002383", 3123479.0, "D", None, None, None, "CANCELA DOCUMENTO", "u", None, None, "DB", "23100026")]
-        with patch("gestiondte.services.rpetc_contabilidad._config_legacy") as config, patch("gestiondte.services.rpetc_contabilidad.pymysql.connect") as connect:
+        with patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config") as config, patch("pymysql.connect") as connect:
             connect.return_value = FakeConnection(rows)
-            config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+            config.return_value = _mysql_config()
             result = obtener_estados_contables_cesiones("09", [cesion])
         payment = result[1]["pagada_proveedor"]
         self.assertEqual(payment["estado"], "PAGADA_PROVEEDOR_DIFERENCIA")
@@ -194,9 +359,9 @@ class RPETCLegacyServiceTest(SimpleTestCase):
     def test_factoring_con_diferencia_conserva_pago(self, fallback):
         cesion = FakeCesion()
         rows = [("0766826709", "FC", "0000002587", 1764899.0, "D", None, None, None, "pago factoring", "u", None, None, "DB", "23100026")]
-        with patch("gestiondte.services.rpetc_contabilidad._config_legacy") as config, patch("gestiondte.services.rpetc_contabilidad.pymysql.connect") as connect:
+        with patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config") as config, patch("pymysql.connect") as connect:
             connect.return_value = FakeConnection(rows)
-            config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+            config.return_value = _mysql_config()
             result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING_DIFERENCIA")
         self.assertEqual(result[1]["pagada_factoring"]["diferencia_monto"], Decimal("100"))
@@ -208,8 +373,8 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         self.assertEqual(normalizar_folio_legacy("2587", "FC"), "0000002587")
         self.assertIsNone(normalizar_folio_legacy("2587", "OT"))
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_batch_contabilizada_pagada_y_sql_parametrizado(self, connect, config):
         rows = [
             ("0763761428", "FC", "0000002587", 1764799.0, "H", None, None, None, "CONTABILIZACION FAE", "u", None, None, "DB", "23100026"),
@@ -217,9 +382,7 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         ]
         connection = FakeConnection(rows)
         connect.return_value = connection
-        config.return_value = SimpleNamespace(
-            host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1"
-        )
+        config.return_value = _mysql_config()
         cesion = FakeCesion()
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["contabilizacion"]["estado"], "CONTABILIZADA")
@@ -231,24 +394,24 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         connect.assert_called_once()
         self.assertTrue(connection.closed)
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_multiples_movimientos_y_monto_discrepante_revisan(self, connect, config):
         rows = [
             ("0763761428", "FC", "0000002587", 1.0, "H", None, None, None, "a", "u", None, None, "DB", "23100026"),
             ("0763761428", "FC", "0000002587", 2.0, "H", None, None, None, "b", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion()
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["contabilizacion"]["estado"], "REVISAR")
         self.assertEqual(result[1]["contabilizacion"]["cantidad_movimientos"], 2)
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_tipo_no_soportado_no_consulta(self, connect, config):
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(tipo_doc="61")
         result = obtener_estados_contables_cesiones("21", [cesion])
         self.assertEqual(result[1]["contabilizacion"]["estado"], "TIPO_NO_SOPORTADO")
@@ -259,31 +422,31 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         with self.assertRaises(ContabilidadLegacyError):
             obtener_estados_contables_cesiones("9;DROP", [FakeCesion()])
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_pago_proveedor_excluye_movimiento_ct(self, connect, config):
         rows = [
             ("0763761428", "FC", "0000002587", 1764799.0, "D", None, None, None, "traspaso", "u", None, None, "CT", "23100026"),
             ("0766826709", "FC", "0000002587", 1764799.0, "D", None, None, None, "factoring", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         result = obtener_estados_contables_cesiones("09", [FakeCesion()])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING")
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "NO_PAGADA")
         self.assertEqual(result[1]["pago"]["estado"], "PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_pago_proveedor_se_marca_con_movimiento_no_ct(self, connect, config):
         rows = [("0763761428", "FC", "0000002587", 1764799.0, "D", None, None, None, "pago proveedor", "u", None, None, "DB", "23100026")]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         result = obtener_estados_contables_cesiones("09", [FakeCesion()])
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "PAGADA_PROVEEDOR")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_fc_2580_contabilizada_factoring_sin_pago_proveedor(self, connect, config):
         rows = [
             ("0763761428", "FC", "0000002580", 1892029.0, "H", None, None, None, "contabilizada", "u", None, None, "DB", "23100026"),
@@ -291,7 +454,7 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             ("0763761428", "FC", "0000002580", 1892029.0, "D", None, None, None, "traspaso", "u", None, None, "CT", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="2580")
         cesion.monto_total = Decimal("1892029")
         cesion.monto_cesion = Decimal("1892029")
@@ -300,47 +463,47 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING")
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "NO_PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_fc_3142_sin_pagos(self, connect, config):
         connect.return_value = FakeConnection([
             ("0763761428", "FC", "0000003142", 1764799.0, "H", None, None, None, "contabilizada", "u", None, None, "DB", "23100026"),
         ])
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="3142")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["contabilizacion"]["estado"], "CONTABILIZADA")
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "NO_PAGADA")
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "NO_PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_cuentas_iva_y_mercaderias_no_activan_pagos(self, connect, config):
         rows = [
             ("0765197139", "FC", "0000003142", 29678.0, "D", None, None, None, "IVA", "u", None, None, "DB", "11400001"),
             ("0765197139", "FC", "0000003142", 156200.0, "D", None, None, None, "mercaderias", "u", None, None, "DB", "11350001"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         result = obtener_estados_contables_cesiones("09", [FakeCesion(folio_doc="3142")])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "NO_PAGADA")
         self.assertEqual(result[1]["pagada_proveedor"]["estado"], "NO_PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_db_con_folio_exacto_activa_factoring(self, connect, config):
         rows = [
             ("0766826709", "DB", "0000002509", 3498155.0, "D", None, None, None, "FAC 2509", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="2509")
         cesion.monto_cesion = Decimal("3498155")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_db_agrupado_identifica_cuatro_facturas_en_un_batch(self, connect, config):
         folios_y_montos = {
             "2509": Decimal("3498155"),
@@ -359,26 +522,26 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             for folio, monto in folios_y_montos.items()
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         result = obtener_estados_contables_cesiones("09", cesiones)
         self.assertTrue(all(result[cesion.pk]["pagada_factoring"]["estado"] == "PAGADA_FACTORING" for cesion in cesiones))
         connect.assert_called_once()
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_db_sin_folio_exacto_activa_factoring_por_glosa_3019(self, connect, config):
         rows = [
             ("0766826709", "DB", "0000000109", 2530844.0, "D", None, None, None, "FAC 3019 V/S AM DECO", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="3019")
         cesion.monto_cesion = Decimal("2530844")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_glosa_requiere_token_numerico_completo(self, connect, config):
         rows = [
             ("0766826709", "DB", "0000000109", 2530844.0, "D", None, None, None, "FAC 13019", "u", None, None, "DB", "23100026"),
@@ -386,14 +549,14 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             ("0766826709", "DB", "0000000111", 2530844.0, "D", None, None, None, "", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="3019")
         cesion.monto_cesion = Decimal("2530844")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "NO_PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_glosa_fallback_requiere_rut_monto_cuenta_dh_y_tipo_db(self, connect, config):
         rows = [
             ("0000000000", "DB", "0000000001", 2530844.0, "D", None, None, None, "FAC 3019", "u", None, None, "DB", "23100026"),
@@ -403,29 +566,29 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             ("0766826709", "FC", "0000000005", 2530844.0, "D", None, None, None, "FAC 3019", "u", None, None, "FC", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="3019")
         cesion.monto_cesion = Decimal("2530844")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "NO_PAGADA")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_matching_exacto_tiene_prioridad_sobre_glosa(self, connect, config):
         rows = [
             ("0766826709", "DB", "0000003019", 2530844.0, "D", None, None, None, "FAC 9999", "u", None, None, "DB", "23100026"),
             ("0766826709", "DB", "0000000009", 2530844.0, "D", None, None, None, "FAC 3019", "u", None, None, "DB", "23100026"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesion = FakeCesion(folio_doc="3019")
         cesion.monto_cesion = Decimal("2530844")
         result = obtener_estados_contables_cesiones("09", [cesion])
         self.assertEqual(result[1]["pagada_factoring"]["estado"], "PAGADA_FACTORING")
         self.assertEqual(result[1]["pagada_factoring"]["movimientos"][0]["numerodocumento"], "0000003019")
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_glosa_agrupada_identifica_cuatro_facturas_en_un_fallback_batch(self, connect, config):
         folios_y_montos = {
             "2509": Decimal("3498155"),
@@ -444,13 +607,13 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             for monto in folios_y_montos.values()
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         result = obtener_estados_contables_cesiones("09", cesiones)
         self.assertTrue(all(result[cesion.pk]["pagada_factoring"]["estado"] == "PAGADA_FACTORING" for cesion in cesiones))
         self.assertEqual(connect.call_count, 2)
 
-    @patch("gestiondte.services.rpetc_contabilidad._config_legacy")
-    @patch("gestiondte.services.rpetc_contabilidad.pymysql.connect")
+    @patch("gestiondte.services.rpetc_contabilidad._mysql_connection_config")
+    @patch("pymysql.connect")
     def test_db_factoring_requiere_rut_cuenta_dh_y_monto(self, connect, config):
         rows = [
             ("0000000000", "DB", "0000002509", 3498155.0, "D", None, None, None, "rut incorrecto", "u", None, None, "DB", "23100026"),
@@ -459,7 +622,7 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             ("0766826709", "DB", "0000002512", 3498155.0, "D", None, None, None, "cuenta incorrecta", "u", None, None, "DB", "11400001"),
         ]
         connect.return_value = FakeConnection(rows)
-        config.return_value = SimpleNamespace(host="h", port=3306, user="u", password="p", db_name="eltit_conta", charset="latin1")
+        config.return_value = _mysql_config()
         cesiones = [FakeCesion(pk=index, folio_doc=folio) for index, folio in enumerate(("2509", "2510", "2511", "2512"), start=1)]
         result = obtener_estados_contables_cesiones("09", cesiones)
         self.assertTrue(all(result[cesion.pk]["pagada_factoring"]["estado"] != "PAGADA_FACTORING" for cesion in cesiones))

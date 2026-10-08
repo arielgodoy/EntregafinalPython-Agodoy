@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core import signing
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -13,12 +14,21 @@ from access_control.views import VerificarPermisoMixin
 
 from .forms import GestionDTEConnectionRoleForm
 from .models import GestionDTEConnectionRole
-from .services.base_dte_schema import BaseDTESchemaInstallError, install_base_dte_schema
+from .services.base_dte_schema import (
+    BaseDTESchemaInstallError,
+    install_base_dte_schema,
+    preview_base_dte_schema,
+)
 from .services.connection_roles import (
+    GestionDTEConnectionError,
     get_gestiondte_connection,
     get_gestiondte_connection_status,
     get_gestiondte_mysql_connection,
 )
+from settings.models import SettingsMySQLConnection
+
+_BASE_DTE_SCHEMA_PREVIEW_SALT = 'gestiondte.base-dte-schema-preview'
+_BASE_DTE_SCHEMA_PREVIEW_MAX_AGE = 600
 
 
 class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
@@ -48,13 +58,17 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
             (item for item in roles if item['role'] == 'serverbasedte'),
             None,
         )
-        base_dte_database_name = (
-            base_dte_status.get('metadata', {}).get('database_name')
-            if base_dte_status
+        base_dte_database_name = None
+        if (
+            base_dte_status
             and base_dte_status['status'] == 'configured'
             and base_dte_status['source_type'] == 'MYSQL_CONFIG'
-            else None
-        )
+        ):
+            metadata = base_dte_status.get('metadata')
+            if isinstance(metadata, dict):
+                configured_database = metadata.get('database_name')
+                if isinstance(configured_database, str):
+                    base_dte_database_name = configured_database
         can_install_base_dte = bool(
             vista
             and empresa_id
@@ -113,29 +127,158 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
     name='dispatch',
 )
 class BaseDTESchemaInstallView(LoginRequiredMixin, View):
+    def _render_connection_roles(
+        self,
+        request,
+        schema_preview=None,
+        schema_preview_token=None,
+    ):
+        page = GestionDTEConnectionRoleView()
+        page.request = request
+        forms = []
+        for role, label, instance in page._role_instances():
+            form = GestionDTEConnectionRoleForm(
+                prefix=f'role-{role}',
+                instance=instance or GestionDTEConnectionRole(role=role),
+                role=role,
+            )
+            forms.append({'role': role, 'label': label, 'form': form})
+        context = page._context(forms)
+        context['schema_preview'] = schema_preview
+        context['schema_preview_token'] = schema_preview_token
+        return render(request, page.template_name, context)
+
+    def _resolve_serverbasedte(
+        self,
+    ) -> tuple[dict[str, object] | None, SettingsMySQLConnection | None, str | None]:
+        source = get_gestiondte_connection('serverbasedte')
+        if source['type'] != 'MYSQL_CONFIG':
+            return None, None, None
+        connection_config = get_gestiondte_mysql_connection('serverbasedte')
+        if not isinstance(connection_config, SettingsMySQLConnection):
+            raise BaseDTESchemaInstallError(
+                'La configuración Base DTE no es válida.'
+            )
+        database_name = source.get('database_name')
+        if (
+            not isinstance(database_name, str)
+            or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(database_name)
+        ):
+            raise BaseDTESchemaInstallError(
+                'La base de datos del rol Base DTE no está configurada o no es válida.'
+            )
+        if source.get('connection_id') != connection_config.pk:
+            raise BaseDTESchemaInstallError(
+                'La conexión Base DTE cambió durante la operación; vuelva a intentarlo.'
+            )
+        return source, connection_config, database_name
+
     def post(self, request):
         try:
-            source = get_gestiondte_connection('serverbasedte')
-            if source['type'] != 'MYSQL_CONFIG':
+            action = request.POST.get('schema_action')
+            source, connection_config, database_name = self._resolve_serverbasedte()
+            if source is None:
                 messages.info(
                     request,
                     'Base DTE utiliza una base administrada por Django; no requiere creación manual de estructura.',
                 )
                 return redirect('gestion_dte:connection_roles')
+            if connection_config is None or database_name is None:
+                raise BaseDTESchemaInstallError(
+                    'La configuración Base DTE no está completa.'
+                )
+            if action == 'preview':
+                schema_preview = preview_base_dte_schema(
+                    connection_config,
+                    database_name,
+                )
+                token = None
+                if schema_preview['missing'] and not schema_preview['conflicts']:
+                    token = signing.dumps(
+                        {
+                            'connection_id': connection_config.pk,
+                            'connection_updated_at': connection_config.updated_at.isoformat(),
+                            'database_name': database_name,
+                            'fingerprint': schema_preview['fingerprint'],
+                        },
+                        salt=_BASE_DTE_SCHEMA_PREVIEW_SALT,
+                        compress=True,
+                    )
+                return self._render_connection_roles(
+                    request,
+                    schema_preview=schema_preview,
+                    schema_preview_token=token,
+                )
 
-            connection_config = get_gestiondte_mysql_connection('serverbasedte')
-            database_name = source.get('database_name')
+            if action != 'confirm':
+                raise BaseDTESchemaInstallError(
+                    'La operación requiere una vista previa y confirmación explícitas.'
+                )
+            try:
+                preview_data = signing.loads(
+                    request.POST.get('schema_preview_token', ''),
+                    salt=_BASE_DTE_SCHEMA_PREVIEW_SALT,
+                    max_age=_BASE_DTE_SCHEMA_PREVIEW_MAX_AGE,
+                )
+            except signing.BadSignature as exc:
+                raise BaseDTESchemaInstallError(
+                    'La vista previa expiró o no es válida; vuelva a inspeccionar la estructura.'
+                ) from exc
+            if not isinstance(preview_data, dict):
+                raise BaseDTESchemaInstallError(
+                    'La vista previa no es válida; vuelva a inspeccionar la estructura.'
+                )
+            fingerprint = preview_data.get('fingerprint')
+            if not isinstance(fingerprint, str) or not fingerprint:
+                raise BaseDTESchemaInstallError(
+                    'La vista previa no es válida; vuelva a inspeccionar la estructura.'
+                )
             if (
-                not database_name
-                or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(database_name)
+                preview_data.get('connection_id') != connection_config.pk
+                or preview_data.get('connection_updated_at')
+                != connection_config.updated_at.isoformat()
+                or preview_data.get('database_name') != database_name
             ):
                 raise BaseDTESchemaInstallError(
-                    'La base de datos del rol Base DTE no está configurada o no es válida.'
+                    'El destino cambió desde la vista previa; vuelva a inspeccionar la estructura.'
                 )
-            install_base_dte_schema(connection_config, database_name=database_name)
-            messages.success(request, 'Estructura Base DTE procesada correctamente.')
+            result = install_base_dte_schema(
+                connection_config,
+                database_name=database_name,
+                expected_fingerprint=fingerprint,
+            )
+            if result['error_type']:
+                messages.error(
+                    request,
+                    'Creación parcial: '
+                    f"tabla={result['error_table']}; "
+                    f"error={result['error_type']}; "
+                    f"creadas={', '.join(result['created']) or 'ninguna'}; "
+                    f"pendientes={', '.join(result['pending']) or 'ninguna'}; "
+                    f"conflictos={', '.join(item['name'] for item in result['conflicts']) or 'ninguno'}. "
+                    'Las operaciones DDL anteriores no se revierten automáticamente.',
+                )
+            elif result['conflicts']:
+                messages.error(
+                    request,
+                    'La estructura detectó conflictos y no se creó ninguna tabla.',
+                )
+            elif result['created']:
+                messages.success(
+                    request,
+                    'Estructura Base DTE creada: '
+                    + ', '.join(result['created']),
+                )
+            else:
+                messages.success(
+                    request,
+                    'La estructura Base DTE ya existe y es compatible; no se realizaron cambios.',
+                )
         except BaseDTESchemaInstallError as exc:
             messages.error(request, str(exc))
-        except Exception:
-            messages.error(request, 'No se pudo procesar la estructura Base DTE.')
+        except GestionDTEConnectionError:
+            messages.error(
+                request,
+                'No se pudo resolver la conexión configurada para el rol Base DTE.',
+            )
         return redirect('gestion_dte:connection_roles')

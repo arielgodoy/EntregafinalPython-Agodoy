@@ -73,22 +73,96 @@
         </form>
       </div>
       {% if can_install_base_dte and base_dte_database_name %}
-        <div class="modal fade" id="baseDteSchemaModal" tabindex="-1" aria-hidden="true">
+        <div class="modal fade" id="baseDteSchemaModal" tabindex="-1" aria-hidden="true"{% if schema_preview %} data-open-on-load="true"{% endif %}>
           <div class="modal-dialog">
             <div class="modal-content">
               <div class="modal-header">
                 <h5 class="modal-title" data-key="gestiondte.connection_roles.create_base_dte">Crear estructura Base DTE</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
               </div>
-              <div class="modal-body" data-key="gestiondte.connection_roles.create_base_dte.confirmation">
-                Se crearán las estructuras necesarias de Base DTE en la base '{{ base_dte_database_name }}'. Las tablas existentes no serán eliminadas.
+              <div class="modal-body">
+                <p data-key="gestiondte.connection_roles.schema.preview_instructions">
+                  Se inspeccionará el esquema '{{ base_dte_database_name }}'. No se modificarán tablas existentes.
+                </p>
+                <form method="post" action="{% url 'gestion_dte:base_dte_schema_install' %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="schema_action" value="preview">
+                  <button type="submit" class="btn btn-outline-primary" data-key="gestiondte.connection_roles.schema.preview_button">
+                    Inspeccionar estructura
+                  </button>
+                </form>
+                {% if schema_preview %}
+                  <hr>
+                  <h6 data-key="gestiondte.connection_roles.schema.preview_title">Resultado de la inspección</h6>
+                  {% if schema_preview.conflicts %}
+                    <div class="alert alert-danger" data-key="gestiondte.connection_roles.schema.conflicts">
+                      Se detectaron tablas incompatibles. No se ejecutará DDL.
+                    </div>
+                  {% elif schema_preview.missing %}
+                    <div class="alert alert-warning" data-key="gestiondte.connection_roles.schema.missing">
+                      Se crearán únicamente las tablas que faltan, después de confirmar.
+                    </div>
+                  {% else %}
+                    <div class="alert alert-success" data-key="gestiondte.connection_roles.schema.complete">
+                      Todas las tablas ya existen y son compatibles.
+                    </div>
+                  {% endif %}
+                  <ul class="mb-0">
+                    {% for table in schema_preview.tables %}
+                      <li>
+                        <code>{{ table.name }}</code>
+                        {% if table.classification == 'COMPATIBLE' or table.status == 'existing' %}
+                          <span data-key="gestiondte.connection_roles.schema.status.existing">— compatible</span>
+                        {% elif table.classification == 'PENDIENTE_CREACIÓN' or table.status == 'missing' %}
+                          <span data-key="gestiondte.connection_roles.schema.status.missing">— pendiente de creación</span>
+                        {% elif table.classification == 'REQUIERE_AMPLIACIÓN_SEGURA' %}
+                          <span data-key="gestiondte.connection_roles.schema.status.requires_expansion">— requiere ampliación segura</span>
+                        {% elif table.classification == 'NO_VERIFICADO' %}
+                          <span data-key="gestiondte.connection_roles.schema.status.not_verified">— no verificado</span>
+                        {% else %}
+                          <span data-key="gestiondte.connection_roles.schema.status.conflict">— incompatible</span>
+                        {% endif %}
+                        {% for issue in table.issues %}<code>{{ issue }}</code>{% endfor %}
+                        {% for difference in table.column_differences %}
+                          <div class="small text-danger">
+                            <code>{{ table.name }}.{{ difference.column }}</code>
+                            <span data-key="gestiondte.connection_roles.schema.expected_type">Tipo esperado:</span>
+                            <code>{{ difference.expected_type }}</code>
+                            <span data-key="gestiondte.connection_roles.schema.actual_type">Tipo encontrado:</span>
+                            <code>{{ difference.actual_type }}</code>
+                            <span data-key="gestiondte.connection_roles.schema.expected_nullability">Nulabilidad esperada:</span>
+                            <code>{{ difference.expected_nullability }}</code>
+                            <span data-key="gestiondte.connection_roles.schema.actual_nullability">Nulabilidad encontrada:</span>
+                            <code>{{ difference.actual_nullability }}</code>
+                            <br>
+                            <span data-key="gestiondte.connection_roles.schema.proposed_action">Acción propuesta:</span>
+                            {{ difference.action_proposed }}
+                            <br>
+                            <span data-key="gestiondte.connection_roles.schema.risk">Riesgo:</span>
+                            {{ difference.risk }}
+                            {% if difference.requires_confirmation %}
+                              <br>
+                              <span data-key="gestiondte.connection_roles.schema.requires_confirmation">Requiere confirmación humana independiente.</span>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
-                <form method="post" action="{% url 'gestion_dte:base_dte_schema_install' %}">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-primary" data-key="gestiondte.connection_roles.create_base_dte.confirm">Confirmar creación</button>
-                </form>
+                {% if schema_preview_token %}
+                  <form method="post" action="{% url 'gestion_dte:base_dte_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="confirm">
+                    <input type="hidden" name="schema_preview_token" value="{{ schema_preview_token }}">
+                    <button type="submit" class="btn btn-primary" data-key="gestiondte.connection_roles.schema.confirm_button">
+                      Confirmar creación
+                    </button>
+                  </form>
+                {% endif %}
               </div>
             </div>
           </div>

@@ -1,12 +1,13 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
+from gestiondte.models import GestionDTEConnectionRole
 from gestiondte.models import (
     CesionRPETC,
     CertificadoSII,
@@ -16,7 +17,7 @@ from gestiondte.models import (
 from auditoria.models import AuditoriaGestionDTEEvent
 from gestiondte.views import _rpetc_request_filters
 from gestiondte.services.rpetc_contabilidad import ContabilidadLegacyError
-from settings.models import UserPreferences
+from settings.models import SettingsMySQLConnection, UserPreferences
 from gestiondte.tests.certificado_fixtures import configure_serverbasedte_django
 
 
@@ -26,6 +27,7 @@ class SincronizarRPETCViewTest(TestCase):
         self.user = User.objects.create_user(username='sync-user', password='pass')
         self.empresa = Empresa.objects.create(codigo='09', descripcion='Empresa activa')
         self.otra_empresa = Empresa.objects.create(codigo='10', descripcion='Otra empresa')
+
         vista, _ = Vista.objects.get_or_create(nombre='Gestión DTE - Control de Cesiones')
         Permiso.objects.create(
             usuario=self.user,
@@ -63,6 +65,24 @@ class SincronizarRPETCViewTest(TestCase):
             'cantidad_registros': 1,
         }
 
+    def _configure_servercontabilidad_test_role(self):
+        accounting_connection = SettingsMySQLConnection.objects.create(
+            empresa=self.empresa,
+            nombre_logico='test-contabilidad',
+            engine=SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL,
+            host='mysql.example.test',
+            port=3306,
+            user='test-user',
+            password='',
+            db_name='eltit_conta',
+            charset='latin1',
+        )
+        GestionDTEConnectionRole.objects.create(
+            role='servercontabilidad',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=accounting_connection,
+        )
+
     def _resultado_sincronizacion_con_cesion(self):
         tarea = TareaRPETC.objects.create(
             empresa=self.empresa, id_tarea='task-contable', tipo_consulta='DEUDOR',
@@ -87,7 +107,14 @@ class SincronizarRPETCViewTest(TestCase):
 
     @patch('gestiondte.services.lectura_automatica.sincronizar_empresa_rpetc')
     @patch('gestiondte.services.rpetc_contabilidad.registrar_cesiones_contabilidad')
-    def test_checkbox_falso_no_escribe_y_verdadero_usa_empresa_activa(self, registrar, sincronizar):
+    @patch('gestiondte.utils.maestro.open_mysql_connection')
+    def test_checkbox_falso_no_escribe_y_verdadero_usa_empresa_activa(
+        self, open_connection, registrar, sincronizar
+    ):
+        self._configure_servercontabilidad_test_role()
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        open_connection.return_value.__enter__.return_value.cursor.return_value = cursor
         sincronizar.return_value = self._resultado_sincronizacion_con_cesion()
         url = reverse('gestion_dte:sincronizar_cesiones_rpetc')
 
@@ -106,7 +133,14 @@ class SincronizarRPETCViewTest(TestCase):
 
     @patch('gestiondte.services.lectura_automatica.sincronizar_empresa_rpetc')
     @patch('gestiondte.services.rpetc_contabilidad.registrar_cesiones_contabilidad')
-    def test_fallo_legacy_no_convierte_sync_rpetc_en_error(self, registrar, sincronizar):
+    @patch('gestiondte.utils.maestro.open_mysql_connection')
+    def test_fallo_legacy_no_convierte_sync_rpetc_en_error(
+        self, open_connection, registrar, sincronizar
+    ):
+        self._configure_servercontabilidad_test_role()
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        open_connection.return_value.__enter__.return_value.cursor.return_value = cursor
         sincronizar.return_value = self._resultado_sincronizacion_con_cesion()
         registrar.side_effect = ContabilidadLegacyError('legacy no disponible')
 

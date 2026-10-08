@@ -5,19 +5,24 @@ import re
 import logging
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Iterable
+from contextlib import contextmanager, nullcontext
+from types import TracebackType
+from typing import Any, ContextManager, Generator, Iterable, Protocol, Sequence, cast
 
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 from django.utils import timezone
 from settings.models import SettingsMySQLConnection
+from settings.services.mysql_connections import open_mysql_connection
+
+from .connection_roles import (
+    GestionDTEConnectionError,
+    get_gestiondte_mysql_connection,
+)
 
 
 logger = logging.getLogger(__name__)
-
-try:
-    import pymysql
-except ImportError:  # pragma: no cover - el entorno productivo debe incluirlo
-    pymysql = None
-
 
 TIPO_DTE_LEGACY = {"33": "FC"}
 CUENTA_CONTABLE_CESIONES = "23100026"
@@ -28,6 +33,31 @@ _SELECT_FIELDS = (
     "fechadocumento, fechavencimiento, glosacontable, creadopor, "
     "fechacreacion, horacreacion, tipo, codigocuenta"
 )
+
+
+class _AccountingCursor(Protocol):
+    description: Sequence[Sequence[Any]]
+
+    def execute(self, query: str, params: Sequence[Any] | None = None) -> Any: ...
+
+    def fetchone(self) -> Sequence[Any] | None: ...
+
+    def fetchall(self) -> Sequence[Sequence[Any]]: ...
+
+    def __enter__(self) -> _AccountingCursor: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+
+class _AccountingConnection(Protocol):
+    def cursor(self) -> ContextManager[_AccountingCursor]: ...
+
+    def commit(self) -> None: ...
 
 
 class ContabilidadLegacyError(RuntimeError):
@@ -144,82 +174,85 @@ def registrar_cesiones_contabilidad(empresa_codigo: Any, cesiones: Iterable[Any]
     }
     if not cesiones:
         return result
-    config = _config_legacy()
-    connection = None
+    config = _mysql_connection_config()
     try:
-        connection = pymysql.connect(
-            host=config.host,
-            port=int(config.port or 3306),
-            user=config.user,
-            password=config.password,
-            database=LEGACY_RCV_SCHEMA,
-            charset=(config.charset or "latin1"),
-            connect_timeout=5,
-            read_timeout=15,
-            write_timeout=10,
-        )
-        with connection.cursor() as cursor:
-            for cesion in cesiones:
-                try:
-                    values, identity = _evento_cesion_values(empresa_codigo, cesion)
-                    cursor.execute(
-                        "SELECT fecha_evento, hora_evento, glosa_evento "
-                        f"FROM {LEGACY_RCV_TABLE} "
-                        "WHERE empresa_verificacion=%s AND rut_proveedor=%s "
-                        "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s LIMIT 1",
-                        identity,
-                    )
-                    existing = cursor.fetchone()
-                    if existing is None:
-                        cursor.execute(
-                            f"INSERT INTO {LEGACY_RCV_TABLE} "
-                            "(rut_proveedor, tipo_doc, numero_doc, tipo_evento, fecha_evento, "
-                            "hora_evento, glosa_evento, empresa_verificacion) "
-                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                            (
-                                values["rut_proveedor"], values["tipo_doc"], values["numero_doc"],
-                                values["tipo_evento"], values["fecha_evento"], values["hora_evento"],
-                                values["glosa_evento"], values["empresa_verificacion"],
-                            ),
-                        )
-                        result["eventos_creados"] += 1
-                    elif tuple(existing) == (
-                        values["fecha_evento"], values["hora_evento"], values["glosa_evento"],
-                    ):
-                        result["eventos_sin_cambios"] += 1
-                    else:
-                        cursor.execute(
-                            f"UPDATE {LEGACY_RCV_TABLE} SET fecha_evento=%s, hora_evento=%s, "
-                            "glosa_evento=%s WHERE empresa_verificacion=%s AND rut_proveedor=%s "
-                            "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s",
-                            (
+        with _open_accounting_connection(config, database_name=LEGACY_RCV_SCHEMA) as connection:
+            transaction_context = (
+                transaction.atomic(using=connection.alias)
+                if isinstance(connection, BaseDatabaseWrapper)
+                else nullcontext()
+            )
+            with transaction_context:
+                with connection.cursor() as cursor:
+                    for cesion in cesiones:
+                        try:
+                            values, identity = _evento_cesion_values(empresa_codigo, cesion)
+                            cursor.execute(
+                                "SELECT fecha_evento, hora_evento, glosa_evento "
+                                f"FROM {LEGACY_RCV_TABLE} "
+                                "WHERE empresa_verificacion=%s AND rut_proveedor=%s "
+                                "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s LIMIT 1",
+                                identity,
+                            )
+                            existing = cursor.fetchone()
+                            if existing is None:
+                                cursor.execute(
+                                    f"INSERT INTO {LEGACY_RCV_TABLE} "
+                                    "(rut_proveedor, tipo_doc, numero_doc, tipo_evento, fecha_evento, "
+                                    "hora_evento, glosa_evento, empresa_verificacion) "
+                                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                                    (
+                                        values["rut_proveedor"], values["tipo_doc"], values["numero_doc"],
+                                        values["tipo_evento"], values["fecha_evento"], values["hora_evento"],
+                                        values["glosa_evento"], values["empresa_verificacion"],
+                                    ),
+                                )
+                                result["eventos_creados"] += 1
+                            elif tuple(existing) == (
                                 values["fecha_evento"], values["hora_evento"], values["glosa_evento"],
-                                *identity,
-                            ),
-                        )
-                        result["eventos_actualizados"] += 1
-                except ContabilidadLegacyError:
-                    result["errores_contables"] += 1
-        connection.commit()
+                            ):
+                                result["eventos_sin_cambios"] += 1
+                            else:
+                                cursor.execute(
+                                    f"UPDATE {LEGACY_RCV_TABLE} SET fecha_evento=%s, hora_evento=%s, "
+                                    "glosa_evento=%s WHERE empresa_verificacion=%s AND rut_proveedor=%s "
+                                    "AND tipo_doc=%s AND numero_doc=%s AND tipo_evento=%s",
+                                    (
+                                        values["fecha_evento"], values["hora_evento"], values["glosa_evento"],
+                                        *identity,
+                                    ),
+                                )
+                                result["eventos_actualizados"] += 1
+                        except ContabilidadLegacyError:
+                            result["errores_contables"] += 1
+                if not isinstance(connection, BaseDatabaseWrapper):
+                    connection.commit()
     except Exception as exc:
         raise ContabilidadLegacyError("No fue posible registrar eventos contables RPETC.") from exc
-    finally:
-        if connection is not None:
-            connection.close()
     return result
 
 
-def _config_legacy() -> SettingsMySQLConnection:
-    config = SettingsMySQLConnection.objects.filter(
-        is_active=True,
-        engine=SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL,
-        db_name="eltit_conta",
-    ).order_by("pk").first()
-    if not config:
-        raise ContabilidadLegacyError("No existe conexión legacy contable activa.")
-    if pymysql is None:
-        raise ContabilidadLegacyError("La librería de conexión legacy no está disponible.")
-    return config
+def _mysql_connection_config() -> SettingsMySQLConnection:
+    try:
+        return get_gestiondte_mysql_connection("servercontabilidad")
+    except (GestionDTEConnectionError, ObjectDoesNotExist) as exc:
+        raise ContabilidadLegacyError(
+            "No existe conexión legacy contable activa."
+        ) from exc
+
+
+@contextmanager
+def _open_accounting_connection(
+    config: SettingsMySQLConnection,
+    database_name: str | None = None,
+) -> Generator[BaseDatabaseWrapper | _AccountingConnection, None, None]:
+    connection_context = (
+        open_mysql_connection(config)
+        if database_name is None
+        else open_mysql_connection(config, database_name=database_name)
+    )
+    with connection_context as connection:
+        yield cast(BaseDatabaseWrapper | _AccountingConnection, connection)
 
 
 def _movimiento_dicts(cursor) -> list[dict[str, Any]]:
@@ -230,7 +263,7 @@ def _movimiento_dicts(cursor) -> list[dict[str, Any]]:
 def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, str]]) -> list[dict[str, Any]]:
     if not keys:
         return []
-    config = _config_legacy()
+    config = _mysql_connection_config()
     schema = _schema_empresa(empresa_codigo)
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
@@ -239,27 +272,12 @@ def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, 
         clauses.append("(rutctacte=%s AND tipodocumento=%s AND numerodocumento=%s AND dh=%s AND codigocuenta=%s)")
         params.extend((rutctacte, tipo, folio, dh, codigocuenta))
     sql = f"SELECT {_SELECT_FIELDS} FROM {table} WHERE " + " OR ".join(clauses)
-    connection = None
     try:
-        connection = pymysql.connect(
-            host=config.host,
-            port=int(config.port or 3306),
-            user=config.user,
-            password=config.password,
-            database=config.db_name,
-            charset=(config.charset or "latin1"),
-            connect_timeout=5,
-            read_timeout=15,
-            write_timeout=10,
-        )
-        with connection.cursor() as cursor:
+        with _open_accounting_connection(config) as connection, connection.cursor() as cursor:
             cursor.execute(sql, params)
             return _movimiento_dicts(cursor)
     except Exception as exc:
         raise ContabilidadLegacyError("No fue posible consultar el ERP legacy.") from exc
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 def _query_factoring_glosa_candidates(
@@ -268,7 +286,7 @@ def _query_factoring_glosa_candidates(
 ) -> list[dict[str, Any]]:
     if not candidates:
         return []
-    config = _config_legacy()
+    config = _mysql_connection_config()
     schema = _schema_empresa(empresa_codigo)
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
@@ -282,27 +300,12 @@ def _query_factoring_glosa_candidates(
         "AND (" + " OR ".join(clauses) + ")"
     )
     params = [CUENTA_CONTABLE_CESIONES, "D", "DB", "DB", *params]
-    connection = None
     try:
-        connection = pymysql.connect(
-            host=config.host,
-            port=int(config.port or 3306),
-            user=config.user,
-            password=config.password,
-            database=config.db_name,
-            charset=(config.charset or "latin1"),
-            connect_timeout=5,
-            read_timeout=15,
-            write_timeout=10,
-        )
-        with connection.cursor() as cursor:
+        with _open_accounting_connection(config) as connection, connection.cursor() as cursor:
             cursor.execute(sql, params)
             return _movimiento_dicts(cursor)
     except Exception as exc:
         raise ContabilidadLegacyError("No fue posible consultar candidatos de factoring.") from exc
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 def _folio_en_glosa(folio: Any, glosa: Any) -> bool:
