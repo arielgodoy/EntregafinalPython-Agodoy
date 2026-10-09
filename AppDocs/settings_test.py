@@ -215,6 +215,5 @@ MIGRATION_MODULES = {
     'control_operacional': None,
     'control_de_proyectos': None,
     'evaluaciones': None,
-    'settings': None,
     'notificaciones': None,
 }
