@@ -1086,6 +1086,12 @@ class BaseTareasSchemaViewTests(TestCase):
             "missing": [],
             "conflicts": [],
             "fingerprint": "fingerprint",
+            "reference_data_complete": True,
+            "reference_data_missing_count": 0,
+            "backend": "mysql",
+            "database_name": "tareas",
+            "connection_id": self.connection.pk,
+            "connection_updated_at": self.connection.updated_at.isoformat(),
         }
         response = self.client.post(url, {"schema_action": "preview"})
 
