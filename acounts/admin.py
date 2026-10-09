@@ -1,6 +1,13 @@
 from django.contrib import admin
 from django.utils import timezone
-from .models import Avatar, EmailAccount, SystemConfig, CompanyConfig, UserEmailToken
+from .models import (
+    Avatar,
+    CompanyConfig,
+    EmailAccount,
+    SystemConfig,
+    UserActiveSession,
+    UserEmailToken,
+)
 
 @admin.register(Avatar)
 class AvatarAdmin(admin.ModelAdmin):
@@ -52,6 +59,23 @@ class UserEmailTokenAdmin(admin.ModelAdmin):
 	list_display = ('user', 'purpose', 'expires_at', 'used_at', 'created_at')
 	list_filter = ('purpose', 'used_at', UserEmailTokenExpiredFilter)
 	search_fields = ('user__username', 'user__email', 'token_hash')
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(UserActiveSession)
+class UserActiveSessionAdmin(admin.ModelAdmin):
+	fields = ('user', 'updated_at')
+	list_display = ('user', 'updated_at')
+	readonly_fields = ('user', 'updated_at')
+	actions = None
 
 	def has_add_permission(self, request):
 		return False

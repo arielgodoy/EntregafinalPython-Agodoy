@@ -23,6 +23,10 @@ internas de Django sin una superficie administrativa propia. El admin debe evita
 exponer passwords, tokens, secretos o credenciales; puede ser de solo lectura
 cuando la finalidad sea inspección.
 
+La cobertura global se comprueba en `AppDocs/tests/test_admin_model_coverage.py`.
+Las exclusiones internas de framework están listadas allí junto con su motivo;
+cualquier otra exclusión debe documentarse explícitamente.
+
 ### Dominio organizacional transversal aprobado
 
 Se reserva la futura `APPLICATION_APP` `organizacion` como owner canónico y
