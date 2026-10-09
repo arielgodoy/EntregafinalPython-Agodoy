@@ -37,6 +37,12 @@ class ReferenceConnection:
     def cursor(self):
         return self
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
     def close(self):
         pass
 
@@ -68,6 +74,22 @@ class ReferenceConnection:
             self.rows.append(tuple(params))
         elif sql.startswith("SELECT 1 FROM information_schema.tables"):
             self.results = [(1,)] if params[1] in self.tables else []
+        elif sql.startswith("SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COLLATION"):
+            self.results = [
+                (table, "BASE TABLE", self.engine, "utf8mb4_unicode_ci")
+                for table in params[1:]
+                if table in self.tables
+            ]
+        elif sql.startswith("SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, EXTRA"):
+            self.results = [
+                (table, "id", "BIGINT", "YES", "")
+                for table in params[1:]
+                if table in self.tables
+            ]
+        elif sql.startswith("SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME"):
+            self.results = []
+        elif sql.startswith("SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME"):
+            self.results = []
         elif sql.startswith("CREATE TABLE IF NOT EXISTS tareas_causaatraso"):
             self.tables.add("tareas_causaatraso")
         else:

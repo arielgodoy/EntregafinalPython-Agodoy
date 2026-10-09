@@ -40,16 +40,14 @@ class ReprogrammingFixture(TestCase):
         cls.role = TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
         )
-        for codigo, nombre in (
-            ("IMPOSIBILIDAD_TECNICA", "Imposibilidad técnica"),
-            ("ATRASO_IMPORTACION", "Atraso importación"),
-        ):
-            CausaAtraso.objects.create(codigo=codigo, nombre=nombre)
         cls.inactive = create_user("rp-inactive")
         cls.inactive.is_active = False
         cls.inactive.save(update_fields=["is_active"])
         assign_permission(cls.actor, cls.empresa, "Tareas", ingresar=True, modificar=True)
-        cls.causes = tuple(CausaAtraso.objects.order_by("codigo")[:2])
+        cls.causes = tuple(
+            CausaAtraso.objects.get(codigo=codigo)
+            for codigo in ("IMPOSIBILIDAD_TECNICA", "ATRASO_IMPORTACION")
+        )
 
     def setUp(self):
         self.task = Tarea.objects.create(
@@ -664,7 +662,7 @@ class DjangoReprogrammingAliasTests(ReprogrammingFixture):
         self.role.django_alias = alias
         self.role.save(update_fields=["django_alias"])
         for cause in self.causes:
-            CausaAtraso.objects.using(alias).create(
+            CausaAtraso.objects.using(alias).get(
                 pk=cause.pk, codigo=cause.codigo, nombre=cause.nombre,
             )
         result = reprogram_task(self.command)
