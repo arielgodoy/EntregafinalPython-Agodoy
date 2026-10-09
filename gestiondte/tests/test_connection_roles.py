@@ -187,6 +187,13 @@ class GestionDTEConnectionRoleTests(TestCase):
         for role, _label in GestionDTEConnectionRole.ROLE_CHOICES:
             self.assertContains(response, f'gestiondte.connection_roles.role.{role}')
 
+    @override_settings(
+        DATABASES={
+            'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'},
+            'DB_sistema': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'},
+        },
+        SYSTEM_DATABASE_ALIASES={'default', 'DB_sistema'},
+    )
     def test_system_database_options_are_rendered_in_role_selectors(self):
         self._activate()
         self._grant(ver=True, ingresar=True)
