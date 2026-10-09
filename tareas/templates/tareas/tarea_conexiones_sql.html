@@ -137,7 +137,7 @@
                           <span data-key="tareas.connection_roles.schema.status.missing">— pendiente de creación</span>
                         {% else %}
                           <span data-key="tareas.connection_roles.schema.status.conflict">— incompatible</span>
-                          {% for issue in table.issues %}<code class="ms-1" data-key="tareas.connection_roles.schema.issue">{{ issue }}</code>{% endfor %}
+                          {% for issue in table.issues %}<code class="ms-1">{{ issue }}</code>{% endfor %}
                         {% endif %}
                       </li>
                     {% endfor %}
