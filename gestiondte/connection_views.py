@@ -9,7 +9,7 @@ from django.views import View
 from typing import cast
 
 from access_control.decorators import verificar_permiso
-from access_control.models import Permiso, Vista
+from access_control.models import Empresa, Permiso, Vista
 from access_control.views import VerificarPermisoMixin
 
 from .forms import GestionDTEConnectionRoleForm
@@ -48,6 +48,10 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
             (role, label, existing.get(role))
             for role, label in GestionDTEConnectionRole.ROLE_CHOICES
         ]
+
+    def _active_empresa(self):
+        empresa_id = self.request.session.get('empresa_id')
+        return Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
 
     def _context(self, forms):
         status = get_gestiondte_connection_status()
@@ -96,6 +100,7 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
                 prefix=f'role-{role}',
                 instance=instance or GestionDTEConnectionRole(role=role),
                 role=role,
+                empresa=self._active_empresa(),
             )
             forms.append({'role': role, 'label': label, 'form': form})
         return render(request, self.template_name, self._context(forms))
@@ -109,6 +114,7 @@ class GestionDTEConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, Vi
                 prefix=f'role-{role}',
                 instance=instance or GestionDTEConnectionRole(role=role),
                 role=role,
+                empresa=self._active_empresa(),
             )
             forms.append({'role': role, 'label': label, 'form': form})
 
@@ -135,12 +141,14 @@ class BaseDTESchemaInstallView(LoginRequiredMixin, View):
     ):
         page = GestionDTEConnectionRoleView()
         page.request = request
+        empresa = page._active_empresa()
         forms = []
         for role, label, instance in page._role_instances():
             form = GestionDTEConnectionRoleForm(
                 prefix=f'role-{role}',
                 instance=instance or GestionDTEConnectionRole(role=role),
                 role=role,
+                empresa=empresa,
             )
             forms.append({'role': role, 'label': label, 'form': form})
         context = page._context(forms)
@@ -150,11 +158,20 @@ class BaseDTESchemaInstallView(LoginRequiredMixin, View):
 
     def _resolve_serverbasedte(
         self,
+        empresa=None,
     ) -> tuple[dict[str, object] | None, SettingsMySQLConnection | None, str | None]:
-        source = get_gestiondte_connection('serverbasedte')
+        source = (
+            get_gestiondte_connection('serverbasedte', empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_connection('serverbasedte')
+        )
         if source['type'] != 'MYSQL_CONFIG':
             return None, None, None
-        connection_config = get_gestiondte_mysql_connection('serverbasedte')
+        connection_config = (
+            get_gestiondte_mysql_connection('serverbasedte', empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_mysql_connection('serverbasedte')
+        )
         if not isinstance(connection_config, SettingsMySQLConnection):
             raise BaseDTESchemaInstallError(
                 'La configuración Base DTE no es válida.'
@@ -176,7 +193,10 @@ class BaseDTESchemaInstallView(LoginRequiredMixin, View):
     def post(self, request):
         try:
             action = request.POST.get('schema_action')
-            source, connection_config, database_name = self._resolve_serverbasedte()
+            empresa = Empresa.objects.filter(
+                pk=request.session.get('empresa_id')
+            ).first()
+            source, connection_config, database_name = self._resolve_serverbasedte(empresa)
             if source is None:
                 messages.info(
                     request,

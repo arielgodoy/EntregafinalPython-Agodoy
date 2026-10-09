@@ -128,7 +128,11 @@ def _cesiones_rpetc_context(empresa_activa, fecha_seleccionada=None, filtros=Non
     if detail:
         try:
             from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
-            contabilidad = obtener_estados_contables_cesiones(empresa_activa.codigo, detail)
+            contabilidad = obtener_estados_contables_cesiones(
+                empresa_activa.codigo,
+                detail,
+                empresa=empresa_activa,
+            )
         except Exception:
             contabilidad = {
                 cesion.pk: {
@@ -209,7 +213,11 @@ def _rpetc_apply_payment_filters(filtered, empresa_activa, filtros):
         if not chunk:
             continue
         from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
-        states_by_pk.update(obtener_estados_contables_cesiones(empresa_activa.codigo, chunk))
+        states_by_pk.update(obtener_estados_contables_cesiones(
+            empresa_activa.codigo,
+            chunk,
+            empresa=empresa_activa,
+        ))
     pending_ids = _rpetc_pagos_pendientes_ids(
         states_by_pk,
         sin_pago_factoring=bool(filtros.get('sin_pago_factoring')),
@@ -514,7 +522,11 @@ def cesiones_data(request):
     page = list(filtered.order_by(order_by, 'pk')[start:start + length])
     try:
         from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
-        states = obtener_estados_contables_cesiones(empresa_activa.codigo, page)
+        states = obtener_estados_contables_cesiones(
+            empresa_activa.codigo,
+            page,
+            empresa=empresa_activa,
+        )
     except Exception:
         states = {
             cesion.pk: {
@@ -611,7 +623,11 @@ def exportar_cesiones_excel(request):
     from .services.rpetc_contabilidad import obtener_estados_contables_cesiones
     for start in range(0, len(cesiones), 250):
         chunk = cesiones[start:start + 250]
-        states.update(obtener_estados_contables_cesiones(empresa_activa.codigo, chunk))
+        states.update(obtener_estados_contables_cesiones(
+            empresa_activa.codigo,
+            chunk,
+            empresa=empresa_activa,
+        ))
 
     workbook = Workbook()
     sheet = workbook.active
@@ -1019,7 +1035,9 @@ def sincronizar_cesiones_rpetc(request):
 
     certificado = next(
         (
-            item for item in CertificadoSIIRepository().list_by_empresa(empresa_activa.codigo)
+            item for item in CertificadoSIIRepository(empresa=empresa_activa).list_by_empresa(
+                empresa_activa.codigo
+            )
             if item.activo
         ),
         None,
@@ -1029,7 +1047,10 @@ def sincronizar_cesiones_rpetc(request):
         return render(request, 'gestiondte/cesiones.html', context)
 
     try:
-        maestro = get_maestroempresa_by_codigo(empresa_activa.codigo)
+        maestro = get_maestroempresa_by_codigo(
+            empresa_activa.codigo,
+            empresa=empresa_activa,
+        )
         sincronizado = sincronizar_empresa_rpetc(
             empresa_activa,
             fecha_desde,
@@ -1050,7 +1071,11 @@ def sincronizar_cesiones_rpetc(request):
         if form.cleaned_data.get('grabar_en_contabilidad', False) and stats.get('tarea'):
             cesiones = CesionRPETC.objects.filter(tareas__tarea=stats['tarea']).distinct()
             try:
-                contabilidad = registrar_cesiones_contabilidad(empresa_activa.codigo, cesiones)
+                contabilidad = registrar_cesiones_contabilidad(
+                    empresa_activa.codigo,
+                    cesiones,
+                    empresa=empresa_activa,
+                )
             except ContabilidadLegacyError:
                 contabilidad['errores_contables'] = cesiones.count()
         stats.update(contabilidad)
@@ -1214,12 +1239,15 @@ def dashboard_resumen(request):
 def certificados_list(request):
     empresa_id = request.session.get('empresa_id')
     active_empresa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
-    certificados = CertificadoSIIRepository().list_by_empresa(
+    certificados = CertificadoSIIRepository(empresa=active_empresa).list_by_empresa(
         active_empresa.codigo
     ) if active_empresa else []
     # gather empresa info for codes present
     codigos = set(cert.empresa_codigo for cert in certificados)
-    empresas_certificados = {c: get_maestroempresa_by_codigo(c) for c in codigos}
+    empresas_certificados = {
+        c: get_maestroempresa_by_codigo(c, empresa=active_empresa)
+        for c in codigos
+    }
     # compute can_create for UI: if user has crear on active empresa OR on any empresa
     can_create_context = False
     can_delete_context = False
@@ -1252,7 +1280,7 @@ def certificados_eliminar(request, pk):
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa:
         return JsonResponse({'success': False, 'error': 'No hay empresa activa.'}, status=403)
-    repository = CertificadoSIIRepository()
+    repository = CertificadoSIIRepository(empresa=empresa_activa)
     certificado = repository.get_by_pk_and_empresa(pk, empresa_activa.codigo)
     if certificado is None:
         return JsonResponse({'success': False, 'error': 'El certificado no pertenece a la empresa activa.'}, status=403)
@@ -1301,7 +1329,11 @@ def certificados_cargar(request, codigoempresa=None):
     if request.method == 'POST':
         data = request.POST.copy()
         data['empresa_codigo'] = empresa_activa.codigo
-        form = CertificadoUploadForm(data, request.FILES)
+        form = CertificadoUploadForm(
+            data,
+            request.FILES,
+            empresa=empresa_activa,
+        )
         if form.is_valid():
             # Validate PKCS#12 before saving file
             uploaded = request.FILES.get('archivo')
@@ -1361,7 +1393,7 @@ def certificados_cargar(request, codigoempresa=None):
                     instance.valido_hasta = valido_hasta
                     uploaded.seek(0)
                     # finally save (this saves file to storage)
-                    instance = CertificadoSIIRepository().create(
+                    instance = CertificadoSIIRepository(empresa=empresa_activa).create(
                         instance, empresa_activa.codigo, request.user
                     )
                     audit_log(
@@ -1380,7 +1412,7 @@ def certificados_cargar(request, codigoempresa=None):
     else:
         initial = {}
         initial['empresa_codigo'] = empresa_activa.codigo
-        form = CertificadoUploadForm(initial=initial)
+        form = CertificadoUploadForm(initial=initial, empresa=empresa_activa)
     return render(request, 'gestiondte/certificados_cargar.html', {'form': form, 'codigoempresa': codigoempresa})
 
 
@@ -1391,8 +1423,13 @@ def certificados_detail(request, codigoempresa):
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa or codigoempresa != empresa_activa.codigo:
         return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
-    certificados = CertificadoSIIRepository().list_by_empresa(empresa_activa.codigo)
-    empresa = get_maestroempresa_by_codigo(empresa_activa.codigo)
+    certificados = CertificadoSIIRepository(empresa=empresa_activa).list_by_empresa(
+        empresa_activa.codigo
+    )
+    empresa = get_maestroempresa_by_codigo(
+        empresa_activa.codigo,
+        empresa=empresa_activa,
+    )
     return render(request, 'gestiondte/certificados_detail.html', {'certificados': certificados, 'codigoempresa': empresa_activa.codigo, 'empresa': empresa})
 
 
@@ -1403,11 +1440,18 @@ def certificados_toggle_active(request, pk):
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa:
         return HttpResponseForbidden('No hay empresa activa.')
-    cert = CertificadoSIIRepository().get_by_pk_and_empresa(pk, empresa_activa.codigo)
+    cert = CertificadoSIIRepository(empresa=empresa_activa).get_by_pk_and_empresa(
+        pk,
+        empresa_activa.codigo,
+    )
     if cert is None:
         return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
     before = {'activo': cert.activo}
-    cert = CertificadoSIIRepository().update_active(pk, empresa_activa.codigo, request.user)
+    cert = CertificadoSIIRepository(empresa=empresa_activa).update_active(
+        pk,
+        empresa_activa.codigo,
+        request.user,
+    )
     audit_log(
         request,
         'UPDATE',
@@ -1433,10 +1477,16 @@ def certificados_probar_conexion(request, pk):
     empresa_activa = Empresa.objects.filter(pk=empresa_id).first() if empresa_id else None
     if not empresa_activa:
         return HttpResponseForbidden('No hay empresa activa.')
-    cert = CertificadoSIIRepository().get_by_pk_and_empresa(pk, empresa_activa.codigo)
+    cert = CertificadoSIIRepository(empresa=empresa_activa).get_by_pk_and_empresa(
+        pk,
+        empresa_activa.codigo,
+    )
     if cert is None:
         return HttpResponseForbidden('El certificado no pertenece a la empresa activa.')
-    empresa = get_maestroempresa_by_codigo(cert.empresa_codigo)
+    empresa = get_maestroempresa_by_codigo(
+        cert.empresa_codigo,
+        empresa=empresa_activa,
+    )
 
     resultado = {
         'cert': cert,
@@ -1451,7 +1501,7 @@ def certificados_probar_conexion(request, pk):
     }
 
     try:
-        res = probar_autenticacion_sii(cert)
+        res = probar_autenticacion_sii(cert, empresa=empresa_activa)
         # success se deriva exclusivamente de token_obtenido para evitar inconsistencias
         resultado.update({
             'success': res['success'] and res['token_obtenido'],

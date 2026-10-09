@@ -1,8 +1,10 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
 from gestiondte.consultassql import build_maestroempresa_by_codigo_query
+from gestiondte.services.connection_roles import GestionDTECompanyMismatchError
 from gestiondte.utils.maestro import get_maestroempresa_by_codigo
 
 
@@ -14,6 +16,16 @@ class MaestroEmpresaQueryTests(SimpleTestCase):
         self.assertIn("codigoempresa, nombre, rut, rutenviasii", query)
         self.assertIn("LIMIT 1", query)
         self.assertEqual(params, ("09",))
+
+    @patch("gestiondte.utils.maestro.get_gestiondte_connection")
+    def test_company_code_cannot_override_active_company(self, get_role):
+        with self.assertRaises(GestionDTECompanyMismatchError):
+            get_maestroempresa_by_codigo(
+                "02",
+                empresa=SimpleNamespace(codigo="01", pk=1),
+            )
+
+        get_role.assert_not_called()
 
     def test_dynamic_sql_identifiers_are_rejected(self):
         for unsafe in ("", "cliente conta", "cliente`conta", "cliente.conta", "cliente;DROP"):

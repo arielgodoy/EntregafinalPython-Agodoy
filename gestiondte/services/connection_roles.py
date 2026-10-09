@@ -31,6 +31,71 @@ class GestionDTEConnectionSourceError(GestionDTEConnectionError):
     pass
 
 
+class GestionDTECompanyMismatchError(GestionDTEConnectionError):
+    pass
+
+
+def _requested_empresa_id(empresa):
+    if empresa is None:
+        return None
+    empresa_id = getattr(empresa, 'pk', empresa)
+    if empresa_id is None:
+        raise GestionDTECompanyMismatchError(
+            'La empresa solicitada no tiene un identificador válido.'
+        )
+    return empresa_id
+
+
+def _validate_connection_company(role: str, connection, empresa) -> None:
+    requested_empresa_id = _requested_empresa_id(empresa)
+    if (
+        requested_empresa_id is not None
+        and connection.empresa_id != requested_empresa_id
+    ):
+        raise GestionDTECompanyMismatchError(
+            f'La conexión del rol {role!r} no pertenece a la empresa solicitada.'
+        )
+
+
+def _get_role_config(role: str):
+    try:
+        return GestionDTEConnectionRole.objects.select_related(
+            'mysql_connection', 'mysql_connection__empresa'
+        ).get(role=role)
+    except GestionDTEConnectionRole.DoesNotExist as exc:
+        raise GestionDTERoleNotFoundError(
+            f'No existe configuración para el rol {role!r}.'
+        ) from exc
+
+
+def _validate_mysql_role(role_config, empresa):
+    connection = role_config.mysql_connection
+    if connection is None or not connection.is_active:
+        raise GestionDTEConnectionInactiveError(
+            f'La conexión MySQL del rol {role_config.role!r} está inactiva o no existe.'
+        )
+    _validate_connection_company(role_config.role, connection, empresa)
+    if (
+        role_config.role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
+        and (
+            not role_config.database_name
+            or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(
+                role_config.database_name
+            )
+        )
+    ):
+        raise GestionDTEConnectionSourceError(
+            f'El rol {role_config.role!r} no tiene una base de datos válida configurada.'
+        )
+    return connection
+
+
+def _resolved_database_name(role_config, connection):
+    if role_config.role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES:
+        return role_config.database_name
+    return connection.db_name
+
+
 def _database_vendor(alias: str, config: dict) -> str:
     try:
         return connections[alias].vendor
@@ -146,15 +211,8 @@ def get_gestiondte_connection_status() -> dict[str, object]:
     }
 
 
-def get_gestiondte_connection(role: str) -> dict[str, object]:
-    try:
-        role_config = GestionDTEConnectionRole.objects.select_related(
-            'mysql_connection', 'mysql_connection__empresa'
-        ).get(role=role)
-    except GestionDTEConnectionRole.DoesNotExist as exc:
-        raise GestionDTERoleNotFoundError(
-            f'No existe configuración para el rol {role!r}.'
-        ) from exc
+def get_gestiondte_connection(role: str, *, empresa=None) -> dict[str, object]:
+    role_config = _get_role_config(role)
 
     if role_config.source_type == 'DJANGO':
         catalog = {item['alias']: item for item in get_system_database_catalog()}
@@ -170,23 +228,7 @@ def get_gestiondte_connection(role: str) -> dict[str, object]:
             'classification': metadata['classification'],
         }
 
-    connection = role_config.mysql_connection
-    if connection is None or not connection.is_active:
-        raise GestionDTEConnectionInactiveError(
-            f'La conexión MySQL del rol {role!r} está inactiva o no existe.'
-        )
-    if (
-        role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
-        and (
-            not role_config.database_name
-            or not GestionDTEConnectionRole.DATABASE_NAME_PATTERN.fullmatch(
-                role_config.database_name
-            )
-        )
-    ):
-        raise GestionDTEConnectionSourceError(
-            f'El rol {role!r} no tiene una base de datos válida configurada.'
-        )
+    connection = _validate_mysql_role(role_config, empresa)
     return {
         'type': 'MYSQL_CONFIG',
         'connection_id': connection.pk,
@@ -194,21 +236,14 @@ def get_gestiondte_connection(role: str) -> dict[str, object]:
         'empresa_codigo': connection.empresa.codigo,
         'nombre_logico': connection.nombre_logico,
         'engine': connection.engine,
-        'database_name': role_config.database_name,
+        'database_name': _resolved_database_name(role_config, connection),
     }
 
 
-def get_gestiondte_mysql_connection(role: str):
-    role_config = GestionDTEConnectionRole.objects.select_related(
-        'mysql_connection', 'mysql_connection__empresa'
-    ).get(role=role)
+def get_gestiondte_mysql_connection(role: str, *, empresa=None):
+    role_config = _get_role_config(role)
     if role_config.source_type != 'MYSQL_CONFIG':
         raise GestionDTEConnectionSourceError(
             f'El rol {role!r} no utiliza una conexión MYSQL_CONFIG.'
         )
-    connection = role_config.mysql_connection
-    if connection is None or not connection.is_active:
-        raise GestionDTEConnectionInactiveError(
-            f'La conexión MySQL del rol {role!r} está inactiva o no existe.'
-        )
-    return connection
+    return _validate_mysql_role(role_config, empresa)

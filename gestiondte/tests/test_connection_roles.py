@@ -12,8 +12,10 @@ from gestiondte.models import GestionDTEConnectionRole
 from gestiondte.services.connection_roles import (
     GestionDTEAliasUnavailableError,
     GestionDTEConnectionSourceError,
+    GestionDTECompanyMismatchError,
     get_gestiondte_connection,
     get_gestiondte_connection_status,
+    get_gestiondte_mysql_connection,
     get_system_database_catalog,
 )
 from settings.models import SettingsMySQLConnection
@@ -34,6 +36,15 @@ class GestionDTEConnectionRoleTests(TestCase):
             user='user',
             password='secret-no-debe-salir',
             db_name='contabilidad',
+        )
+        self.empresa_b = Empresa.objects.create(codigo='02', descripcion='Empresa B')
+        self.connection_b = SettingsMySQLConnection.objects.create(
+            empresa=self.empresa_b,
+            nombre_logico='contabilidad',
+            host='mysql-b.example.test',
+            user='user-b',
+            password='secret-b',
+            db_name='contabilidad-b',
         )
 
     def _activate(self):
@@ -81,6 +92,54 @@ class GestionDTEConnectionRoleTests(TestCase):
                     mysql_connection=self.connection,
                 )
                 mysql_role.full_clean()
+
+    def test_role_resolver_rejects_cross_company_connection(self):
+        role = GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=self.connection,
+            database_name='gestiondte',
+        )
+
+        resolved = get_gestiondte_connection('serverbasedte', empresa=self.empresa)
+        self.assertEqual(resolved['connection_id'], self.connection.pk)
+
+        with self.assertRaises(GestionDTECompanyMismatchError):
+            get_gestiondte_connection('serverbasedte', empresa=self.empresa_b)
+        with self.assertRaises(GestionDTECompanyMismatchError):
+            get_gestiondte_mysql_connection('serverbasedte', empresa=self.empresa_b)
+
+        role.mysql_connection = self.connection_b
+        role.save(update_fields=['mysql_connection'])
+        with self.assertRaises(GestionDTECompanyMismatchError):
+            get_gestiondte_connection('serverbasedte', empresa=self.empresa)
+
+    def test_role_form_rejects_client_connection_from_another_company(self):
+        form = GestionDTEConnectionRoleForm(
+            data={
+                'source_type': 'MYSQL_CONFIG',
+                'mysql_connection': self.connection_b.pk,
+                'database_name': 'gestiondte',
+            },
+            instance=GestionDTEConnectionRole(role='serverbasedte'),
+            empresa=self.empresa,
+            role='serverbasedte',
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('mysql_connection', form.errors)
+
+    def test_django_system_role_is_global_for_any_active_company(self):
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='DJANGO',
+            django_alias='default',
+        )
+
+        resolved = get_gestiondte_connection('serverbasedte', empresa=self.empresa_b)
+
+        self.assertEqual(resolved['type'], 'DJANGO')
+        self.assertEqual(resolved['alias'], 'default')
 
     def test_accounting_form_only_offers_mysql_source(self):
         for role in GestionDTEConnectionRole.LEGACY_MYSQL_ROLES:

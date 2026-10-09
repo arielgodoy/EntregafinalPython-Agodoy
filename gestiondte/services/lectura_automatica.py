@@ -17,6 +17,7 @@ from ..models import (
 )
 from ..utils.maestro import get_maestroempresa_by_codigo
 from ..repositories.certificados import CertificadoSIIRepository
+from .connection_roles import GestionDTEConnectionError
 from .rpetc_importer import normalizar_rut
 
 logger = logging.getLogger(__name__)
@@ -101,15 +102,18 @@ def empresas_elegibles() -> list[tuple[Any, CertificadoSII]]:
 
     ahora = timezone.now()
     elegibles = {}
-    repository = CertificadoSIIRepository()
     from access_control.models import Empresa
     certificados = []
     for empresa in Empresa.objects.all().only("codigo"):
-        certificados.extend(
-            certificate for certificate in repository.list_by_empresa(empresa.codigo)
-            if certificate.activo and certificate.valido_hasta and certificate.valido_hasta >= ahora
-            and certificate.archivo and certificate.archivo.name
-        )
+        try:
+            repository = CertificadoSIIRepository(empresa=empresa)
+            certificados.extend(
+                certificate for certificate in repository.list_by_empresa(empresa.codigo)
+                if certificate.activo and certificate.valido_hasta and certificate.valido_hasta >= ahora
+                and certificate.archivo and certificate.archivo.name
+            )
+        except GestionDTEConnectionError:
+            continue
     for certificado in sorted(certificados, key=lambda item: (item.empresa_codigo, item.valido_hasta, -item.id)):
         if certificado.empresa_codigo in elegibles or not _certificado_elegible(certificado, ahora):
             continue
@@ -130,11 +134,14 @@ def sincronizar_empresa_rpetc(
     max_intentos: int = 20,
 ) -> dict[str, Any]:
     """Ejecuta una lectura DEUDOR reutilizando cliente, parser e importador."""
-    maestro = maestro or get_maestroempresa_by_codigo(empresa.codigo)
+    maestro = maestro or get_maestroempresa_by_codigo(
+        empresa.codigo,
+        empresa=empresa,
+    )
     rut_empresa, dv_empresa = normalizar_rut((maestro or {}).get("rut"))
     certificado = certificado or next(
         (
-            item for item in CertificadoSIIRepository().list_by_empresa(empresa.codigo)
+            item for item in CertificadoSIIRepository(empresa=empresa).list_by_empresa(empresa.codigo)
             if item.activo
         ),
         None,

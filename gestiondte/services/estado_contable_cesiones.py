@@ -171,7 +171,11 @@ def actualizar_estados_contables_cesiones(empresa, cesiones: Iterable[Any], chun
         chunk = cesiones[inicio:inicio + chunk_size]
         verificada_en = timezone.now()
         try:
-            legacy = obtener_estados_contables_cesiones(empresa.codigo, chunk)
+            legacy = obtener_estados_contables_cesiones(
+                empresa.codigo,
+                chunk,
+                empresa=empresa,
+            )
             values_by_pk = {
                 cesion.pk: _snapshot_values(cesion, legacy.get(cesion.pk, {}), verificada_en)
                 for cesion in chunk

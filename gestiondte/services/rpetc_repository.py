@@ -66,8 +66,12 @@ class RPETCRepository:
         SettingsMySQLConnection.ENGINE_LEGACY_PYMYSQL,
     }
 
-    def __init__(self) -> None:
-        resolved = get_gestiondte_connection(self.role)
+    def __init__(self, *, empresa=None) -> None:
+        resolved = (
+            get_gestiondte_connection(self.role, empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_connection(self.role)
+        )
         source_type = resolved.get("type")
         if source_type == "DJANGO":
             alias = resolved.get("alias")
@@ -93,7 +97,11 @@ class RPETCRepository:
                 "El rol serverbasedte resolvió una fuente no soportada."
             )
 
-        connection = get_gestiondte_mysql_connection(self.role)
+        connection = (
+            get_gestiondte_mysql_connection(self.role, empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_mysql_connection(self.role)
+        )
         if not connection.is_active:
             raise RPETCRepositoryConfigurationError(
                 "La conexión configurada para serverbasedte está inactiva."

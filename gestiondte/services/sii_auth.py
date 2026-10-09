@@ -85,7 +85,12 @@ def _build_jwt(private_key, cert_der: bytes, rut_sin_dv: str, audience: str) -> 
     return f"{header_b64}.{payload_b64}.{_b64url(signature)}"
 
 
-def probar_autenticacion_sii(certificado_sii, *, _incluir_access_token=False) -> dict:
+def probar_autenticacion_sii(
+    certificado_sii,
+    *,
+    empresa=None,
+    _incluir_access_token=False,
+) -> dict:
     """
     Autentica contra el SII con el certificado PFX dado y retorna resultado seguro.
 
@@ -93,6 +98,8 @@ def probar_autenticacion_sii(certificado_sii, *, _incluir_access_token=False) ->
     NO persiste tokens. NO implementa consultas RPETC/DTE.
     """
     empresa_codigo = certificado_sii.empresa_codigo
+    if empresa is not None and str(empresa_codigo) != str(empresa.codigo):
+        raise SiiAuthError("El certificado no pertenece a la empresa activa.")
 
     # — Validar precondiciones —
     from django.utils import timezone
@@ -140,7 +147,10 @@ def probar_autenticacion_sii(certificado_sii, *, _incluir_access_token=False) ->
 
     # — Obtener rutenviasii desde maestroempresas (fuente principal de aio) —
     from gestiondte.utils.maestro import get_maestroempresa_by_codigo
-    empresa_data = get_maestroempresa_by_codigo(empresa_codigo)
+    empresa_data = get_maestroempresa_by_codigo(
+        empresa_codigo,
+        empresa=empresa,
+    )
     rutenviasii_raw = (empresa_data or {}).get('rutenviasii') or ''
     rutenviasii_raw = str(rutenviasii_raw).strip()
 

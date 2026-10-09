@@ -14,11 +14,18 @@ class CertificadoUploadForm(forms.ModelForm):
         model = CertificadoSII
         fields = ['empresa_codigo', 'archivo', 'password', 'password_confirm', 'activo']
 
+    def __init__(self, *args, **kwargs):
+        self.empresa = kwargs.pop('empresa', None)
+        super().__init__(*args, **kwargs)
+
     def clean_empresa_codigo(self):
         codigo = self.cleaned_data.get('empresa_codigo')
         if not codigo:
             raise forms.ValidationError('Código de empresa es requerido')
-        empresa = get_maestroempresa_by_codigo(codigo)
+        empresa = get_maestroempresa_by_codigo(
+            codigo,
+            empresa=self.empresa,
+        ) if self.empresa is not None else get_maestroempresa_by_codigo(codigo)
         if not empresa:
             raise forms.ValidationError('Empresa contable no encontrada')
         # attach nombre/rut for view usage
@@ -103,6 +110,7 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.role = kwargs.pop('role', None)
+        self.empresa = kwargs.pop('empresa', None)
         super().__init__(*args, **kwargs)
         self.role = self.role or self.instance.role
         self.show_database_name = self.role in GestionDTEConnectionRole.DATABASE_CONFIGURABLE_ROLES
@@ -131,7 +139,10 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
         self.fields['django_alias'].choices = django_alias_choices
         self.fields['django_alias'].widget.choices = django_alias_choices
         self.fields['django_alias'].required = False
-        self.fields['mysql_connection'].queryset = get_active_mysql_connection_catalog()
+        connections = get_active_mysql_connection_catalog()
+        if self.empresa is not None:
+            connections = connections.filter(empresa_id=self.empresa.pk)
+        self.fields['mysql_connection'].queryset = connections
         self.fields['mysql_connection'].required = False
         self.fields['mysql_connection'].label_from_instance = (
             lambda connection: f"{connection.empresa.codigo} - "
@@ -162,6 +173,11 @@ class GestionDTEConnectionRoleForm(forms.ModelForm):
         elif source_type == 'MYSQL_CONFIG':
             if mysql_connection is None:
                 self.add_error('mysql_connection', 'Debe seleccionar una conexión MySQL activa.')
+            elif self.empresa is not None and mysql_connection.empresa_id != self.empresa.pk:
+                self.add_error(
+                    'mysql_connection',
+                    'La conexión seleccionada no pertenece a la empresa activa.',
+                )
             if django_alias:
                 self.add_error('django_alias', 'No puede combinar ambas fuentes.')
             cleaned['django_alias'] = None

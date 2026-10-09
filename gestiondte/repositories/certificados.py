@@ -94,8 +94,13 @@ class CertificateRecord:
 class CertificadoSIIRepository:
     role = "serverbasedte"
 
-    def __init__(self):
-        self.role_config = get_gestiondte_connection(self.role)
+    def __init__(self, *, empresa=None):
+        self.empresa = empresa
+        self.role_config = (
+            get_gestiondte_connection(self.role, empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_connection(self.role)
+        )
 
     @property
     def is_django(self):
@@ -106,13 +111,22 @@ class CertificadoSIIRepository:
         return self.role_config["alias"]
 
     def _mysql_connection(self):
-        config = get_gestiondte_mysql_connection(self.role)
+        config = (
+            get_gestiondte_mysql_connection(self.role, empresa=self.empresa)
+            if self.empresa is not None
+            else get_gestiondte_mysql_connection(self.role)
+        )
         database_name = self.role_config.get("database_name")
         if not database_name:
             raise ValueError("serverbasedte no tiene database_name configurado.")
         return open_mysql_connection(config, database_name=database_name)
 
+    def _validate_empresa_codigo(self, empresa_codigo):
+        if self.empresa is not None and empresa_codigo != self.empresa.codigo:
+            raise ValueError("La empresa solicitada no coincide con la empresa activa.")
+
     def list_by_empresa(self, empresa_codigo):
+        self._validate_empresa_codigo(empresa_codigo)
         if self.is_django:
             return list(
                 CertificadoSII.objects.using(self.django_alias).filter(
@@ -122,6 +136,7 @@ class CertificadoSIIRepository:
         return self._fetch_mysql(build_certificado_list_query(empresa_codigo))
 
     def get_by_pk_and_empresa(self, pk, empresa_codigo):
+        self._validate_empresa_codigo(empresa_codigo)
         if self.is_django:
             return CertificadoSII.objects.using(self.django_alias).filter(
                 pk=pk, empresa_codigo=empresa_codigo
@@ -130,6 +145,7 @@ class CertificadoSIIRepository:
         return rows[0] if rows else None
 
     def create(self, instance, empresa_codigo, user):
+        self._validate_empresa_codigo(empresa_codigo)
         if instance.empresa_codigo != empresa_codigo:
             raise ValueError("El certificado no pertenece a la empresa activa.")
         if self.is_django:
@@ -188,6 +204,7 @@ class CertificadoSIIRepository:
         return created
 
     def update_active(self, pk, empresa_codigo, user):
+        self._validate_empresa_codigo(empresa_codigo)
         if self.is_django:
             cert = self.get_by_pk_and_empresa(pk, empresa_codigo)
             if cert is None:
@@ -222,6 +239,7 @@ class CertificadoSIIRepository:
         return cert
 
     def delete(self, pk, empresa_codigo):
+        self._validate_empresa_codigo(empresa_codigo)
         cert = self.get_by_pk_and_empresa(pk, empresa_codigo)
         if cert is None:
             return None

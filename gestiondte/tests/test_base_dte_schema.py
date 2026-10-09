@@ -644,8 +644,8 @@ class BaseDTESchemaInstallTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        get_connection.assert_called_once_with('serverbasedte')
-        get_mysql_connection.assert_called_once_with('serverbasedte')
+        get_connection.assert_called_once_with('serverbasedte', empresa=self.empresa)
+        get_mysql_connection.assert_called_once_with('serverbasedte', empresa=self.empresa)
         preview.assert_called_once_with(self.connection, 'gestiondte')
         self.assertContains(response, 'gestiondte_tarearpetc')
         self.assertContains(response, 'Confirmar creación')

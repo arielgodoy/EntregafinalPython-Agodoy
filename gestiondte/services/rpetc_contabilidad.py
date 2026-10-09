@@ -78,9 +78,13 @@ def _validar_codigo_empresa(codigo: Any) -> str:
     return codigo
 
 
-def _accounting_schema() -> str:
+def _accounting_schema(empresa=None) -> str:
     try:
-        role_config = get_gestiondte_connection("servercontabilidad")
+        role_config = (
+            get_gestiondte_connection("servercontabilidad", empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_connection("servercontabilidad")
+        )
     except (GestionDTEConnectionError, ObjectDoesNotExist) as exc:
         raise ContabilidadLegacyError(
             "No existe configuración de schema legacy contable activa."
@@ -179,7 +183,12 @@ def _evento_cesion_values(empresa_codigo: Any, cesion: Any) -> tuple[dict[str, A
     return values, identity
 
 
-def registrar_cesiones_contabilidad(empresa_codigo: Any, cesiones: Iterable[Any]) -> dict[str, int]:
+def registrar_cesiones_contabilidad(
+    empresa_codigo: Any,
+    cesiones: Iterable[Any],
+    *,
+    empresa=None,
+) -> dict[str, int]:
     """Registra eventos CED sin duplicar cesiones previamente registradas."""
     cesiones = list(cesiones)
     result = {
@@ -190,7 +199,11 @@ def registrar_cesiones_contabilidad(empresa_codigo: Any, cesiones: Iterable[Any]
     }
     if not cesiones:
         return result
-    config = _mysql_connection_config()
+    if empresa is not None and str(empresa_codigo) != str(empresa.codigo):
+        raise ContabilidadLegacyError(
+            "El código de empresa no coincide con la empresa activa."
+        )
+    config = _mysql_connection_config(empresa)
     try:
         with _open_accounting_connection(config, database_name=LEGACY_RCV_SCHEMA) as connection:
             transaction_context = (
@@ -248,9 +261,13 @@ def registrar_cesiones_contabilidad(empresa_codigo: Any, cesiones: Iterable[Any]
     return result
 
 
-def _mysql_connection_config() -> SettingsMySQLConnection:
+def _mysql_connection_config(empresa=None) -> SettingsMySQLConnection:
     try:
-        return get_gestiondte_mysql_connection("servercontabilidad")
+        return (
+            get_gestiondte_mysql_connection("servercontabilidad", empresa=empresa)
+            if empresa is not None
+            else get_gestiondte_mysql_connection("servercontabilidad")
+        )
     except (GestionDTEConnectionError, ObjectDoesNotExist) as exc:
         raise ContabilidadLegacyError(
             "No existe conexión legacy contable activa."
@@ -276,11 +293,16 @@ def _movimiento_dicts(cursor) -> list[dict[str, Any]]:
     return [dict(zip(names, row)) for row in cursor.fetchall()]
 
 
-def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, str]]) -> list[dict[str, Any]]:
+def _query_movimientos(
+    empresa_codigo: str,
+    keys: set[tuple[str, str, str, str, str]],
+    *,
+    empresa=None,
+) -> list[dict[str, Any]]:
     if not keys:
         return []
-    config = _mysql_connection_config()
-    schema = _accounting_schema()
+    config = _mysql_connection_config(empresa)
+    schema = _accounting_schema(empresa)
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
     params: list[str] = []
@@ -299,11 +321,13 @@ def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, 
 def _query_factoring_glosa_candidates(
     empresa_codigo: str,
     candidates: set[tuple[str, Decimal]],
+    *,
+    empresa=None,
 ) -> list[dict[str, Any]]:
     if not candidates:
         return []
-    config = _mysql_connection_config()
-    schema = _accounting_schema()
+    config = _mysql_connection_config(empresa)
+    schema = _accounting_schema(empresa)
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
     params: list[Any] = []
@@ -394,9 +418,18 @@ def _classify(
     return result
 
 
-def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[Any]) -> dict[Any, dict[str, Any]]:
+def obtener_estados_contables_cesiones(
+    empresa_codigo: str,
+    cesiones: Iterable[Any],
+    *,
+    empresa=None,
+) -> dict[Any, dict[str, Any]]:
     """Resuelve estados de todas las cesiones con una consulta OR batch."""
     _validar_codigo_empresa(empresa_codigo)
+    if empresa is not None and str(empresa_codigo) != str(empresa.codigo):
+        raise ContabilidadLegacyError(
+            "El código de empresa no coincide con la empresa activa."
+        )
     cesiones = list(cesiones)
     result: dict[Any, dict[str, Any]] = {}
     keys: set[tuple[str, str, str, str, str]] = set()
@@ -414,7 +447,7 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
             "pagada_proveedor": {"estado": "TIPO_NO_SOPORTADO" if not key_by_cesion[cesion.pk]["pagada_proveedor"] else None, "cantidad_movimientos": 0, "movimientos": []},
         }
     indexed = {}
-    for movement in _query_movimientos(empresa_codigo, keys):
+    for movement in _query_movimientos(empresa_codigo, keys, empresa=empresa):
         key = (
             movement["rutctacte"],
             movement["tipodocumento"],
@@ -468,7 +501,11 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
     logger.debug("rpetc factoring fallback iniciado: pending=%d", len(unresolved))
     logger.debug("rpetc factoring fallback claves candidatas: count=%d", len(fallback_candidates))
     try:
-        fallback_movements = _query_factoring_glosa_candidates(empresa_codigo, fallback_candidates)
+        fallback_movements = _query_factoring_glosa_candidates(
+            empresa_codigo,
+            fallback_candidates,
+            empresa=empresa,
+        )
         logger.debug("rpetc factoring fallback candidatos SQL: count=%d", len(fallback_movements))
         fallback_by_cesion: dict[Any, list[dict[str, Any]]] = {cesion.pk: [] for cesion in unresolved}
         for movement in fallback_movements:
@@ -532,7 +569,16 @@ def obtener_estados_contables_cesiones(empresa_codigo: str, cesiones: Iterable[A
     return result
 
 
-def obtener_detalle_contable_cesion(empresa_codigo: str, cesion) -> dict[str, Any]:
+def obtener_detalle_contable_cesion(
+    empresa_codigo: str,
+    cesion,
+    *,
+    empresa=None,
+) -> dict[str, Any]:
     """Obtiene ambos bloques de movimientos para una cesión concreta."""
-    states = obtener_estados_contables_cesiones(empresa_codigo, [cesion])
+    states = obtener_estados_contables_cesiones(
+        empresa_codigo,
+        [cesion],
+        empresa=empresa,
+    )
     return states[cesion.pk]
