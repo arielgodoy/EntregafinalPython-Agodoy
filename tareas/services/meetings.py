@@ -252,32 +252,45 @@ def _convene_meeting(reunion, *, actor=None, storage):
         f"Empresa: {reunion.empresa}\n"
         f"Ver reunión: {detail_url}"
     )
-    for participant in participants:
-        try:
-            notify_task_event(
-                tarea=reunion.tarea_planificada,
-                destinatario=participant.usuario,
-                titulo=title,
-                cuerpo=body,
-                url=detail_url,
-                actor=actor,
-                dedupe_key=f"reunion:{reunion.pk}:convocatoria:{participant.usuario.pk}",
-            )
-        except Exception:
-            logger.exception("Meeting in-app notification failed: reunion=%s recipient=%s", reunion.pk, participant.usuario.pk)
-        if participant.usuario.email:
+    def notify_participants():
+        for participant in participants:
             try:
-                send_task_email(
+                notify_task_event(
                     tarea=reunion.tarea_planificada,
-                    subject=title,
-                    body_text=body,
-                    to_emails=[participant.usuario.email],
+                    destinatario=participant.usuario,
+                    titulo=title,
+                    cuerpo=body,
+                    url=detail_url,
+                    actor=actor,
+                    dedupe_key=f"reunion:{reunion.pk}:convocatoria:{participant.usuario.pk}",
                 )
             except Exception:
-                logger.exception("Meeting email notification failed: reunion=%s recipient=%s", reunion.pk, participant.usuario.pk)
+                logger.exception(
+                    "Meeting in-app notification failed: reunion=%s recipient=%s",
+                    reunion.pk,
+                    participant.usuario.pk,
+                )
+            if participant.usuario.email:
+                try:
+                    send_task_email(
+                        tarea=reunion.tarea_planificada,
+                        subject=title,
+                        body_text=body,
+                        to_emails=[participant.usuario.email],
+                    )
+                except Exception:
+                    logger.exception(
+                        "Meeting email notification failed: reunion=%s recipient=%s",
+                        reunion.pk,
+                        participant.usuario.pk,
+                    )
     reunion.convocada_at = timezone.now()
     reunion.updated_at = reunion.convocada_at
     persisted = storage.mark_convened(reunion)
+    if isinstance(storage, DjangoMeetingStorage):
+        transaction.on_commit(notify_participants, using=storage.alias)
+    else:
+        notify_participants()
     original_reunion.convocada_at = persisted.convocada_at
     original_reunion.updated_at = persisted.updated_at
     return original_reunion

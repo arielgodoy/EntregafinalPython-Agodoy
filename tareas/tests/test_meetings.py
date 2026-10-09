@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.test import TestCase
 
 from access_control.models import Empresa, Permiso, Vista
@@ -15,6 +16,7 @@ from tareas.services.meetings import (
     create_meeting,
     mark_meeting_completed,
 )
+from tareas.services.meeting_storage import DjangoMeetingStorage
 
 
 class MeetingServiceTests(TestCase):
@@ -95,13 +97,66 @@ class MeetingServiceTests(TestCase):
     def test_convene_notifies_once_and_records_timestamp(self, notify, email):
         meeting = self.meeting()
         add_meeting_participant(reunion=meeting, usuario=self.participant)
-        convene_meeting(meeting, actor=self.user)
+        with self.captureOnCommitCallbacks(execute=True):
+            convene_meeting(meeting, actor=self.user)
         meeting.refresh_from_db()
         self.assertIsNotNone(meeting.convocada_at)
         notify.assert_called_once()
         email.assert_called_once()
         with self.assertRaises(ValidationError):
             convene_meeting(meeting)
+
+    @patch("tareas.services.meetings.send_task_email")
+    @patch("tareas.services.meetings.notify_task_event")
+    def test_convene_defers_notifications_until_commit(self, notify, email):
+        meeting = self.meeting()
+        add_meeting_participant(reunion=meeting, usuario=self.participant)
+
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            with transaction.atomic():
+                convene_meeting(meeting, actor=self.user)
+                notify.assert_not_called()
+                email.assert_not_called()
+
+        meeting.refresh_from_db()
+        self.assertIsNotNone(meeting.convocada_at)
+        self.assertEqual(len(callbacks), 1)
+        callbacks[0]()
+        notify.assert_called_once()
+        email.assert_called_once()
+
+    @patch("tareas.services.meetings.send_task_email")
+    @patch("tareas.services.meetings.notify_task_event")
+    @patch.object(DjangoMeetingStorage, "mark_convened", side_effect=RuntimeError("persist meeting"))
+    def test_convene_persistence_failure_does_not_notify(
+        self, mark_convened, notify, email
+    ):
+        meeting = self.meeting()
+        add_meeting_participant(reunion=meeting, usuario=self.participant)
+
+        with self.assertRaises(RuntimeError):
+            convene_meeting(meeting, actor=self.user)
+
+        meeting.refresh_from_db()
+        self.assertIsNone(meeting.convocada_at)
+        notify.assert_not_called()
+        email.assert_not_called()
+
+    @patch("tareas.services.meetings.send_task_email", side_effect=RuntimeError("email"))
+    @patch("tareas.services.meetings.notify_task_event", side_effect=RuntimeError("notify"))
+    def test_convene_communication_failures_do_not_rollback(
+        self, notify, email
+    ):
+        meeting = self.meeting()
+        add_meeting_participant(reunion=meeting, usuario=self.participant)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            convene_meeting(meeting, actor=self.user)
+
+        meeting.refresh_from_db()
+        self.assertIsNotNone(meeting.convocada_at)
+        notify.assert_called_once()
+        email.assert_called_once()
 
     def test_completion_requires_comments(self):
         meeting = self.meeting()

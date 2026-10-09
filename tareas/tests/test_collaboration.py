@@ -65,8 +65,11 @@ class T061CollaborationTests(TestCase):
         with patch("tareas.services.meetings.notify_task_event") as notify, patch(
             "tareas.services.meetings.send_task_email"
         ) as email:
-            convene_meeting(meeting, actor=self.usuario)
-        self.assertEqual(notify.call_count, 1)
+            with self.captureOnCommitCallbacks(execute=True):
+                convene_meeting(meeting, actor=self.usuario)
+                self.assertEqual(notify.call_count, 0)
+                self.assertEqual(email.call_count, 0)
+            self.assertEqual(notify.call_count, 1)
         self.assertEqual(email.call_count, 1)
         meeting.refresh_from_db()
         self.assertIsNotNone(meeting.convocada_at)
