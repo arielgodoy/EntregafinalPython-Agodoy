@@ -15,6 +15,9 @@ CATALOGS = {
     "sp": json.loads((ROOT / "static/lang/sp.json").read_text(encoding="utf-8")),
     "en": json.loads((ROOT / "static/lang/en.json").read_text(encoding="utf-8")),
 }
+MESSAGE_KEY_PATTERN = re.compile(
+    r"tareas\.(?:messages|validation|links)(?:\.[a-z0-9_]+)+"
+)
 
 
 class TareasI18nTests(SimpleTestCase):
@@ -39,11 +42,19 @@ class TareasI18nTests(SimpleTestCase):
         for source in (ROOT / "tareas/templates/tareas").rglob("*.html"):
             content = source.read_text(encoding="utf-8")
             for key in re.findall(r'data-key\s*=\s*["\']([^"\']+)["\']', content):
-                keys.add(key)
                 if "{{" in key or "{%" in key:
                     dynamic.append((source, key))
+                else:
+                    keys.add(key)
 
-        self.assertFalse(dynamic)
+        self.assertIn(
+            (ROOT / "tareas/templates/tareas/enlace_tarea_error.html", "{{ error_title_key }}"),
+            dynamic,
+        )
+        self.assertIn(
+            (ROOT / "tareas/templates/tareas/enlace_tarea_error.html", "{{ error_description_key }}"),
+            dynamic,
+        )
         self.assertEqual({key for key in keys if key not in CATALOGS["sp"]}, set())
         self.assertEqual({key for key in keys if key not in CATALOGS["en"]}, set())
 
@@ -69,9 +80,8 @@ class TareasI18nTests(SimpleTestCase):
             ROOT / "tareas/static/tareas/js/task_links.js",
         )
         used = set()
-        pattern = re.compile(r"tareas\.(?:messages|validation|links)\.[a-z0-9_]+")
         for source in sources:
-            used.update(pattern.findall(source.read_text(encoding="utf-8")))
+            used.update(MESSAGE_KEY_PATTERN.findall(source.read_text(encoding="utf-8")))
 
         for key in used:
             self.assertIn(key, CATALOGS["sp"], key)
@@ -120,7 +130,7 @@ class TareasI18nTests(SimpleTestCase):
         used = set()
         for source in sources:
             content = source.read_text(encoding="utf-8")
-            used.update(re.findall(r"tareas\.(?:messages|validation|links)\.[a-z0-9_]+", content))
+            used.update(MESSAGE_KEY_PATTERN.findall(content))
             self.assertNotRegex(content, r"\{\{\s*message_key\b")
             self.assertNotRegex(content, r"textContent\s*=\s*message_key\b")
 
