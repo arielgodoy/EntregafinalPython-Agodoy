@@ -15,6 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core import signing
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
@@ -143,7 +144,12 @@ from .services.links import (
     revoke_task_link_by_id,
 )
 from .services.comment_storage import CommentPageCommand, resolve_comment_storage
-from .services.connection_roles import get_tarea_connection_status
+from .services.connection_roles import (
+    TareaConnectionError,
+    get_tarea_connection,
+    get_tarea_connection_status,
+    get_tarea_mysql_connection,
+)
 from .services.task_storage import (
     CreateTaskDraftInput,
     TaskStorageError,
@@ -184,7 +190,9 @@ from .services.hierarchy_lifecycle_storage import (
 )
 from .services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
+    complete_base_tareas_reference_data,
     install_base_tareas_schema,
+    preview_base_tareas_schema,
 )
 from .services.milestone_storage import (
     CreateMilestoneCommand, UpdateMilestoneCommand, CompleteMilestoneCommand,
@@ -203,6 +211,10 @@ from .services.kpi import (
 )
 
 logger = logging.getLogger(__name__)
+
+_BASE_TAREAS_SCHEMA_PREVIEW_SALT = "tareas.base-tareas-schema-preview"
+_BASE_TAREAS_SEED_PREVIEW_SALT = "tareas.base-tareas-seed-preview"
+_BASE_TAREAS_SCHEMA_PREVIEW_MAX_AGE = 600
 
 
 def _get_empresa_id(request):
@@ -791,15 +803,185 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
     name="dispatch",
 )
 class BaseTareasSchemaInstallView(LoginRequiredMixin, View):
+    def _render_connection_roles(
+        self,
+        request,
+        schema_preview=None,
+        schema_preview_token=None,
+        seed_preview_token=None,
+    ):
+        page = TareaConnectionRoleView()
+        page.request = request
+        forms = []
+        for role, label, instance in page._role_instances():
+            form = TareaConnectionRoleForm(
+                prefix=f"role-{role}",
+                instance=instance or TareaConnectionRole(role=role),
+                role=role,
+            )
+            forms.append({"role": role, "label": label, "form": form})
+        context = page._context(forms)
+        context["schema_preview"] = schema_preview
+        context["schema_preview_token"] = schema_preview_token
+        context["seed_preview_token"] = seed_preview_token
+        return render(request, page.template_name, context)
+
     def post(self, request):
         try:
-            install_base_tareas_schema()
-        except BaseTareasSchemaInstallError:
-            messages.error(request, "tareas.connection_roles.bootstrap.error")
+            source = get_tarea_connection("BASE_TAREAS")
+            if source["type"] != "MYSQL_CONFIG":
+                messages.info(
+                    request,
+                    "La Base Tareas utiliza una base administrada por Django; "
+                    "no requiere creación manual de estructura.",
+                )
+                return redirect(reverse("tareas:conexiones_sql"))
+
+            connection_config = get_tarea_mysql_connection("BASE_TAREAS")
+            database_name = source.get("database_name")
+            if not isinstance(database_name, str):
+                raise BaseTareasSchemaInstallError(
+                    "La base de BASE_TAREAS no está configurada."
+                )
+
+            action = request.POST.get("schema_action")
+            if action == "preview":
+                schema_preview = preview_base_tareas_schema()
+                schema_preview_token = None
+                seed_preview_token = None
+                if schema_preview["missing"] and not schema_preview["conflicts"]:
+                    schema_preview_token = signing.dumps(
+                        {
+                            "role": "BASE_TAREAS",
+                            "connection_id": schema_preview["connection_id"],
+                            "connection_updated_at": schema_preview["connection_updated_at"],
+                            "database_name": schema_preview["database_name"],
+                            "fingerprint": schema_preview["fingerprint"],
+                            "missing": schema_preview["missing"],
+                        },
+                        salt=_BASE_TAREAS_SCHEMA_PREVIEW_SALT,
+                        compress=True,
+                    )
+                elif (
+                    not schema_preview["conflicts"]
+                    and schema_preview["reference_data_complete"] is False
+                ):
+                    seed_preview_token = signing.dumps(
+                        {
+                            "role": "BASE_TAREAS",
+                            "connection_id": schema_preview["connection_id"],
+                            "connection_updated_at": schema_preview["connection_updated_at"],
+                            "database_name": schema_preview["database_name"],
+                            "fingerprint": schema_preview["fingerprint"],
+                            "reference_data_complete": False,
+                        },
+                        salt=_BASE_TAREAS_SEED_PREVIEW_SALT,
+                        compress=True,
+                    )
+                return self._render_connection_roles(
+                    request,
+                    schema_preview=schema_preview,
+                    schema_preview_token=schema_preview_token,
+                    seed_preview_token=seed_preview_token,
+                )
+
+            if action == "seed":
+                try:
+                    seed_data = signing.loads(
+                        request.POST.get("seed_preview_token", ""),
+                        salt=_BASE_TAREAS_SEED_PREVIEW_SALT,
+                        max_age=_BASE_TAREAS_SCHEMA_PREVIEW_MAX_AGE,
+                    )
+                except signing.BadSignature as exc:
+                    raise BaseTareasSchemaInstallError(
+                        "La vista previa de datos base expiró o no es válida; "
+                        "vuelva a inspeccionar."
+                    ) from exc
+                if (
+                    not isinstance(seed_data, dict)
+                    or seed_data.get("role") != "BASE_TAREAS"
+                    or seed_data.get("connection_id") != connection_config.pk
+                    or seed_data.get("connection_updated_at")
+                    != connection_config.updated_at.isoformat()
+                    or seed_data.get("database_name") != database_name
+                    or seed_data.get("reference_data_complete") is not False
+                    or not isinstance(seed_data.get("fingerprint"), str)
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "El destino cambió desde la inspección; vuelva a inspeccionar."
+                    )
+                inserted = complete_base_tareas_reference_data(
+                    expected_connection_id=seed_data["connection_id"],
+                    expected_connection_updated_at=seed_data[
+                        "connection_updated_at"
+                    ],
+                    expected_database_name=seed_data["database_name"],
+                    expected_fingerprint=seed_data["fingerprint"],
+                )
+                if inserted:
+                    messages.success(
+                        request,
+                        f"Se completaron {inserted} causas base de Tareas.",
+                    )
+                else:
+                    messages.info(
+                        request,
+                        "Los datos base de Tareas ya estaban completos.",
+                    )
+                return redirect(reverse("tareas:conexiones_sql"))
+
+            if action != "confirm":
+                raise BaseTareasSchemaInstallError(
+                    "La operación requiere una vista previa y confirmación explícitas."
+                )
+
+            try:
+                preview_data = signing.loads(
+                    request.POST.get("schema_preview_token", ""),
+                    salt=_BASE_TAREAS_SCHEMA_PREVIEW_SALT,
+                    max_age=_BASE_TAREAS_SCHEMA_PREVIEW_MAX_AGE,
+                )
+            except signing.BadSignature as exc:
+                raise BaseTareasSchemaInstallError(
+                    "La vista previa expiró o no es válida; vuelva a inspeccionar."
+                ) from exc
+            if not isinstance(preview_data, dict):
+                raise BaseTareasSchemaInstallError(
+                    "La vista previa no es válida; vuelva a inspeccionar."
+                )
+            if (
+                preview_data.get("role") != "BASE_TAREAS"
+                or preview_data.get("connection_id") != connection_config.pk
+                or preview_data.get("connection_updated_at")
+                != connection_config.updated_at.isoformat()
+                or preview_data.get("database_name") != database_name
+                or not isinstance(preview_data.get("fingerprint"), str)
+                or not isinstance(preview_data.get("missing"), list)
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "El destino cambió desde la inspección; vuelva a inspeccionar."
+                )
+
+            install_base_tareas_schema(
+                expected_fingerprint=preview_data["fingerprint"],
+                expected_missing=tuple(preview_data["missing"]),
+                expected_connection_id=preview_data["connection_id"],
+                expected_connection_updated_at=preview_data[
+                    "connection_updated_at"
+                ],
+                expected_database_name=preview_data["database_name"],
+            )
+        except BaseTareasSchemaInstallError as exc:
+            messages.error(request, str(exc))
+        except TareaConnectionError:
+            messages.error(
+                request,
+                "No se pudo resolver la conexión configurada para Base Tareas.",
+            )
         else:
             messages.success(
                 request,
-                "tareas.connection_roles.bootstrap.success",
+                "Estructura Base Tareas creada correctamente.",
             )
         return redirect(reverse("tareas:conexiones_sql"))
 

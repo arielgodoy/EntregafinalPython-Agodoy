@@ -39,6 +39,11 @@
       });
       updateRoleFields(roleSection);
     });
+
+    const schemaModal = document.querySelector('#baseTareasSchemaModal[data-open-on-load="true"]');
+    if (schemaModal && window.bootstrap && window.bootstrap.Modal) {
+      window.bootstrap.Modal.getOrCreateInstance(schemaModal).show();
+    }
   }
 
   if (document.readyState === 'loading') {

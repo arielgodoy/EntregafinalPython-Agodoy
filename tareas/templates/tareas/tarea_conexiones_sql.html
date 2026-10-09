@@ -84,22 +84,87 @@
         </form>
       </div>
       {% if can_install_base_tareas %}
-        <div class="modal fade" id="baseTareasSchemaModal" tabindex="-1" aria-hidden="true">
+        <div class="modal fade" id="baseTareasSchemaModal" tabindex="-1" aria-hidden="true"{% if schema_preview %} data-open-on-load="true"{% endif %}>
           <div class="modal-dialog">
             <div class="modal-content">
               <div class="modal-header">
                 <h5 class="modal-title" data-key="tareas.connection_roles.bootstrap.button">Crear estructura Base Tareas</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
               </div>
-              <div class="modal-body" data-key="tareas.connection_roles.bootstrap.confirmation">
-                Se creará la estructura operacional de Tareas en la base '{{ base_tareas_database_name }}'. Las tablas existentes no serán eliminadas.
+              <div class="modal-body">
+                {% if not schema_preview %}
+                  <p data-key="tareas.connection_roles.schema.preview_instructions">
+                    Se inspeccionará el esquema '{{ base_tareas_database_name }}'. No se modificarán tablas existentes.
+                  </p>
+                  <form method="post" action="{% url 'tareas:base_tareas_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="preview">
+                    <button type="submit" class="btn btn-outline-primary" data-key="tareas.connection_roles.schema.preview_button">
+                      Inspeccionar estructura
+                    </button>
+                  </form>
+                {% else %}
+                  <h6 data-key="tareas.connection_roles.schema.preview_title">Resultado de la inspección</h6>
+                  {% if schema_preview.conflicts %}
+                    <div class="alert alert-danger" data-key="tareas.connection_roles.schema.conflicts">
+                      Se detectaron tablas incompatibles. No se ejecutará DDL.
+                    </div>
+                  {% elif schema_preview.missing %}
+                    <div class="alert alert-warning" data-key="tareas.connection_roles.schema.missing">
+                      Se crearán únicamente las tablas que faltan, después de confirmar.
+                    </div>
+                  {% else %}
+                    <div class="alert alert-success" data-key="tareas.connection_roles.schema.complete">
+                      Todas las tablas ya existen y son compatibles.
+                    </div>
+                    {% if schema_preview.reference_data_complete %}
+                      <div class="alert alert-success mb-0" data-key="tareas.connection_roles.schema.reference_data_complete">
+                        Los datos base también están completos.
+                      </div>
+                    {% elif schema_preview.reference_data_complete is False %}
+                      <div class="alert alert-warning mb-0" data-key="tareas.connection_roles.schema.reference_data_pending">
+                        Faltan datos base.
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                  <ul class="mb-0">
+                    {% for table in schema_preview.tables %}
+                      <li>
+                        <code>{{ table.name }}</code>
+                        {% if table.classification == 'COMPATIBLE' %}
+                          <span data-key="tareas.connection_roles.schema.status.existing">— compatible</span>
+                        {% elif table.classification == 'PENDIENTE_CREACION' %}
+                          <span data-key="tareas.connection_roles.schema.status.missing">— pendiente de creación</span>
+                        {% else %}
+                          <span data-key="tareas.connection_roles.schema.status.conflict">— incompatible</span>
+                          {% for issue in table.issues %}<code class="ms-1" data-key="tareas.connection_roles.schema.issue">{{ issue }}</code>{% endfor %}
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
-                <form method="post" action="{% url 'tareas:base_tareas_schema_install' %}">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-primary" data-key="tareas.connection_roles.bootstrap.confirm">Confirmar creación</button>
-                </form>
+                {% if schema_preview_token and schema_preview.missing and not schema_preview.conflicts %}
+                  <form method="post" action="{% url 'tareas:base_tareas_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="confirm">
+                    <input type="hidden" name="schema_preview_token" value="{{ schema_preview_token }}">
+                    <button type="submit" class="btn btn-primary" data-key="tareas.connection_roles.schema.confirm_button">
+                      Confirmar creación
+                    </button>
+                  </form>
+                {% elif seed_preview_token and not schema_preview.missing and not schema_preview.conflicts %}
+                  <form method="post" action="{% url 'tareas:base_tareas_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="seed">
+                    <input type="hidden" name="seed_preview_token" value="{{ seed_preview_token }}">
+                    <button type="submit" class="btn btn-primary" data-key="tareas.connection_roles.schema.complete_reference_data">
+                      Completar datos base
+                    </button>
+                  </form>
+                {% endif %}
               </div>
             </div>
           </div>
