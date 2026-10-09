@@ -10,6 +10,19 @@ La fuente tecnica de verdad para la clasificacion de apps es
 - `SYSTEM_SUPPORT_APPS`: infraestructura transversal no critica dentro de `SYSTEM_APPS`.
 - `APPLICATION_APPS`: modulos de negocio.
 
+## Visibilidad administrativa de modelos SQLite
+
+Todo modelo Django concreto y administrado que persista mediante la base
+`default` (SQLite) debe estar registrado en la superficie administrativa
+correspondiente, salvo una exclusión explícita y documentada. La definición del
+modelo por sí sola no lo hace visible en el admin.
+
+Quedan fuera los modelos abstractos, proxies sin entrada propia, `managed=False`,
+modelos almacenados en bases externas/legacy, tablas M2M automáticas y tablas
+internas de Django sin una superficie administrativa propia. El admin debe evitar
+exponer passwords, tokens, secretos o credenciales; puede ser de solo lectura
+cuando la finalidad sea inspección.
+
 ### Dominio organizacional transversal aprobado
 
 Se reserva la futura `APPLICATION_APP` `organizacion` como owner canónico y

@@ -1,5 +1,7 @@
+from django.apps import apps
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.db import router
 from django.test import RequestFactory, TestCase
 
 from access_control.models import AccessRequest, Empresa
@@ -11,8 +13,11 @@ from gestiondte.models import (
     CesionRPETC,
     CesionRPETCHistorial,
     EstadoContableCesion,
+    GestionDTEConnectionRole,
     LecturaAutomaticaConfig,
     LecturaAutomaticaEjecucion,
+    RevisionCesionComentario,
+    RevisionCesionRPETC,
     TareaCesionRPETC,
     TareaRPETC,
 )
@@ -41,11 +46,35 @@ class AdminRegistrationTests(TestCase):
             EstadoContableCesion,
             TareaCesionRPETC,
             CesionRPETCHistorial,
+            GestionDTEConnectionRole,
+            RevisionCesionRPETC,
+            RevisionCesionComentario,
             SettingsMySQLConnection,
         )
         for model in missing_models:
             with self.subTest(model=model.__name__):
-                self.assertIn(model, admin.site._registry)
+                self.assertTrue(admin.site.is_registered(model))
+
+    def test_all_managed_gestiondte_default_models_are_registered(self):
+        for model in apps.get_app_config('gestiondte').get_models():
+            options = model._meta
+            if (
+                options.managed
+                and not options.abstract
+                and not options.proxy
+                and not options.auto_created
+                and (router.db_for_write(model) or 'default') == 'default'
+            ):
+                with self.subTest(model=options.label):
+                    self.assertTrue(admin.site.is_registered(model))
+
+    def test_connection_role_appears_in_gestiondte_admin_index(self):
+        response = self.client.get('/admin/gestiondte/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '/admin/gestiondte/gestiondteconnectionrole/',
+        )
 
     def test_read_only_models_disallow_add_change_and_delete(self):
         read_only_models = (
@@ -59,6 +88,9 @@ class AdminRegistrationTests(TestCase):
             EstadoContableCesion,
             TareaCesionRPETC,
             CesionRPETCHistorial,
+            GestionDTEConnectionRole,
+            RevisionCesionRPETC,
+            RevisionCesionComentario,
             SettingsMySQLConnection,
         )
         for model in read_only_models:
@@ -122,6 +154,9 @@ class AdminRegistrationTests(TestCase):
             EstadoContableCesion,
             TareaCesionRPETC,
             CesionRPETCHistorial,
+            GestionDTEConnectionRole,
+            RevisionCesionRPETC,
+            RevisionCesionComentario,
             SettingsMySQLConnection,
         )
         for model in models:
@@ -142,6 +177,9 @@ class AdminRegistrationTests(TestCase):
             EstadoContableCesion,
             TareaCesionRPETC,
             CesionRPETCHistorial,
+            GestionDTEConnectionRole,
+            RevisionCesionRPETC,
+            RevisionCesionComentario,
             SettingsMySQLConnection,
         )
         for model in models:
@@ -157,13 +195,19 @@ class AdminRegistrationTests(TestCase):
             archivo='gestiondte/certificados/99/admin-test.pfx',
             password_encrypted=b'CERTIFICATE_SECRET_SENTINEL',
         )
-        SettingsMySQLConnection.objects.create(
+        mysql_connection = SettingsMySQLConnection.objects.create(
             empresa=empresa,
             nombre_logico='admin-test',
             host='mysql.example.invalid',
             user='admin-test-user',
             password='MYSQL_PASSWORD_SENTINEL',
             db_name='admin_test',
+        )
+        GestionDTEConnectionRole.objects.create(
+            role='serverbasedte',
+            source_type='MYSQL_CONFIG',
+            mysql_connection=mysql_connection,
+            database_name='admin_test',
         )
         UserPreferences.objects.update_or_create(
             user=user,
@@ -181,6 +225,7 @@ class AdminRegistrationTests(TestCase):
 
         urls_and_secrets = (
             ('/admin/gestiondte/certificadosii/', 'CERTIFICATE_SECRET_SENTINEL'),
+            ('/admin/gestiondte/gestiondteconnectionrole/', 'MYSQL_PASSWORD_SENTINEL'),
             ('/admin/settings/settingsmysqlconnection/', 'MYSQL_PASSWORD_SENTINEL'),
             ('/admin/settings/userpreferences/', 'EMAIL_PASSWORD_SENTINEL'),
             ('/admin/settings/userpreferences/', 'SMTP_PASSWORD_SENTINEL'),

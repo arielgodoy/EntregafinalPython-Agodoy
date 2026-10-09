@@ -5,8 +5,11 @@ from .models import (
     CesionRPETC,
     CesionRPETCHistorial,
     EstadoContableCesion,
+    GestionDTEConnectionRole,
     LecturaAutomaticaConfig,
     LecturaAutomaticaEjecucion,
+    RevisionCesionComentario,
+    RevisionCesionRPETC,
     TareaCesionRPETC,
     TareaRPETC,
 )
@@ -21,6 +24,16 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(GestionDTEConnectionRole)
+class GestionDTEConnectionRoleAdmin(ReadOnlyAdmin):
+    list_display = (
+        'role', 'source_type', 'django_alias', 'database_name',
+        'mysql_connection', 'created_at', 'updated_at',
+    )
+    list_filter = ('role', 'source_type')
+    search_fields = ('role', 'database_name')
 
 
 @admin.register(CertificadoSII)
@@ -57,6 +70,24 @@ class CesionRPETCAdmin(ReadOnlyAdmin):
         'cesionario_rut', 'cedente_razon_social', 'cesionario_razon_social',
     )
     date_hierarchy = 'fecha_cesion'
+
+
+@admin.register(RevisionCesionRPETC)
+class RevisionCesionRPETCAdmin(ReadOnlyAdmin):
+    list_display = (
+        'empresa', 'cesion', 'creado_por', 'creado_en', 'modificado_en',
+    )
+    list_filter = ('empresa', 'creado_en')
+    date_hierarchy = 'creado_en'
+
+
+@admin.register(RevisionCesionComentario)
+class RevisionCesionComentarioAdmin(ReadOnlyAdmin):
+    list_display = (
+        'revision', 'creado_por', 'creado_en', 'modificado_en',
+    )
+    list_filter = ('creado_en',)
+    date_hierarchy = 'creado_en'
 
 
 @admin.register(LecturaAutomaticaConfig)
