@@ -43,6 +43,19 @@ def _current_task(tarea_id, empresa_id=None):
     return storage.task(tarea_id, empresa_id)
 
 
+def _validated_comment_task(comentario, tarea_contexto=None):
+    if tarea_contexto is None:
+        try:
+            tarea_contexto = comentario.tarea
+        except AttributeError as exc:
+            raise ValidationError(
+                "No se pudo validar la Empresa del Comentario."
+            ) from exc
+    if tarea_contexto.pk != comentario.tarea_id:
+        raise ValidationError("El Comentario no pertenece a la Tarea.")
+    return tarea_contexto
+
+
 def _validate_actor(tarea, usuario, accion):
     _validate_user_in_task_company(tarea, usuario)
     if not is_effective_participant(tarea, usuario):
@@ -199,12 +212,19 @@ def _create_mini_task_close_comment(
     ), documents=documentos)
 
 
-def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, documentos_nuevos=None):
+def edit_comment(
+    *, comentario, usuario, contenido=_UNSET, documentos=_UNSET,
+    documentos_nuevos=None, tarea_contexto=None,
+):
+    tarea_contexto = _validated_comment_task(comentario, tarea_contexto)
+    empresa_id = tarea_contexto.empresa_id
     storage = resolve_comment_storage()
     comentario_actual = storage.get(
-        comentario.pk, comentario.tarea_id, comentario.tarea.empresa_id,
+        comentario.pk, comentario.tarea_id, empresa_id,
     )
-    tarea_actual = _current_task(comentario_actual.tarea_id, comentario_actual.tarea.empresa_id)
+    if comentario_actual.tarea_id != tarea_contexto.pk:
+        raise ValidationError("El Comentario no pertenece a la Tarea.")
+    tarea_actual = _current_task(comentario_actual.tarea_id, empresa_id)
     _validate_actor(tarea_actual, usuario, "modificar")
     _validate_operational_task(tarea_actual)
     if comentario_actual.autor_id != usuario.pk:
@@ -249,32 +269,40 @@ def edit_comment(*, comentario, usuario, contenido=_UNSET, documentos=_UNSET, do
     return comentario_actual
 
 
-def hide_comment(*, comentario, usuario, motivo):
+def hide_comment(*, comentario, usuario, motivo, tarea_contexto=None):
     return _set_visibility(
         comentario=comentario,
         usuario=usuario,
         motivo=motivo,
         evento=ComentarioVersion.Evento.OCULTADO,
         oculto=True,
+        tarea_contexto=tarea_contexto,
     )
 
 
-def restore_comment(*, comentario, usuario, motivo):
+def restore_comment(*, comentario, usuario, motivo, tarea_contexto=None):
     return _set_visibility(
         comentario=comentario,
         usuario=usuario,
         motivo=motivo,
         evento=ComentarioVersion.Evento.RESTAURADO,
         oculto=False,
+        tarea_contexto=tarea_contexto,
     )
 
 
-def _set_visibility(*, comentario, usuario, motivo, evento, oculto):
+def _set_visibility(
+    *, comentario, usuario, motivo, evento, oculto, tarea_contexto=None,
+):
+    tarea_contexto = _validated_comment_task(comentario, tarea_contexto)
+    empresa_id = tarea_contexto.empresa_id
     storage = resolve_comment_storage()
     comentario_actual = storage.get(
-        comentario.pk, comentario.tarea_id, comentario.tarea.empresa_id,
+        comentario.pk, comentario.tarea_id, empresa_id,
     )
-    tarea_actual = _current_task(comentario_actual.tarea_id, comentario_actual.tarea.empresa_id)
+    if comentario_actual.tarea_id != tarea_contexto.pk:
+        raise ValidationError("El Comentario no pertenece a la Tarea.")
+    tarea_actual = _current_task(comentario_actual.tarea_id, empresa_id)
     _validate_actor(tarea_actual, usuario, "supervisor")
     _validate_operational_task(tarea_actual)
     motivo_limpio = (motivo or "").strip()

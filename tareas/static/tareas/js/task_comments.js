@@ -250,7 +250,7 @@
         article.appendChild(avatar);
         article.appendChild(bubble);
         var header = document.createElement("div");
-        header.className = "d-flex flex-wrap justify-content-between gap-2 task-comments__meta";
+        header.className = "d-flex align-items-center gap-2 task-comments__meta";
         var author = document.createElement("strong");
         author.className = "task-comments__author";
         author.textContent = comment.autor ? comment.autor.username : "";
@@ -346,7 +346,7 @@
             menuToggle.innerHTML = '<i class="ri-more-2-fill" aria-hidden="true"></i>';
             actions.appendChild(menuToggle);
             actions.appendChild(menu);
-            bubble.appendChild(actions);
+            header.appendChild(actions);
         }
         return article;
     }

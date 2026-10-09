@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -12,6 +13,12 @@ from django.utils import timezone
 from tareas.models import Comentario, DocumentoTarea, Hito, Tarea, TareaLectura, TareaParticipante
 from tareas.services.assignment import add_participant
 from tareas.services.comments import create_comment, edit_comment, hide_comment, restore_comment
+from tareas.services.comment_storage import (
+    CommentDTO,
+    CommentVersionDTO,
+    DocumentDTO,
+    TaskDTO,
+)
 from tareas.services.connection_roles import BackendContext
 from tareas.services.documents import create_document
 from tareas.tests.factories import (
@@ -233,6 +240,280 @@ class CommentReadViewTests(TestCase):
         session = self.client.session
         session["empresa_id"] = self.empresa.pk
         session.save()
+
+    def make_comment_dto(
+        self, *, author=None, content="Antes", attachments=(), versions=(), oculto=False,
+    ):
+        created_at = timezone.now()
+        return CommentDTO(
+            id=101,
+            task_id=self.tarea.pk,
+            author_id=(author or self.autor).pk,
+            content=content,
+            created_at=created_at,
+            updated_at=created_at,
+            oculto=oculto,
+            versions=tuple(versions),
+            attachments=tuple(attachments),
+        )
+
+    def make_mysql_comment_storage(self, actor, comment):
+        state = {"comment": comment, "writes": []}
+        task = TaskDTO(
+            id=self.tarea.pk,
+            empresa_id=self.empresa.pk,
+            estado=Tarea.Estado.ACTIVA,
+            prioridad=Tarea.Prioridad.NORMAL,
+            anulada=False,
+            creador_id=self.autor.pk,
+            responsable_id=self.autor.pk,
+            empresa=self.empresa,
+            explicit_participant_ids=(actor.pk,),
+        )
+        detail = SimpleNamespace(
+            core=SimpleNamespace(
+                id=self.tarea.pk,
+                empresa_id=self.empresa.pk,
+                estado=Tarea.Estado.ACTIVA,
+                anulada=False,
+                creada_por_id=self.autor.pk,
+                responsable_id=self.autor.pk,
+            ),
+            effective_user_ids=(actor.pk,),
+            participants=(),
+        )
+        task_detail_storage = SimpleNamespace(
+            get_task_detail=lambda **kwargs: detail,
+        )
+
+        class Storage:
+            def _check_scope(self, task_id, empresa_id):
+                if (task_id, empresa_id) != (self_task.pk, self_empresa.pk):
+                    raise AssertionError("Comment storage received an unvalidated scope.")
+
+            def task(self, task_id, empresa_id):
+                self._check_scope(task_id, empresa_id)
+                return task
+
+            def get(self, comment_id, task_id, empresa_id):
+                self._check_scope(task_id, empresa_id)
+                if comment_id != state["comment"].pk:
+                    raise AssertionError("Unexpected comment id.")
+                return state["comment"]
+
+            def list(self, command):
+                self._check_scope(command.task_id, command.empresa_id)
+                return [state["comment"]]
+
+            def create(self, command, *, documents=()):
+                self._check_scope(command.task_id, command.empresa_id)
+                state["writes"].append("create")
+                created_at = timezone.now()
+                state["comment"] = CommentDTO(
+                    id=command.author_id + 1000,
+                    task_id=command.task_id,
+                    author_id=command.author_id,
+                    content=command.content,
+                    created_at=created_at,
+                    updated_at=created_at,
+                    oculto=False,
+                )
+                return state["comment"]
+
+            def document_ids_for_comment(self, comment_id):
+                return tuple(document.pk for document in state["comment"].attachments)
+
+            def documents(self, task_id, document_ids, empresa_id):
+                self._check_scope(task_id, empresa_id)
+                return tuple(
+                    SimpleNamespace(
+                        pk=document.pk,
+                        tarea_id=task_id,
+                        empresa_id=empresa_id,
+                    )
+                    for document in state["comment"].attachments
+                    if document.pk in document_ids
+                )
+
+            def edit(self, command, *, documents=()):
+                self._check_scope(command.task_id, command.empresa_id)
+                state["writes"].append("edit")
+                current = state["comment"]
+                state["comment"] = CommentDTO(
+                    id=current.pk,
+                    task_id=current.tarea_id,
+                    author_id=current.autor_id,
+                    content=command.content,
+                    created_at=current.created_at,
+                    updated_at=timezone.now(),
+                    oculto=current.oculto,
+                    versions=current.versions,
+                    attachments=current.attachments,
+                )
+                return state["comment"]
+
+            def set_visibility(self, command):
+                self._check_scope(command.task_id, command.empresa_id)
+                state["writes"].append("set_visibility")
+                current = state["comment"]
+                state["comment"] = CommentDTO(
+                    id=current.pk,
+                    task_id=current.tarea_id,
+                    author_id=current.autor_id,
+                    content=current.contenido,
+                    created_at=current.created_at,
+                    updated_at=timezone.now(),
+                    oculto=command.oculto,
+                    versions=current.versions,
+                    attachments=current.attachments,
+                )
+                return state["comment"]
+
+        self_task = self.tarea
+        self_empresa = self.empresa
+        return Storage(), state, task_detail_storage
+
+    def activate_mysql_comment_backend(self, storage, task_detail_storage):
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        context = BackendContext(
+            logical_role="BASE_TAREAS",
+            backend_type="MYSQL_CONFIG",
+            mysql_connection=object(),
+            database_name="configured_tasks",
+        )
+        mysql_storage = stack.enter_context(patch(
+            "tareas.services.comment_storage.MySQLCommentStorage",
+            return_value=storage,
+        ))
+        django_storage = stack.enter_context(patch(
+            "tareas.services.comment_storage.DjangoCommentStorage",
+        ))
+        stack.enter_context(patch(
+            "tareas.services.comment_storage.resolve_operational_backend",
+            return_value=context,
+        ))
+        stack.enter_context(patch(
+            "tareas.views.resolve_detail_storage",
+            return_value=task_detail_storage,
+        ))
+        stack.enter_context(patch(
+            "tareas.forms.resolve_document_storage",
+            return_value=SimpleNamespace(list_task_documents=lambda **kwargs: ()),
+        ))
+        stack.enter_context(patch(
+            "tareas.services.comments.is_effectively_annulled",
+            return_value=False,
+        ))
+        stack.enter_context(patch("tareas.services.comments._schedule_comment_event"))
+        return mysql_storage, django_storage
+
+    def test_mysql_dto_create_endpoint_returns_the_created_comment(self):
+        comment = self.make_comment_dto()
+        storage, state, detail_storage = self.make_mysql_comment_storage(self.autor, comment)
+        _mysql_storage, django_storage = self.activate_mysql_comment_backend(storage, detail_storage)
+        self.login_as(self.autor)
+
+        response = self.client.post(
+            reverse("tareas:crear_comentario", kwargs={"tarea_id": self.tarea.pk}),
+            {"contenido": "Creado"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["comentario"]["contenido"], "Creado")
+        self.assertEqual(state["comment"].contenido, "Creado")
+        self.assertEqual(state["writes"], ["create"])
+        django_storage.assert_not_called()
+
+    def test_mysql_dto_edit_endpoint_preserves_attachment_json_and_write_scope(self):
+        document = DocumentDTO(
+            77, DocumentoTarea.Tipo.OTRO, DocumentoTarea.FormatoArchivo.PDF,
+            "https://example.test/adjunto", "media/adjunto.pdf", "adjunto.pdf",
+        )
+        version = CommentVersionDTO(
+            1, "CREADO", 1, "Antes", self.autor, timezone.now(), "",
+            documentos=(document,),
+        )
+        comment = self.make_comment_dto(attachments=(document,), versions=(version,))
+        storage, state, detail_storage = self.make_mysql_comment_storage(self.autor, comment)
+        mysql_storage, django_storage = self.activate_mysql_comment_backend(storage, detail_storage)
+        self.login_as(self.autor)
+
+        response = self.client.post(
+            reverse(
+                "tareas:editar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comment.pk},
+            ),
+            {"contenido": "Editado", "empresa_id": self.otra_empresa.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["comentario"]
+        self.assertEqual(payload["contenido"], "Editado")
+        self.assertEqual(payload["adjuntos"][0]["id"], document.pk)
+        self.assertEqual(payload["historial"][0]["adjuntos"][0]["id"], document.pk)
+        self.assertEqual(
+            set(payload["adjuntos"][0]),
+            {"id", "tipo", "tipo_i18n_key", "formato_archivo", "url", "archivo_url", "nombre_archivo"},
+        )
+        self.assertEqual(state["comment"].contenido, "Editado")
+        self.assertEqual(state["writes"], ["edit"])
+        self.assertTrue(mysql_storage.called)
+        django_storage.assert_not_called()
+
+    def test_mysql_dto_listing_serializes_document_attachments(self):
+        document = DocumentDTO(
+            78, DocumentoTarea.Tipo.OTRO, DocumentoTarea.FormatoArchivo.PDF,
+            "", "media/listado.pdf", "listado.pdf",
+        )
+        comment = self.make_comment_dto(attachments=(document,))
+        storage, _state, detail_storage = self.make_mysql_comment_storage(self.lector, comment)
+        _mysql_storage, django_storage = self.activate_mysql_comment_backend(storage, detail_storage)
+        self.login_as(self.lector)
+
+        with patch("tareas.views.count_pending_comments", return_value=0), patch(
+            "tareas.views.get_first_pending_comment", return_value=None,
+        ):
+            response = self.client.get(
+                reverse("tareas:listar_comentarios", kwargs={"tarea_id": self.tarea.pk}),
+                {"after_id": "0"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["comentarios"][0]["adjuntos"][0]["nombre_archivo"],
+            "listado.pdf",
+        )
+        django_storage.assert_not_called()
+
+    def test_mysql_dto_hide_and_restore_endpoints_use_task_company_context(self):
+        add_participant(self.tarea, self.supervisor, actor=self.autor)
+        comment = self.make_comment_dto()
+        storage, state, detail_storage = self.make_mysql_comment_storage(self.supervisor, comment)
+        _mysql_storage, django_storage = self.activate_mysql_comment_backend(storage, detail_storage)
+        self.login_as(self.supervisor)
+
+        hidden = self.client.post(
+            reverse(
+                "tareas:ocultar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comment.pk},
+            ),
+            {"motivo": "Moderación"},
+        )
+        restored = self.client.post(
+            reverse(
+                "tareas:restaurar_comentario",
+                kwargs={"tarea_id": self.tarea.pk, "comentario_id": comment.pk},
+            ),
+            {"motivo": "Revisión"},
+        )
+
+        self.assertEqual(hidden.status_code, 200)
+        self.assertTrue(hidden.json()["comentario"]["oculto"])
+        self.assertEqual(restored.status_code, 200)
+        self.assertFalse(restored.json()["comentario"]["oculto"])
+        self.assertEqual(state["writes"], ["set_visibility", "set_visibility"])
+        django_storage.assert_not_called()
 
     def test_get_uses_next_chronological_page_and_pending_cursor(self):
         comentarios = [

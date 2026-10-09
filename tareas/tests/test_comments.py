@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -340,6 +341,19 @@ class CommentServiceTests(TestCase):
         comentario.save(update_fields=["created_at"])
         with self.assertRaises(ValidationError):
             edit_comment(comentario=comentario, usuario=self.autor, contenido="Tarde")
+
+    def test_edit_accepts_original_at_exactly_one_hour(self):
+        tarea = self.make_task()
+        comentario = create_comment(tarea=tarea, usuario=self.autor, contenido="Original")
+        now = timezone.now()
+        comentario.created_at = now - timedelta(hours=1)
+        comentario.save(update_fields=["created_at"])
+
+        with patch("tareas.services.comments.timezone.now", return_value=now):
+            edit_comment(comentario=comentario, usuario=self.autor, contenido="Editado")
+
+        comentario.refresh_from_db()
+        self.assertEqual(comentario.contenido, "Editado")
 
     def test_edit_preserves_versions_and_document_references(self):
         tarea = self.make_task()

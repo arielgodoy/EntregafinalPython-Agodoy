@@ -1,0 +1,31 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Enlace no disponible{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Enlace no disponible" pagetitle="Tareas" title_key=error_title_key pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-8 offset-lg-2">
+                    <div class="card shadow-lg">
+                        <div class="card-body text-center py-5">
+                            <div class="avatar-lg mx-auto mb-4">
+                                <div class="avatar-title bg-warning-subtle text-warning rounded-circle fs-2">
+                                    <i class="ri-link-unlink-m" aria-hidden="true"></i>
+                                </div>
+                            </div>
+                            <h4 class="mb-3" data-key="{{ error_title_key }}">{{ error_title }}</h4>
+                            <p class="text-muted mb-0" data-key="{{ error_description_key }}">{{ error_description }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

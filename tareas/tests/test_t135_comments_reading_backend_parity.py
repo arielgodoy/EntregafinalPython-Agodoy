@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone as datetime_timezone
 from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -24,6 +24,7 @@ from tareas.services.comment_storage import (
     ReadingCommand,
     resolve_comment_storage,
     TaskDTO,
+    _comment_dto,
 )
 from tareas.services.comments import _schedule_comment_event, create_comment
 from tareas.services.participants import is_effective_participant
@@ -294,6 +295,19 @@ class CommentsReadingBackendParityTests(TestCase):
         self.assertEqual(connection.cursor.call_count, 1)
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
+
+    def test_mysql_comment_dto_normalizes_naive_datetimes_as_utc(self):
+        naive_created = datetime(2026, 10, 9, 12, 34, 56)
+        aware_updated = datetime(2026, 10, 9, 13, 34, 56, tzinfo=datetime_timezone.utc)
+
+        comment = _comment_dto(
+            (20, 7, self.default_user.pk, "Comentario", naive_created, aware_updated, False),
+        )
+
+        self.assertTrue(timezone.is_aware(comment.created_at))
+        self.assertEqual(comment.created_at.tzinfo, datetime_timezone.utc)
+        self.assertEqual(comment.created_at.replace(tzinfo=None), naive_created)
+        self.assertEqual(comment.updated_at, aware_updated)
 
     def test_mysql_comment_notification_uses_effective_roles(self):
         milestone_owner = User.objects.create_user("comment-milestone-owner")

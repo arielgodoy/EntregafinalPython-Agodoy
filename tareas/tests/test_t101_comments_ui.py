@@ -1,3 +1,5 @@
+from html.parser import HTMLParser
+
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -6,6 +8,64 @@ from pathlib import Path
 from tareas.models import Tarea, TareaConnectionRole
 from tareas.services.assignment import add_participant
 from tareas.tests.factories import assign_permission, create_empresa, create_tarea, create_user
+
+
+class _DetailStructureParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = {"tag": "document", "attrs": {}, "children": [], "parent": None}
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = {
+            "tag": tag,
+            "attrs": dict(attrs),
+            "children": [],
+            "parent": self.stack[-1],
+        }
+        self.stack[-1]["children"].append(node)
+        if tag not in {
+            "area", "base", "br", "col", "embed", "hr", "img",
+            "input", "link", "meta", "param", "source", "track", "wbr",
+        }:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if self.stack[-1]["tag"] == tag:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index]["tag"] == tag:
+                del self.stack[index:]
+                return
+
+    def _find(self, predicate):
+        pending = list(self.root["children"])
+        while pending:
+            node = pending.pop(0)
+            if predicate(node):
+                return node
+            pending.extend(node["children"])
+        return None
+
+    def find_by_id(self, value):
+        return self._find(lambda node: node["attrs"].get("id") == value)
+
+    def find_by_class(self, value):
+        return self._find(
+            lambda node: value in node["attrs"].get("class", "").split()
+        )
+
+    def find_descendant_by_class(self, node, value):
+        pending = list(node["children"])
+        while pending:
+            child = pending.pop(0)
+            if value in child["attrs"].get("class", "").split():
+                return child
+            pending.extend(child["children"])
+        return None
 
 
 class T101CommentsUiTests(TestCase):
@@ -21,6 +81,8 @@ class T101CommentsUiTests(TestCase):
         cls.creador = create_user(username="t101-creador")
         cls.modificador = create_user(username="t101-modificador")
         cls.admin = create_user(username="t101-admin")
+        cls.hitos_lector = create_user(username="t101-hitos-lector")
+        cls.hitos_creador = create_user(username="t101-hitos-creador")
         cls.sin_ingresar = create_user(username="t101-sin-ingresar")
         assign_permission(
             cls.participante,
@@ -42,6 +104,29 @@ class T101CommentsUiTests(TestCase):
             crear=True,
             modificar=True,
             supervisor=True,
+        )
+        assign_permission(cls.hitos_lector, cls.empresa, "Tareas", ingresar=True)
+        assign_permission(
+            cls.hitos_lector,
+            cls.empresa,
+            "Tareas - Hitos",
+            ingresar=True,
+        )
+        assign_permission(
+            cls.hitos_creador,
+            cls.empresa,
+            "Tareas",
+            ingresar=True,
+            crear=True,
+            modificar=True,
+        )
+        assign_permission(
+            cls.hitos_creador,
+            cls.empresa,
+            "Tareas - Hitos",
+            ingresar=True,
+            crear=True,
+            modificar=True,
         )
 
     def login_as(self, usuario):
@@ -148,6 +233,67 @@ class T101CommentsUiTests(TestCase):
         self.assertContains(response, 'data-comments-composer')
         self.assertFalse(tarea.participantes.filter(usuario=self.admin).exists())
 
+    def test_detail_without_milestone_create_permission_preserves_html_structure(self):
+        tarea = self.make_task()
+
+        response = self.get_detail(tarea, self.hitos_lector)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="crearHitoModal"')
+
+        parser = _DetailStructureParser()
+        parser.feed(response.content.decode())
+        main = parser.find_by_class("task-detail-main")
+        comments = parser.find_by_class("task-detail-comments")
+        surface = parser.find_by_class("task-detail__surface")
+        card = parser.find_by_class("task-detail__card")
+
+        self.assertIsNotNone(main)
+        self.assertIsNotNone(comments)
+        self.assertIsNotNone(surface)
+        self.assertIsNotNone(card)
+        self.assertIs(main["parent"], comments["parent"])
+        self.assertEqual(
+            main["parent"]["attrs"].get("class"),
+            "row g-4 align-items-start",
+        )
+        self.assertIs(surface["parent"], card)
+
+    def test_detail_with_milestone_create_permission_renders_complete_modal(self):
+        tarea = create_tarea(
+            self.empresa,
+            self.hitos_creador,
+            responsable=self.hitos_creador,
+            estado=Tarea.Estado.ACTIVA,
+            fecha_publicacion=timezone.now(),
+        )
+
+        response = self.get_detail(tarea, self.hitos_creador)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="crearHitoModal"')
+
+        parser = _DetailStructureParser()
+        parser.feed(response.content.decode())
+        main = parser.find_by_class("task-detail-main")
+        comments = parser.find_by_class("task-detail-comments")
+        modal = parser.find_by_id("crearHitoModal")
+        dialog = parser.find_descendant_by_class(modal, "modal-dialog")
+        content = parser.find_descendant_by_class(modal, "modal-content")
+
+        self.assertIsNotNone(main)
+        self.assertIsNotNone(comments)
+        self.assertIsNotNone(modal)
+        self.assertIsNotNone(dialog)
+        self.assertIsNotNone(content)
+        self.assertIs(main["parent"], comments["parent"])
+        self.assertEqual(
+            main["parent"]["attrs"].get("class"),
+            "row g-4 align-items-start",
+        )
+        self.assertIs(dialog["parent"], modal)
+        self.assertIs(content["parent"], dialog)
+
     def test_user_without_ingresar_cannot_access_comment_card(self):
         tarea = self.make_task()
 
@@ -253,6 +399,26 @@ class T101CommentsUiTests(TestCase):
         self.assertIn("max-width: 82%", stylesheet)
         self.assertIn("max-width: 92%", stylesheet)
         self.assertNotIn("position: fixed", stylesheet)
+
+    def test_comment_actions_stay_next_to_time_without_changing_dropdown_contract(self):
+        script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
+        stylesheet = Path("tareas/static/tareas/css/task_comments.css").read_text(encoding="utf-8")
+        renderer_start = script.index("function renderComment(root, comment)")
+        renderer_end = script.index("function syncComment(root, comment)", renderer_start)
+        renderer = script[renderer_start:renderer_end]
+        actions_start = stylesheet.index(".task-comments__actions {")
+        actions_end = stylesheet.index("}", actions_start)
+        actions_styles = stylesheet[actions_start:actions_end]
+
+        self.assertLess(renderer.index("header.appendChild(date);"), renderer.index("header.appendChild(actions);"))
+        self.assertIn('menuToggle.setAttribute("data-bs-toggle", "dropdown")', renderer)
+        self.assertIn("actions.appendChild(menu);", renderer)
+        self.assertNotIn("bubble.appendChild(actions);", renderer)
+        self.assertIn("flex-wrap: nowrap;", stylesheet)
+        self.assertIn("text-overflow: ellipsis;", stylesheet)
+        self.assertNotIn("margin-top:", actions_styles)
+        self.assertNotIn("padding-top:", actions_styles)
+        self.assertNotIn("border-top:", actions_styles)
 
     def test_create_appends_canonical_comment_without_replacing_feed(self):
         script = Path("tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")

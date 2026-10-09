@@ -115,17 +115,24 @@
 }
 
 .task-comments__meta {
-    margin-bottom: 0.35rem;
+    flex-wrap: nowrap;
+    min-width: 0;
+    margin-bottom: 0.25rem;
     color: var(--task-chat-muted);
     font-size: 0.75rem;
 }
 
 .task-comments__author {
+    min-width: 0;
+    overflow: hidden;
     color: var(--task-chat-text);
     font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .task-comments__date {
+    flex: 0 0 auto;
     white-space: nowrap;
     cursor: help;
 }
@@ -140,7 +147,7 @@
 }
 
 .task-comments__body {
-    margin-bottom: 0.65rem;
+    margin-bottom: 0;
     line-height: 1.5;
 }
 
@@ -164,13 +171,8 @@
 }
 
 .task-comments__actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.4rem;
-    margin-top: 0.75rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid var(--bs-border-color-translucent);
+    display: inline-flex;
+    flex: 0 0 auto;
 }
 
 .task-comments__more {

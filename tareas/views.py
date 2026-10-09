@@ -7,6 +7,8 @@ Patrones vigentes reutilizados:
 """
 
 import logging
+import traceback
+import copy
 from dataclasses import replace
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -14,6 +16,7 @@ from urllib.parse import urlparse
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core import signing
 from django.db import transaction
@@ -143,7 +146,7 @@ from .services.links import (
     revoke_task_link,
     revoke_task_link_by_id,
 )
-from .services.comment_storage import CommentPageCommand, resolve_comment_storage
+from .services.comment_storage import CommentPageCommand, DocumentDTO, resolve_comment_storage
 from .services.connection_roles import (
     TareaConnectionError,
     get_tarea_connection,
@@ -274,6 +277,12 @@ def _comment_document_data(documento):
     }
 
 
+def _comment_attachment_document(adjunto):
+    if isinstance(adjunto, DocumentDTO):
+        return adjunto
+    return adjunto.documento
+
+
 def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
     def related_items(value):
         return value.all() if hasattr(value, "all") else value
@@ -292,7 +301,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
 
     adjuntos = []
     for adjunto in related_items(comentario.adjuntos):
-        adjuntos.append(_comment_document_data(adjunto.documento))
+        adjuntos.append(_comment_document_data(_comment_attachment_document(adjunto)))
 
     historial = []
     if puede_ver_historial:
@@ -309,7 +318,7 @@ def _comment_data(comentario, usuario, puede_supervisar, avatar_url=None):
                     "fecha": version.fecha.isoformat(),
                     "motivo": version.motivo,
                     "adjuntos": [
-                        _comment_document_data(relacion.documento)
+                        _comment_document_data(_comment_attachment_document(relacion))
                         for relacion in related_items(version.documentos)
                     ],
                 }
@@ -1648,10 +1657,23 @@ class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):
         except ValidationError:
             return _comment_error_response()
         except Exception as error:
-            logger.error(
-                "Tareas comment endpoint failed (%s)",
-                type(error).__name__,
-            )
+            if settings.DEBUG:
+                frame = traceback.extract_tb(error.__traceback__)[-1:]
+                source = frame[0] if frame else None
+                logger.exception(
+                    "Tareas comment endpoint failed: type=%s file=%s "
+                    "function=%s line=%s message=%s",
+                    type(error).__name__,
+                    source.filename if source else "<unknown>",
+                    source.name if source else "<unknown>",
+                    source.lineno if source else "<unknown>",
+                    str(error),
+                )
+            else:
+                logger.error(
+                    "Tareas comment endpoint failed (%s)",
+                    type(error).__name__,
+                )
             return _comment_error_response(status=500)
 
     def get_tarea(self, request, tarea_id):
@@ -1947,6 +1969,7 @@ class EditarComentarioView(TareaComentariosView):
             "comentario": comentario,
             "usuario": request.user,
             "documentos_nuevos": form.nuevos_documentos(),
+            "tarea_contexto": tarea,
         }
         if "contenido" in request.POST:
             cambios["contenido"] = form.cleaned_data.get("contenido", "")
@@ -1989,6 +2012,7 @@ class _CambiarVisibilidadComentarioView(TareaComentariosView):
                 comentario=comentario,
                 usuario=request.user,
                 motivo=form.cleaned_data["motivo"],
+                tarea_contexto=tarea,
             )
         except ValidationError:
             return _comment_error_response()
@@ -2165,6 +2189,21 @@ class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 class AbrirEnlaceTareaView(LoginRequiredMixin, View):
     template_name = "tareas/enlace_tarea_lectura.html"
+    error_template_name = "tareas/enlace_tarea_error.html"
+    link_error_messages = {
+        "RECHAZADO_EXPIRADO": (
+            "tareas.links.unavailable.expired.title",
+            "tareas.links.unavailable.expired.description",
+            "Este enlace ha expirado.",
+            "Solicita al remitente que genere un nuevo enlace.",
+        ),
+        "RECHAZADO_REVOCADO": (
+            "tareas.links.unavailable.revoked.title",
+            "tareas.links.unavailable.revoked.description",
+            "Enlace ya no disponible.",
+            "Este enlace compartido dejó de estar disponible. Solicita al remitente que genere uno nuevo.",
+        ),
+    }
 
     def get(self, request, token):
         empresa_id = _get_empresa_id(request)
@@ -2174,8 +2213,38 @@ class AbrirEnlaceTareaView(LoginRequiredMixin, View):
                 usuario=request.user,
                 empresa=empresa_id,
             )
-        except TaskLinkAccessError:
-            return HttpResponseForbidden("No es posible acceder al enlace.")
+        except TaskLinkAccessError as exc:
+            resultado = exc.resultado
+            if isinstance(resultado, str) and resultado.startswith("['") and resultado.endswith("']"):
+                resultado = resultado[2:-2]
+            title_key, description_key, title_text, description_text = self.link_error_messages.get(
+                resultado,
+                (
+                    "tareas.links.unavailable.generic.title",
+                    "tareas.links.unavailable.generic.description",
+                    "Enlace no disponible.",
+                    "No es posible acceder a este enlace. Verifica que sea correcto o solicita uno nuevo al remitente.",
+                ),
+            )
+            safe_request = copy.copy(request)
+            safe_request.path_info = "/tareas/enlace/"
+            safe_request.META = request.META.copy()
+            safe_request.META["PATH_INFO"] = safe_request.path_info
+            safe_request.META["QUERY_STRING"] = ""
+            safe_request.get_full_path = lambda: safe_request.path_info
+            response = render(
+                safe_request,
+                self.error_template_name,
+                {
+                    "request": safe_request,
+                    "error_title_key": title_key,
+                    "error_description_key": description_key,
+                    "error_title": title_text,
+                    "error_description": description_text,
+                },
+                status=403,
+            )
+            return response
         return render(request, self.template_name, {"tarea": enlace.tarea})
 
 

@@ -254,11 +254,72 @@ class TaskLinkViewTests(TaskLinkServiceTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.tarea.titulo)
 
+    def test_open_shows_revoked_message_to_recipient(self):
+        self.client.force_login(self.destinatario)
+        self.activate_company(self.empresa)
+        self.enlace.revocado_at = timezone.now()
+        self.enlace.save(update_fields=["revocado_at"])
+
+        response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Enlace ya no disponible.", status_code=403)
+        self.assertContains(response, "Este enlace compartido dejó de estar disponible.", status_code=403)
+        self.assertNotIn(self.token.encode(), response.content)
+
+    def test_open_shows_expired_message_to_recipient(self):
+        self.client.force_login(self.destinatario)
+        self.activate_company(self.empresa)
+        self.enlace.fecha_expiracion = timezone.now() - timedelta(seconds=1)
+        self.enlace.save(update_fields=["fecha_expiracion"])
+
+        response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Este enlace ha expirado.", status_code=403)
+        self.assertContains(response, "Solicita al remitente que genere un nuevo enlace.", status_code=403)
+        self.assertNotIn(self.token.encode(), response.content)
+
+    def test_open_shows_generic_message_for_unknown_token(self):
+        self.client.force_login(self.destinatario)
+        self.activate_company(self.empresa)
+
+        response = self.client.get(reverse("tareas:enlace_tarea", args=["unknown-token"]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Enlace no disponible.", status_code=403)
+        self.assertContains(response, "No es posible acceder a este enlace.", status_code=403)
+        self.assertNotIn(b"unknown-token", response.content)
+
+    def test_open_shows_generic_message_for_unauthorized_user(self):
+        self.client.force_login(self.creador)
+        self.activate_company(self.empresa)
+
+        response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Enlace no disponible.", status_code=403)
+        self.assertNotContains(response, "Enlace ya no disponible.", status_code=403)
+        self.assertNotContains(response, "Este enlace ha expirado.", status_code=403)
+
+    def test_open_shows_generic_message_for_inactive_user(self):
+        self.destinatario.is_active = False
+        self.destinatario.save(update_fields=["is_active"])
+        self.client.force_login(self.destinatario)
+        self.activate_company(self.empresa)
+
+        response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
+
+        self.assertEqual(response.status_code, 302)
+
     def test_open_rejects_wrong_company_and_revoke_is_protected(self):
         self.client.force_login(self.destinatario)
         self.activate_company(self.otra_empresa)
         response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
         self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Enlace no disponible.", status_code=403)
+        self.assertNotContains(response, "Enlace ya no disponible.", status_code=403)
+        self.assertNotContains(response, "Este enlace ha expirado.", status_code=403)
         self.client.force_login(self.creador)
         self.activate_company(self.empresa)
         response = self.client.post(

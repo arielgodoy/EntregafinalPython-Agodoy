@@ -130,6 +130,7 @@ def emit_task_event(
         try:
             notify_task_event(
                 tarea=tarea,
+                destinatario=recipient,
                 titulo=title,
                 cuerpo=body,
                 actor=actor,

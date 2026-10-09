@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timezone as datetime_timezone
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
@@ -228,7 +229,19 @@ def _task_dto(row, explicit_participant_ids=(), additional_effective_user_ids=()
 
 
 def _comment_dto(row, versions=(), attachments=()):
-    return CommentDTO(*row, tuple(versions), tuple(attachments))
+    normalized_row = (
+        *row[:4],
+        _normalize_comment_datetime(row[4]),
+        _normalize_comment_datetime(row[5]),
+        row[6],
+    )
+    return CommentDTO(*normalized_row, tuple(versions), tuple(attachments))
+
+
+def _normalize_comment_datetime(value):
+    if value is not None and timezone.is_naive(value):
+        return timezone.make_aware(value, datetime_timezone.utc)
+    return value
 
 
 class DjangoCommentStorage:
@@ -772,7 +785,10 @@ class MySQLCommentStorage:
                 name = str(archivo or "").replace("\\", "/").rsplit("/", 1)[-1]
                 documents.append(DocumentDTO(document_id, tipo, formato, url or "", archivo or "", name))
             actor = User.objects.using("default").filter(pk=actor_id).first()
-            versions.append(CommentVersionDTO(version_id, event, number, content, actor, fecha, reason, tuple(documents)))
+            versions.append(CommentVersionDTO(
+                version_id, event, number, content, actor,
+                _normalize_comment_datetime(fecha), reason, tuple(documents),
+            ))
         return _comment_dto(row, versions, attachments)
 
     def get(self, comment_id, task_id, empresa_id):

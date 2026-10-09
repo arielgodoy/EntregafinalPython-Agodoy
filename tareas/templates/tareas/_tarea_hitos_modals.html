@@ -123,8 +123,8 @@
 {% endif %}
 {% endfor %}
 
-<div class="modal fade{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if puede_crear_hito and hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
-    {% if puede_crear_hito %}
+{% if puede_crear_hito %}
+<div class="modal fade{% if hito_form.is_bound and hito_form.errors %} show d-block{% endif %}" id="crearHitoModal" tabindex="-1" aria-labelledby="crearHitoModalLabel" aria-hidden="{% if hito_form.is_bound and hito_form.errors %}false{% else %}true{% endif %}"{% if hito_form.is_bound and hito_form.errors %} style="display: block;"{% endif %}>
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="post" action="{{ hitos_action_url }}">
@@ -146,7 +146,7 @@
                 </div>
             </form>
         </div>
-        {% endif %}
     </div>
 </div>
+{% endif %}
 {% if puede_crear_hito and hito_form.is_bound and hito_form.errors or modal_abierto_hito_id %}<div class="modal-backdrop fade show"></div>{% endif %}
