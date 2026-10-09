@@ -31,7 +31,11 @@ def observe_user_activity(sender, instance, raw=False, **kwargs):
         del instance._tareas_previous_is_active
     if raw or previous is None or previous == instance.is_active:
         return
-    handle_user_activity_transition(usuario=instance, was_active=previous)
+    handle_user_activity_transition(
+        usuario=instance,
+        was_active=previous,
+        skip_unconfigured=True,
+    )
 
 
 @receiver(post_save, sender=Comentario, dispatch_uid="tareas_ensure_comment_readings")

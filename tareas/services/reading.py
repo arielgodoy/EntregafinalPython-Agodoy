@@ -18,6 +18,10 @@ from tareas.services.comment_storage import (
     RecognizeCommentsCommand,
     resolve_comment_storage,
 )
+from tareas.services.connection_roles import (
+    TareaConnectionRoleNotFoundError,
+    TareaConnectionInactiveError,
+)
 
 
 COMMENT_PAGE_SIZE = 20
@@ -87,10 +91,16 @@ def close_inactivity_pause(*, lectura, at=None):
     ))
 
 
-def handle_user_activity_transition(*, usuario, was_active, at=None):
+def handle_user_activity_transition(*, usuario, was_active, at=None, skip_unconfigured=False):
     if was_active == usuario.is_active:
         return
-    resolve_comment_storage().handle_user_activity(
+    try:
+        storage = resolve_comment_storage()
+    except (TareaConnectionRoleNotFoundError, TareaConnectionInactiveError):
+        if skip_unconfigured:
+            return
+        raise
+    storage.handle_user_activity(
         usuario.pk, usuario.is_active, at or timezone.now(),
     )
 

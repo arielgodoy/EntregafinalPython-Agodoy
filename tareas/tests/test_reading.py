@@ -9,6 +9,7 @@ from tareas.models import (
     ComentarioPausaLectura,
     Hito,
     Tarea,
+    TareaConnectionRole,
     TareaLectura,
     TareaParticipante,
 )
@@ -20,9 +21,11 @@ from tareas.services.reading import (
     get_first_pending_comment,
     get_initial_comment_page,
     get_previous_comment_page,
+    handle_user_activity_transition,
     open_inactivity_pause,
     recognize_loaded_comments,
 )
+from tareas.services.connection_roles import TareaConnectionRoleNotFoundError
 from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
 
 
@@ -56,6 +59,15 @@ class CommentReadingServiceTests(TestCase):
             Comentario.objects.filter(pk=comentario.pk).update(created_at=created_at)
             comentario.refresh_from_db()
         return comentario
+
+    def test_explicit_user_activity_transition_still_requires_task_storage(self):
+        TareaConnectionRole.objects.filter(role="BASE_TAREAS").delete()
+
+        with self.assertRaises(TareaConnectionRoleNotFoundError):
+            handle_user_activity_transition(
+                usuario=self.lector,
+                was_active=False,
+            )
 
     def test_counter_and_first_pending_without_comments(self):
         tarea = self.make_task()
