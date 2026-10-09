@@ -60,6 +60,17 @@ def _raise_si_anulada(tarea):
         raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
 
 
+def _lock_task(tarea, storage):
+    try:
+        return (
+            Tarea.objects.using(storage.alias)
+            .select_for_update()
+            .get(pk=tarea.pk, empresa_id=tarea.empresa_id)
+        )
+    except Tarea.DoesNotExist as exc:
+        raise TaskStorageError("tareas.messages.generic_error") from exc
+
+
 def _emit_hierarchy_event(tarea, usuario, event, title, body):
     for affected_task in [tarea, *get_descendants(tarea)]:
         emit_task_event(
@@ -79,35 +90,42 @@ def _emit_hierarchy_event(tarea, usuario, event, title, body):
 
 
 def transition_task(tarea, destino, usuario, accion_evento, motivo=""):
-    _raise_si_anulada(tarea)
-    if destino not in _ALLOWED.get(tarea.estado, set()):
-        raise ValidationError(
-            f"Transición no permitida: {tarea.estado} -> {destino}."
-        )
-    origen = tarea.estado
     storage = _django_task_storage(tarea)
-    if destino == Tarea.Estado.GESTION and origen == Tarea.Estado.ACTIVA:
-        storage.enter_management(
-            task_id=tarea.pk,
-            empresa_id=tarea.empresa_id,
-            actor_id=usuario.pk,
-        )
-        tarea.refresh_from_db(using=storage.alias)
-        return TareaTransicion.objects.using(storage.alias).filter(
-            tarea_id=tarea.pk,
+    with transaction.atomic(using=storage.alias):
+        locked_tarea = _lock_task(tarea, storage)
+        _raise_si_anulada(locked_tarea)
+        if destino not in _ALLOWED.get(locked_tarea.estado, set()):
+            raise ValidationError(
+                f"Transición no permitida: {locked_tarea.estado} -> {destino}."
+            )
+        origen = locked_tarea.estado
+        if destino == Tarea.Estado.GESTION and origen == Tarea.Estado.ACTIVA:
+            storage.enter_management(
+                task_id=locked_tarea.pk,
+                empresa_id=locked_tarea.empresa_id,
+                actor_id=usuario.pk,
+            )
+            locked_tarea.refresh_from_db(using=storage.alias)
+            tarea.estado = locked_tarea.estado
+            tarea.anulada = locked_tarea.anulada
+            return TareaTransicion.objects.using(storage.alias).filter(
+                tarea_id=locked_tarea.pk,
+                estado_destino=destino,
+            ).order_by("-pk").first()
+        locked_tarea.estado = destino
+        locked_tarea.full_clean()
+        locked_tarea.save(using=storage.alias, update_fields=["estado"])
+        transition = TareaTransicion.objects.using(storage.alias).create(
+            tarea=locked_tarea,
+            estado_origen=origen,
             estado_destino=destino,
-        ).order_by("-pk").first()
-    tarea.estado = destino
-    tarea.full_clean()
-    tarea.save(using=storage.alias, update_fields=["estado"])
-    return TareaTransicion.objects.using(storage.alias).create(
-        tarea=tarea,
-        estado_origen=origen,
-        estado_destino=destino,
-        accion_evento=accion_evento,
-        usuario=usuario,
-        motivo=motivo,
-    )
+            accion_evento=accion_evento,
+            usuario=usuario,
+            motivo=motivo,
+        )
+        tarea.estado = locked_tarea.estado
+        tarea.anulada = locked_tarea.anulada
+        return transition
 
 
 def publish_task(tarea, usuario):
@@ -125,18 +143,17 @@ def publish_task(tarea, usuario):
 
 
 def complete_task(tarea, usuario):
-    _raise_si_anulada(tarea)
     storage = _django_task_storage(tarea)
     with transaction.atomic(using=storage.alias):
-        tarea.cierre_completado = True
-        tarea.fecha_cumplimiento = timezone.now()
-        tarea.save(using=storage.alias, update_fields=["cierre_completado", "fecha_cumplimiento"])
         transition = transition_task(
             tarea,
             Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
             usuario,
             "MARCAR_100",
         )
+        tarea.cierre_completado = True
+        tarea.fecha_cumplimiento = timezone.now()
+        tarea.save(using=storage.alias, update_fields=["cierre_completado", "fecha_cumplimiento"])
     emit_task_event(
         tarea=tarea,
         event="solicitud_aprobacion_cierre",
@@ -154,25 +171,28 @@ def complete_task(tarea, usuario):
 
 
 def approve_closure(tarea, usuario, comentario=""):
-    _raise_si_anulada(tarea)
-    validate_closure_requirements(tarea)
     storage = _django_task_storage(tarea)
     with transaction.atomic(using=storage.alias):
+        locked_tarea = _lock_task(tarea, storage)
+        _raise_si_anulada(locked_tarea)
+        validate_closure_requirements(locked_tarea)
         transition = transition_task(
-            tarea,
+            locked_tarea,
             Tarea.Estado.CERRADA,
             usuario,
             "APROBAR_CIERRE",
             comentario,
         )
-        tarea.cierre_completado = True
-        tarea.save(using=storage.alias, update_fields=["cierre_completado"])
+        locked_tarea.cierre_completado = True
+        locked_tarea.save(using=storage.alias, update_fields=["cierre_completado"])
         TareaCierre.objects.using(storage.alias).create(
-            tarea=tarea,
+            tarea=locked_tarea,
             usuario=usuario,
             resultado=TareaCierre.Resultado.APROBADO,
             comentario=comentario,
         )
+        tarea.estado = locked_tarea.estado
+        tarea.cierre_completado = locked_tarea.cierre_completado
     emit_task_event(
         tarea=tarea,
         event="aprobacion_cierre",
@@ -190,7 +210,6 @@ def approve_closure(tarea, usuario, comentario=""):
 
 
 def reject_closure(tarea, usuario, comentario=""):
-    _raise_si_anulada(tarea)
     storage = _django_task_storage(tarea)
     with transaction.atomic(using=storage.alias):
         transition = transition_task(
@@ -231,42 +250,46 @@ def annul_task(tarea, usuario, motivo=""):
     Registra la acción ANULAR en TareaTransicion (auditoría). No crea snapshot para
     restauración de estado (ya no es necesario: el estado nunca cambia).
     """
-    if tarea.anulada:
-        raise ValidationError("La tarea ya está anulada.")
-    if tarea.estado == Tarea.Estado.BORRADOR:
-        raise ValidationError("Una tarea en borrador no puede anularse.")
     storage = _django_task_storage(tarea)
     with transaction.atomic(using=storage.alias):
-        tarea.anulada = True
-        tarea.save(using=storage.alias, update_fields=["anulada"])
+        locked_tarea = _lock_task(tarea, storage)
+        if locked_tarea.anulada:
+            raise ValidationError("La tarea ya está anulada.")
+        if locked_tarea.estado == Tarea.Estado.BORRADOR:
+            raise ValidationError("Una tarea en borrador no puede anularse.")
+        locked_tarea.anulada = True
+        locked_tarea.save(using=storage.alias, update_fields=["anulada"])
         TareaTransicion.objects.using(storage.alias).create(
-            tarea=tarea,
-            estado_origen=tarea.estado,
-            estado_destino=tarea.estado,
+            tarea=locked_tarea,
+            estado_origen=locked_tarea.estado,
+            estado_destino=locked_tarea.estado,
             accion_evento="ANULAR",
             usuario=usuario,
             motivo=motivo,
         )
+        tarea.anulada = locked_tarea.anulada
     _emit_hierarchy_event(tarea, usuario, "anulacion", "Tarea anulada", "La tarea fue anulada.")
     return tarea
 
 
 def reactivate_task(tarea, usuario, motivo=""):
     """Reactiva la tarea poniendo `anulada=False`; NO restaura ni cambia el estado."""
-    if not tarea.anulada:
-        raise ValidationError("La tarea no está anulada.")
     storage = _django_task_storage(tarea)
     with transaction.atomic(using=storage.alias):
-        tarea.anulada = False
-        tarea.save(using=storage.alias, update_fields=["anulada"])
+        locked_tarea = _lock_task(tarea, storage)
+        if not locked_tarea.anulada:
+            raise ValidationError("La tarea no está anulada.")
+        locked_tarea.anulada = False
+        locked_tarea.save(using=storage.alias, update_fields=["anulada"])
         TareaTransicion.objects.using(storage.alias).create(
-            tarea=tarea,
-            estado_origen=tarea.estado,
-            estado_destino=tarea.estado,
+            tarea=locked_tarea,
+            estado_origen=locked_tarea.estado,
+            estado_destino=locked_tarea.estado,
             accion_evento="REACTIVAR",
             usuario=usuario,
             motivo=motivo,
         )
+        tarea.anulada = locked_tarea.anulada
     _emit_hierarchy_event(
         tarea,
         usuario,

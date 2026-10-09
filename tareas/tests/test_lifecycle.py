@@ -1,7 +1,10 @@
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
+from django.db.models.query import QuerySet
 from django.test import TestCase
 
 from access_control.models import Empresa
@@ -203,3 +206,74 @@ class Phase2LifecycleTest(TestCase):
         transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
         annul_task(task, self.authorizer)
         self.assertFalse(TareaAnulacionSnapshot.objects.filter(tarea=task).exists())
+
+    def test_transition_uses_locked_task_state_not_stale_instance(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        stale_task = Tarea.objects.get(pk=task.pk)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+
+        with self.assertRaises(ValidationError):
+            transition_task(
+                stale_task,
+                Tarea.Estado.GESTION,
+                self.creator,
+                "INICIAR_GESTION",
+            )
+
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.GESTION)
+        self.assertEqual(
+            TareaTransicion.objects.filter(tarea=task).count(),
+            2,
+        )
+
+    def test_transition_acquires_row_lock(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+
+        original_select_for_update = QuerySet.select_for_update
+        with patch.object(
+            QuerySet,
+            "select_for_update",
+            autospec=True,
+            side_effect=original_select_for_update,
+        ) as select_for_update:
+            transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+
+        self.assertTrue(select_for_update.called)
+
+    def test_transition_rolls_back_state_and_history_together(self):
+        task = self.make_task()
+        task.publicar(self.creator)
+        transition_task(task, Tarea.Estado.GESTION, self.creator, "INICIAR_GESTION")
+        transitions_before = TareaTransicion.objects.filter(tarea=task).count()
+
+        original_create = QuerySet.create
+
+        def create_then_fail(**kwargs):
+            original_create(self=kwargs.pop("_queryset"), **kwargs)
+            raise IntegrityError("forced lifecycle rollback")
+
+        with patch(
+            "django.db.models.query.QuerySet.create",
+            autospec=True,
+            side_effect=lambda queryset, **kwargs: create_then_fail(
+                _queryset=queryset,
+                **kwargs,
+            ),
+        ):
+            with self.assertRaises(IntegrityError):
+                transition_task(
+                    task,
+                    Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                    self.responsible,
+                    "MARCAR_100",
+                )
+
+        task.refresh_from_db()
+        self.assertEqual(task.estado, Tarea.Estado.GESTION)
+        self.assertEqual(
+            TareaTransicion.objects.filter(tarea=task).count(),
+            transitions_before,
+        )
