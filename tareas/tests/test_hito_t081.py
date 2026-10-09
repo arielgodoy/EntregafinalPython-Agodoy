@@ -83,7 +83,8 @@ class HitoT081Tests(TestCase):
         self._login_with_company(self.owner)
         content = self.client.get(self._url()).content.decode()
         start = content.index(f'id="verCumplimientoHitoModal-{self.hito.pk}"')
-        modal = content[start:content.index("id=\"crearHitoModal\"", start)]
+        next_modal = content.find('<div class="modal fade"', start + 1)
+        modal = content[start:next_modal if next_modal != -1 else len(content)]
         self.assertIn("Hito pendiente T081", modal)
         self.assertIn("Completado", modal)
         self.assertIn("t081_owner", modal)

@@ -153,14 +153,18 @@ class ParticipantAdministrationViewTests(TestCase):
     def test_family_resolver_errors_do_not_lookup_default_tasks(self):
         for error in (RuntimeError("sensitive detail"), ValueError("sensitive detail")):
             with self.subTest(error=type(error).__name__), patch(
-                "tareas.services.participant_storage.get_tarea_connection", side_effect=error,
+                "tareas.services.participant_storage.resolve_operational_backend",
+                side_effect=error,
             ), patch("tareas.views.Tarea.objects.get", side_effect=AssertionError("default fallback")):
                 response = self.client.post(self.url("vincular_participante", self.new.pk))
                 self.assertEqual(response.status_code, 503)
                 self.assertNotIn("sensitive", response.content.decode())
 
     def test_edit_resolver_failure_is_fail_closed(self):
-        with patch("tareas.services.task_storage.get_tarea_connection", side_effect=RuntimeError("sensitive detail")):
+        with patch(
+            "tareas.services.task_storage.resolve_operational_backend",
+            side_effect=RuntimeError("sensitive detail"),
+        ):
             response = self.client.post(self.url("editar_tarea"), self.edit_data())
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("sensitive", response.content.decode())
