@@ -1,11 +1,13 @@
 from django.db import connections
 
-from settings.models import SettingsMySQLConnection
 from settings.services.legacy_database_names import get_legacy_database_name
 from settings.services.mysql_connections import open_mysql_connection
 
 from ..consultassql import build_maestroempresa_by_codigo_query
-from ..services.connection_roles import get_gestiondte_connection
+from ..services.connection_roles import (
+    get_gestiondte_connection,
+    get_gestiondte_mysql_connection,
+)
 
 
 def _row_to_dict(row):
@@ -47,7 +49,7 @@ def get_maestroempresa_by_codigo(codigo):
     if role_config["type"] != "MYSQL_CONFIG":
         return None
 
-    connection_config = SettingsMySQLConnection.objects.get(pk=role_config["connection_id"])
+    connection_config = get_gestiondte_mysql_connection("servercontabilidad")
     with open_mysql_connection(connection_config, database_name=schema_name) as connection:
         cursor = connection.cursor()
         try:

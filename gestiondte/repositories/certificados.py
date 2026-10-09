@@ -14,9 +14,11 @@ from gestiondte.consultassql import (
     build_certificado_update_query,
 )
 from gestiondte.models import CertificadoSII
-from gestiondte.services.connection_roles import get_gestiondte_connection
+from gestiondte.services.connection_roles import (
+    get_gestiondte_connection,
+    get_gestiondte_mysql_connection,
+)
 from gestiondte.utils.crypto import decrypt_password
-from settings.models import SettingsMySQLConnection
 from settings.services.mysql_connections import open_mysql_connection
 
 
@@ -104,9 +106,7 @@ class CertificadoSIIRepository:
         return self.role_config["alias"]
 
     def _mysql_connection(self):
-        config = SettingsMySQLConnection.objects.get(
-            pk=self.role_config["connection_id"]
-        )
+        config = get_gestiondte_mysql_connection(self.role)
         database_name = self.role_config.get("database_name")
         if not database_name:
             raise ValueError("serverbasedte no tiene database_name configurado.")

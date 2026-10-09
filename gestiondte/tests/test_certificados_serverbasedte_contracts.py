@@ -377,12 +377,11 @@ class CertificadoRepositoryMysqlContractTests(SimpleTestCase):
         self.assertEqual(django_record.valido_hasta, mysql_record.valido_hasta)
         self.assertEqual(django_record.valido_hasta.timestamp(), mysql_record.valido_hasta.timestamp())
 
-    def _repository(self, connection_id=17, database_name="serverbasedte_db"):
+    def _repository(self, database_name="serverbasedte_db"):
         resolver = patch(
             "gestiondte.repositories.certificados.get_gestiondte_connection",
             return_value={
                 "type": "MYSQL_CONFIG",
-                "connection_id": connection_id,
                 "database_name": database_name,
             },
         )
@@ -391,7 +390,7 @@ class CertificadoRepositoryMysqlContractTests(SimpleTestCase):
         repository = CertificadoSIIRepository()
         config = MagicMock(name="mysql_config")
         config_patch = patch(
-            "gestiondte.repositories.certificados.SettingsMySQLConnection.objects.get",
+            "gestiondte.repositories.certificados.get_gestiondte_mysql_connection",
             return_value=config,
         )
         config_patch.start()
