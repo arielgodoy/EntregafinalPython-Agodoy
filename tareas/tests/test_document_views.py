@@ -25,6 +25,7 @@ class DocumentViewsTests(TestCase):
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
         )
         assign_permission(cls.usuario, cls.empresa, "Tareas - Documentos y evidencia", modificar=True)
+        assign_permission(cls.usuario, cls.empresa, "Tareas", ingresar=True)
         cls.tarea = create_tarea(cls.empresa, cls.usuario, titulo="Tarea documentos")
         cls.tarea_externa = create_tarea(cls.otra_empresa, cls.usuario, titulo="Documento externo")
 

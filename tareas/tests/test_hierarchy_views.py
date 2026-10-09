@@ -104,7 +104,8 @@ class HierarchyViewsTests(TestCase):
         response = self.get_detail(self.make_task("Sin jerarquía"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Jerarquía")
+        self.assertContains(response, "Sin jerarquía")
+        self.assertNotContains(response, 'id="tareas-jerarquia-titulo"')
 
     def test_tarea_anulada_directamente_se_representa(self):
         task = self.make_task("Tarea anulada")

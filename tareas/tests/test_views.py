@@ -207,9 +207,9 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         tarea = self._crear_tarea()
         self._login()
         response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
-        self.assertContains(response, "Fecha de asignación")
-        self.assertContains(response, "Fecha tope")
-        self.assertContains(response, "Fecha de cumplimiento")
+        self.assertContains(response, "Asignación")
+        self.assertContains(response, "Tope")
+        self.assertContains(response, "Cumplimiento")
         self.assertContains(response, "—")
 
     def test_detalle_muestra_configuracion_de_cierre_en_lectura(self):
@@ -276,9 +276,9 @@ class CrearEditarBorradoresTests(TareasViewsBase):
         tarea.save(update_fields=["fecha_cumplimiento"])
         self._login()
         response = self.client.get(reverse("tareas:detalle_tarea", args=[tarea.pk]))
-        self.assertContains(response, "Fecha de publicación")
-        self.assertContains(response, "Fecha de asignación")
-        self.assertContains(response, "Fecha de cumplimiento")
+        self.assertContains(response, "Publicación")
+        self.assertContains(response, "Asignación")
+        self.assertContains(response, "Cumplimiento")
 
     def test_crear_sin_permiso_devuelve_403(self):
         self._permiso(self.vista_tareas, crear=False, ingresar=False)
