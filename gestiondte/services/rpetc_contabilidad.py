@@ -18,16 +18,18 @@ from settings.services.mysql_connections import open_mysql_connection
 
 from .connection_roles import (
     GestionDTEConnectionError,
+    get_gestiondte_connection,
     get_gestiondte_mysql_connection,
 )
+from ..utils.sql_identifiers import validate_mysql_identifier
 
 
 logger = logging.getLogger(__name__)
 
 TIPO_DTE_LEGACY = {"33": "FC"}
 CUENTA_CONTABLE_CESIONES = "23100026"
-_SCHEMA_RE = re.compile(r"^[0-9]{2}$")
 _FOLIO_TOKEN_RE = re.compile(r"\d+")
+_SCHEMA_RE = re.compile(r"^[0-9]{2}$")
 _SELECT_FIELDS = (
     "rutctacte, tipodocumento, numerodocumento, monto, dh, fecha, "
     "fechadocumento, fechavencimiento, glosacontable, creadopor, "
@@ -76,8 +78,22 @@ def _validar_codigo_empresa(codigo: Any) -> str:
     return codigo
 
 
-def _schema_empresa(codigo: Any) -> str:
-    return f"eltit_conta{_validar_codigo_empresa(codigo)}"
+def _accounting_schema() -> str:
+    try:
+        role_config = get_gestiondte_connection("servercontabilidad")
+    except (GestionDTEConnectionError, ObjectDoesNotExist) as exc:
+        raise ContabilidadLegacyError(
+            "No existe configuración de schema legacy contable activa."
+        ) from exc
+    try:
+        return validate_mysql_identifier(
+            role_config.get("database_name"),
+            label="esquema de contabilidad",
+        )
+    except ValueError as exc:
+        raise ContabilidadLegacyError(
+            "El rol servercontabilidad no tiene un schema contable válido."
+        ) from exc
 
 
 def normalizar_rut_legacy(rut: Any, dv: Any) -> str | None:
@@ -264,7 +280,7 @@ def _query_movimientos(empresa_codigo: str, keys: set[tuple[str, str, str, str, 
     if not keys:
         return []
     config = _mysql_connection_config()
-    schema = _schema_empresa(empresa_codigo)
+    schema = _accounting_schema()
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
     params: list[str] = []
@@ -287,7 +303,7 @@ def _query_factoring_glosa_candidates(
     if not candidates:
         return []
     config = _mysql_connection_config()
-    schema = _schema_empresa(empresa_codigo)
+    schema = _accounting_schema()
     table = f"`{schema}`.`movimientoscontables`"
     clauses = []
     params: list[Any] = []

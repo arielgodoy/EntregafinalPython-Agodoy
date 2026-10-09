@@ -27,6 +27,7 @@ from .connection_roles import (
     get_gestiondte_connection,
     get_gestiondte_mysql_connection,
 )
+from ..utils.sql_identifiers import validate_mysql_identifier
 
 
 class RPETCRepositoryConfigurationError(RuntimeError):
@@ -486,7 +487,7 @@ def _field_for_name(model: type[Model], name: str):
 
 
 def _quote_mysql(identifier: str) -> str:
-    return f"`{identifier.replace('`', '``')}`"
+    return f"`{validate_mysql_identifier(identifier, label='identificador SQL')}`"
 
 
 def _where(model: type[Model], values: Mapping[str, Any]) -> tuple[str, tuple[Any, ...]]:

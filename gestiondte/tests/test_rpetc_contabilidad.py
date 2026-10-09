@@ -104,6 +104,14 @@ def _mysql_config(db_name="eltit_conta", host="h"):
 
 
 class RPETCLegacyServiceTest(SimpleTestCase):
+    def setUp(self):
+        self.accounting_role_patcher = patch(
+            "gestiondte.services.rpetc_contabilidad.get_gestiondte_connection",
+            return_value={"database_name": "eltit_conta"},
+        )
+        self.accounting_role_patcher.start()
+        self.addCleanup(self.accounting_role_patcher.stop)
+
     def test_schema_rcv_es_central_y_no_depende_de_empresa(self):
         self.assertEqual(LEGACY_RCV_SCHEMA, "eltit_conta")
 
@@ -153,10 +161,12 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         self.assertFalse(connection.committed)
 
     @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_connection")
     @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
-    def test_b1_a017_resuelve_rol_y_conserva_schema_empresa(self, open_connection, get_role):
+    def test_b1_a017_usa_schema_del_rol(self, open_connection, get_role_config, get_role):
         config = _mysql_config()
         get_role.return_value = config
+        get_role_config.return_value = {"database_name": "eltit_conta"}
         cursor = LegacyCursor([
             ("0763761428", "FC", "0000002587", 1764799.0, "H", None, None, None, "contabilizada", "u", None, None, "DB", "23100026"),
         ])
@@ -168,14 +178,16 @@ class RPETCLegacyServiceTest(SimpleTestCase):
 
         get_role.assert_called_once_with("servercontabilidad")
         open_connection.assert_called_once_with(config)
-        self.assertIn("`eltit_conta09`.`movimientoscontables`", cursor.sql)
+        self.assertIn("`eltit_conta`.`movimientoscontables`", cursor.sql)
         self.assertEqual(rows[0]["numerodocumento"], "0000002587")
 
     @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_connection")
     @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
-    def test_b1_a018_resuelve_rol_y_conserva_query_de_glosa(self, open_connection, get_role):
+    def test_b1_a018_usa_schema_del_rol_en_glosa(self, open_connection, get_role_config, get_role):
         config = _mysql_config()
         get_role.return_value = config
+        get_role_config.return_value = {"database_name": "eltit_conta"}
         cursor = LegacyCursor([])
         connection = MagicMock()
         connection.cursor.return_value.__enter__.return_value = cursor
@@ -185,14 +197,15 @@ class RPETCLegacyServiceTest(SimpleTestCase):
 
         get_role.assert_called_once_with("servercontabilidad")
         open_connection.assert_called_once_with(config)
-        self.assertIn("`eltit_conta10`.`movimientoscontables`", cursor.sql)
+        self.assertIn("`eltit_conta`.`movimientoscontables`", cursor.sql)
         self.assertEqual(cursor.params[:4], ["23100026", "D", "DB", "DB"])
         self.assertEqual(rows, [])
 
     @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_connection")
     @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
-    def test_b1_cambio_de_configuracion_de_rol_cambia_conexion_sin_cambiar_sql(
-        self, open_connection, get_role
+    def test_b1_cambio_de_configuracion_de_rol_cambia_conexion_y_schema(
+        self, open_connection, get_role_config, get_role
     ):
         first_config = _mysql_config(host="conta-one")
         second_config = _mysql_config(host="conta-two")
@@ -203,6 +216,10 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         first_connection.cursor.return_value.__enter__.return_value = first_cursor
         second_connection.cursor.return_value.__enter__.return_value = second_cursor
         get_role.side_effect = [first_config, second_config]
+        get_role_config.side_effect = [
+            {"database_name": "eltit_conta_one"},
+            {"database_name": "eltit_conta_two"},
+        ]
         open_connection.side_effect = [
             nullcontext(first_connection),
             nullcontext(second_connection),
@@ -216,7 +233,7 @@ class RPETCLegacyServiceTest(SimpleTestCase):
             [call.args[0] for call in open_connection.call_args_list],
             [first_config, second_config],
         )
-        self.assertEqual(first_cursor.sql, second_cursor.sql)
+        self.assertNotEqual(first_cursor.sql, second_cursor.sql)
         self.assertEqual(first_cursor.params, second_cursor.params)
         self.assertEqual(get_role.call_args_list, [
             call("servercontabilidad"),
@@ -232,6 +249,23 @@ class RPETCLegacyServiceTest(SimpleTestCase):
 
         with self.assertRaises(ContabilidadLegacyError):
             _query_movimientos("09", {("0763761428", "FC", "0000002587", "H", "23100026")})
+
+        open_connection.assert_not_called()
+
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.get_gestiondte_mysql_connection")
+    @patch("gestiondte.services.rpetc_contabilidad.open_mysql_connection")
+    def test_b1_schema_invalido_falla_antes_de_abrir_conexion(
+        self, open_connection, get_role, get_role_config
+    ):
+        get_role.return_value = _mysql_config()
+        get_role_config.return_value = {"database_name": "conta;drop"}
+
+        with self.assertRaises(ContabilidadLegacyError):
+            _query_movimientos(
+                "09",
+                {("0763761428", "FC", "0000002587", "H", "23100026")},
+            )
 
         open_connection.assert_not_called()
 
@@ -390,7 +424,7 @@ class RPETCLegacyServiceTest(SimpleTestCase):
         self.assertTrue(result[1]["contabilizacion"]["monto_coincide"])
         self.assertEqual(connection.cursor_obj.params.count("0000002587"), 4)
         self.assertNotIn("LIKE", connection.cursor_obj.sql.upper())
-        self.assertIn("eltit_conta09", connection.cursor_obj.sql)
+        self.assertIn("eltit_conta", connection.cursor_obj.sql)
         connect.assert_called_once()
         self.assertTrue(connection.closed)
 

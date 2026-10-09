@@ -1,12 +1,8 @@
-import re
-
-
-_DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+from .utils.sql_identifiers import validate_mysql_identifier
 
 
 def build_maestroempresa_by_codigo_query(schema_name, codigo):
-    if not isinstance(schema_name, str) or not _DATABASE_NAME_PATTERN.fullmatch(schema_name):
-        raise ValueError("El esquema de contabilidad no es válido.")
+    validate_mysql_identifier(schema_name, label="esquema de contabilidad")
     return (
         f"SELECT codigoempresa, nombre, rut, rutenviasii "
         f"FROM `{schema_name}`.maestroempresas "
@@ -38,7 +34,10 @@ def build_certificado_list_query(empresa_codigo, pk=None):
 
 
 def build_certificado_insert_query(values):
-    fields = tuple(values)
+    fields = tuple(
+        validate_mysql_identifier(field, label="columna de certificado")
+        for field in values
+    )
     placeholders = ", ".join("%s" for _ in fields)
     return (
         f"INSERT INTO gestiondte_certificadosii ({', '.join(fields)}) "
@@ -48,11 +47,15 @@ def build_certificado_insert_query(values):
 
 
 def build_certificado_update_query(pk, empresa_codigo, values):
-    assignments = ", ".join(f"{field} = %s" for field in values)
+    fields = tuple(
+        validate_mysql_identifier(field, label="columna de certificado")
+        for field in values
+    )
+    assignments = ", ".join(f"{field} = %s" for field in fields)
     return (
         f"UPDATE gestiondte_certificadosii SET {assignments} "
         "WHERE id = %s AND empresa_codigo = %s",
-        tuple(values.values()) + (pk, empresa_codigo),
+        tuple(values[field] for field in fields) + (pk, empresa_codigo),
     )
 
 

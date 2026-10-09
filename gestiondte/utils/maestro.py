@@ -1,6 +1,5 @@
 from django.db import connections
 
-from settings.services.legacy_database_names import get_legacy_database_name
 from settings.services.mysql_connections import open_mysql_connection
 
 from ..consultassql import build_maestroempresa_by_codigo_query
@@ -32,8 +31,10 @@ def get_maestroempresa_by_codigo(codigo):
     if stripped and stripped != codigo_str:
         candidates.append(stripped)
 
-    schema_name = get_legacy_database_name("contabilidad", None)
     role_config = get_gestiondte_connection("servercontabilidad")
+    schema_name = role_config.get("database_name")
+    if not schema_name:
+        raise ValueError("El rol servercontabilidad no tiene database_name configurado.")
 
     if role_config["type"] == "DJANGO":
         connection = connections[role_config["alias"]]

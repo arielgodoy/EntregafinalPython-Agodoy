@@ -15,15 +15,24 @@ class MaestroEmpresaQueryTests(SimpleTestCase):
         self.assertIn("LIMIT 1", query)
         self.assertEqual(params, ("09",))
 
+    def test_dynamic_sql_identifiers_are_rejected(self):
+        for unsafe in ("", "cliente conta", "cliente`conta", "cliente.conta", "cliente;DROP"):
+            with self.subTest(unsafe=unsafe):
+                with self.assertRaises(ValueError):
+                    build_maestroempresa_by_codigo_query(unsafe, "09")
+
+        with self.assertRaises(ValueError):
+            from gestiondte.consultassql import build_certificado_insert_query
+
+            build_certificado_insert_query({"archivo` = %s --": "value"})
+
     @patch("gestiondte.utils.maestro.open_mysql_connection")
     @patch("gestiondte.utils.maestro.get_gestiondte_mysql_connection")
     @patch("gestiondte.utils.maestro.get_gestiondte_connection")
-    @patch("gestiondte.utils.maestro.get_legacy_database_name")
     def test_mysql_role_uses_global_database_without_fallback(
-        self, database_name, get_role, get_mysql_config, open_connection
+        self, get_role, get_mysql_config, open_connection
     ):
-        database_name.return_value = "cliente_conta"
-        get_role.return_value = {"type": "MYSQL_CONFIG"}
+        get_role.return_value = {"type": "MYSQL_CONFIG", "database_name": "cliente_conta"}
         config = MagicMock()
         get_mysql_config.return_value = config
         cursor = MagicMock()
@@ -35,7 +44,6 @@ class MaestroEmpresaQueryTests(SimpleTestCase):
         result = get_maestroempresa_by_codigo("09")
 
         self.assertEqual(result["codigo"], "09")
-        database_name.assert_called_once_with("contabilidad", None)
         get_role.assert_called_once_with("servercontabilidad")
         get_mysql_config.assert_called_once_with("servercontabilidad")
         open_connection.assert_called_once_with(config, database_name="cliente_conta")
@@ -49,11 +57,10 @@ class MaestroEmpresaQueryTests(SimpleTestCase):
     )
     @patch(
         "gestiondte.utils.maestro.get_gestiondte_connection",
-        return_value={"type": "MYSQL_CONFIG"},
+        return_value={"type": "MYSQL_CONFIG", "database_name": "cliente_conta"},
     )
-    @patch("gestiondte.utils.maestro.get_legacy_database_name", return_value="cliente_conta")
     def test_mysql_resolver_error_does_not_open_connection(
-        self, _database_name, get_role, get_mysql_config, open_connection
+        self, get_role, get_mysql_config, open_connection
     ):
         with self.assertRaises(RuntimeError):
             get_maestroempresa_by_codigo("09")
@@ -64,8 +71,7 @@ class MaestroEmpresaQueryTests(SimpleTestCase):
 
     @patch("gestiondte.utils.maestro.open_mysql_connection")
     @patch("gestiondte.utils.maestro.get_gestiondte_connection")
-    @patch("gestiondte.utils.maestro.get_legacy_database_name", return_value="cliente_conta")
-    def test_role_error_does_not_scan_other_connections(self, get_database_name, get_role, open_connection):
+    def test_role_error_does_not_scan_other_connections(self, get_role, open_connection):
         get_role.side_effect = RuntimeError("role unavailable")
 
         with self.assertRaises(RuntimeError):
