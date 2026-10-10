@@ -135,8 +135,8 @@ class MiniSQLConnection:
 class MiniTaskParityTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.company = Empresa.objects.create(codigo="MINIPARITY")
-        cls.other = Empresa.objects.create(codigo="MINIOTHER")
+        cls.company = Empresa.objects.create(codigo="00")
+        cls.other = Empresa.objects.create(codigo="02")
         cls.responsible = User.objects.create_user("mini-responsible", email="responsible@example.test")
         cls.assigned = User.objects.create_user("mini-assigned", email="assigned@example.test")
         cls.supervisor = User.objects.create_user("mini-supervisor", email="supervisor@example.test")

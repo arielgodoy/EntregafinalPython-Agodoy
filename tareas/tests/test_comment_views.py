@@ -92,7 +92,7 @@ class CommentWebUrlTests(SimpleTestCase):
 class CommentsMysqlHttpGuardTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="C100MYSQL", descripcion="Empresa Comments MySQL")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa Comments MySQL")
         cls.usuario = create_user(username="comments-mysql-http")
         assign_permission(cls.usuario, cls.empresa, "Tareas", ingresar=True, crear=True)
         cls.tarea = create_tarea(
@@ -171,7 +171,7 @@ class CommentReadViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         configure_task_storage()
-        cls.empresa = create_empresa(codigo="C100R", descripcion="Empresa Lectura Web")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa Lectura Web")
         cls.lector = create_user(username="reading-web-user")
         cls.autor = create_user(username="reading-web-author")
         cls.supervisor = create_user(username="reading-web-supervisor")

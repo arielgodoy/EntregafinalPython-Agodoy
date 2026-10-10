@@ -18,7 +18,7 @@ from tareas.services.detail_storage import (
 class MySQLDetailStorageTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="133MYSQL", descripcion="Empresa MySQL")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa MySQL")
         cls.user = User.objects.create_user("t133-mysql-user", password="pass")
         cls.vista_tareas = Vista.objects.create(nombre="Tareas")
         Permiso.objects.create(
@@ -28,7 +28,7 @@ class MySQLDetailStorageTests(TestCase):
             ingresar=True,
         )
         cls.connection = SettingsMySQLConnection.objects.create(
-            empresa=Empresa.objects.create(codigo="00", descripcion="Catalogo"),
+            empresa=cls.empresa,
             nombre_logico="mysql-detail-test",
             host="mysql.example.test",
             user="user",
@@ -225,8 +225,8 @@ class MySQLDetailStorageTests(TestCase):
 class MySQLWriteGuardTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="133GUARD", descripcion="Guard")
-        cls.catalog = Empresa.objects.create(codigo="00", descripcion="Catalogo")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Guard")
+        cls.catalog = cls.empresa
         cls.user = User.objects.create_user("t133-guard-user", password="pass")
         vista = Vista.objects.create(nombre="Tareas")
         Permiso.objects.create(usuario=cls.user, empresa=cls.empresa, vista=vista, ingresar=True, modificar=True)

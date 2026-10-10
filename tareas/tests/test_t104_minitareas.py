@@ -32,11 +32,11 @@ from tareas.tests.factories import activate_company, assign_permission, simple_j
 class MiniTareaT104Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="T104", descripcion="T104")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="T104")
         TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
         )
-        cls.otra_empresa = Empresa.objects.create(codigo="T104B", descripcion="T104 B")
+        cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="T104 B")
         cls.creador = User.objects.create_user("t104_creador", email="creador@example.test")
         cls.responsable = User.objects.create_user("t104_responsable", email="responsable@example.test")
         cls.asignado = User.objects.create_user("t104_asignado", email="asignado@example.test")

@@ -371,8 +371,8 @@ class TareaConnectionRoleFormTests(TestCase):
 class TareaConnectionRoleViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="connection-user", password="pass")
-        self.empresa = Empresa.objects.create(codigo="09", descripcion="Empresa vista")
-        self.catalog_empresa = Empresa.objects.create(codigo="00", descripcion="Catálogo vista")
+        self.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa vista")
+        self.catalog_empresa = self.empresa
         self.catalog_connection = SettingsMySQLConnection.objects.create(
             empresa=self.catalog_empresa,
             nombre_logico="catalogo_vista",

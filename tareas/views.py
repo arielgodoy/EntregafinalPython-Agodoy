@@ -1,7 +1,7 @@
 """Vistas de la app tareas (Tareas Internas).
 
 Patrones vigentes reutilizados:
-- VerificarPermisoMixin (ICMEAS) + LoginRequiredMixin (access_control/views.py).
+- LoginRequiredMixin + VerificarPermisoMixin (ICMEAS).
 - Empresa activa desde request.session["empresa_id"]; nunca desde parámetros.
 - Querysets filtrados por empresa activa (404 si pertenece a otra empresa).
 """
@@ -41,6 +41,76 @@ from access_control.services.permissions import (
     user_has_permission_for_empresa,
 )
 from access_control.views import VerificarPermisoMixin
+
+_MENSAJE_EMPRESA_BASE_00 = (
+    "La planificación de tareas solo funciona en la Empresa Base 00. "
+    "Seleccione esa empresa para continuar."
+)
+_CLAVE_EMPRESA_BASE_00_REQUERIDA = "tareas.empresa_base00.requerida"
+
+
+def _guard_empresa_base_00(request):
+    empresa_id = request.session.get("empresa_id")
+    if not empresa_id:
+        return redirect(reverse("access_control:seleccionar_empresa"))
+
+    if Empresa.objects.using("default").filter(
+        pk=empresa_id,
+        codigo="00",
+    ).exists():
+        return None
+
+    is_ajax = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or request.content_type == "application/json"
+        or "application/json" in request.headers.get("accept", "")
+    )
+    if is_ajax:
+        return JsonResponse(
+            {
+                "success": False,
+                "message_key": _CLAVE_EMPRESA_BASE_00_REQUERIDA,
+            },
+            status=403,
+        )
+
+    messages.warning(
+        request,
+        _MENSAJE_EMPRESA_BASE_00,
+        extra_tags="empresa-switch-toast",
+    )
+    return redirect(reverse("access_control:seleccionar_empresa"))
+
+
+class EmpresaBase00GuardMixin:
+    def dispatch(self, request, *args, **kwargs):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
+        return super().dispatch(request, *args, **kwargs)
+
+
+class TareasVerificarPermisoMixin(VerificarPermisoMixin, EmpresaBase00GuardMixin):
+    crear_permiso_faltante = False
+
+
+class TareasLoginRequiredMixin(LoginRequiredMixin):
+    def handle_no_permission(
+        self,
+        request=None,
+        mensaje="No tienes permiso para esta acción.",
+    ):
+        if request is None:
+            return LoginRequiredMixin.handle_no_permission(self)
+        return VerificarPermisoMixin.handle_no_permission(self, request, mensaje)
+
+
+class TareasLoginVerificarPermisoMixin(
+    TareasLoginRequiredMixin,
+    TareasVerificarPermisoMixin,
+):
+    pass
+
 
 from .forms import (
     AvanceManualForm,
@@ -673,7 +743,7 @@ def _get_operational_similarity_task(task_id, empresa_id):
         ) from exc
 
 
-class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
+class ListarTareasView(TareasLoginVerificarPermisoMixin, ListView):
     model = Tarea
     template_name = "tareas/tarea_lista.html"
     context_object_name = "tareas"
@@ -717,7 +787,7 @@ class ListarTareasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
         return render(request, self.template_name, context)
 
 
-class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareaConnectionRoleView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
     template_name = "tareas/tarea_conexiones_sql.html"
     vista_nombre = "Tareas - Conexiones SQL"
     permiso_requerido = "ingresar"
@@ -773,8 +843,13 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
             "vista_nombre": self.vista_nombre,
         }
 
-    @method_decorator(verificar_permiso(vista_nombre, "ingresar"))
+    @method_decorator(
+        verificar_permiso(vista_nombre, "ingresar", crear_permiso_faltante=False)
+    )
     def get(self, request):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         forms = []
         for role, label, instance in self._role_instances():
             form = TareaConnectionRoleForm(
@@ -785,8 +860,13 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
             forms.append({"role": role, "label": label, "form": form})
         return render(request, self.template_name, self._context(forms))
 
-    @method_decorator(verificar_permiso(vista_nombre, "modificar"))
+    @method_decorator(
+        verificar_permiso(vista_nombre, "modificar", crear_permiso_faltante=False)
+    )
     def post(self, request):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         forms = []
         for role, label, instance in self._role_instances():
             form = TareaConnectionRoleForm(
@@ -808,10 +888,20 @@ class TareaConnectionRoleView(VerificarPermisoMixin, LoginRequiredMixin, View):
 
 
 @method_decorator(
-    verificar_permiso("Tareas - Conexiones SQL", "supervisor"),
+    verificar_permiso(
+        "Tareas - Conexiones SQL",
+        "supervisor",
+        crear_permiso_faltante=False,
+    ),
     name="dispatch",
 )
 class BaseTareasSchemaInstallView(LoginRequiredMixin, View):
+    def dispatch(self, request, *args, **kwargs):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
+        return super().dispatch(request, *args, **kwargs)
+
     def _render_connection_roles(
         self,
         request,
@@ -995,7 +1085,7 @@ class BaseTareasSchemaInstallView(LoginRequiredMixin, View):
         return redirect(reverse("tareas:conexiones_sql"))
 
 
-class MisTareasDashboardView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class MisTareasDashboardView(TareasLoginVerificarPermisoMixin, View):
     template_name = "tareas/mis_tareas.html"
     vista_nombre = "Tareas - Dashboard personal"
     permiso_requerido = "ingresar"
@@ -1056,13 +1146,15 @@ def _serialize_dashboard_value(value):
     return value
 
 
-class TareasDashboardGeneralView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareasDashboardGeneralView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "supervisor"
-    verificar_vicmeas_en_dispatch = False
     crear_permiso_faltante = False
 
     def get(self, request):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         context = get_general_dashboard(
             user=request.user,
             filters=_dashboard_filters(request),
@@ -1072,13 +1164,15 @@ class TareasDashboardGeneralView(VerificarPermisoMixin, LoginRequiredMixin, View
         return render(request, "tareas/dashboard_general.html", context)
 
 
-class TareasDashboardEmpresaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareasDashboardEmpresaView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "supervisor"
-    verificar_vicmeas_en_dispatch = False
     crear_permiso_faltante = False
 
     def get(self, request, empresa_id):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         try:
             context = get_company_dashboard(
                 user=request.user,
@@ -1090,13 +1184,15 @@ class TareasDashboardEmpresaView(VerificarPermisoMixin, LoginRequiredMixin, View
         return render(request, "tareas/dashboard_empresa.html", context)
 
 
-class TareasDashboardDepartamentoView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareasDashboardDepartamentoView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "supervisor"
-    verificar_vicmeas_en_dispatch = False
     crear_permiso_faltante = False
 
     def get(self, request, empresa_id, departamento_id):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         try:
             context = get_department_dashboard(
                 user=request.user,
@@ -1109,13 +1205,15 @@ class TareasDashboardDepartamentoView(VerificarPermisoMixin, LoginRequiredMixin,
         return render(request, "tareas/dashboard_departamento.html", context)
 
 
-class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareasDashboardUsuarioView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "supervisor"
-    verificar_vicmeas_en_dispatch = False
     crear_permiso_faltante = False
 
     def get(self, request, empresa_id, usuario_id):
+        response = _guard_empresa_base_00(request)
+        if response is not None:
+            return response
         try:
             context = get_user_dashboard(
                 user=request.user,
@@ -1128,7 +1226,7 @@ class TareasDashboardUsuarioView(VerificarPermisoMixin, LoginRequiredMixin, View
         return render(request, "tareas/dashboard_usuario.html", context)
 
 
-class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
+class DetalleTareaView(TareasLoginVerificarPermisoMixin, DetailView):
     model = Tarea
     template_name = "tareas/tarea_detalle.html"
     context_object_name = "tarea"
@@ -1399,7 +1497,9 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
             context.setdefault("documentos_tab_activo", False)
         return context
 
-    @method_decorator(verificar_permiso("Tareas", "modificar"))
+    @method_decorator(
+        verificar_permiso("Tareas", "modificar", crear_permiso_faltante=False)
+    )
     def post(self, request, *args, **kwargs):
         task_id = kwargs["pk"]
         empresa_id = _get_empresa_id(request)
@@ -1422,7 +1522,7 @@ class DetalleTareaView(VerificarPermisoMixin, LoginRequiredMixin, DetailView):
         return self.render_to_response(context)
 
 
-class ReprogramarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class ReprogramarTareaView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -1498,8 +1598,7 @@ class MiniTareaEndpointMixin:
 
 
 class CrearMiniTareaView(
-    VerificarPermisoMixin,
-    LoginRequiredMixin,
+    TareasLoginVerificarPermisoMixin,
     MiniTareaEndpointMixin,
     View,
 ):
@@ -1524,8 +1623,7 @@ class CrearMiniTareaView(
 
 
 class CerrarMiniTareaView(
-    VerificarPermisoMixin,
-    LoginRequiredMixin,
+    TareasLoginVerificarPermisoMixin,
     MiniTareaEndpointMixin,
     View,
 ):
@@ -1567,8 +1665,7 @@ class CerrarMiniTareaView(
 
 
 class ReabrirMiniTareaView(
-    VerificarPermisoMixin,
-    LoginRequiredMixin,
+    TareasLoginVerificarPermisoMixin,
     MiniTareaEndpointMixin,
     View,
 ):
@@ -1593,8 +1690,7 @@ class ReabrirMiniTareaView(
 
 
 class EliminarMiniTareaView(
-    VerificarPermisoMixin,
-    LoginRequiredMixin,
+    TareasLoginVerificarPermisoMixin,
     MiniTareaEndpointMixin,
     View,
 ):
@@ -1615,8 +1711,7 @@ class EliminarMiniTareaView(
 
 
 class HistorialMiniTareaView(
-    VerificarPermisoMixin,
-    LoginRequiredMixin,
+    TareasLoginVerificarPermisoMixin,
     MiniTareaEndpointMixin,
     View,
 ):
@@ -1645,7 +1740,7 @@ class HistorialMiniTareaView(
         )
 
 
-class TareaComentariosView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareaComentariosView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     crear_permiso_faltante = False
 
@@ -2032,7 +2127,7 @@ class RestaurarComentarioView(_CambiarVisibilidadComentarioView):
     servicio = staticmethod(restore_comment)
 
 
-class ParticipantAdministrationView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class ParticipantAdministrationView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -2142,7 +2237,7 @@ class AdministrarResponsableDetalleView(ParticipantAdministrationView):
         ))
 
 
-class CrearEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearEnlaceTareaView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -2206,6 +2301,9 @@ class AbrirEnlaceTareaView(LoginRequiredMixin, View):
     }
 
     def get(self, request, token):
+        company_response = _guard_empresa_base_00(request)
+        if company_response is not None:
+            return company_response
         empresa_id = _get_empresa_id(request)
         try:
             enlace = resolve_task_link(
@@ -2248,7 +2346,7 @@ class AbrirEnlaceTareaView(LoginRequiredMixin, View):
         return render(request, self.template_name, {"tarea": enlace.tarea})
 
 
-class RevocarEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class RevocarEnlaceTareaView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
     crear_permiso_faltante = False
@@ -2269,7 +2367,7 @@ class RevocarEnlaceTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
 
 
-class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
+class CrearTareaView(TareasLoginVerificarPermisoMixin, CreateView):
     model = Tarea
     form_class = TareaForm
     template_name = "tareas/tarea_form.html"
@@ -2310,7 +2408,7 @@ class CrearTareaView(VerificarPermisoMixin, LoginRequiredMixin, CreateView):
         return redirect("tareas:detalle_tarea", pk=result.id)
 
 
-class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class EditarTareaView(TareasLoginVerificarPermisoMixin, View):
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
@@ -2463,7 +2561,7 @@ class EditarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return redirect("tareas:detalle_tarea", pk=updated.id)
 
 
-class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class PublicarTareaView(TareasLoginVerificarPermisoMixin, View):
     """Publica un borrador (FR-007/FR-008, Q1). Publicación irreversible (Q2)."""
 
     vista_nombre = "Tareas - Ciclo de vida"
@@ -2515,7 +2613,7 @@ class PublicarTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return redirect("tareas:detalle_tarea", pk=result.task_id)
 
 
-class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class SimilitudTareaView(TareasLoginVerificarPermisoMixin, View):
     template_name = "tareas/tarea_similitud.html"
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
@@ -2555,7 +2653,7 @@ class SimilitudTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
         )
 
 
-class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class ConfirmarSimilitudView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 
@@ -2606,7 +2704,7 @@ class ConfirmarSimilitudView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
 
-class TareaLifecycleView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class TareaLifecycleView(TareasLoginVerificarPermisoMixin, View):
     """Protected Phase 2 action endpoint for one task."""
 
     permiso_requerido = "modificar"
@@ -2718,7 +2816,7 @@ def _build_hitos_context(tarea, actor, **form_overrides):
     }
 
 
-class HitosTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas - Hitos"
     permiso_requerido = "ingresar"
 
@@ -3014,7 +3112,7 @@ def _build_document_context(tarea, **form_overrides):
     }
 
 
-class DocumentosTareaView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
     vista_nombre = "Tareas - Documentos y evidencia"
     permiso_requerido = "modificar"
 
@@ -3164,7 +3262,7 @@ class ReunionEmpresaQuerysetMixin:
         return meeting
 
 
-class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, ListView):
+class ListarReunionesRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, ListView):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_lista.html"
     context_object_name = "reuniones"
@@ -3172,7 +3270,7 @@ class ListarReunionesRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reu
     permiso_requerido = "ingresar"
 
 
-class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
+class CrearReunionRevisionView(TareasLoginVerificarPermisoMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
@@ -3196,7 +3294,7 @@ class CrearReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, View):
         return render(request, self.template_name, {"form": form})
 
 
-class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, DetailView):
+class DetalleReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, DetailView):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_detalle.html"
     context_object_name = "reunion"
@@ -3213,7 +3311,7 @@ class DetalleReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reun
         return context
 
 
-class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class EditarReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, View):
     template_name = "tareas/reunion_revision_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "modificar"
@@ -3238,7 +3336,7 @@ class EditarReunionRevisionView(VerificarPermisoMixin, LoginRequiredMixin, Reuni
         return render(request, self.template_name, {"form": form, "object": reunion})
 
 
-class ReunionRevisionActionView(VerificarPermisoMixin, LoginRequiredMixin, ReunionEmpresaQuerysetMixin, View):
+class ReunionRevisionActionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, View):
     vista_nombre = "Tareas - Ciclo de vida"
     permiso_requerido = "modificar"
 

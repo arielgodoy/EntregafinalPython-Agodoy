@@ -31,8 +31,8 @@ from tareas.tests.factories import activate_company, assign_permission, create_u
 class ReprogrammingFixture(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="RPG", descripcion="Reprogramming")
-        cls.other_empresa = Empresa.objects.create(codigo="RPO", descripcion="Other")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Reprogramming")
+        cls.other_empresa = Empresa.objects.create(codigo="02", descripcion="Other")
         cls.actor = create_user("reprogrammer")
         cls.creator = create_user("rp-creator")
         cls.responsible = create_user("rp-responsible")

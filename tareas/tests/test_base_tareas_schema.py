@@ -999,13 +999,10 @@ class BaseTareasSchemaViewTests(TestCase):
             password="pass",
         )
         self.active_company = Empresa.objects.create(
-            codigo="09",
+            codigo="00",
             descripcion="Empresa activa",
         )
-        self.catalog_company = Empresa.objects.create(
-            codigo="00",
-            descripcion="Empresa Base",
-        )
+        self.catalog_company = self.active_company
         self.vista = Vista.objects.create(
             nombre="Tareas - Conexiones SQL",
             route_name="tareas:conexiones_sql",

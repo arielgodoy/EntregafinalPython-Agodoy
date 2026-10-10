@@ -41,8 +41,8 @@ from tareas.services.detail_storage import (
 class DetailCharacterizationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="133A", descripcion="Empresa A")
-        cls.otra_empresa = Empresa.objects.create(codigo="133B", descripcion="Empresa B")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa A")
+        cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.user = User.objects.create_user(username="t133-user", password="pass")
         cls.responsible = User.objects.create_user(
             username="t133-responsible", password="pass"
@@ -440,7 +440,7 @@ class DetailCharacterizationTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_mysql_detail_resolves_mysql_storage_without_django_fallback(self):
-        catalog = Empresa.objects.create(codigo="00", descripcion="Catálogo")
+        catalog = self.empresa
         connection = SettingsMySQLConnection.objects.create(
             empresa=catalog,
             nombre_logico="mysql-detail",

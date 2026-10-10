@@ -77,7 +77,7 @@ class MySQLEditStorageTests(TestCase):
 class MySQLEditViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="134VIEW", descripcion="Edit View")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Edit View")
         cls.user = User.objects.create_user("t134-edit-user", password="pass")
         vista = Vista.objects.create(nombre="Tareas")
         Permiso.objects.create(

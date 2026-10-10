@@ -11,8 +11,8 @@ from tareas.models import Tarea, TareaConnectionRole, TareaParticipante
 class ListTaskCharacterizationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="132A", descripcion="Empresa A")
-        cls.otra_empresa = Empresa.objects.create(codigo="132B", descripcion="Empresa B")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa A")
+        cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.user = User.objects.create_user(username="t132-list-user", password="pass")
         cls.responsible = User.objects.create_user(
             username="t132-responsible", password="pass"

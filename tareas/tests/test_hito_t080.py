@@ -22,8 +22,8 @@ class HitoT080Tests(TestCase):
     @classmethod
     def setUpTestData(cls):
         configure_task_storage()
-        cls.empresa = create_empresa(codigo="80", descripcion="Empresa T080")
-        cls.otra_empresa = create_empresa(codigo="81", descripcion="Otra T080")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa T080")
+        cls.otra_empresa = create_empresa(codigo="02", descripcion="Otra T080")
         cls.manager = create_user("t080_manager")
         cls.owner = create_user("t080_owner")
         cls.creator = create_user("t080_creator")

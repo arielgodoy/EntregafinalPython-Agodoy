@@ -14,7 +14,7 @@ class ParticipantAdministrationViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         configure_task_storage()
-        cls.company = create_empresa(codigo="PAV")
+        cls.company = create_empresa(codigo="00")
         cls.creator = create_user("pav-creator")
         cls.old = create_user("pav-old")
         cls.new = create_user("pav-new")

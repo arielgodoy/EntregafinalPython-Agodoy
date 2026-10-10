@@ -18,8 +18,8 @@ from tareas.tests.factories import assign_permission, create_empresa, create_tar
 class DocumentViewsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="DV1")
-        cls.otra_empresa = create_empresa(codigo="DV2")
+        cls.empresa = create_empresa(codigo="00")
+        cls.otra_empresa = create_empresa(codigo="02")
         cls.usuario = create_user(username="document-view-user")
         TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"

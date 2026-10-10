@@ -14,8 +14,8 @@ from tareas.tests.factories import assign_permission, create_empresa, create_tar
 class HierarchyViewsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="HV1", descripcion="Empresa navegación")
-        cls.otra_empresa = create_empresa(codigo="HV2", descripcion="Empresa externa")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa navegación")
+        cls.otra_empresa = create_empresa(codigo="02", descripcion="Empresa externa")
         cls.user = create_user(username="hierarchy_view_user")
         assign_permission(cls.user, cls.empresa, "Tareas", ingresar=True)
         TareaConnectionRole.objects.create(

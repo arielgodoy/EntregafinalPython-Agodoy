@@ -13,7 +13,7 @@ class T060SimilarityViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         configure_task_storage()
-        cls.empresa = Empresa.objects.create(codigo="T60", descripcion="Empresa T060")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa T060")
         cls.usuario = User.objects.create_user("t060_user", password="pass")
         cls.responsable = User.objects.create_user("t060_resp", password="pass")
         cls.vista = Vista.objects.create(nombre="Tareas - Ciclo de vida")

@@ -24,8 +24,8 @@ from tareas.services.task_storage import TaskStorageError
 class ProgressViewsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="PV1")
-        cls.otra_empresa = create_empresa(codigo="PV2")
+        cls.empresa = create_empresa(codigo="00")
+        cls.otra_empresa = create_empresa(codigo="02")
         cls.usuario = create_user(username="progress-view-user")
         TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
@@ -134,7 +134,7 @@ class ProgressViewsTests(TestCase):
 class MySQLMilestoneHttpTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="MYSQLHTTP")
+        cls.empresa = create_empresa(codigo="00")
         cls.user = create_user("mysql-hito-http")
         assign_permission(
             cls.user, cls.empresa, "Tareas - Hitos",
@@ -148,7 +148,7 @@ class MySQLMilestoneHttpTests(TestCase):
             task_id=cls.task.pk, empresa_id=cls.empresa.pk,
             sections=TaskDetailSections(milestones=True, mini_tasks=False, links=False),
         )
-        catalog = create_empresa(codigo="00")
+        catalog = cls.empresa
         mysql = SettingsMySQLConnection.objects.create(
             empresa=catalog, nombre_logico="hito-http-test",
             host="mysql.example.test", user="fixture", db_name="tareas", is_active=True,

@@ -125,7 +125,7 @@ class _SQLiteConnection:
 class MeetingBackendParityTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.company = Empresa.objects.create(codigo="M135", descripcion="Meetings parity")
+        cls.company = Empresa.objects.create(codigo="00", descripcion="Meetings parity")
         cls.creator = User.objects.create_user("meeting_parity_creator")
         cls.participant = User.objects.create_user("meeting_parity_participant")
         vista = Vista.objects.create(nombre="Tareas")
@@ -242,7 +242,7 @@ class MeetingBackendParityTests(TestCase):
             self.assertEqual(form.cleaned_data["tarea"].pk, self.task.pk)
 
     def test_reunion_task_form_rejects_task_from_another_company(self):
-        other_company = Empresa.objects.create(codigo="M136", descripcion="Other company")
+        other_company = Empresa.objects.create(codigo="02", descripcion="Other company")
         other_task = Tarea.objects.create(
             titulo="Other company task",
             correlativo="A1360001",

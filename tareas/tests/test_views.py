@@ -17,7 +17,7 @@ from tareas.models import Tarea, TareaConnectionRole, TareaParticipante
 class TareasViewsBase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa A")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa A")
         cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.user = User.objects.create_user(username="user1", password="pass")
         cls.responsable = User.objects.create_user(username="resp", password="pass")
@@ -403,7 +403,7 @@ class AislamientoPermisosTests(TareasViewsBase):
         self.assertContains(response, "De A")
         self.assertNotContains(response, "De B")
 
-    def test_cambio_de_empresa_activa_cambia_listado(self):
+    def test_empresa_distinta_de_base_redirige_al_selector(self):
         self._permiso(self.vista_tareas, ingresar=True)
         Permiso.objects.update_or_create(
             usuario=self.user,
@@ -415,8 +415,12 @@ class AislamientoPermisosTests(TareasViewsBase):
         self._crear_tarea(titulo="De B", empresa=self.otra_empresa)
         self._login(empresa=self.otra_empresa)
         response = self.client.get(reverse("tareas:listar_tareas"))
-        self.assertContains(response, "De B")
-        self.assertNotContains(response, "De A")
+        self.assertRedirects(
+            response,
+            reverse("access_control:seleccionar_empresa"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(self.client.session["empresa_id"], self.otra_empresa.pk)
 
     def test_detalle_tarea_de_otra_empresa_devuelve_404(self):
         self._permiso(self.vista_tareas, ingresar=True)

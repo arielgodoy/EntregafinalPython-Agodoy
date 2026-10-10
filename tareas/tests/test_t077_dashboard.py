@@ -14,8 +14,8 @@ class T077DashboardTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         configure_task_storage()
-        cls.empresa = create_empresa(codigo="77", descripcion="Empresa T077")
-        cls.otra_empresa = create_empresa(codigo="78", descripcion="Otra T077")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa T077")
+        cls.otra_empresa = create_empresa(codigo="02", descripcion="Otra T077")
         cls.usuario = create_user("t077_usuario")
         cls.otro_usuario = create_user("t077_otro")
         assign_permission(cls.usuario, cls.empresa, "Tareas - Dashboard personal", ingresar=True)

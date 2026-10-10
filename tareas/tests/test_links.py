@@ -31,8 +31,8 @@ class TaskLinkServiceTests(TestCase):
             source_type="DJANGO",
             django_alias="default",
         )
-        cls.empresa = Empresa.objects.create(codigo="L01", descripcion="Empresa enlaces")
-        cls.otra_empresa = Empresa.objects.create(codigo="L02", descripcion="Otra empresa")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa enlaces")
+        cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Otra empresa")
         cls.creador = User.objects.create_user("link_creator", email="creator@example.test")
         cls.destinatario = User.objects.create_user("link_recipient", email="recipient@example.test")
         cls.otro_usuario = User.objects.create_user("link_other", email="other@example.test")
@@ -315,11 +315,14 @@ class TaskLinkViewTests(TaskLinkServiceTests):
     def test_open_rejects_wrong_company_and_revoke_is_protected(self):
         self.client.force_login(self.destinatario)
         self.activate_company(self.otra_empresa)
+        access_events_before = EventoAccesoEnlace.objects.count()
         response = self.client.get(reverse("tareas:enlace_tarea", args=[self.token]))
-        self.assertEqual(response.status_code, 403)
-        self.assertContains(response, "Enlace no disponible.", status_code=403)
-        self.assertNotContains(response, "Enlace ya no disponible.", status_code=403)
-        self.assertNotContains(response, "Este enlace ha expirado.", status_code=403)
+        self.assertRedirects(
+            response,
+            reverse("access_control:seleccionar_empresa"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(EventoAccesoEnlace.objects.count(), access_events_before)
         self.client.force_login(self.creador)
         self.activate_company(self.empresa)
         response = self.client.post(

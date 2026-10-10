@@ -21,8 +21,8 @@ from tareas.services.task_storage import CreatedTaskResult
 class CreateTaskCharacterizationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa_a = Empresa.objects.create(codigo="131A", descripcion="Empresa A")
-        cls.empresa_b = Empresa.objects.create(codigo="131B", descripcion="Empresa B")
+        cls.empresa_a = Empresa.objects.create(codigo="00", descripcion="Empresa A")
+        cls.empresa_b = Empresa.objects.create(codigo="02", descripcion="Empresa B")
         cls.creator = User.objects.create_user(username="t131-creator", password="pass")
         cls.valid_responsible = User.objects.create_user(
             username="t131-valid", password="pass"

@@ -19,8 +19,8 @@ class MiniTareaT105Tests(TestCase):
         TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default",
         )
-        cls.empresa = Empresa.objects.create(codigo="T105", descripcion="Empresa T105")
-        cls.otra_empresa = Empresa.objects.create(codigo="T105B", descripcion="Empresa T105 B")
+        cls.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa T105")
+        cls.otra_empresa = Empresa.objects.create(codigo="02", descripcion="Empresa T105 B")
         cls.responsable = User.objects.create_user("t105_responsable")
         cls.supervisor = User.objects.create_user("t105_supervisor")
         cls.tercero = User.objects.create_user("t105_tercero")

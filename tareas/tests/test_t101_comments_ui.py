@@ -71,7 +71,7 @@ class _DetailStructureParser(HTMLParser):
 class T101CommentsUiTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.empresa = create_empresa(codigo="T101", descripcion="Empresa T101")
+        cls.empresa = create_empresa(codigo="00", descripcion="Empresa T101")
         TareaConnectionRole.objects.create(
             role="BASE_TAREAS", source_type="DJANGO", django_alias="default"
         )
