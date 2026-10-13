@@ -1,0 +1,231 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}Evaluaciones - Conexiones SQL{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title_key="evaluaciones.connection_roles.title" pagetitle_key="menu.evaluations" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+  <div class="page-content">
+    <div class="container-fluid">
+      <div class="card">
+        <div class="card-body">
+          <h3 data-key="evaluaciones.connection_roles.heading">Conexiones SQL de Evaluaciones</h3>
+          <p data-key="evaluaciones.connection_roles.description">
+            Asocie cada rol con una conexión existente de Configuración.
+          </p>
+
+          {% for item in role_forms %}
+          <section class="border rounded p-3 mb-3" data-connection-role="{{ item.role }}">
+            <h5 data-key="evaluaciones.connection_roles.role.{{ item.role }}">{{ item.label }}</h5>
+            {% if item.role == "BASE_EVALUACIONES" %}
+              <p data-key="evaluaciones.connection_roles.purpose.BASE_EVALUACIONES">Base operativa de Evaluaciones.</p>
+            {% elif item.role == "AUDITORIA_EVALUACIONES" %}
+              <p data-key="evaluaciones.connection_roles.purpose.AUDITORIA_EVALUACIONES">Base preparada para la futura auditoría de Evaluaciones.</p>
+            {% elif item.role == "LEGACY_MYSQL" %}
+              <p data-key="evaluaciones.connection_roles.purpose.LEGACY_MYSQL">Origen Legacy MySQL; esta fase no implementa escrituras de negocio.</p>
+            {% else %}
+              <p data-key="evaluaciones.connection_roles.purpose.LEGACY_AUDITORIA">Conexión técnica Legacy para auditoría; su uso futuro queda pendiente.</p>
+            {% endif %}
+
+            {% if item.status.status == "configured" %}
+              <span class="badge bg-success-subtle text-success" data-key="evaluaciones.connection_roles.status.configured">CONFIGURADO</span>
+            {% elif item.status.status == "invalid" %}
+              <span class="badge bg-danger-subtle text-danger" data-key="evaluaciones.connection_roles.status.invalid">CONFIGURACIÓN INVÁLIDA</span>
+            {% else %}
+              <span class="badge bg-warning-subtle text-warning" data-key="evaluaciones.connection_roles.status.missing">NO CONFIGURADO</span>
+            {% endif %}
+
+            {% if item.status.metadata.nombre_logico %}
+              <div class="text-muted mt-2">
+                <span data-key="evaluaciones.connection_roles.metadata.connection">Conexión:</span>
+                {{ item.status.metadata.empresa }} / {{ item.status.metadata.nombre_logico }}
+              </div>
+              <div class="text-muted">
+                <span data-key="evaluaciones.connection_roles.metadata.database">Base efectiva:</span>
+                {{ item.status.metadata.database_name }}
+              </div>
+              {% if not item.status.metadata.is_active %}
+                <div class="text-danger" data-key="evaluaciones.connection_roles.metadata.inactive">La conexión central está inactiva.</div>
+              {% endif %}
+            {% endif %}
+            {% if item.status.metadata.alias %}
+              <div class="text-muted mt-2">
+                <span data-key="evaluaciones.connection_roles.metadata.alias">Alias Django:</span>
+                {{ item.status.metadata.alias }} ({{ item.status.metadata.vendor }})
+              </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'evaluaciones:connection_roles' %}" class="mt-3">
+              {% csrf_token %}
+              <input type="hidden" name="role" value="{{ item.role }}">
+              {% if item.form.non_field_errors %}
+                {% for error in item.form.non_field_errors %}
+                  <div class="alert alert-danger" data-key="evaluaciones.connection_roles.error">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+              {% if item.form.show_source_selector %}
+                <div class="mb-3">
+                  <label class="form-label" for="{{ item.form.source_type.id_for_label }}" data-key="evaluaciones.connection_roles.source_type">Tipo de conexión</label>
+                  {{ item.form.source_type }}
+                  {% for error in item.form.source_type.errors %}
+                    <div class="text-danger" data-key="evaluaciones.connection_roles.error.source_type">{{ error }}</div>
+                  {% endfor %}
+                </div>
+                <div class="mb-3" data-role-field-container="django_alias">
+                  <label class="form-label" for="{{ item.form.django_alias.id_for_label }}" data-key="evaluaciones.connection_roles.django_alias">Conexión del sistema</label>
+                  {{ item.form.django_alias }}
+                  {% for error in item.form.django_alias.errors %}
+                    <div class="text-danger" data-key="evaluaciones.connection_roles.error.django_alias">{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                {{ item.form.source_type }}
+                {{ item.form.django_alias }}
+                {% for error in item.form.source_type.errors %}
+                  <div class="text-danger" data-key="evaluaciones.connection_roles.error.source_type">{{ error }}</div>
+                {% endfor %}
+                {% for error in item.form.django_alias.errors %}
+                  <div class="text-danger" data-key="evaluaciones.connection_roles.error.django_alias">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+              <div class="mb-3" data-role-field-container="mysql_connection">
+                <label class="form-label" for="{{ item.form.mysql_connection.id_for_label }}" data-key="evaluaciones.connection_roles.mysql_connection">Conexión MySQL</label>
+                {{ item.form.mysql_connection }}
+                {% for error in item.form.mysql_connection.errors %}
+                  <div class="text-danger" data-key="evaluaciones.connection_roles.error.connection">{{ error }}</div>
+                {% endfor %}
+              </div>
+              {% if item.form.show_database_name %}
+                <div class="mb-3" data-role-field-container="database_name">
+                  <label class="form-label" for="{{ item.form.database_name.id_for_label }}" data-key="evaluaciones.connection_roles.database_name">Nombre de base específico</label>
+                  {{ item.form.database_name }}
+                  {% for error in item.form.database_name.errors %}
+                    <div class="text-danger" data-key="evaluaciones.connection_roles.error.database">{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <button type="submit" class="btn btn-success" data-key="evaluaciones.connection_roles.save">Guardar asociación</button>
+            </form>
+
+            {% if connection_probe_allowed and item.status.status == "configured" %}
+              <form method="post" action="{% url 'evaluaciones:connection_probe' %}" class="mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="role" value="{{ item.role }}">
+                <button type="submit" class="btn btn-outline-primary" data-key="evaluaciones.connection_roles.probe">Probar conexión técnica</button>
+              </form>
+            {% endif %}
+            {% if item.role == "BASE_EVALUACIONES" and base_schema_install_allowed %}
+              <button
+                type="button"
+                class="btn btn-outline-primary mt-2"
+                data-bs-toggle="modal"
+                data-bs-target="#baseEvaluacionesSchemaModal"
+                data-key="evaluaciones.connection_roles.schema.install_button"
+              >Crear estructura Base Evaluaciones</button>
+            {% endif %}
+          </section>
+          {% endfor %}
+        </div>
+      </div>
+      {% if base_schema_install_allowed %}
+        <div
+          class="modal fade"
+          id="baseEvaluacionesSchemaModal"
+          tabindex="-1"
+          aria-hidden="true"
+          {% if schema_preview or schema_error %}data-open-on-load="true"{% endif %}
+        >
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" data-key="evaluaciones.connection_roles.schema.install_button">Crear estructura Base Evaluaciones</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar" data-key="buttons.close"></button>
+              </div>
+              <div class="modal-body">
+                {% if schema_error %}
+                  <div class="alert alert-danger" data-key="evaluaciones.connection_roles.schema.error">{{ schema_error }}</div>
+                  <form method="post" action="{% url 'evaluaciones:base_evaluaciones_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="preview">
+                    <button type="submit" class="btn btn-outline-primary" data-key="evaluaciones.connection_roles.schema.retry">Volver a inspeccionar</button>
+                  </form>
+                {% elif not schema_preview %}
+                  <p data-key="evaluaciones.connection_roles.schema.instructions">
+                    Se inspeccionará la base efectiva configurada en BASE_EVALUACIONES. La vista previa no ejecuta escrituras.
+                  </p>
+                  <form method="post" action="{% url 'evaluaciones:base_evaluaciones_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="preview">
+                    <button type="submit" class="btn btn-outline-primary" data-key="evaluaciones.connection_roles.schema.preview_button">Inspeccionar estructura</button>
+                  </form>
+                {% else %}
+                  <p>
+                    <span data-key="evaluaciones.connection_roles.schema.database">Base efectiva:</span>
+                    <code>{{ schema_preview.database_name }}</code>
+                  </p>
+                  <p>
+                    <span data-key="evaluaciones.connection_roles.schema.mysql_version">Versión MySQL:</span>
+                    <code>{{ schema_preview.server_version }}</code>
+                  </p>
+                  {% if schema_preview.conflicts %}
+                    <div class="alert alert-danger" data-key="evaluaciones.connection_roles.schema.conflicts">
+                      Se encontraron incompatibilidades. No se ejecutará DDL.
+                    </div>
+                  {% elif schema_preview.missing %}
+                    <div class="alert alert-warning" data-key="evaluaciones.connection_roles.schema.missing">
+                      Solo se creará la tabla faltante después de confirmar.
+                    </div>
+                  {% else %}
+                    <div class="alert alert-success" data-key="evaluaciones.connection_roles.schema.complete">
+                      La tabla ya existe y es compatible.
+                    </div>
+                  {% endif %}
+                  <ul class="mb-3">
+                    {% for table in schema_preview.tables %}
+                      <li>
+                        <code>{{ table.name }}</code>
+                        {% if table.classification == "COMPATIBLE" %}
+                          <span data-key="evaluaciones.connection_roles.schema.status.compatible">— compatible</span>
+                        {% elif table.classification == "PENDIENTE_CREACION" %}
+                          <span data-key="evaluaciones.connection_roles.schema.status.missing">— pendiente de creación</span>
+                        {% else %}
+                          <span data-key="evaluaciones.connection_roles.schema.status.incompatible">— incompatible</span>
+                          {% for issue in table.issues %}<code class="ms-1">{{ issue }}</code>{% endfor %}
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                  <form method="post" action="{% url 'evaluaciones:base_evaluaciones_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="preview">
+                    <button type="submit" class="btn btn-outline-secondary" data-key="evaluaciones.connection_roles.schema.retry">Volver a inspeccionar</button>
+                  </form>
+                {% endif %}
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-key="buttons.cancel">Cancelar</button>
+                {% if schema_preview_token and schema_preview.missing and not schema_preview.conflicts %}
+                  <form method="post" action="{% url 'evaluaciones:base_evaluaciones_schema_install' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schema_action" value="confirm">
+                    <input type="hidden" name="schema_preview_token" value="{{ schema_preview_token }}">
+                    <button type="submit" class="btn btn-primary" data-key="evaluaciones.connection_roles.schema.confirm_button">Confirmar creación</button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'evaluaciones/js/connection_roles.js' %}"></script>
+{% endblock extra_js %}

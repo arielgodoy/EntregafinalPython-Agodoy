@@ -121,6 +121,9 @@
                             {% if "evaluaciones_import" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'evaluaciones:importar_personas' %}" class="nav-link"><span data-key="menu.evaluations.import_people">Importar Personas</span></a>
                             </li>{% endif %}
+                            {% if "evaluaciones_connections" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'evaluaciones:connection_roles' %}" class="nav-link"><span data-key="menu.evaluations.connections">Conexiones Sql</span></a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}

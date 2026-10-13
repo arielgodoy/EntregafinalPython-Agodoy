@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import logging
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from django.conf import settings
-from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from api.services import buk_api
 
 from ..models import Persona
+from .persona_storage import open_persona_storage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -387,9 +390,6 @@ def importar_personas_desde_api_interna(
         employees_by_person_id[person_id_int] = item
 
     person_ids = list(employees_by_person_id.keys())
-    existing_by_person_id = {
-        p.person_id: p for p in Persona.objects.filter(person_id__in=person_ids)
-    }
 
     to_create: List[Persona] = []
     to_update: List[Persona] = []
@@ -399,42 +399,52 @@ def importar_personas_desde_api_interna(
     omitted_count = duplicates
 
     try:
-        with transaction.atomic():
-            for person_id_int, employee in employees_by_person_id.items():
-                mapped, map_error_key = _map_employee_to_persona_fields(employee, import_date=import_date)
-                if not mapped:
-                    errors += 1
-                    continue
+        with open_persona_storage() as storage:
+            with storage.atomic():
+                existing_by_person_id = storage.existing_by_person_id(person_ids)
+                for person_id_int, employee in employees_by_person_id.items():
+                    mapped, map_error_key = _map_employee_to_persona_fields(
+                        employee,
+                        import_date=import_date,
+                    )
+                    if not mapped:
+                        errors += 1
+                        continue
 
-                existing = existing_by_person_id.get(person_id_int)
-                if not existing:
-                    to_create.append(Persona(**mapped))
-                    created_count += 1
-                    continue
+                    existing = existing_by_person_id.get(person_id_int)
+                    if not existing:
+                        to_create.append(Persona(**mapped))
+                        created_count += 1
+                        continue
 
-                changed = False
-                for field_name in _UPDATE_FIELDS:
-                    if getattr(existing, field_name) != mapped.get(field_name):
-                        changed = True
-                        break
+                    changed = False
+                    for field_name in _UPDATE_FIELDS:
+                        if getattr(existing, field_name) != mapped.get(field_name):
+                            changed = True
+                            break
 
-                if not changed:
-                    omitted_count += 1
-                    continue
+                    if not changed:
+                        omitted_count += 1
+                        continue
 
-                for field_name in _UPDATE_FIELDS:
-                    setattr(existing, field_name, mapped.get(field_name))
+                    for field_name in _UPDATE_FIELDS:
+                        setattr(existing, field_name, mapped.get(field_name))
 
-                to_update.append(existing)
-                updated_count += 1
+                    to_update.append(existing)
+                    updated_count += 1
 
-            if to_create:
-                Persona.objects.bulk_create(to_create, batch_size=_BULK_BATCH_SIZE)
+                storage.bulk_create(to_create, batch_size=_BULK_BATCH_SIZE)
+                storage.bulk_update(
+                    to_update,
+                    _UPDATE_FIELDS,
+                    batch_size=_BULK_BATCH_SIZE,
+                )
 
-            if to_update:
-                Persona.objects.bulk_update(to_update, _UPDATE_FIELDS, batch_size=_BULK_BATCH_SIZE)
-
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "Persona import storage failed (error_type=%s)",
+            type(exc).__name__,
+        )
         raise PersonaImportServiceError("evaluaciones.personas.import.error.db") from None
 
     return PersonaImportResult(

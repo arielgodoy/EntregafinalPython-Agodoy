@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import date
 from unittest.mock import patch
 
@@ -5,7 +6,14 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evaluaciones.models import Persona
+from evaluaciones.services.persona_storage import DjangoPersonaStorage
 from evaluaciones.services.persona_importer import importar_personas_desde_api_interna
+
+
+@contextmanager
+def _open_test_storage():
+    # Production resolution rejects default; this uses the isolated test database.
+    yield DjangoPersonaStorage("default")
 
 
 def _employee_payload(*, person_id: int, full_name: str) -> dict:
@@ -62,6 +70,14 @@ def _employee_payload(*, person_id: int, full_name: str) -> dict:
 
 
 class PersonaImporterTests(TestCase):
+    def setUp(self):
+        storage_patch = patch(
+            "evaluaciones.services.persona_importer.open_persona_storage",
+            _open_test_storage,
+        )
+        storage_patch.start()
+        self.addCleanup(storage_patch.stop)
+
     @patch("api.services.buk_api.fetch_active_employees")
     def test_importer_creates_persona_single_page(self, mock_fetch):
         employee = _employee_payload(person_id=16047, full_name="Ana Pérez Gómez")

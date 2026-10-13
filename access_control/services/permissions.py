@@ -170,6 +170,7 @@ SIDEBAR_VIEW_NAMES = {
     "gestion_dte_lectura": "Gestión DTE - Lectura Automática de Cesiones",
     "gestion_dte_certificados": "Gestión DTE - Certificados PFX-DTE",
     "evaluaciones_import": "Evaluaciones - Importar Personas",
+    "evaluaciones_connections": "Evaluaciones - Conexiones Sql",
     "projects_list": "Control de Proyectos - Proyectos",
     "projects_create": "Control de Proyectos - Proyectos",
     "projects_clients": "Control de Proyectos - Clientes",
@@ -211,7 +212,7 @@ SIDEBAR_GROUPS = {
     "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
     "master_files": ("suppliers_master",),
     "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados", "settings_gestion_dte_connections"),
-    "evaluaciones": ("evaluaciones_import",),
+    "evaluaciones": ("evaluaciones_import", "evaluaciones_connections"),
     "projects": ("projects_list", "projects_create", "projects_clients", "projects_create_client", "projects_professionals", "projects_create_professional"),
     "operational": ("operational_dashboard", "operational_alerts"),
     "tasks": ("tasks_list", "tasks_create", "tasks_dashboard", "tasks_connections"),
@@ -255,7 +256,7 @@ SIDEBAR_PERMISSION_REQUIREMENTS = {
 
 SIDEBAR_SCOPE_ALIASES = {
     "proveedores": ("suppliers_master",),
-    "evaluaciones": ("evaluaciones_import",),
+    "evaluaciones": ("evaluaciones_import", "evaluaciones_connections"),
     "control_operacional": ("operational_dashboard", "operational_alerts"),
 }
 

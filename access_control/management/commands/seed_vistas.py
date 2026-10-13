@@ -26,6 +26,11 @@ VISTAS = [
         "descripcion": "Configuración global de roles de conexión Tareas",
         "route_name": "tareas:conexiones_sql",
     },
+    {
+        "nombre": "Evaluaciones - Conexiones Sql",
+        "descripcion": "Configuración global de roles de conexión Evaluaciones",
+        "route_name": "evaluaciones:connection_roles",
+    },
     {"nombre": "API - Acceso", "descripcion": "Acceso a la API protegido por ICMEAS"},
     {"nombre": "API - Maestros Locales", "descripcion": "Acceso API al maestro de locales"},
 ]

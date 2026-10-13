@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -6,6 +7,20 @@ from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from evaluaciones.models import Persona
+from evaluaciones.services.persona_storage import PersonaStorageError
+from evaluaciones.services.persona_storage import DjangoPersonaStorage
+
+
+@contextmanager
+def _open_test_storage():
+    yield DjangoPersonaStorage("default")
+
+
+def _list_test_personas():
+    personas = list(
+        Persona.objects.all().order_by("-anio", "-mes", "full_name")[:5000]
+    )
+    return personas, Persona.objects.count()
 
 
 def _employee_payload(*, person_id: int) -> dict:
@@ -58,6 +73,19 @@ def _employee_payload(*, person_id: int) -> dict:
 
 class ImportarPersonasViewTests(TestCase):
     def setUp(self):
+        storage_patch = patch(
+            "evaluaciones.services.persona_importer.open_persona_storage",
+            _open_test_storage,
+        )
+        storage_patch.start()
+        self.addCleanup(storage_patch.stop)
+        listing_patch = patch(
+            "evaluaciones.views.list_personas",
+            _list_test_personas,
+        )
+        listing_patch.start()
+        self.addCleanup(listing_patch.stop)
+
         self.user = User.objects.create_user(username="u", password="p")
         self.empresa = Empresa.objects.create(codigo="01", descripcion="Empresa 1")
         self.vista = Vista.objects.create(nombre="Evaluaciones - Importar Personas")
@@ -113,3 +141,17 @@ class ImportarPersonasViewTests(TestCase):
         url = reverse("evaluaciones:importar_personas")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 403)
+
+    def test_list_storage_failure_is_reported_as_controlled_error(self):
+        with patch(
+            "evaluaciones.views.list_personas",
+            side_effect=PersonaStorageError("storage unavailable"),
+        ):
+            resp = self.client.get(reverse("evaluaciones:importar_personas"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.context["import_error_key"],
+            "evaluaciones.personas.import.error.db",
+        )
+        self.assertIsNone(resp.context["personas_total"])

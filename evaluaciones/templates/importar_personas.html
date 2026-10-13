@@ -29,6 +29,14 @@ Importar Personas
                         </small>
                     </div>
 
+                    {% if can_view_sql_connections %}
+                    <div class="mb-3 text-end">
+                        <a href="{% url 'evaluaciones:connection_roles' %}" class="btn btn-outline-primary" data-key="evaluaciones.connection_roles.manage">
+                            Configurar conexiones SQL
+                        </a>
+                    </div>
+                    {% endif %}
+
                     <form method="post" class="mb-3" id="import-personas-form" data-start-url="{% url 'evaluaciones:importar_personas_start' %}" data-status-url="{% url 'evaluaciones:importar_personas_status' %}">
                         {% csrf_token %}
                         <div class="row g-3 align-items-end">
