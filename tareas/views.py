@@ -282,6 +282,9 @@ from .services.kpi import (
     get_task_dashboard,
     get_user_dashboard,
 )
+from .services.personal_dashboard import (
+    build_personal_dashboard_presentation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1106,6 +1109,31 @@ class MisTareasDashboardView(TareasLoginVerificarPermisoMixin, View):
                 render(request, self.template_name, {"mini_storage_error": True}).content,
                 status=503,
             )
+        return render(request, self.template_name, context)
+
+
+class TareasDashboardPersonalView(TareasLoginVerificarPermisoMixin, View):
+    template_name = "tareas/dashboard_personal.html"
+    vista_nombre = "Tareas - Dashboard personal"
+    permiso_requerido = "ingresar"
+
+    def get(self, request):
+        try:
+            context = get_personal_dashboard(
+                user=request.user,
+                empresa_id=_get_empresa_id(request),
+            )
+        except TaskStorageError:
+            logger.error("Personal task dashboard storage failure")
+            return HttpResponse(
+                render(
+                    request,
+                    self.template_name,
+                    {"dashboard_storage_error": True},
+                ).content,
+                status=503,
+            )
+        context.update(build_personal_dashboard_presentation(context))
         return render(request, self.template_name, context)
 
 

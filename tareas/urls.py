@@ -15,6 +15,11 @@ urlpatterns = [
         name='base_tareas_schema_install',
     ),
     path('mis-tareas/', views.MisTareasDashboardView.as_view(), name='mis_tareas'),
+    path(
+        'dashboard/personal/',
+        views.TareasDashboardPersonalView.as_view(),
+        name='dashboard_personal',
+    ),
     path('dashboard/general/', views.TareasDashboardGeneralView.as_view(), name='dashboard_general'),
     path('dashboard/general/empresa/<int:empresa_id>/', views.TareasDashboardEmpresaView.as_view(), name='dashboard_general_empresa'),
     path('dashboard/general/empresa/<int:empresa_id>/departamento/<int:departamento_id>/', views.TareasDashboardDepartamentoView.as_view(), name='dashboard_general_departamento'),

@@ -1,0 +1,186 @@
+{% extends "partials/base.html" %}
+
+{% block title %}Mi Dashboard de Tareas{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Mi Dashboard de Tareas" pagetitle="Tareas" title_key="tareas.dashboard.personal.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+                <div>
+                    <h4 class="fw-bold mb-1">
+                        <span data-key="tareas.dashboard.personal.title">Mi Dashboard de Tareas</span>
+                    </h4>
+                    <p class="text-muted mb-0">
+                        <span data-key="tareas.dashboard.personal.subtitle">Resumen de mis tareas, hitos y minitareas</span>
+                    </p>
+                </div>
+                <a class="btn btn-outline-primary" href="{% url 'tareas:mis_tareas' %}">
+                    <i class="ri-list-check align-bottom me-1" aria-hidden="true"></i>
+                    <span data-key="tareas.personal.title">Mis Hitos y Tareas</span>
+                </a>
+            </div>
+
+            {% if dashboard_storage_error %}
+            <div class="alert alert-danger" role="alert">
+                <span data-key="tareas.messages.generic_error">No fue posible procesar la solicitud.</span>
+            </div>
+            {% endif %}
+
+            <section class="row g-3 mb-4">
+                {% for kpi in dashboard_kpis %}
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-grow-1">
+                                    <p class="text-muted mb-1">
+                                        <span data-key="{{ kpi.key }}">{{ kpi.label }}</span>
+                                    </p>
+                                    <h4 class="mb-0">{{ kpi.value }}</h4>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    <i class="{{ kpi.icon }} fs-2 text-primary" aria-hidden="true"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </section>
+
+            <section class="mb-4" aria-labelledby="dashboard-estados-title">
+                <h5 id="dashboard-estados-title" class="mb-3">
+                    <span data-key="tareas.dashboard.personal.states.title">Resumen por estado</span>
+                </h5>
+                {% if not dashboard_has_tasks %}
+                <div class="alert alert-info">
+                    <span data-key="tareas.personal.empty_tasks">No tienes tareas asignadas en esta empresa.</span>
+                </div>
+                {% endif %}
+                <div class="row g-3">
+                    {% for group in dashboard_state_groups %}
+                    <div class="col-12 col-md-6 col-xxl-3">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">
+                                    {% include "tareas/_state_label.html" with value=group.estado %}
+                                </h6>
+                                <span class="badge bg-primary-subtle text-primary">{{ group.total }}</span>
+                            </div>
+                            <div class="card-body">
+                                {% if group.tareas %}
+                                    {% for tarea in group.tareas %}
+                                    <article data-task-card="true" class="border-bottom pb-3 mb-3{% if forloop.last %} border-bottom-0 pb-0 mb-0{% endif %}">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                            <span class="text-muted small">{{ tarea.correlativo|default:"-" }}</span>
+                                            {% include "tareas/_priority_label.html" with value=tarea.prioridad %}
+                                        </div>
+                                        <h6 class="mb-2">{{ tarea.titulo }}</h6>
+                                        {% if tarea.fecha_tope %}
+                                        <p class="text-muted small mb-1">
+                                            <span data-key="tareas.fields.fecha_tope">Fecha tope</span>:
+                                            {{ tarea.fecha_tope|date:"d/m/Y" }}
+                                        </p>
+                                        {% endif %}
+                                        {% if tarea.responsable %}
+                                        <p class="text-muted small mb-2">
+                                            <span data-key="tareas.fields.responsable">Responsable</span>:
+                                            {{ tarea.responsable.username }}
+                                        </p>
+                                        {% endif %}
+                                        <a href="{% url 'tareas:detalle_tarea' tarea.pk %}" class="btn btn-sm btn-outline-primary">
+                                            <span data-key="tareas.personal.actions.view_task">Ver tarea</span>
+                                        </a>
+                                    </article>
+                                    {% endfor %}
+                                {% else %}
+                                <p class="text-muted small mb-0">
+                                    <span data-key="tareas.dashboard.personal.empty_state">No hay tareas en este estado.</span>
+                                </p>
+                                {% endif %}
+                                {% if group.has_more %}
+                                <a href="{% url 'tareas:mis_tareas' %}" class="btn btn-sm btn-link px-0 mt-2">
+                                    <span data-key="tareas.personal.title">Mis Hitos y Tareas</span>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="row g-3">
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <span data-key="tareas.dashboard.personal.pending_milestones">Mis hitos pendientes</span>
+                            </h5>
+                            <span class="badge bg-warning-subtle text-warning">{{ dashboard_pending_milestones_count }}</span>
+                        </div>
+                        <div class="card-body">
+                            {% if dashboard_pending_milestones %}
+                                {% for hito in dashboard_pending_milestones %}
+                                <div class="border-bottom pb-3 mb-3{% if forloop.last %} border-bottom-0 pb-0 mb-0{% endif %}">
+                                    <h6 class="mb-1">{{ hito.nombre }}</h6>
+                                    <p class="text-muted small mb-0">
+                                        {{ hito.tarea.correlativo|default:"-" }} — {{ hito.tarea.titulo }}
+                                    </p>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <p class="text-muted mb-0">
+                                <span data-key="tareas.dashboard.personal.empty_pending_milestones">No tienes hitos pendientes.</span>
+                            </p>
+                            {% endif %}
+                            {% if dashboard_pending_milestones_has_more %}
+                            <a href="{% url 'tareas:mis_tareas' %}" class="btn btn-sm btn-link px-0 mt-2">
+                                <span data-key="tareas.personal.title">Mis Hitos y Tareas</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <span data-key="tareas.dashboard.personal.pending_minitasks">Mis minitareas pendientes</span>
+                            </h5>
+                            <span class="badge bg-warning-subtle text-warning">{{ dashboard_pending_minitasks_count }}</span>
+                        </div>
+                        <div class="card-body">
+                            {% if dashboard_pending_minitasks %}
+                                {% for mini_tarea in dashboard_pending_minitasks %}
+                                <div class="border-bottom pb-3 mb-3{% if forloop.last %} border-bottom-0 pb-0 mb-0{% endif %}">
+                                    <h6 class="mb-1">{{ mini_tarea.descripcion }}</h6>
+                                    <p class="text-muted small mb-0">
+                                        {{ mini_tarea.tarea.correlativo|default:"-" }} — {{ mini_tarea.tarea.titulo }}
+                                    </p>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <p class="text-muted mb-0">
+                                <span data-key="tareas.dashboard.personal.empty_pending_minitasks">No tienes minitareas pendientes.</span>
+                            </p>
+                            {% endif %}
+                            {% if dashboard_pending_minitasks_has_more %}
+                            <a href="{% url 'tareas:mis_tareas' %}" class="btn btn-sm btn-link px-0 mt-2">
+                                <span data-key="tareas.personal.title">Mis Hitos y Tareas</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock content %}

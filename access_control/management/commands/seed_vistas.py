@@ -27,6 +27,11 @@ VISTAS = [
         "route_name": "tareas:conexiones_sql",
     },
     {
+        "nombre": "Tareas - Dashboard personal",
+        "descripcion": "Dashboard personal de Tareas",
+        "route_name": "tareas:dashboard_personal",
+    },
+    {
         "nombre": "Evaluaciones - Conexiones Sql",
         "descripcion": "Configuración global de roles de conexión Evaluaciones",
         "route_name": "evaluaciones:connection_roles",
