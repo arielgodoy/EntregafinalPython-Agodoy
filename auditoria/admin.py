@@ -5,6 +5,7 @@ from .models import (
     AuditArchivePurgeChunk,
     AuditoriaBibliotecaEvent,
     AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
     UserPresence,
 )
 
@@ -52,6 +53,22 @@ class AuditoriaGestionDTEEventAdmin(ReadOnlyAuditAdmin):
     list_display = (
         'id', 'created_at', 'user', 'action', 'object_type',
         'status_code', 'vista_nombre',
+    )
+    list_filter = ('action', 'status_code', 'created_at')
+    readonly_fields = fields
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+
+
+@admin.register(AuditoriaTareasEvent)
+class AuditoriaTareasEventAdmin(ReadOnlyAuditAdmin):
+    fields = (
+        'id', 'created_at', 'user', 'empresa_id', 'action', 'object_type',
+        'object_id', 'status_code', 'duration_ms', 'vista_nombre', 'message_key',
+    )
+    list_display = (
+        'id', 'created_at', 'user', 'empresa_id', 'action', 'object_type',
+        'object_id', 'status_code', 'vista_nombre',
     )
     list_filter = ('action', 'status_code', 'created_at')
     readonly_fields = fields

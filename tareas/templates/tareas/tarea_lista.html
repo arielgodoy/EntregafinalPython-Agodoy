@@ -116,7 +116,18 @@ Tareas
                                 <td>{% if tarea.fecha_tope %}{{ tarea.fecha_tope|date:"Y-m-d" }}{% else %}—{% endif %}</td>
                                 <td><span class="badge bg-secondary-subtle text-secondary">{% include "tareas/_state_label.html" with value=tarea.estado %}</span></td>
                                 <td><span class="badge bg-info-subtle text-info">{% include "tareas/_priority_label.html" with value=tarea.prioridad %}</span></td>
-                                <td><div class="d-flex flex-wrap gap-1"><a href="{% url 'tareas:detalle_tarea' tarea.id %}" class="btn btn-sm btn-icon btn-outline-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Ver tarea" aria-label="Ver tarea"><i class="ri-eye-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.ver">Ver</span></a><a href="{% url 'tareas:editar_tarea' tarea.id %}" class="btn btn-sm btn-icon btn-outline-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Editar tarea" aria-label="Editar tarea"><i class="ri-edit-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.editar">Editar</span></a></div></td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <a href="{% url 'tareas:detalle_tarea' tarea.id %}" class="btn btn-sm btn-icon btn-outline-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Ver tarea" aria-label="Ver tarea"><i class="ri-eye-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.ver">Ver</span></a>
+                                        <a href="{% url 'tareas:editar_tarea' tarea.id %}" class="btn btn-sm btn-icon btn-outline-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="Editar tarea" aria-label="Editar tarea"><i class="ri-edit-line" aria-hidden="true"></i><span class="visually-hidden" data-key="tareas.actions.editar">Editar</span></a>
+                                        {% if puede_previsualizar_eliminacion_definitiva %}
+                                        <button type="button" class="btn btn-sm btn-icon btn-outline-danger js-permanent-deletion-preview" data-preview-url="{% url 'tareas:previsualizar_eliminacion_definitiva' tarea.id %}" data-bs-toggle="tooltip" data-bs-placement="top" title="Eliminar definitivamente" aria-label="Eliminar definitivamente">
+                                            <i class="ri-delete-bin-line" aria-hidden="true"></i>
+                                            <span class="visually-hidden" data-key="tareas.deletion_preview.open">Previsualizar eliminación definitiva</span>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
                             </tr>
                             {% endfor %}
                             </tbody>
@@ -130,4 +141,65 @@ Tareas
         </div>
     </div>
 </div>
+
+{% if puede_previsualizar_eliminacion_definitiva %}
+<div class="modal fade" id="permanentDeletionPreviewModal" tabindex="-1" aria-labelledby="permanentDeletionPreviewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="permanentDeletionPreviewTitle" data-key="tareas.deletion_preview.title">Eliminación definitiva de tarea</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger" role="alert" data-key="tareas.deletion_preview.irreversible">
+                    Esta operación eliminará definitivamente la tarea seleccionada, todas sus tareas descendientes y sus dependencias exclusivas. No podrá deshacerse.
+                </div>
+                <div class="alert alert-warning d-none" id="permanentDeletionPreviewError" role="alert"></div>
+                <dl class="row mb-3">
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.correlativo">Correlativo</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewCorrelativo">—</dd>
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.task_title">Tarea</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewTaskTitle">—</dd>
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.task_count">Tareas afectadas</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewTaskCount">—</dd>
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.descendant_count">Descendientes</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewDescendantCount">—</dd>
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.state">Estado</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewState">—</dd>
+                    <dt class="col-sm-4" data-key="tareas.deletion_preview.backend">Backend operacional</dt>
+                    <dd class="col-sm-8" id="permanentDeletionPreviewBackend">—</dd>
+                </dl>
+                <h6 data-key="tareas.deletion_preview.dependencies">Dependencias detectadas</h6>
+                <ul class="list-group mb-3" id="permanentDeletionPreviewCounts"></ul>
+                <div class="d-none mb-3" id="permanentDeletionPreviewWarningsContainer">
+                    <h6 class="text-warning" data-key="tareas.deletion_preview.warnings">Advertencias</h6>
+                    <ul class="mb-0" id="permanentDeletionPreviewWarnings"></ul>
+                </div>
+                <div class="d-none mb-3" id="permanentDeletionPreviewSharedContainer">
+                    <h6 class="text-warning" data-key="tareas.deletion_preview.shared">Referencias compartidas</h6>
+                    <ul class="mb-0" id="permanentDeletionPreviewShared"></ul>
+                </div>
+                <div class="d-none" id="permanentDeletionPreviewBlockersContainer">
+                    <h6 class="text-danger" data-key="tareas.deletion_preview.blockers">Bloqueos de integridad</h6>
+                    <ul class="mb-0" id="permanentDeletionPreviewBlockers"></ul>
+                </div>
+                <p class="text-muted mt-3 mb-0" data-key="tareas.deletion_preview.phase_notice">
+                    Esta fase solo genera una previsualización. No se eliminarán registros ni archivos.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-key="tareas.deletion_preview.close">Cerrar</button>
+                <button type="button" class="btn btn-danger" disabled aria-disabled="true" title="Eliminación física pendiente de implementación y autorización" data-key="tareas.deletion_preview.delete_disabled">Eliminar definitivamente</button>
+                <span class="visually-hidden" data-key="tareas.deletion_preview.delete_pending">Eliminación física pendiente de implementación y autorización</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock content %}
+
+{% block extra_js %}
+{% if puede_previsualizar_eliminacion_definitiva %}
+<script src="{% static 'tareas/js/permanent_deletion_preview.js' %}"></script>
+{% endif %}
+{% endblock extra_js %}

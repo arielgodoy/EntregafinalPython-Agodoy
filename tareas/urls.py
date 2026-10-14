@@ -8,6 +8,11 @@ app_name = 'tareas'
 
 urlpatterns = [
     path('', views.ListarTareasView.as_view(), name='listar_tareas'),
+    path(
+        '<int:pk>/eliminacion-definitiva/previsualizar/',
+        views.PrevisualizarEliminacionDefinitivaView.as_view(),
+        name='previsualizar_eliminacion_definitiva',
+    ),
     path('configuracion/conexiones/', views.TareaConnectionRoleView.as_view(), name='conexiones_sql'),
     path(
         'configuracion/conexiones/base-tareas/crear/',

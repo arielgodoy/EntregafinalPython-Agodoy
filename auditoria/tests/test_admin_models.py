@@ -7,12 +7,14 @@ from auditoria.models import (
     AuditArchiveBatch,
     AuditArchivePurgeChunk,
     AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
     UserPresence,
 )
 
 
 AUDIT_MODELS = (
     AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
     UserPresence,
     AuditArchiveBatch,
     AuditArchivePurgeChunk,

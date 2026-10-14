@@ -5,7 +5,12 @@ from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.urls import resolve
 from auditoria.middleware import AuditMiddleware
-from auditoria.models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence
+from auditoria.models import (
+    AuditoriaBibliotecaEvent,
+    AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
+    UserPresence,
+)
 from auditoria.helpers import audit_log
 from auditoria.services import AuditoriaService
 from access_control.models import Empresa
@@ -83,6 +88,22 @@ class AuditMiddlewareTests(TestCase):
         eventos = AuditoriaBibliotecaEvent.objects.filter(action='ERROR_500')
         self.assertEqual(eventos.count(), 1)
         self.assertEqual(eventos.first().status_code, 500)
+
+    def test_middleware_redacts_shared_task_tokens(self):
+        request = self._create_request(
+            path="/tareas/enlace/token-value/?token=query-value",
+            empresa_id=self.empresa.id,
+        )
+        request.resolver_match = resolve(request.path)
+
+        self.middleware.process_request(request)
+        self.middleware.process_response(request, HttpResponse(status=200))
+
+        event = AuditoriaTareasEvent.objects.get(action="VIEW")
+        self.assertNotIn("token-value", event.path)
+        self.assertNotIn("query-value", event.querystring)
+        self.assertIn("[REDACTED]", event.path)
+        self.assertIn("%5BREDACTED%5D", event.querystring)
     
     def test_middleware_respects_audit_logged_flag(self):
         """

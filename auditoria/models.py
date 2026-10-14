@@ -86,6 +86,16 @@ class AuditoriaGestionDTEEvent(AuditEventBase):
         ordering = ['-created_at']
 
 
+class AuditoriaTareasEvent(AuditEventBase):
+    """Eventos de auditoría específicos de la app tareas."""
+
+    class Meta:
+        db_table = 'auditoria_tareas_event'
+        verbose_name = 'Evento de Auditoría Tareas'
+        verbose_name_plural = 'Eventos de Auditoría Tareas'
+        ordering = ['-created_at']
+
+
 class UserPresence(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='audit_presence')
     empresa_id = models.IntegerField(null=True, blank=True, db_index=True)

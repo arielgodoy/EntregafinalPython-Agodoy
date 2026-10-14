@@ -20,6 +20,7 @@
     "menu.notifications.center":"Alert Center",
     "menu.notifications.force":"Send forced notifications",
     "menu.notifications.custom":"Custom alert",
+    "menu.audit.tasks":"Task Audit",
     "chat.chats":"Chats",
     "chat.tab.chats":"Chats",
     "chat.tab.contacts":"Contacts",
@@ -1634,4 +1635,38 @@
     ,"tareas.comments.less": "View less"
     ,"tareas.comments.close": "Close"
     ,"tareas.comments.actions": "Comment actions"
+    ,"tareas.dashboard.personal.title": "My Task Dashboard"
+    ,"tareas.dashboard.personal.subtitle": "Summary of my tasks, milestones, and MiniTasks"
+    ,"tareas.dashboard.personal.states.title": "Summary by status"
+    ,"tareas.dashboard.personal.empty_state": "There are no tasks in this status."
+    ,"tareas.dashboard.personal.pending_milestones": "My pending milestones"
+    ,"tareas.dashboard.personal.empty_pending_milestones": "You have no pending milestones."
+    ,"tareas.dashboard.personal.pending_minitasks": "My pending MiniTasks"
+    ,"tareas.dashboard.personal.empty_pending_minitasks": "You have no pending MiniTasks."
+    ,"tareas.deletion_preview.backend": "Operational backend"
+    ,"tareas.deletion_preview.blocked": "Preview blocked"
+    ,"tareas.deletion_preview.blocker_detail": "Integrity blocker details"
+    ,"tareas.deletion_preview.blockers": "Integrity blockers"
+    ,"tareas.deletion_preview.close": "Close"
+    ,"tareas.deletion_preview.correlativo": "Reference"
+    ,"tareas.deletion_preview.delete_disabled": "Permanently delete"
+    ,"tareas.deletion_preview.delete_pending": "Physical deletion is pending implementation and authorization"
+    ,"tareas.deletion_preview.dependencies": "Detected dependencies"
+    ,"tareas.deletion_preview.dependency_label": "Dependency"
+    ,"tareas.deletion_preview.descendant_count": "Descendants"
+    ,"tareas.deletion_preview.irreversible": "This operation will permanently delete the selected task, all its descendant tasks, and their exclusive dependencies. This action cannot be undone."
+    ,"tareas.deletion_preview.load_error": "The preview could not be loaded."
+    ,"tareas.deletion_preview.open": "Preview permanent deletion"
+    ,"tareas.deletion_preview.phase_notice": "This phase only displays a preview. No records or files will be deleted."
+    ,"tareas.deletion_preview.ready": "Preview ready"
+    ,"tareas.deletion_preview.schema_incomplete": "The task schema is incomplete."
+    ,"tareas.deletion_preview.shared": "Shared references"
+    ,"tareas.deletion_preview.shared_detail": "Shared reference details"
+    ,"tareas.deletion_preview.state": "Status"
+    ,"tareas.deletion_preview.task_count": "Tasks affected"
+    ,"tareas.deletion_preview.task_title": "Task"
+    ,"tareas.deletion_preview.title": "Permanent task deletion"
+    ,"tareas.deletion_preview.unavailable": "The preview could not be generated."
+    ,"tareas.deletion_preview.warning_detail": "Warning details"
+    ,"tareas.deletion_preview.warnings": "Warnings"
 }

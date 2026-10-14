@@ -1,11 +1,13 @@
 import time
 import logging
+from urllib.parse import parse_qsl, quote, urlencode
 from django.utils.deprecation import MiddlewareMixin
 from common.http import get_client_ip
 from common.navigation import is_navigable_request
 from .services import AuditoriaService
 
 logger = logging.getLogger(__name__)
+_SENSITIVE_QUERY_KEY_PARTS = ('password', 'token', 'secret', 'api_key', 'csrf')
 
 
 class AuditMiddleware(MiddlewareMixin):
@@ -80,8 +82,8 @@ class AuditMiddleware(MiddlewareMixin):
             ip_address=self._get_client_ip(request),
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
             method=request.method,
-            path=request.path,
-            querystring=request.META.get('QUERY_STRING', ''),
+            path=self._audit_path(request, app_label),
+            querystring=self._audit_querystring(request, app_label),
             status_code=response.status_code,
             duration_ms=duration_ms,
         )
@@ -93,7 +95,7 @@ class AuditMiddleware(MiddlewareMixin):
         """
         # Solo registrar si es biblioteca y es GET (evitar spam de POST no manejados)
         app_label = self._infer_app_from_request(request)
-        if app_label not in ('biblioteca', 'gestiondte') or not is_navigable_request(request):
+        if app_label not in ('biblioteca', 'gestiondte', 'tareas') or not is_navigable_request(request):
             return
 
         # En una fase posterior, app_name/namespace/url_name se obtendrán de
@@ -107,8 +109,8 @@ class AuditMiddleware(MiddlewareMixin):
             ip_address=self._get_client_ip(request),
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
             method=request.method,
-            path=request.path,
-            querystring=request.META.get('QUERY_STRING', ''),
+            path=self._audit_path(request, app_label),
+            querystring=self._audit_querystring(request, app_label),
             status_code=response.status_code,
             duration_ms=duration_ms,
         )
@@ -124,6 +126,8 @@ class AuditMiddleware(MiddlewareMixin):
         parts = path.strip('/').split('/')
         if parts and parts[0] == 'biblioteca':
             return 'biblioteca'
+        if parts and parts[0] == 'tareas':
+            return 'tareas'
         return None
 
     def _infer_app_from_request(self, request):
@@ -133,7 +137,36 @@ class AuditMiddleware(MiddlewareMixin):
             return 'gestiondte'
         if resolver_app == 'biblioteca':
             return 'biblioteca'
+        if resolver_app == 'tareas':
+            return 'tareas'
         return self._infer_app_from_path(request.path)
+
+    @staticmethod
+    def _audit_path(request, app_label):
+        path = request.path
+        if app_label != 'tareas':
+            return path
+        resolver_match = getattr(request, 'resolver_match', None)
+        for key, value in getattr(resolver_match, 'kwargs', {}).items():
+            if any(part in key.lower() for part in _SENSITIVE_QUERY_KEY_PARTS) and value:
+                path = path.replace(str(value), '[REDACTED]')
+                path = path.replace(quote(str(value), safe=''), '[REDACTED]')
+        return path
+
+    @staticmethod
+    def _audit_querystring(request, app_label):
+        querystring = request.META.get('QUERY_STRING', '')
+        if app_label != 'tareas' or not querystring:
+            return querystring
+        return urlencode([
+            (
+                key,
+                '[REDACTED]'
+                if any(part in key.lower() for part in _SENSITIVE_QUERY_KEY_PARTS)
+                else value,
+            )
+            for key, value in parse_qsl(querystring, keep_blank_values=True)
+        ])
     
     def _get_client_ip(self, request):
         """Extraer IP real del cliente."""

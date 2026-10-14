@@ -11,6 +11,7 @@ from tareas.models import Tarea, TareaConnectionRole
 from tareas.views import (
     AbrirEnlaceTareaView,
     BaseTareasSchemaInstallView,
+    PrevisualizarEliminacionDefinitivaView,
     TareaConnectionRoleView,
     TareasDashboardDepartamentoView,
     TareasDashboardEmpresaView,
@@ -298,6 +299,7 @@ class TareasEmpresaBase00GuardTests(TestCase):
             TareasDashboardDepartamentoView,
             TareasDashboardUsuarioView,
             AbrirEnlaceTareaView,
+            PrevisualizarEliminacionDefinitivaView,
         }
 
         unguarded_routes = [

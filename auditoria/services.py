@@ -10,7 +10,13 @@ from pathlib import Path
 
 from django.conf import settings
 
-from .models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence, AuditArchiveBatch
+from .models import (
+    AuditoriaBibliotecaEvent,
+    AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
+    UserPresence,
+    AuditArchiveBatch,
+)
 from access_control.models import Vista
 
 logger = logging.getLogger(__name__)
@@ -239,6 +245,7 @@ class AuditoriaService:
     APP_MODEL_MAP = {
         'biblioteca': AuditoriaBibliotecaEvent,
         'gestiondte': AuditoriaGestionDTEEvent,
+        'tareas': AuditoriaTareasEvent,
     }
 
     @classmethod

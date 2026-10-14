@@ -6,7 +6,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import Http404, JsonResponse
 from access_control.views import VerificarPermisoMixin
-from auditoria.models import AuditoriaBibliotecaEvent, AuditoriaGestionDTEEvent, UserPresence
+from auditoria.models import (
+    AuditoriaBibliotecaEvent,
+    AuditoriaGestionDTEEvent,
+    AuditoriaTareasEvent,
+    UserPresence,
+)
 from auditoria.permissions import get_archivable_company_ids, get_auditable_company_ids, get_auditable_companies
 from auditoria.services import AuditoriaService
 from django.shortcuts import get_object_or_404, redirect, render
@@ -37,6 +42,11 @@ class AuditoriaPermissionMixin:
                 f"No tienes permiso para '{self.permiso_requerido}' en {self.vista_nombre}.",
             )
         return super().dispatch(request, *args, **kwargs)
+
+
+class AuditoriaTareasPermissionMixin(VerificarPermisoMixin):
+    crear_permiso_faltante = False
+    verificar_vicmeas_en_dispatch = False
 
 
 class AuditoriaBibliotecaListView(AuditoriaPermissionMixin, ListView):
@@ -312,6 +322,22 @@ class AuditoriaGestionDTEListView(AuditoriaBibliotecaListView):
         return context
 
 
+class AuditoriaTareasListView(AuditoriaTareasPermissionMixin, AuditoriaBibliotecaListView):
+    model = AuditoriaTareasEvent
+    vista_nombre = "Auditoría - Tareas"
+    permiso_requerido = "ingresar"
+    audit_title = "Auditoría Tareas"
+    audit_list_url_name = "auditoria:auditoria_tareas_list"
+    audit_detail_url_name = "auditoria:auditoria_tareas_detail"
+    audit_app_label = "tareas"
+    audit_latest_views_url_name = "auditoria:auditoria_tareas_latest_views"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["archivable_company_ids"] = set()
+        return context
+
+
 class AuditoriaGestionDTEDetailView(AuditoriaBibliotecaDetailView):
     model = AuditoriaGestionDTEEvent
     vista_nombre = "Auditoría - Gestión DTE"
@@ -328,6 +354,15 @@ class AuditoriaGestionDTEHistoricalDetailView(AuditoriaGestionDTEDetailView):
         if event is None:
             raise Http404
         return event
+
+
+class AuditoriaTareasDetailView(AuditoriaTareasPermissionMixin, AuditoriaBibliotecaDetailView):
+    model = AuditoriaTareasEvent
+    vista_nombre = "Auditoría - Tareas"
+    permiso_requerido = "ingresar"
+    audit_title = "Auditoría Tareas"
+    audit_list_url_name = "auditoria:auditoria_tareas_list"
+    audit_app_label = "tareas"
 
 
 class AuditoriaBibliotecaLatestViewsView(AuditoriaPermissionMixin, View):
@@ -358,6 +393,28 @@ class AuditoriaGestionDTELatestViewsView(AuditoriaBibliotecaLatestViewsView):
     vista_nombre = "Auditoría - Gestión DTE"
     model = AuditoriaGestionDTEEvent
     audit_app_label = "gestiondte"
+
+
+class AuditoriaTareasLatestViewsView(
+    AuditoriaTareasPermissionMixin,
+    AuditoriaBibliotecaLatestViewsView,
+):
+    vista_nombre = "Auditoría - Tareas"
+    permiso_requerido = "ingresar"
+    model = AuditoriaTareasEvent
+    audit_app_label = "tareas"
+
+    def get(self, request, user_id):
+        eventos = self.model.objects.filter(
+            user_id=user_id,
+            action="VIEW",
+            empresa_id__in=self.auditable_company_ids,
+        ).order_by("-created_at")[:10]
+        return render(request, "auditoria/auditoria_latest_views.html", {
+            "eventos": eventos,
+            "audit_title": f"Últimas vistas - {self.vista_nombre}",
+            "back_url_name": "auditoria:auditoria_tareas_list",
+        })
 
 
 class AuditoriaArchiveView(VerificarPermisoMixin, LoginRequiredMixin, View):

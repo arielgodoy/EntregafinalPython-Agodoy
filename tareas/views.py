@@ -82,6 +82,27 @@ def _guard_empresa_base_00(request):
     return redirect(reverse("access_control:seleccionar_empresa"))
 
 
+def _can_preview_permanent_deletion(request):
+    if not getattr(request.user, "is_authenticated", False):
+        return False
+    empresa_id = request.session.get("empresa_id")
+    if not empresa_id:
+        return False
+    empresa = Empresa.objects.using("default").filter(
+        pk=empresa_id,
+        codigo="00",
+    ).first()
+    return bool(
+        empresa
+        and user_has_permission_for_empresa(
+            user=request.user,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+    )
+
+
 class EmpresaBase00GuardMixin:
     def dispatch(self, request, *args, **kwargs):
         response = _guard_empresa_base_00(request)
@@ -154,6 +175,7 @@ from .models import (
     TareaParticipante,
 )
 from .services.context import get_active_company_id
+from .services.audit import log_task_operation, task_audit_snapshot
 from .services.participant_storage import (
     AddParticipantCommand,
     ChangeParticipantRoleCommand,
@@ -260,6 +282,12 @@ from .services.reprogramming_storage import (
 from .services.hierarchy_lifecycle_storage import (
     HierarchyLifecycleCommand,
     resolve_hierarchy_lifecycle_storage,
+)
+from .services.deletion_preview import (
+    DeletionPreviewError,
+    DeletionPreviewNotFound,
+    DeletionPreviewSchemaIncomplete,
+    build_deletion_preview,
 )
 from .services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
@@ -773,6 +801,9 @@ class ListarTareasView(TareasLoginVerificarPermisoMixin, ListView):
                 "gestion": 0,
                 "cerradas": 0,
             },
+            "puede_previsualizar_eliminacion_definitiva": (
+                _can_preview_permanent_deletion(request)
+            ),
         }
         try:
             result = resolve_list_storage().list_tasks(
@@ -788,6 +819,81 @@ class ListarTareasView(TareasLoginVerificarPermisoMixin, ListView):
         context["tareas"] = result.items
         context["tareas_summary"] = result.summary
         return render(request, self.template_name, context)
+
+
+class PrevisualizarEliminacionDefinitivaView(
+    LoginRequiredMixin,
+    EmpresaBase00GuardMixin,
+    VerificarPermisoMixin,
+    View,
+):
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    verificar_vicmeas_en_dispatch = False
+
+    def get(self, request, pk):
+        if not _can_preview_permanent_deletion(request):
+            return VerificarPermisoMixin.handle_no_permission(
+                self,
+                request,
+                "Se requiere permiso Supervisor VICMEAS para previsualizar esta operación.",
+            )
+        try:
+            preview = build_deletion_preview(
+                task_id=pk,
+                empresa_id=request.session["empresa_id"],
+            )
+        except DeletionPreviewNotFound as exc:
+            raise Http404 from exc
+        except DeletionPreviewSchemaIncomplete as exc:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message_key": "tareas.deletion_preview.schema_incomplete",
+                    "blockers": [
+                        "Faltan tablas operacionales requeridas: "
+                        + ", ".join(exc.missing_tables)
+                    ],
+                },
+                status=409,
+            )
+        except DeletionPreviewError:
+            logger.error(
+                "Permanent deletion preview failed for task=%s",
+                pk,
+            )
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message_key": "tareas.deletion_preview.unavailable",
+                },
+                status=503,
+            )
+
+        result = {
+            "task": preview["task"],
+            "task_count": preview["task_count"],
+            "descendant_count": preview["descendant_count"],
+            "counts": preview["counts"],
+            "shared_references": preview["shared_references"],
+            "warnings": preview["warnings"],
+            "blockers": preview["blockers"],
+            "integrity_status": preview["integrity_status"],
+            "backend": preview["backend"],
+        }
+        has_blockers = bool(preview["blockers"])
+        return JsonResponse(
+            {
+                "success": not has_blockers,
+                "message_key": (
+                    "tareas.deletion_preview.blocked"
+                    if has_blockers
+                    else "tareas.deletion_preview.ready"
+                ),
+                "preview": result,
+            },
+            status=409 if has_blockers else 200,
+        )
 
 
 class TareaConnectionRoleView(TareasLoginRequiredMixin, VerificarPermisoMixin, View):
@@ -1542,6 +1648,18 @@ class DetalleTareaView(TareasLoginVerificarPermisoMixin, DetailView):
                 )
             except EditTaskNotFound as exc:
                 raise Http404 from exc
+            log_task_operation(
+                request,
+                task_id=task_id,
+                empresa_id=empresa_id,
+                action="UPDATE",
+                operation="configure_closure_evidence",
+                after={
+                    "requiere_evidencia_cierre": (
+                        form.cleaned_data["requiere_evidencia_cierre"]
+                    )
+                },
+            )
             messages.success(request, "tareas.messages.evidence_configuration_updated")
             return redirect("tareas:detalle_tarea", pk=task_id)
         self.object = self.get_object()
@@ -1564,7 +1682,7 @@ class ReprogramarTareaView(TareasLoginVerificarPermisoMixin, View):
                     messages.error(request, error)
         else:
             try:
-                reprogram_task(ReprogramTaskCommand(
+                result = reprogram_task(ReprogramTaskCommand(
                     task_id=pk, empresa_id=_get_empresa_id(request),
                     actor_id=request.user.pk,
                     fecha_tope_nueva=form.cleaned_data["fecha_tope_nueva"],
@@ -1582,6 +1700,16 @@ class ReprogramarTareaView(TareasLoginVerificarPermisoMixin, View):
                 logger.error("Reprogramming storage failure: task=%s", pk)
                 messages.error(request, str(exc))
             else:
+                log_task_operation(
+                    request,
+                    task_id=result.task_id,
+                    empresa_id=result.empresa_id,
+                    action="UPDATE",
+                    operation="reprogram_task",
+                    before={"fecha_tope": result.fecha_tope_anterior},
+                    after={"fecha_tope": result.fecha_tope_nueva},
+                    meta={"reprogramacion_id": result.reprogramacion_id},
+                )
                 messages.success(request, "tareas.reprogramming.success")
         return redirect(
             reverse("tareas:detalle_tarea", kwargs={"pk": pk}) + "#tarea-reprogramaciones"
@@ -1640,12 +1768,23 @@ class CrearMiniTareaView(
         if not form.is_valid():
             return self.reject(request, tarea)
         try:
-            self.mini_storage.create(CreateMiniTaskCommand(
+            result = self.mini_storage.create(CreateMiniTaskCommand(
                 **self.scope(request, tarea_id), descripcion=form.cleaned_data["descripcion"],
                 persona_id=form.cleaned_data["persona"].pk,
             ))
         except ValidationError:
             return self.reject(request, tarea)
+        log_task_operation(
+            request,
+            task_id=result.task_id,
+            empresa_id=tarea.empresa_id,
+            action="CREATE",
+            operation="create_mini_task",
+            object_type="Minitarea",
+            object_id=result.mini_task_id,
+            after={"hecho": False},
+            meta={"event_id": result.event_id},
+        )
         messages.success(request, "tareas.messages.lifecycle_action_applied")
         return self.redirect_to_detail(tarea)
 
@@ -1686,6 +1825,21 @@ class CerrarMiniTareaView(
             ))
         except ValidationError:
             return self.reject(request, tarea)
+        log_task_operation(
+            request,
+            task_id=result.task_id,
+            empresa_id=tarea.empresa_id,
+            action="UPDATE",
+            operation="close_mini_task",
+            object_type="Minitarea",
+            object_id=result.mini_task_id,
+            before={"hecho": False},
+            after={"hecho": True},
+            meta={
+                "event_id": result.event_id,
+                "close_comment_id": result.comentario_feed_id,
+            },
+        )
         messages.success(request, "tareas.messages.lifecycle_action_applied")
         if result.delivery.failed:
             messages.warning(request, "tareas.minitareas.communication_failed")
@@ -1707,12 +1861,24 @@ class ReabrirMiniTareaView(
         if not form.is_valid():
             return self.reject(request, tarea)
         try:
-            self.mini_storage.reopen(ReopenMiniTaskCommand(
+            result = self.mini_storage.reopen(ReopenMiniTaskCommand(
                 **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
                 comentario=form.cleaned_data["comentario"],
             ))
         except ValidationError:
             return self.reject(request, tarea)
+        log_task_operation(
+            request,
+            task_id=result.task_id,
+            empresa_id=tarea.empresa_id,
+            action="UPDATE",
+            operation="reopen_mini_task",
+            object_type="Minitarea",
+            object_id=result.mini_task_id,
+            before={"hecho": True},
+            after={"hecho": False},
+            meta={"event_id": result.event_id},
+        )
         messages.success(request, "tareas.messages.lifecycle_action_applied")
         return self.redirect_to_detail(tarea)
 
@@ -1729,11 +1895,22 @@ class EliminarMiniTareaView(
     def post(self, request, tarea_id, mini_tarea_id):
         tarea, _detail = self.get_tarea(request, tarea_id)
         try:
-            self.mini_storage.delete(DeleteMiniTaskCommand(
+            result = self.mini_storage.delete(DeleteMiniTaskCommand(
                 **self.scope(request, tarea_id), mini_task_id=mini_tarea_id,
             ))
         except ValidationError:
             return self.reject(request, tarea)
+        log_task_operation(
+            request,
+            task_id=result.task_id,
+            empresa_id=tarea.empresa_id,
+            action="DELETE",
+            operation="delete_mini_task",
+            object_type="Minitarea",
+            object_id=result.mini_task_id,
+            after={"deleted": True},
+            meta={"event_id": result.event_id},
+        )
         messages.success(request, "tareas.messages.minitask_deleted")
         return self.redirect_to_detail(tarea)
 
@@ -2047,6 +2224,16 @@ class CrearComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
+        log_task_operation(
+            request,
+            task_id=tarea.pk,
+            empresa_id=tarea.empresa_id,
+            action="CREATE",
+            operation="create_task_comment",
+            object_type="Comentario",
+            object_id=comentario.pk,
+            after={"comentario_id": comentario.pk},
+        )
         avatar = Avatar.objects.filter(user_id=request.user.pk).first()
         request.user.avatar = avatar
         puede_supervisar = user_has_permission_for_empresa(
@@ -2102,6 +2289,25 @@ class EditarComentarioView(TareaComentariosView):
             comentario = edit_comment(**cambios)
         except ValidationError:
             return _comment_error_response()
+        changed_fields = []
+        if "contenido" in request.POST:
+            changed_fields.append("contenido")
+        if "documentos_modificados" in request.POST or "documentos" in request.POST:
+            changed_fields.append("documentos")
+        if form.nuevos_documentos():
+            changed_fields.append("documentos_nuevos")
+        log_task_operation(
+            request,
+            task_id=tarea.pk,
+            empresa_id=tarea.empresa_id,
+            action="UPDATE",
+            operation="update_task_comment",
+            object_type="Comentario",
+            object_id=comentario.pk,
+            before={"comentario_id": comentario.pk},
+            after={"comentario_id": comentario.pk},
+            meta={"changed_fields": changed_fields},
+        )
         puede_supervisar = user_has_permission_for_empresa(
             user=request.user,
             empresa=tarea.empresa,
@@ -2139,6 +2345,21 @@ class _CambiarVisibilidadComentarioView(TareaComentariosView):
             )
         except ValidationError:
             return _comment_error_response()
+        log_task_operation(
+            request,
+            task_id=tarea.pk,
+            empresa_id=tarea.empresa_id,
+            action="UPDATE",
+            operation=(
+                "restore_task_comment"
+                if self.servicio is restore_comment
+                else "hide_task_comment"
+            ),
+            object_type="Comentario",
+            object_id=comentario.pk,
+            before={"oculto": self.servicio is restore_comment},
+            after={"oculto": self.servicio is hide_comment},
+        )
         return JsonResponse(
             {
                 "success": True,
@@ -2161,6 +2382,8 @@ class ParticipantAdministrationView(TareasLoginVerificarPermisoMixin, View):
     crear_permiso_faltante = False
     http_method_names = ["post"]
     json_response = False
+    audit_operation = None
+    audit_action = "UPDATE"
 
     def post(self, request, tarea_id, **kwargs):
         try:
@@ -2186,6 +2409,51 @@ class ParticipantAdministrationView(TareasLoginVerificarPermisoMixin, View):
                 return JsonResponse({"success": False, "message_key": key}, status=status)
             messages.error(request, key)
         else:
+            if result.changed and self.audit_operation:
+                is_reassignment = self.audit_operation == "reassign_responsible"
+                before = (
+                    {"responsable_id": result.old_responsible_id}
+                    if is_reassignment
+                    else {
+                        key: value
+                        for key, value in {
+                            "usuario_id": result.user_id,
+                            "rol": result.old_role,
+                        }.items()
+                        if value is not None
+                    }
+                )
+                after = (
+                    {"responsable_id": result.new_responsible_id}
+                    if is_reassignment
+                    else {
+                        key: value
+                        for key, value in {
+                            "usuario_id": result.user_id,
+                            "rol": result.new_role,
+                        }.items()
+                        if value is not None
+                    }
+                )
+                log_task_operation(
+                    request,
+                    task_id=result.task_id,
+                    empresa_id=result.empresa_id,
+                    action=self.audit_action,
+                    operation=self.audit_operation,
+                    object_type="Tarea" if is_reassignment else "TareaParticipante",
+                    object_id=(
+                        result.task_id
+                        if is_reassignment
+                        else result.participant_id or result.user_id
+                    ),
+                    before=before,
+                    after=after,
+                    meta={
+                        "mutation_id": result.reassignment_id,
+                        "participant_id": result.participant_id,
+                    },
+                )
             if self.json_response:
                 data = {
                     "success": True, "message_key": "tareas.assignment.success",
@@ -2210,6 +2478,9 @@ class ParticipantAdministrationView(TareasLoginVerificarPermisoMixin, View):
 
 
 class VincularParticipanteDetalleView(ParticipantAdministrationView):
+    audit_operation = "add_task_participant"
+    audit_action = "CREATE"
+
     def execute(self, request, tarea_id, **kwargs):
         try:
             user_id = int(request.POST.get("usuario", ""))
@@ -2222,6 +2493,8 @@ class VincularParticipanteDetalleView(ParticipantAdministrationView):
 
 
 class VincularParticipanteView(ParticipantAdministrationView):
+    audit_operation = "add_task_participant"
+    audit_action = "CREATE"
     json_response = True
 
     def execute(self, request, tarea_id, usuario_id):
@@ -2231,6 +2504,9 @@ class VincularParticipanteView(ParticipantAdministrationView):
 
 
 class DesvincularParticipanteDetalleView(ParticipantAdministrationView):
+    audit_operation = "remove_task_participant"
+    audit_action = "DELETE"
+
     def execute(self, request, tarea_id, usuario_id):
         return remove_task_participant(RemoveParticipantCommand(
             **self.scope(request, tarea_id), user_id=usuario_id,
@@ -2242,6 +2518,8 @@ class DesvincularParticipanteView(DesvincularParticipanteDetalleView):
 
 
 class CambiarRolParticipanteView(ParticipantAdministrationView):
+    audit_operation = "change_participant_role"
+
     def execute(self, request, tarea_id, usuario_id):
         form = ParticipanteRolForm(request.POST)
         if not form.is_valid():
@@ -2253,6 +2531,8 @@ class CambiarRolParticipanteView(ParticipantAdministrationView):
 
 
 class AdministrarResponsableDetalleView(ParticipantAdministrationView):
+    audit_operation = "reassign_responsible"
+
     def execute(self, request, tarea_id):
         value = request.POST.get("responsable", "")
         try:
@@ -2296,6 +2576,16 @@ class CrearEnlaceTareaView(TareasLoginVerificarPermisoMixin, View):
                 {"success": False, "message_key": "tareas.links.create_error"},
                 status=400,
             )
+        log_task_operation(
+            request,
+            task_id=tarea_id,
+            empresa_id=empresa_id,
+            action="SHARE",
+            operation="create_task_link",
+            object_type="EnlaceTarea",
+            object_id=enlace.pk,
+            after={"destinatario_id": destinatario.pk},
+        )
         return JsonResponse(
             {
                 "success": True,
@@ -2390,6 +2680,16 @@ class RevocarEnlaceTareaView(TareasLoginVerificarPermisoMixin, View):
                 {"success": False, "message_key": "tareas.links.revoke_error"},
                 status=400,
             )
+        log_task_operation(
+            request,
+            task_id=None,
+            empresa_id=empresa_id,
+            action="UPDATE",
+            operation="revoke_task_link",
+            object_type="EnlaceTarea",
+            object_id=enlace_id,
+            after={"revocado": True},
+        )
         return JsonResponse(
             {"success": True, "message_key": "tareas.links.revoked"}
         )
@@ -2433,6 +2733,20 @@ class CrearTareaView(TareasLoginVerificarPermisoMixin, CreateView):
             form.add_error(None, str(exc))
             return self.form_invalid(form)
         self.object = result.task
+        log_task_operation(
+            self.request,
+            task_id=result.id,
+            empresa_id=result.empresa_id,
+            action="CREATE",
+            operation="create_task",
+            correlativo=result.correlativo,
+            after={
+                "estado": result.estado,
+                "prioridad": result.prioridad,
+                "responsable_id": result.responsable_id,
+                "correlativo": result.correlativo,
+            },
+        )
         return redirect("tareas:detalle_tarea", pk=result.id)
 
 
@@ -2586,6 +2900,22 @@ class EditarTareaView(TareasLoginVerificarPermisoMixin, View):
                 body="Se actualizó información funcional de la tarea.",
                 actor=request.user,
             )
+        changed_fields = [
+            field for field in form.changed_data
+            if field != "motivo"
+        ]
+        if changed_fields:
+            log_task_operation(
+                request,
+                task_id=updated.id,
+                empresa_id=updated.empresa_id,
+                action="UPDATE",
+                operation="update_task",
+                correlativo=getattr(self.edit_detail.core, "correlativo", None),
+                before=task_audit_snapshot(data),
+                after=task_audit_snapshot(updated),
+                meta={"changed_fields": changed_fields},
+            )
         return redirect("tareas:detalle_tarea", pk=updated.id)
 
 
@@ -2637,6 +2967,17 @@ class PublicarTareaView(TareasLoginVerificarPermisoMixin, View):
             messages.error(request, mensaje)
             return redirect("tareas:detalle_tarea", pk=task_id)
         else:
+            log_task_operation(
+                request,
+                task_id=result.task_id,
+                empresa_id=result.empresa_id,
+                action="UPDATE",
+                operation="publish_task",
+                correlativo=result.correlativo,
+                before={"estado": result.previous_state},
+                after=task_audit_snapshot(result),
+                meta={"transition_id": result.transition_id},
+            )
             messages.success(request, "tareas.messages.task_published")
         return redirect("tareas:detalle_tarea", pk=result.task_id)
 
@@ -2723,11 +3064,22 @@ class ConfirmarSimilitudView(TareasLoginVerificarPermisoMixin, View):
             )
         if pending:
             return redirect("tareas:similitud_tarea", tarea_id=tarea.pk)
+        previous_state = tarea.estado
         try:
-            publish_task(tarea, request.user)
+            published_task = publish_task(tarea, request.user)
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
             return redirect("tareas:detalle_tarea", pk=tarea.pk)
+        log_task_operation(
+            request,
+            task_id=published_task.pk,
+            empresa_id=published_task.empresa_id,
+            action="UPDATE",
+            operation="publish_task_after_similarity_review",
+            correlativo=published_task.correlativo,
+            before={"estado": previous_state},
+            after=task_audit_snapshot(published_task),
+        )
         messages.success(request, "tareas.messages.similarity_confirmed_and_published")
         return redirect("tareas:detalle_tarea", pk=tarea.pk)
 
@@ -2758,6 +3110,16 @@ class TareaLifecycleView(TareasLoginVerificarPermisoMixin, View):
             except TaskStorageError as exc:
                 messages.error(request, str(exc))
                 return redirect("tareas:detalle_tarea", pk=command.task_id)
+            log_task_operation(
+                request,
+                task_id=result.task_id,
+                empresa_id=result.empresa_id,
+                action="UPDATE",
+                operation=f"task_{self.accion}",
+                before={"anulada": not result.anulada},
+                after={"anulada": result.anulada},
+                meta={"transition_id": result.transition_id},
+            )
             messages.success(request, "tareas.messages.lifecycle_action_applied")
             return redirect("tareas:detalle_tarea", pk=result.task_id)
         if self.accion in {"completar", "aprobar", "rechazar"}:
@@ -2783,6 +3145,28 @@ class TareaLifecycleView(TareasLoginVerificarPermisoMixin, View):
             except TaskStorageError as exc:
                 messages.error(request, str(exc))
                 return redirect("tareas:detalle_tarea", pk=command.task_id)
+            previous_state = {
+                "completar": Tarea.Estado.GESTION,
+                "aprobar": Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                "rechazar": Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+            }[self.accion]
+            log_task_operation(
+                request,
+                task_id=result.task_id,
+                empresa_id=result.empresa_id,
+                action="UPDATE",
+                operation=f"task_{self.accion}",
+                before={"estado": previous_state},
+                after={
+                    "estado": result.state,
+                    "cierre_completado": result.cierre_completado,
+                    "fecha_cumplimiento": result.fecha_cumplimiento,
+                },
+                meta={
+                    "transition_id": result.transition_id,
+                    "cierre_id": result.cierre_id,
+                },
+            )
             messages.success(request, "tareas.messages.lifecycle_action_applied")
             return redirect("tareas:detalle_tarea", pk=result.task_id)
         if self.accion == "gestion":
@@ -2801,6 +3185,17 @@ class TareaLifecycleView(TareasLoginVerificarPermisoMixin, View):
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
                 return redirect("tareas:detalle_tarea", pk=kwargs["pk"])
+            log_task_operation(
+                request,
+                task_id=result.task_id,
+                empresa_id=result.empresa_id,
+                action="UPDATE",
+                operation="task_gestion",
+                before={"estado": result.previous_state},
+                after={"estado": result.state},
+                correlativo=result.correlativo,
+                meta={"transition_id": result.transition_id},
+            )
             messages.success(request, "tareas.messages.lifecycle_action_applied")
             return redirect("tareas:detalle_tarea", pk=result.task_id)
         raise ValidationError(
@@ -2939,7 +3334,7 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = HitoCrearForm(request.POST, empresa=self.empresa)
             if form.is_valid():
                 try:
-                    self.storage.execute(CreateMilestoneCommand(
+                    result = self.storage.execute(CreateMilestoneCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         nombre=form.cleaned_data["nombre"],
                         cumplimiento=form.cleaned_data["cumplimiento"],
@@ -2949,6 +3344,16 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="CREATE",
+                        operation="create_milestone",
+                        object_type="Hito",
+                        object_id=result.milestone_id,
+                        after={"created": True},
+                    )
                     messages.success(request, "tareas.messages.milestone_created")
                     return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, hito_form=form))
@@ -2967,7 +3372,7 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = CompletarHitoForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    self.storage.execute(CompleteMilestoneCommand(
+                    result = self.storage.execute(CompleteMilestoneCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         milestone_id=hito.pk,
                         resena_cierre=form.cleaned_data["resena_cierre"],
@@ -2978,6 +3383,17 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="UPDATE",
+                        operation="complete_milestone",
+                        object_type="Hito",
+                        object_id=result.milestone_id,
+                        before={"completado": hito.completado},
+                        after={"completado": True},
+                    )
                     messages.success(request, "tareas.messages.milestone_completed")
                     return self.redirect_after_post(request, tarea)
             return render(
@@ -2994,7 +3410,7 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = HitoForm(request.POST)
             if form.is_valid():
                 try:
-                    self.storage.execute(UpdateMilestoneCommand(
+                    result = self.storage.execute(UpdateMilestoneCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         milestone_id=hito.pk,
                         nombre=form.cleaned_data["nombre"],
@@ -3004,6 +3420,17 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    if result.changed:
+                        log_task_operation(
+                            request,
+                            task_id=result.task_id,
+                            empresa_id=tarea.empresa_id,
+                            action="UPDATE",
+                            operation="update_milestone",
+                            object_type="Hito",
+                            object_id=result.milestone_id,
+                            meta={"changed_fields": ["nombre", "cumplimiento", "peso"]},
+                        )
                     messages.success(request, "tareas.messages.milestone_updated")
                     return self.redirect_after_post(request, tarea)
             return render(
@@ -3020,7 +3447,7 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = HitoCumplimientoForm(request.POST)
             if form.is_valid():
                 try:
-                    self.storage.execute(UpdateMilestoneCommand(
+                    result = self.storage.execute(UpdateMilestoneCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         milestone_id=hito.pk,
                         cumplimiento=form.cleaned_data["cumplimiento"],
@@ -3028,6 +3455,18 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    if result.changed:
+                        log_task_operation(
+                            request,
+                            task_id=result.task_id,
+                            empresa_id=tarea.empresa_id,
+                            action="UPDATE",
+                            operation="update_milestone_progress",
+                            object_type="Hito",
+                            object_id=result.milestone_id,
+                            before={"cumplimiento": hito.cumplimiento},
+                            after={"cumplimiento": form.cleaned_data["cumplimiento"]},
+                        )
                     messages.success(request, "tareas.messages.milestone_progress_updated")
                     return self.redirect_after_post(request, tarea)
             return render(
@@ -3044,7 +3483,7 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = HitoReasignacionForm(request.POST, empresa=self.empresa)
             if form.is_valid():
                 try:
-                    self.storage.execute(ReassignMilestoneCommand(
+                    result = self.storage.execute(ReassignMilestoneCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         milestone_id=hito.pk,
                         responsable_id=form.cleaned_data["responsable"].pk,
@@ -3053,6 +3492,19 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="UPDATE",
+                        operation="reassign_milestone",
+                        object_type="Hito",
+                        object_id=result.milestone_id,
+                        before={"responsable_id": hito.responsable_id},
+                        after={
+                            "responsable_id": form.cleaned_data["responsable"].pk,
+                        },
+                    )
                     messages.success(request, "tareas.messages.milestone_reassigned")
                     return self.redirect_after_post(request, tarea)
             return render(
@@ -3067,37 +3519,68 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             )
         if accion in {"anular_hito", "reactivar_hito"}:
             try:
-                self.storage.execute(SetMilestoneAnnulledCommand(
+                result = self.storage.execute(SetMilestoneAnnulledCommand(
                     task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                     milestone_id=hito.pk, anulado=accion == "anular_hito",
                 ))
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
+                if result.changed:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="UPDATE",
+                        operation=accion,
+                        object_type="Hito",
+                        object_id=result.milestone_id,
+                        before={"anulado": hito.anulado},
+                        after={"anulado": accion == "anular_hito"},
+                    )
                 messages.success(request, "tareas.messages.milestone_status_updated")
             return self.redirect_after_post(request, tarea)
         if accion == "eliminar_hito":
             try:
-                self.storage.execute(DeleteMilestoneCommand(
+                result = self.storage.execute(DeleteMilestoneCommand(
                     task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                     milestone_id=hito.pk,
                 ))
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             else:
+                log_task_operation(
+                    request,
+                    task_id=result.task_id,
+                    empresa_id=tarea.empresa_id,
+                    action="DELETE" if result.deleted else "UPDATE",
+                    operation="delete_milestone" if result.deleted else "annul_milestone",
+                    object_type="Hito",
+                    object_id=result.milestone_id,
+                    after={"deleted": True} if result.deleted else {"anulado": True},
+                )
                 messages.success(request, "tareas.messages.milestone_deleted_or_annulled")
             return self.redirect_after_post(request, tarea)
         if accion == "manual":
             form = AvanceManualForm(request.POST)
             if form.is_valid():
                 try:
-                    self.storage.execute(UpdateManualProgressCommand(
+                    result = self.storage.execute(UpdateManualProgressCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                         porcentaje=form.cleaned_data["porcentaje"],
                     ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="UPDATE",
+                        operation="update_manual_progress",
+                        object_type="Tarea",
+                        after={"porcentaje": form.cleaned_data["porcentaje"]},
+                    )
                     messages.success(request, "tareas.messages.manual_progress_updated")
                     return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, manual_form=form))
@@ -3105,12 +3588,21 @@ class HitosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = AvancePonderadoForm(request.POST)
             if form.is_valid():
                 try:
-                    self.storage.execute(SetWeightedProgressModeCommand(
+                    result = self.storage.execute(SetWeightedProgressModeCommand(
                         task_id=tarea.pk, empresa_id=tarea.empresa_id, actor_id=request.user.pk,
                     ))
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
+                    log_task_operation(
+                        request,
+                        task_id=result.task_id,
+                        empresa_id=tarea.empresa_id,
+                        action="UPDATE",
+                        operation="set_weighted_progress",
+                        object_type="Tarea",
+                        after={"modo_ponderado": True},
+                    )
                     messages.success(request, "tareas.messages.weighted_mode_configured")
                     return self.redirect_after_post(request, tarea)
             return render(request, "tareas/tarea_hitos.html", self.get_context(tarea, ponderado_form=form))
@@ -3221,7 +3713,7 @@ class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = DocumentoForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    storage.create_document(DocumentCreateCommand(
+                    documento = storage.create_document(DocumentCreateCommand(
                         tarea_id=tarea.pk,
                         empresa_id=tarea.empresa_id,
                         usuario_id=request.user.pk,
@@ -3235,6 +3727,19 @@ class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
                 except ValidationError as exc:
                     form.add_error(None, exc)
                     return self.render_invalid(request, tarea, document_form=form)
+                log_task_operation(
+                    request,
+                    task_id=tarea.pk,
+                    empresa_id=tarea.empresa_id,
+                    action="CREATE",
+                    operation="create_task_document",
+                    object_type="DocumentoTarea",
+                    object_id=getattr(documento, "pk", documento),
+                    after={
+                        "tipo": form.cleaned_data["tipo"],
+                        "formato_archivo": form.cleaned_data["formato_archivo"],
+                    },
+                )
                 messages.success(request, "tareas.messages.document_registered")
                 return self.redirect_after_post(request, tarea)
             return self.render_invalid(request, tarea, document_form=form)
@@ -3242,7 +3747,7 @@ class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
             form = EvidenciaRegistroForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    storage.register_evidence(EvidenceCreateCommand(
+                    evidencia = storage.register_evidence(EvidenceCreateCommand(
                         tarea_id=tarea.pk,
                         empresa_id=tarea.empresa_id,
                         usuario_id=request.user.pk,
@@ -3260,6 +3765,18 @@ class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
                         for mensaje in exc.messages:
                             form.add_error(None, mensaje)
                     return self.render_invalid(request, tarea, evidencia_registro_form=form)
+                log_task_operation(
+                    request,
+                    task_id=tarea.pk,
+                    empresa_id=tarea.empresa_id,
+                    action="CREATE",
+                    operation="register_closure_evidence",
+                    object_type="EvidenciaCierre",
+                    object_id=getattr(evidencia, "pk", evidencia),
+                    after={
+                        "formato_archivo": form.cleaned_data["formato_archivo"],
+                    },
+                )
                 messages.success(request, "tareas.messages.evidence_registered")
                 return self.redirect_after_post(request, tarea)
             return self.render_invalid(request, tarea, evidencia_registro_form=form)

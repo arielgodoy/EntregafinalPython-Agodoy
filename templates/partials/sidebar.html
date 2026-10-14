@@ -281,6 +281,9 @@
                             {% if "audit_gestion_dte" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'auditoria:auditoria_gestiondte_list' %}" class="nav-link" data-key="menu.audit.gestion_dte">Auditoría Gestión DTE</a>
                             </li>{% endif %}
+                            {% if "audit_tasks" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'auditoria:auditoria_tareas_list' %}" class="nav-link" data-key="menu.audit.tasks">Auditoría Tareas</a>
+                            </li>{% endif %}
                         </ul>
                     </div>
                 </li>{% endif %}

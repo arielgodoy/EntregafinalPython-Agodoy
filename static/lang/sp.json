@@ -19,6 +19,7 @@
     "menu.notifications.center":"Centro de Alertas",
     "menu.notifications.force":"Enviar notificaciones forzadas",
     "menu.notifications.custom":"Alerta personalizada",
+    "menu.audit.tasks":"Auditoría Tareas",
     "chat.chats":"Chats",
     "chat.tab.chats":"Chats",
     "chat.tab.contacts":"Contactos",
@@ -1596,4 +1597,38 @@
     ,"tareas.assignment.errors.storage": "No se pudo guardar el cambio de responsable o participantes."
     ,"tareas.assignment.errors.state": "Esta tarea no admite cambios de responsable o participantes."
     ,"tareas.assignment.errors.invalid_edit": "Los datos de edición no corresponden a esta tarea."
+    ,"tareas.dashboard.personal.title": "Mi Dashboard de Tareas"
+    ,"tareas.dashboard.personal.subtitle": "Resumen de mis tareas, hitos y minitareas"
+    ,"tareas.dashboard.personal.states.title": "Resumen por estado"
+    ,"tareas.dashboard.personal.empty_state": "No hay tareas en este estado."
+    ,"tareas.dashboard.personal.pending_milestones": "Mis hitos pendientes"
+    ,"tareas.dashboard.personal.empty_pending_milestones": "No tienes hitos pendientes."
+    ,"tareas.dashboard.personal.pending_minitasks": "Mis minitareas pendientes"
+    ,"tareas.dashboard.personal.empty_pending_minitasks": "No tienes minitareas pendientes."
+    ,"tareas.deletion_preview.backend": "Backend operacional"
+    ,"tareas.deletion_preview.blocked": "Previsualización bloqueada"
+    ,"tareas.deletion_preview.blocker_detail": "Detalle del bloqueo de integridad"
+    ,"tareas.deletion_preview.blockers": "Bloqueos de integridad"
+    ,"tareas.deletion_preview.close": "Cerrar"
+    ,"tareas.deletion_preview.correlativo": "Correlativo"
+    ,"tareas.deletion_preview.delete_disabled": "Eliminar definitivamente"
+    ,"tareas.deletion_preview.delete_pending": "Eliminación física pendiente de implementación y autorización"
+    ,"tareas.deletion_preview.dependencies": "Dependencias detectadas"
+    ,"tareas.deletion_preview.dependency_label": "Dependencia"
+    ,"tareas.deletion_preview.descendant_count": "Descendientes"
+    ,"tareas.deletion_preview.irreversible": "Esta operación eliminará definitivamente la tarea seleccionada, todas sus tareas descendientes y sus dependencias exclusivas. No podrá deshacerse."
+    ,"tareas.deletion_preview.load_error": "No se pudo cargar la previsualización."
+    ,"tareas.deletion_preview.open": "Previsualizar eliminación definitiva"
+    ,"tareas.deletion_preview.phase_notice": "Esta fase solo genera una previsualización. No se eliminarán registros ni archivos."
+    ,"tareas.deletion_preview.ready": "Previsualización lista"
+    ,"tareas.deletion_preview.schema_incomplete": "El esquema de tareas está incompleto."
+    ,"tareas.deletion_preview.shared": "Referencias compartidas"
+    ,"tareas.deletion_preview.shared_detail": "Detalle de referencia compartida"
+    ,"tareas.deletion_preview.state": "Estado"
+    ,"tareas.deletion_preview.task_count": "Tareas afectadas"
+    ,"tareas.deletion_preview.task_title": "Tarea"
+    ,"tareas.deletion_preview.title": "Eliminación definitiva de tarea"
+    ,"tareas.deletion_preview.unavailable": "No se pudo generar la previsualización."
+    ,"tareas.deletion_preview.warning_detail": "Detalle de la advertencia"
+    ,"tareas.deletion_preview.warnings": "Advertencias"
 }
