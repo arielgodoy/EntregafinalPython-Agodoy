@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 import logging
+import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from django.conf import settings
@@ -42,18 +43,42 @@ _NULLABLE_STRING_FIELDS = {
     "personal_email",
     "office_number",
     "office_phone",
+    "role_code",
+    "role_name",
+    "role_family_name",
+    "cost_center",
+    "recinto_asistencia_code",
+    "recinto_primario_code",
+    "ctrlit_recinto",
+    "contract_type",
 }
 
-_NULLABLE_INT_FIELDS = {"location_id"}
+_NULLABLE_INT_FIELDS = {
+    "location_id",
+    "buk_employee_id",
+    "company_id",
+    "role_id",
+    "role_family_id",
+    "area_id",
+    "recinto_asistencia_id",
+    "recinto_primario_id",
+    "job_id",
+}
 
 _UPDATE_FIELDS = [
+    "person_id",
+    "buk_employee_id",
+    "anio",
+    "mes",
+    "fecha_corte",
+    "rut",
+    "rut_normalizado",
     "full_name",
     "first_name",
     "surname",
     "second_surname",
     "document_type",
     "document_number",
-    "rut",
     "code_sheet",
     "email",
     "personal_email",
@@ -70,6 +95,7 @@ _UPDATE_FIELDS = [
     "gender",
     "birthday",
     "active_since",
+    "active_until",
     "created_at",
     "status",
     "payment_method",
@@ -88,8 +114,24 @@ _UPDATE_FIELDS = [
     "pension_fund",
     "afc",
     "retired",
-    "mes",
-    "anio",
+    "company_id",
+    "role_id",
+    "role_code",
+    "role_name",
+    "role_family_id",
+    "role_family_name",
+    "area_id",
+    "cost_center",
+    "recinto_asistencia_id",
+    "recinto_asistencia_code",
+    "recinto_primario_id",
+    "recinto_primario_code",
+    "ctrlit_recinto",
+    "job_id",
+    "job_start_date",
+    "job_end_date",
+    "contract_type",
+    "buk_payload",
 ]
 
 
@@ -168,6 +210,39 @@ def _parse_required_datetime(value: Any):
     return dt
 
 
+def _normalize_rut(value: Any) -> Optional[str]:
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+
+    normalized = re.sub(r"[\s.-]", "", str(value).strip()).upper()
+    if not re.fullmatch(r"\d{7,8}[0-9K]", normalized):
+        return None
+
+    body, check_digit = normalized[:-1], normalized[-1]
+    total = 0
+    factor = 2
+    for digit in reversed(body):
+        total += int(digit) * factor
+        factor = 2 if factor == 7 else factor + 1
+
+    remainder = 11 - total % 11
+    expected = "0" if remainder == 11 else "K" if remainder == 10 else str(remainder)
+    if check_digit != expected:
+        return None
+
+    return normalized
+
+
+def _as_optional_scalar_str(value: Any, *, field_name: str) -> Optional[str]:
+    if value is None or not isinstance(value, (str, int, float, bool)):
+        return None
+    return _as_str(value, field_name=field_name, allow_none=True)
+
+
+def _as_mapping(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _extract_total_pages(pagination: Any) -> Optional[int]:
     if not isinstance(pagination, dict):
         return None
@@ -209,7 +284,11 @@ def _extract_total_pages(pagination: Any) -> Optional[int]:
     return None
 
 
-def _map_employee_to_persona_fields(employee: Dict[str, Any], *, import_date: date) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _map_employee_to_persona_fields(
+    employee: Dict[str, Any],
+    *,
+    import_date: date,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
         person_id_raw = employee.get("person_id")
         if person_id_raw is None or person_id_raw == "":
@@ -234,11 +313,29 @@ def _map_employee_to_persona_fields(employee: Dict[str, Any], *, import_date: da
     if not created_at:
         return None, "evaluaciones.personas.import.error.invalid_datetime_fields"
 
+    rut_original = _as_str(employee.get("rut"), field_name="rut", allow_none=True)
+    rut_normalizado = _normalize_rut(employee.get("rut"))
+    if rut_normalizado is None:
+        return None, "evaluaciones.personas.import.error.invalid_rut"
+
     gender_value = _as_str(employee.get("gender"), field_name="gender", allow_none=False) or ""
     gender_value = (gender_value[:1] if gender_value else "")
 
+    current_job = _as_mapping(employee.get("current_job"))
+    role = _as_mapping(current_job.get("role"))
+    role_family = _as_mapping(role.get("role_family"))
+    recinto_asistencia = _as_mapping(current_job.get("recinto_asistencia"))
+    recinto_primario = _as_mapping(current_job.get("recinto_primario"))
+    custom_attributes = _as_mapping(current_job.get("custom_attributes"))
+
     fields: Dict[str, Any] = {
         "person_id": person_id,
+        "buk_employee_id": _as_int(employee.get("id"), allow_none=True),
+        "anio": import_date.year,
+        "mes": import_date.month,
+        "fecha_corte": import_date,
+        "rut": rut_original,
+        "rut_normalizado": rut_normalizado,
         "full_name": _as_str(employee.get("full_name"), field_name="full_name", allow_none=False) or "",
         "first_name": _as_str(employee.get("first_name"), field_name="first_name", allow_none=False) or "",
         "surname": _as_str(employee.get("surname"), field_name="surname", allow_none=False) or "",
@@ -266,6 +363,7 @@ def _map_employee_to_persona_fields(employee: Dict[str, Any], *, import_date: da
         "gender": gender_value,
         "birthday": birthday,
         "active_since": active_since,
+        "active_until": _parse_required_date(employee.get("active_until")),
         "created_at": created_at,
         "status": _as_str(employee.get("status"), field_name="status", allow_none=False) or "",
         "payment_method": _as_str(employee.get("payment_method"), field_name="payment_method", allow_none=False) or "",
@@ -284,8 +382,54 @@ def _map_employee_to_persona_fields(employee: Dict[str, Any], *, import_date: da
         "pension_fund": _as_str(employee.get("pension_fund"), field_name="pension_fund", allow_none=False) or "",
         "afc": _as_str(employee.get("afc"), field_name="afc", allow_none=False) or "",
         "retired": _as_bool(employee.get("retired")),
-        "mes": import_date.month,
-        "anio": import_date.year,
+        "company_id": _as_int(current_job.get("company_id"), allow_none=True),
+        "role_id": _as_int(role.get("id"), allow_none=True),
+        "role_code": _as_optional_scalar_str(
+            role.get("code"),
+            field_name="role_code",
+        ),
+        "role_name": _as_optional_scalar_str(
+            role.get("name"),
+            field_name="role_name",
+        ),
+        "role_family_id": _as_int(role_family.get("id"), allow_none=True),
+        "role_family_name": _as_optional_scalar_str(
+            role_family.get("name"),
+            field_name="role_family_name",
+        ),
+        "area_id": _as_int(current_job.get("area_id"), allow_none=True),
+        "cost_center": _as_optional_scalar_str(
+            current_job.get("cost_center"),
+            field_name="cost_center",
+        ),
+        "recinto_asistencia_id": _as_int(
+            recinto_asistencia.get("id"),
+            allow_none=True,
+        ),
+        "recinto_asistencia_code": _as_optional_scalar_str(
+            recinto_asistencia.get("code"),
+            field_name="recinto_asistencia_code",
+        ),
+        "recinto_primario_id": _as_int(
+            recinto_primario.get("id"),
+            allow_none=True,
+        ),
+        "recinto_primario_code": _as_optional_scalar_str(
+            recinto_primario.get("code"),
+            field_name="recinto_primario_code",
+        ),
+        "ctrlit_recinto": _as_optional_scalar_str(
+            custom_attributes.get("ctrlit_recinto"),
+            field_name="ctrlit_recinto",
+        ),
+        "job_id": _as_int(current_job.get("id"), allow_none=True),
+        "job_start_date": _parse_required_date(current_job.get("start_date")),
+        "job_end_date": _parse_required_date(current_job.get("end_date")),
+        "contract_type": _as_optional_scalar_str(
+            current_job.get("contract_type"),
+            field_name="contract_type",
+        ),
+        "buk_payload": employee,
     }
 
     for field_name in _NULLABLE_STRING_FIELDS:
@@ -369,7 +513,7 @@ def importar_personas_desde_api_interna(
 
     total_recibidos = len(all_employees)
 
-    employees_by_person_id: Dict[int, Dict[str, Any]] = {}
+    employees_by_rut: Dict[str, Dict[str, Any]] = {}
     duplicates = 0
     errors = 0
 
@@ -378,18 +522,20 @@ def importar_personas_desde_api_interna(
             errors += 1
             continue
 
-        person_id_raw = item.get("person_id")
-        try:
-            person_id_int = int(person_id_raw)
-        except (TypeError, ValueError):
+        mapped, _map_error_key = _map_employee_to_persona_fields(
+            item,
+            import_date=import_date,
+        )
+        if not mapped:
             errors += 1
             continue
 
-        if person_id_int in employees_by_person_id:
+        rut_normalizado = mapped["rut_normalizado"]
+        if rut_normalizado in employees_by_rut:
             duplicates += 1
-        employees_by_person_id[person_id_int] = item
+        employees_by_rut[rut_normalizado] = mapped
 
-    person_ids = list(employees_by_person_id.keys())
+    rut_normalizados = list(employees_by_rut.keys())
 
     to_create: List[Persona] = []
     to_update: List[Persona] = []
@@ -401,17 +547,13 @@ def importar_personas_desde_api_interna(
     try:
         with open_persona_storage() as storage:
             with storage.atomic():
-                existing_by_person_id = storage.existing_by_person_id(person_ids)
-                for person_id_int, employee in employees_by_person_id.items():
-                    mapped, map_error_key = _map_employee_to_persona_fields(
-                        employee,
-                        import_date=import_date,
-                    )
-                    if not mapped:
-                        errors += 1
-                        continue
-
-                    existing = existing_by_person_id.get(person_id_int)
+                existing_by_month_and_rut = storage.existing_by_month_and_rut(
+                    anio=import_date.year,
+                    mes=import_date.month,
+                    rut_normalizados=rut_normalizados,
+                )
+                for rut_normalizado, mapped in employees_by_rut.items():
+                    existing = existing_by_month_and_rut.get(rut_normalizado)
                     if not existing:
                         to_create.append(Persona(**mapped))
                         created_count += 1

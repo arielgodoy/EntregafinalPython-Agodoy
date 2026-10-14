@@ -1,17 +1,23 @@
--- Derived from evaluaciones.models.Persona using Django 5.1.3's MySQL schema editor.
--- Supported targets: Oracle MySQL 8.0.16+ and MariaDB 10.5+ (Django 5.1).
--- Both supported server families enforce the CHECK constraints below.
--- Engine, character set, and collation are explicit and do not use server defaults.
+-- Derived from evaluaciones.models.Persona using Django 5.1's MySQL schema editor.
+-- Supported targets: Oracle MySQL 8.0.16+ and MariaDB 10.5+.
+-- MariaDB stores its JSON type as LONGTEXT with JSON validation.
+-- The application schema installer executes this statement only after signed confirmation.
+-- No payload values belong in this file; buk_payload contains sensitive personal data.
 CREATE TABLE `evaluaciones_persona` (
   `id` bigint AUTO_INCREMENT NOT NULL PRIMARY KEY,
-  `person_id` integer NOT NULL UNIQUE,
+  `person_id` integer NOT NULL,
+  `buk_employee_id` integer NULL,
+  `anio` smallint UNSIGNED NOT NULL CHECK (`anio` >= 0),
+  `mes` smallint UNSIGNED NOT NULL CHECK (`mes` >= 0),
+  `fecha_corte` date NOT NULL,
+  `rut` varchar(20) NULL,
+  `rut_normalizado` varchar(20) NOT NULL,
   `full_name` varchar(255) NOT NULL,
   `first_name` varchar(100) NOT NULL,
   `surname` varchar(100) NOT NULL,
   `second_surname` varchar(100) NULL,
   `document_type` varchar(20) NOT NULL,
   `document_number` varchar(20) NOT NULL,
-  `rut` varchar(20) NOT NULL,
   `code_sheet` varchar(20) NOT NULL,
   `email` varchar(254) NULL,
   `personal_email` varchar(254) NULL,
@@ -28,6 +34,7 @@ CREATE TABLE `evaluaciones_persona` (
   `gender` varchar(1) NOT NULL,
   `birthday` date NOT NULL,
   `active_since` date NOT NULL,
+  `active_until` date NULL,
   `created_at` datetime(6) NOT NULL,
   `status` varchar(20) NOT NULL,
   `payment_method` varchar(50) NOT NULL,
@@ -46,6 +53,37 @@ CREATE TABLE `evaluaciones_persona` (
   `pension_fund` varchar(50) NOT NULL,
   `afc` varchar(20) NOT NULL,
   `retired` bool NOT NULL,
-  `mes` smallint UNSIGNED NOT NULL CHECK (`mes` >= 0),
-  `anio` smallint UNSIGNED NOT NULL CHECK (`anio` >= 0)
+  `company_id` integer NULL,
+  `role_id` integer NULL,
+  `role_code` varchar(100) NULL,
+  `role_name` varchar(255) NULL,
+  `role_family_id` integer NULL,
+  `role_family_name` varchar(255) NULL,
+  `area_id` integer NULL,
+  `cost_center` varchar(100) NULL,
+  `recinto_asistencia_id` integer NULL,
+  `recinto_asistencia_code` varchar(100) NULL,
+  `recinto_primario_id` integer NULL,
+  `recinto_primario_code` varchar(100) NULL,
+  `ctrlit_recinto` varchar(100) NULL,
+  `job_id` integer NULL,
+  `job_start_date` date NULL,
+  `job_end_date` date NULL,
+  `contract_type` varchar(100) NULL,
+  `buk_payload` json NOT NULL,
+  CONSTRAINT `eval_person_month_rut_uq`
+    UNIQUE (`anio`, `mes`, `rut_normalizado`),
+  CONSTRAINT `eval_person_month_chk`
+    CHECK ((`mes` >= 1 AND `mes` <= 12)),
+  CONSTRAINT `eval_person_year_chk`
+    CHECK (`anio` >= 1),
+  CONSTRAINT `eval_person_rut_nonempty_chk`
+    CHECK (`rut_normalizado` > ''),
+  KEY `eval_person_period_org_idx`
+    (`anio`, `mes`, `company_id`, `recinto_asistencia_code`, `role_id`),
+  KEY `eval_person_buk_person_idx` (`person_id`),
+  KEY `eval_person_buk_emp_idx` (`buk_employee_id`),
+  KEY `eval_person_company_idx` (`company_id`),
+  KEY `eval_person_recinto_idx` (`recinto_asistencia_code`),
+  KEY `eval_person_role_idx` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

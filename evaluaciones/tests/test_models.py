@@ -1,4 +1,5 @@
 from datetime import datetime, timezone as datetime_timezone
+from importlib import import_module
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -11,10 +12,21 @@ class PersonaModelTests(SimpleTestCase):
     def test_current_month_returns_valid_month(self):
         self.assertIn(current_month(), range(1, 13))
 
-    def test_persona_uses_current_month_when_mes_is_omitted(self):
-        persona = Persona(person_id=1, full_name="Persona de prueba")
+    def test_monthly_period_fields_are_required(self):
+        for field_name in ("anio", "mes"):
+            field = Persona._meta.get_field(field_name)
+            with self.subTest(field=field_name):
+                self.assertFalse(field.null)
+                self.assertFalse(field.has_default())
 
-        self.assertEqual(persona.mes, current_month())
+    def test_monthly_schema_migration_is_state_only(self):
+        migration = import_module(
+            "evaluaciones.migrations.0008_persona_monthly_schema_state"
+        ).Migration("0008_persona_monthly_schema_state", "evaluaciones")
+        operation = migration.operations[0]
+
+        self.assertEqual(operation.database_operations, [])
+        self.assertTrue(operation.state_operations)
 
     @override_settings(SYSTEM_LOCAL_TIME_ZONE="America/Santiago")
     @patch("django.utils.timezone.now")

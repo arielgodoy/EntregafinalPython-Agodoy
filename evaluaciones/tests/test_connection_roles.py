@@ -858,13 +858,13 @@ class EvaluacionesConnectionViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_connection_link_uses_its_view_visibility_not_import_supervisor(self):
+    def test_connection_link_is_not_rendered_on_import_page(self):
         self.permission.supervisor = False
         self.permission.save(update_fields=["supervisor"])
 
         response = self.client.get(reverse("evaluaciones:importar_personas"))
 
-        self.assertContains(response, "Configurar conexiones SQL")
+        self.assertNotContains(response, "Configurar conexiones SQL")
 
         self.connection_permission.ver = False
         self.connection_permission.save(update_fields=["ver"])

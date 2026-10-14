@@ -125,11 +125,28 @@ class PersonaImportProgressEndpointsTests(TestCase):
         mock_spawn.return_value = None
 
         url = reverse("evaluaciones:importar_personas_start")
-        resp = self.client.post(url, {"date": "2026-03-07"}, **self._ajax_headers())
+        with patch(
+            "evaluaciones.views.system_date_context",
+            return_value={"fecha_sistema": "2026-10-13"},
+        ):
+            resp = self.client.post(
+                url,
+                {
+                    "date": "2025-01-02",
+                    "fecha": "2024-02-03",
+                    "anio": "2020",
+                    "mes": "4",
+                },
+                **self._ajax_headers(),
+            )
 
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data.get("success"))
+        self.assertEqual(
+            mock_spawn.call_args.kwargs["date_str"],
+            "2026-10-13",
+        )
 
         status_url = reverse("evaluaciones:importar_personas_status")
         status_resp = self.client.get(status_url, **self._ajax_headers())
@@ -138,6 +155,84 @@ class PersonaImportProgressEndpointsTests(TestCase):
         status_payload = status_resp.json()
         self.assertEqual(status_payload.get("status"), "running")
         self.assertEqual(status_payload.get("message_key"), "evaluaciones.personas.import.progress_starting")
+
+    def test_start_rejects_when_official_system_date_is_unavailable(self):
+        with (
+            patch(
+                "evaluaciones.views.system_date_context",
+                return_value={"fecha_sistema": None},
+            ),
+            patch(
+                "evaluaciones.services.persona_import_job.start_persona_import_async"
+            ) as mock_start,
+        ):
+            response = self.client.post(
+                reverse("evaluaciones:importar_personas_start"),
+                {"date": "2026-10-13"},
+                **self._ajax_headers(),
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "message_key": "evaluaciones.personas.import.error.system_date_unavailable",
+            },
+        )
+        mock_start.assert_not_called()
+
+    def test_async_worker_uses_date_captured_before_system_date_changes(self):
+        from evaluaciones.services import persona_import_job
+        from evaluaciones.services.persona_importer import PersonaImportResult
+
+        date_state = {"value": "2026-10-13"}
+        received_dates = []
+
+        def fake_import(date_value, exclude_pending, request_user=None, progress_callback=None):
+            received_dates.append(date_value)
+            return PersonaImportResult(
+                total_recibidos=0,
+                creados=0,
+                actualizados=0,
+                omitidos=0,
+                errores=0,
+                paginas_procesadas=0,
+            )
+
+        def spawn_after_date_change(*, status_key, date_str, exclude_pending):
+            date_state["value"] = "2026-11-02"
+            persona_import_job._run_persona_import(
+                status_key=status_key,
+                date_str=date_str,
+                exclude_pending=exclude_pending,
+            )
+
+        with (
+            patch(
+                "evaluaciones.views.system_date_context",
+                side_effect=lambda request: {
+                    "fecha_sistema": date_state["value"],
+                },
+            ),
+            patch(
+                "evaluaciones.services.persona_import_job.importar_personas_desde_api_interna",
+                side_effect=fake_import,
+            ),
+            patch(
+                "evaluaciones.services.persona_import_job._spawn_persona_import_thread",
+                side_effect=spawn_after_date_change,
+            ),
+        ):
+            response = self.client.post(
+                reverse("evaluaciones:importar_personas_start"),
+                {"date": "2001-01-01"},
+                **self._ajax_headers(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(received_dates, ["2026-10-13"])
+        self.assertEqual(date_state["value"], "2026-11-02")
 
     def test_status_updates_with_mocked_progress(self):
         from evaluaciones.services import persona_import_job
@@ -189,11 +284,27 @@ class PersonaImportProgressEndpointsTests(TestCase):
                 exclude_pending=exclude_pending,
             )
 
-        with patch("evaluaciones.services.persona_import_job.importar_personas_desde_api_interna", side_effect=fake_import):
-            with patch("evaluaciones.services.persona_import_job._spawn_persona_import_thread", side_effect=spawn_sync):
-                url = reverse("evaluaciones:importar_personas_start")
-                resp = self.client.post(url, {"date": "2026-03-07"}, **self._ajax_headers())
-                self.assertEqual(resp.status_code, 200)
+        with (
+            patch(
+                "evaluaciones.views.system_date_context",
+                return_value={"fecha_sistema": "2026-10-13"},
+            ),
+            patch(
+                "evaluaciones.services.persona_import_job.importar_personas_desde_api_interna",
+                side_effect=fake_import,
+            ),
+            patch(
+                "evaluaciones.services.persona_import_job._spawn_persona_import_thread",
+                side_effect=spawn_sync,
+            ),
+        ):
+            url = reverse("evaluaciones:importar_personas_start")
+            resp = self.client.post(
+                url,
+                {"date": "2026-03-07"},
+                **self._ajax_headers(),
+            )
+            self.assertEqual(resp.status_code, 200)
 
         status_url = reverse("evaluaciones:importar_personas_status")
         status_resp = self.client.get(status_url, **self._ajax_headers())

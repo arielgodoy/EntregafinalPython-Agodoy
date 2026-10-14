@@ -29,20 +29,21 @@ Importar Personas
                         </small>
                     </div>
 
-                    {% if can_view_sql_connections %}
-                    <div class="mb-3 text-end">
-                        <a href="{% url 'evaluaciones:connection_roles' %}" class="btn btn-outline-primary" data-key="evaluaciones.connection_roles.manage">
-                            Configurar conexiones SQL
-                        </a>
-                    </div>
-                    {% endif %}
-
                     <form method="post" class="mb-3" id="import-personas-form" data-start-url="{% url 'evaluaciones:importar_personas_start' %}" data-status-url="{% url 'evaluaciones:importar_personas_status' %}">
                         {% csrf_token %}
                         <div class="row g-3 align-items-end">
                             <div class="col-md-3">
-                                <label for="importDate" class="form-label" data-key="evaluaciones.personas.import.date_label">Fecha</label>
-                                <input type="date" class="form-control" id="importDate" name="date" value="{{ import_date|default:'' }}" required>
+                                <label class="form-label" data-key="evaluaciones.personas.import.system_date_label">Fecha de Sistema</label>
+                                <div class="form-control bg-light" aria-readonly="true">
+                                    {% if import_system_date_available %}
+                                    {{ import_system_date_display }}
+                                    {% else %}
+                                    <span data-key="evaluaciones.personas.import.system_date_unavailable">No disponible</span>
+                                    {% endif %}
+                                </div>
+                                {% if not import_system_date_available %}
+                                <div class="form-text text-danger" data-key="evaluaciones.personas.import.system_date_error">No se pudo obtener la Fecha de Sistema oficial. La importación no se iniciará.</div>
+                                {% endif %}
                             </div>
                             <div class="col-md-4">
                                 <div class="form-check mt-4">
@@ -94,6 +95,7 @@ Importar Personas
                     <div class="alert alert-danger d-none" role="alert" id="import-error-alert">
                         <span id="import-error-text-generic" data-key="evaluaciones.personas.import.progress_failed">No se pudo completar la importación.</span>
                         <span id="import-error-text-forbidden" class="d-none" data-key="error_403_message">No tienes permisos suficientes para acceder a esta página.</span>
+                        <span id="import-error-text-system-date" class="d-none" data-key="evaluaciones.personas.import.system_date_error">No se pudo obtener la Fecha de Sistema oficial. La importación no se iniciará.</span>
                     </div>
 
                     <div class="card mb-3 {% if not import_result %}d-none{% endif %}" id="import-summary-card">
@@ -128,31 +130,111 @@ Importar Personas
                         </div>
                     </div>
 
+                    {% if persona_filter_error %}
+                    <div class="alert alert-warning" role="alert">
+                        <span data-key="evaluaciones.personas.filters.invalid">Uno o más filtros no son válidos para los datos disponibles.</span>
+                    </div>
+                    {% endif %}
+
+                    <form method="get" class="card card-body mb-3" id="persona-list-filters">
+                        <h5 class="card-title mb-3" data-key="evaluaciones.personas.filters.title">Consultar registros</h5>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3 col-xl-2">
+                                <label for="persona-period-filter" class="form-label" data-key="evaluaciones.personas.filters.period">Período consultado</label>
+                                <select class="form-select" id="persona-period-filter" name="period">
+                                    {% for option in period_options %}
+                                    <option value="{{ option.value }}" {% if selected_period == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                    {% empty %}
+                                    <option value="" selected data-key="evaluaciones.personas.filters.no_periods">Sin períodos disponibles</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3 col-xl-2">
+                                <label for="persona-company-filter" class="form-label" data-key="evaluaciones.personas.filters.company">Empresa</label>
+                                <select class="form-select" id="persona-company-filter" name="company_id">
+                                    <option value="" data-key="evaluaciones.personas.filters.all">Todos</option>
+                                    {% for option in company_options %}
+                                    <option value="{{ option.value }}" {% if selected_company_id == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3 col-xl-3">
+                                <label for="persona-location-filter" class="form-label" data-key="evaluaciones.personas.filters.location">Local de trabajo</label>
+                                <select class="form-select" id="persona-location-filter" name="ctrlit_recinto">
+                                    <option value="" data-key="evaluaciones.personas.filters.all">Todos</option>
+                                    {% for option in location_options %}
+                                    <option value="{{ option.value }}" {% if selected_location == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3 col-xl-3">
+                                <label for="persona-role-filter" class="form-label" data-key="evaluaciones.personas.filters.role">Cargo/Labor</label>
+                                <select class="form-select" id="persona-role-filter" name="role_id">
+                                    <option value="" data-key="evaluaciones.personas.filters.all">Todos</option>
+                                    {% for option in role_options %}
+                                    <option value="{{ option.value }}" {% if selected_role_id == option.value %}selected{% endif %}{% if option.missing_label %} data-key="evaluaciones.personas.value.no_information"{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-12 col-xl-2 text-xl-end">
+                                <button type="submit" class="btn btn-primary" data-key="evaluaciones.personas.filters.apply">Aplicar</button>
+                            </div>
+                        </div>
+                    </form>
+
                     <div class="table-responsive">
                         <table class="table table-bordered dt-responsive nowrap table-striped align-middle" id="personas-table">
                             <thead>
                                 <tr>
-                                    <th data-key="evaluaciones.personas.columns.person_id">ID</th>
-                                    <th data-key="evaluaciones.personas.columns.full_name">Nombre</th>
                                     <th data-key="evaluaciones.personas.columns.rut">RUT</th>
-                                    <th data-key="evaluaciones.personas.columns.email">Email</th>
+                                    <th data-key="evaluaciones.personas.columns.full_name">Nombre</th>
+                                    <th data-key="evaluaciones.personas.columns.company">Empresa</th>
+                                    <th data-key="evaluaciones.personas.columns.ctrlit_recinto">Local de trabajo</th>
+                                    <th data-key="evaluaciones.personas.columns.role_name">Cargo/Labor</th>
+                                    <th data-key="evaluaciones.personas.columns.role_family_name">Familia del cargo</th>
+                                    <th data-key="evaluaciones.personas.columns.area">Área</th>
+                                    <th data-key="evaluaciones.personas.columns.cost_center">Centro de costo</th>
                                     <th data-key="evaluaciones.personas.columns.status">Estado</th>
-                                    <th data-key="evaluaciones.personas.columns.period">Periodo</th>
+                                    <th data-key="evaluaciones.personas.columns.period">Período</th>
+                                    <th data-key="evaluaciones.personas.columns.email">Email</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for p in personas %}
                                 <tr>
-                                    <td>{{ p.person_id }}</td>
-                                    <td>{{ p.full_name }}</td>
-                                    <td>{{ p.rut }}</td>
-                                    <td>{{ p.email|default_if_none:"" }}</td>
-                                    <td>{{ p.status }}</td>
+                                    <td>{% if p.rut %}{{ p.rut }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
+                                    <td>{% if p.full_name %}{{ p.full_name }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
+                                    <td>
+                                        {% if p.company_id or p.company_id == 0 %}
+                                        <span data-key="evaluaciones.personas.value.buk_company_prefix">Empresa BUK #</span>{{ p.company_id }}
+                                        {% else %}
+                                        <span data-key="evaluaciones.personas.value.no_information">Sin información</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if p.ctrlit_recinto %}
+                                        {{ p.ctrlit_recinto }}
+                                        {% else %}
+                                        <span data-key="evaluaciones.personas.value.no_location">Sin recinto</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{% if p.role_name %}{{ p.role_name }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
+                                    <td>{% if p.role_family_name %}{{ p.role_family_name }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
+                                    <td>
+                                        {% if p.area_id or p.area_id == 0 %}
+                                        <span data-key="evaluaciones.personas.value.area_prefix">Área #</span>{{ p.area_id }}
+                                        {% else %}
+                                        <span data-key="evaluaciones.personas.value.no_information">Sin información</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{% if p.cost_center %}{{ p.cost_center }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
+                                    <td>{% if p.status %}{{ p.status }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
                                     <td>{{ p.mes }}/{{ p.anio }}</td>
+                                    <td>{% if p.email %}{{ p.email }}{% else %}<span data-key="evaluaciones.personas.value.no_information">Sin información</span>{% endif %}</td>
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="6" class="text-center" data-key="evaluaciones.personas.empty">Sin personas cargadas.</td>
+                                    <td colspan="11" class="text-center" data-key="evaluaciones.personas.empty">Sin personas cargadas.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -176,12 +258,25 @@ Importar Personas
             },
             responsive: true,
             autoWidth: false,
+            searching: true,
+            ordering: true,
+            order: [[0, 'asc']],
+            paging: true,
             pageLength: 50,
             lengthMenu: [
                 [10, 25, 50, 100],
                 [10, 25, 50, 100]
             ],
         });
+
+        const listingFilters = document.getElementById('persona-list-filters');
+        if (listingFilters) {
+            listingFilters.querySelectorAll('select').forEach(function (select) {
+                select.addEventListener('change', function () {
+                    listingFilters.submit();
+                });
+            });
+        }
 
         const form = document.getElementById('import-personas-form');
         if (!form) {
@@ -206,6 +301,7 @@ Importar Personas
         const alertError = document.getElementById('import-error-alert');
         const errorTextGeneric = document.getElementById('import-error-text-generic');
         const errorTextForbidden = document.getElementById('import-error-text-forbidden');
+        const errorTextSystemDate = document.getElementById('import-error-text-system-date');
 
         const summaryCard = document.getElementById('import-summary-card');
         const elReceived = document.getElementById('import-total-received');
@@ -262,6 +358,9 @@ Importar Personas
             }
             if (errorTextForbidden) {
                 errorTextForbidden.classList.toggle('d-none', kind !== 'forbidden');
+            }
+            if (errorTextSystemDate) {
+                errorTextSystemDate.classList.toggle('d-none', kind !== 'system-date');
             }
         }
 
@@ -511,7 +610,9 @@ Importar Personas
 
                 setStatusLabel('error');
                 hideAjaxAlerts();
-                setErrorAlertKind('generic');
+                const systemDateUnavailable = started.payload
+                    && started.payload.message_key === 'evaluaciones.personas.import.error.system_date_unavailable';
+                setErrorAlertKind(systemDateUnavailable ? 'system-date' : 'generic');
                 showAjaxError();
                 console.log('Importación con error controlado');
                 return;

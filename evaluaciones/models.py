@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from datetime import datetime
 
 from settings.models import SettingsMySQLConnection
 
@@ -194,14 +193,19 @@ class EvaluacionConnectionRole(models.Model):
 
 
 class Persona(models.Model):
-    person_id = models.IntegerField(unique=True)
+    person_id = models.IntegerField()
+    buk_employee_id = models.IntegerField(blank=True, null=True)
+    anio = models.PositiveSmallIntegerField()
+    mes = models.PositiveSmallIntegerField()
+    fecha_corte = models.DateField()
+    rut = models.CharField(max_length=20, blank=True, null=True)
+    rut_normalizado = models.CharField(max_length=20)
     full_name = models.CharField(max_length=255)
     first_name = models.CharField(max_length=100)
     surname = models.CharField(max_length=100)
     second_surname = models.CharField(max_length=100, blank=True, null=True)
     document_type = models.CharField(max_length=20)
     document_number = models.CharField(max_length=20)
-    rut = models.CharField(max_length=20)
     code_sheet = models.CharField(max_length=20)
     email = models.EmailField(blank=True, null=True)
     personal_email = models.EmailField(blank=True, null=True)
@@ -218,6 +222,7 @@ class Persona(models.Model):
     gender = models.CharField(max_length=1)
     birthday = models.DateField()
     active_since = models.DateField()
+    active_until = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField()
     status = models.CharField(max_length=20)
     payment_method = models.CharField(max_length=50)
@@ -236,14 +241,58 @@ class Persona(models.Model):
     pension_fund = models.CharField(max_length=50)
     afc = models.CharField(max_length=20)
     retired = models.BooleanField(default=False)
-
-    mes = models.PositiveSmallIntegerField(default=current_month)
-    anio = models.PositiveSmallIntegerField(default=datetime.now().year)
+    company_id = models.IntegerField(blank=True, null=True)
+    role_id = models.IntegerField(blank=True, null=True)
+    role_code = models.CharField(max_length=100, blank=True, null=True)
+    role_name = models.CharField(max_length=255, blank=True, null=True)
+    role_family_id = models.IntegerField(blank=True, null=True)
+    role_family_name = models.CharField(max_length=255, blank=True, null=True)
+    area_id = models.IntegerField(blank=True, null=True)
+    cost_center = models.CharField(max_length=100, blank=True, null=True)
+    recinto_asistencia_id = models.IntegerField(blank=True, null=True)
+    recinto_asistencia_code = models.CharField(max_length=100, blank=True, null=True)
+    recinto_primario_id = models.IntegerField(blank=True, null=True)
+    recinto_primario_code = models.CharField(max_length=100, blank=True, null=True)
+    ctrlit_recinto = models.CharField(max_length=100, blank=True, null=True)
+    job_id = models.IntegerField(blank=True, null=True)
+    job_start_date = models.DateField(blank=True, null=True)
+    job_end_date = models.DateField(blank=True, null=True)
+    contract_type = models.CharField(max_length=100, blank=True, null=True)
+    buk_payload = models.JSONField()
 
     class Meta:
         verbose_name = "Persona"
         verbose_name_plural = "Personas"
         ordering = ['-anio', '-mes', 'full_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=("anio", "mes", "rut_normalizado"),
+                name="eval_person_month_rut_uq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(mes__gte=1, mes__lte=12),
+                name="eval_person_month_chk",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(anio__gte=1),
+                name="eval_person_year_chk",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(rut_normalizado__gt=""),
+                name="eval_person_rut_nonempty_chk",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("anio", "mes", "company_id", "recinto_asistencia_code", "role_id"),
+                name="eval_person_period_org_idx",
+            ),
+            models.Index(fields=("person_id",), name="eval_person_buk_person_idx"),
+            models.Index(fields=("buk_employee_id",), name="eval_person_buk_emp_idx"),
+            models.Index(fields=("company_id",), name="eval_person_company_idx"),
+            models.Index(fields=("recinto_asistencia_code",), name="eval_person_recinto_idx"),
+            models.Index(fields=("role_id",), name="eval_person_role_idx"),
+        ]
 
     def __str__(self):
         return self.full_name

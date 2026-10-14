@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
@@ -25,16 +26,75 @@ from .services.connection_roles import (
     get_evaluaciones_connection_status,
     open_evaluaciones_connection,
 )
-from .services.persona_storage import PersonaStorageError, list_personas
+from .services.persona_storage import (
+    PersonaStorageError,
+    list_persona_period_data,
+)
 from .services.base_evaluaciones_schema import (
     BaseEvaluacionesSchemaInstallError,
     install_base_evaluaciones_schema,
     preview_base_evaluaciones_schema,
 )
 from settings.services.mysql_connections import MySQLConnectionOpenError
+from settings.context_processors import system_date_context
 
 
 logger = logging.getLogger(__name__)
+
+_SYSTEM_DATE_UNAVAILABLE_KEY = (
+    "evaluaciones.personas.import.error.system_date_unavailable"
+)
+
+
+def _resolve_system_date(request):
+    try:
+        value = system_date_context(request).get("fecha_sistema")
+    except Exception as exc:
+        logger.error(
+            "Persona import system date resolution failed (error_type=%s)",
+            type(exc).__name__,
+        )
+        return None
+
+    if not isinstance(value, str):
+        return None
+    try:
+        resolved_date = date.fromisoformat(value)
+    except ValueError:
+        return None
+    return resolved_date if resolved_date.isoformat() == value else None
+
+
+def _parse_period_filter(value):
+    if not value:
+        return None, True
+    if (
+        len(value) != 7
+        or value[4] != "-"
+        or not value[:4].isdigit()
+        or not value[5:].isdigit()
+    ):
+        return None, False
+    anio, mes = int(value[:4]), int(value[5:])
+    if anio < 1 or mes < 1 or mes > 12:
+        return None, False
+    return (anio, mes), True
+
+
+def _parse_integer_filter(value, allowed_values):
+    if not value:
+        return None, True
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None, False
+    return (parsed, parsed in allowed_values)
+
+
+def _location_filter_value(value):
+    if value is None or not str(value).strip():
+        return None
+    return str(value).strip()
 
 
 class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
@@ -44,20 +104,190 @@ class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     vista_nombre = "Evaluaciones - Importar Personas"
     permiso_requerido = "ingresar"
 
+    def dispatch(self, request, *args, **kwargs):
+        self.permiso_requerido = (
+            "supervisor" if request.method == "POST" else "ingresar"
+        )
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
-        # Listado acotado para evitar cargas grandes; se ampliará en la fase de importación real.
         self.personas_total = None
         self.personas_storage_error = False
+        self.personas_filter_error = False
+        self.period_options = []
+        self.company_options = []
+        self.location_options = []
+        self.role_options = []
+        self.selected_period = ""
+        self.selected_company_id = ""
+        self.selected_location = ""
+        self.selected_role_id = ""
+
+        period_raw = self.request.GET.get("period", "")
+        requested_period, valid_period = _parse_period_filter(period_raw)
+        self.personas_filter_error = not valid_period
+
         try:
-            personas, self.personas_total = list_personas()
+            periods, selected_period, period_people = list_persona_period_data(
+                requested_period
+            )
         except PersonaStorageError:
             self.personas_storage_error = True
             return []
-        return personas
+
+        if period_raw and selected_period != requested_period:
+            self.personas_filter_error = True
+
+        self.period_options = [
+            {
+                "value": f"{anio:04d}-{mes:02d}",
+                "label": f"{mes:02d}/{anio:04d}",
+            }
+            for anio, mes in periods
+        ]
+        if selected_period:
+            self.selected_period = (
+                f"{selected_period[0]:04d}-{selected_period[1]:02d}"
+            )
+
+        self.personas_total = len(period_people)
+        company_ids = sorted(
+            {
+                persona.company_id
+                for persona in period_people
+                if persona.company_id is not None
+            }
+        )
+        self.company_options = [
+            {
+                "value": str(company_id),
+                "label": f"Empresa BUK #{company_id}",
+            }
+            for company_id in company_ids
+        ]
+
+        company_raw = self.request.GET.get("company_id", "")
+        company_id, company_valid = _parse_integer_filter(
+            company_raw,
+            set(company_ids),
+        )
+        if not company_valid:
+            self.personas_filter_error = True
+            selected_company_people = []
+        else:
+            self.selected_company_id = (
+                str(company_id) if company_id is not None else ""
+            )
+            selected_company_people = [
+                persona
+                for persona in period_people
+                if company_id is None or persona.company_id == company_id
+            ]
+
+        location_values = sorted(
+            {
+                location
+                for persona in selected_company_people
+                if (location := _location_filter_value(persona.ctrlit_recinto))
+                is not None
+            },
+            key=str.casefold,
+        )
+        self.location_options = [
+            {"value": location, "label": location}
+            for location in location_values
+        ]
+
+        location_raw = self.request.GET.get("ctrlit_recinto", "")
+        location = location_raw or None
+        location_valid = location is None or location in location_values
+        if not location_valid:
+            self.personas_filter_error = True
+            selected_location_people = []
+        else:
+            self.selected_location = location or ""
+            selected_location_people = [
+                persona
+                for persona in selected_company_people
+                if location is None
+                or _location_filter_value(persona.ctrlit_recinto) == location
+            ]
+
+        role_labels = {}
+        for persona in selected_location_people:
+            if persona.role_id is None:
+                continue
+            label = (persona.role_name or "").strip()
+            if persona.role_id not in role_labels or (
+                label
+                and (
+                    not role_labels[persona.role_id]
+                    or label.casefold()
+                    < role_labels[persona.role_id].casefold()
+                )
+            ):
+                role_labels[persona.role_id] = label
+        self.role_options = [
+            {
+                "value": str(role_id),
+                "label": label or "Sin información",
+                "missing_label": not bool(label),
+            }
+            for role_id, label in sorted(
+                role_labels.items(),
+                key=lambda item: (item[1].casefold(), item[0]),
+            )
+        ]
+
+        role_raw = self.request.GET.get("role_id", "")
+        role_id, role_valid = _parse_integer_filter(
+            role_raw,
+            set(role_labels),
+        )
+        if not role_valid:
+            self.personas_filter_error = True
+        else:
+            self.selected_role_id = str(role_id) if role_id is not None else ""
+
+        if self.personas_filter_error:
+            return []
+        return [
+            persona
+            for persona in selected_location_people
+            if role_id is None or persona.role_id == role_id
+        ]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        if not hasattr(self, "_resolved_system_date"):
+            self._resolved_system_date = _resolve_system_date(self.request)
+        system_date = self._resolved_system_date
+        context["import_system_date_display"] = (
+            system_date.strftime("%d-%m-%Y") if system_date else ""
+        )
+        context["import_system_date_available"] = system_date is not None
         context["personas_total"] = getattr(self, "personas_total", None)
+        context["period_options"] = getattr(self, "period_options", [])
+        context["company_options"] = getattr(self, "company_options", [])
+        context["location_options"] = getattr(self, "location_options", [])
+        context["role_options"] = getattr(self, "role_options", [])
+        context["selected_period"] = getattr(self, "selected_period", "")
+        context["selected_company_id"] = getattr(
+            self,
+            "selected_company_id",
+            "",
+        )
+        context["selected_location"] = getattr(
+            self,
+            "selected_location",
+            "",
+        )
+        context["selected_role_id"] = getattr(self, "selected_role_id", "")
+        context["persona_filter_error"] = getattr(
+            self,
+            "personas_filter_error",
+            False,
+        )
         if getattr(self, "personas_storage_error", False):
             context["import_error_key"] = "evaluaciones.personas.import.error.db"
             context["import_error_text"] = (
@@ -79,7 +309,8 @@ class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
     def post(self, request, *args, **kwargs):
         from .services.persona_importer import PersonaImportServiceError, importar_personas_desde_api_interna
 
-        date_str = (request.POST.get("date") or "").strip()
+        system_date = _resolve_system_date(request)
+        self._resolved_system_date = system_date
         exclude_pending_raw = request.POST.get("exclude_pending")
         exclude_pending = str(exclude_pending_raw).strip().lower() in ("true", "1", "yes", "y", "on")
 
@@ -89,33 +320,36 @@ class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
         import_error_key = None
         import_error_text = None
 
-        try:
-            import_result = importar_personas_desde_api_interna(
-                date_str,
-                exclude_pending,
-                request_user=request.user,
+        if system_date is None:
+            import_error_key = _SYSTEM_DATE_UNAVAILABLE_KEY
+            import_error_text = (
+                "No se pudo obtener la Fecha de Sistema oficial. "
+                "La importación no se inició."
             )
-            import_success_key = "evaluaciones.personas.import.success"
-            import_success_text = "Importación completada."
-        except PersonaImportServiceError as exc:
-            import_error_key = exc.message_key
-            if exc.message_key == "evaluaciones.personas.import.error.date_required":
-                import_error_text = "La fecha es obligatoria."
-            elif exc.message_key == "evaluaciones.personas.import.error.date_invalid":
-                import_error_text = "La fecha debe tener formato YYYY-MM-DD."
-            elif exc.message_key == "evaluaciones.personas.import.error.invalid_response":
-                import_error_text = "Respuesta inválida desde la API interna."
-            elif exc.message_key == "evaluaciones.personas.import.error.too_many_pages":
-                import_error_text = "Paginación inválida o demasiado extensa."
-            elif exc.message_key == "evaluaciones.personas.import.error.api":
-                import_error_text = "No se pudo consultar la API interna."
-            elif exc.message_key == "evaluaciones.personas.import.error.db":
-                import_error_text = "No se pudo guardar la importación en la base de datos."
-            else:
+        else:
+            try:
+                import_result = importar_personas_desde_api_interna(
+                    system_date.isoformat(),
+                    exclude_pending,
+                    request_user=request.user,
+                )
+                import_success_key = "evaluaciones.personas.import.success"
+                import_success_text = "Importación completada."
+            except PersonaImportServiceError as exc:
+                import_error_key = exc.message_key
+                if exc.message_key == "evaluaciones.personas.import.error.invalid_response":
+                    import_error_text = "Respuesta inválida desde la API interna."
+                elif exc.message_key == "evaluaciones.personas.import.error.too_many_pages":
+                    import_error_text = "Paginación inválida o demasiado extensa."
+                elif exc.message_key == "evaluaciones.personas.import.error.api":
+                    import_error_text = "No se pudo consultar la API interna."
+                elif exc.message_key == "evaluaciones.personas.import.error.db":
+                    import_error_text = "No se pudo guardar la importación en la base de datos."
+                else:
+                    import_error_text = "No se pudo completar la importación."
+            except Exception:
+                import_error_key = "evaluaciones.personas.import.error.generic"
                 import_error_text = "No se pudo completar la importación."
-        except Exception:
-            import_error_key = "evaluaciones.personas.import.error.generic"
-            import_error_text = "No se pudo completar la importación."
 
         self.object_list = self.get_queryset()
         if self.personas_storage_error and not import_error_key:
@@ -124,7 +358,6 @@ class ImportarPersonasView(VerificarPermisoMixin, LoginRequiredMixin, ListView):
                 "No se pudo cargar la información de personas desde la base de datos."
             )
         context = self.get_context_data()
-        context["import_date"] = date_str
         context["exclude_pending"] = exclude_pending
         context["import_result"] = import_result
         context["import_success_key"] = import_success_key
@@ -139,9 +372,17 @@ class ImportarPersonasStartView(VerificarPermisoMixin, LoginRequiredMixin, View)
     permiso_requerido = "supervisor"
 
     def post(self, request, *args, **kwargs):
-        from datetime import date as date_cls
-
         from .services import persona_import_job
+
+        system_date = _resolve_system_date(request)
+        if system_date is None:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message_key": _SYSTEM_DATE_UNAVAILABLE_KEY,
+                },
+                status=503,
+            )
 
         empresa_id = request.session.get("empresa_id") or 0
         status_key = persona_import_job.build_persona_import_cache_key(
@@ -150,43 +391,12 @@ class ImportarPersonasStartView(VerificarPermisoMixin, LoginRequiredMixin, View)
             session_key=request.session.session_key,
         )
 
-        date_str = (request.POST.get("date") or "").strip()
         exclude_pending_raw = request.POST.get("exclude_pending")
         exclude_pending = str(exclude_pending_raw).strip().lower() in ("true", "1", "yes", "y", "on")
 
-        if not date_str:
-            persona_import_job.set_status(
-                status_key=status_key,
-                status_payload={
-                    "status": "error",
-                    "message_key": "evaluaciones.personas.import.error.date_required",
-                    "finished_at": persona_import_job.timezone.now().isoformat(),
-                },
-            )
-            return JsonResponse(
-                {"success": False, "message_key": "evaluaciones.personas.import.error.date_required"},
-                status=400,
-            )
-
-        try:
-            date_cls.fromisoformat(date_str)
-        except ValueError:
-            persona_import_job.set_status(
-                status_key=status_key,
-                status_payload={
-                    "status": "error",
-                    "message_key": "evaluaciones.personas.import.error.date_invalid",
-                    "finished_at": persona_import_job.timezone.now().isoformat(),
-                },
-            )
-            return JsonResponse(
-                {"success": False, "message_key": "evaluaciones.personas.import.error.date_invalid"},
-                status=400,
-            )
-
         status = persona_import_job.start_persona_import_async(
             status_key=status_key,
-            date_str=date_str,
+            date_str=system_date.isoformat(),
             exclude_pending=exclude_pending,
         )
 

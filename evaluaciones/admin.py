@@ -23,4 +23,7 @@ class EvaluacionConnectionRoleAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-admin.site.register(Persona)
+
+@admin.register(Persona)
+class PersonaAdmin(admin.ModelAdmin):
+    exclude = ("buk_payload",)

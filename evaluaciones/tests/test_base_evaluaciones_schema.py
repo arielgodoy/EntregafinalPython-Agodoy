@@ -42,12 +42,23 @@ def compatible_snapshot(*, table_exists=True):
                 "unique": True,
                 "columns": expected["primary"],
             },
-            {
-                "name": "person_id",
-                "unique": True,
-                "columns": ("person_id",),
-            },
         ]
+        actual["indexes"].extend(
+            {
+                "name": f"unique_{index}",
+                "unique": True,
+                "columns": columns,
+            }
+            for index, columns in enumerate(expected["unique"])
+        )
+        actual["indexes"].extend(
+            {
+                "name": f"index_{index}",
+                "unique": False,
+                "columns": columns,
+            }
+            for index, columns in enumerate(expected["ordinary"])
+        )
         actual["checks"] = set(expected["checks"])
     return {
         "expected": expected,
@@ -64,6 +75,7 @@ class ReadOnlyCursor:
         failing_sql_fragment=None,
         failure=None,
         check_rows=(),
+        column_rows=(),
     ):
         self.calls = []
         self.rows = []
@@ -72,6 +84,7 @@ class ReadOnlyCursor:
         self.failing_sql_fragment = failing_sql_fragment
         self.failure = failure
         self.check_rows = check_rows
+        self.column_rows = column_rows
 
     def __enter__(self):
         return self
@@ -87,6 +100,8 @@ class ReadOnlyCursor:
             self.one = self.server_row
         elif "INFORMATION_SCHEMA.CHECK_CONSTRAINTS" in query:
             self.rows = list(self.check_rows)
+        elif "INFORMATION_SCHEMA.COLUMNS" in query:
+            self.rows = list(self.column_rows)
         else:
             self.one = None
             self.rows = []
@@ -164,10 +179,27 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
         self.assertEqual(expected["table"], "evaluaciones_persona")
         self.assertEqual(len(expected["columns"]), len(Persona._meta.local_fields))
         self.assertEqual(expected["primary"], ("id",))
-        self.assertEqual(expected["unique"], {("person_id",)})
+        self.assertEqual(expected["unique"], {("anio", "mes", "rut_normalizado")})
         self.assertEqual(
             expected["checks"],
-            {"mes>=0", "anio>=0"},
+            {
+                "anio>=0",
+                "mes>=0",
+                "mes>=1andmes<=12",
+                "anio>=1",
+                "rut_normalizado>''",
+            },
+        )
+        self.assertEqual(
+            expected["ordinary"],
+            {
+                ("anio", "mes", "company_id", "recinto_asistencia_code", "role_id"),
+                ("person_id",),
+                ("buk_employee_id",),
+                ("company_id",),
+                ("recinto_asistencia_code",),
+                ("role_id",),
+            },
         )
         self.assertEqual(expected["engine"], "InnoDB")
         self.assertEqual(expected["charset"], "utf8mb4")
@@ -179,6 +211,7 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
 
         self.assertEqual(len(statements), 1)
         self.assertTrue(statements[0].startswith("CREATE TABLE `evaluaciones_persona`"))
+        self.assertIn("`buk_payload` json NOT NULL", statements[0])
         self.assertIn(
             "ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 "
             "COLLATE=utf8mb4_unicode_ci",
@@ -194,7 +227,59 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
         self.assertEqual(statements[0], schema._read_frozen_statement())
         self.assertEqual(
             schema._expected_schema(statements[0])["checks"],
-            {"mes>=0", "anio>=0"},
+            {
+                "anio>=0",
+                "mes>=0",
+                "mes>=1andmes<=12",
+                "anio>=1",
+                "rut_normalizado>''",
+            },
+        )
+
+    def test_monthly_identity_and_rut_constraints_are_required(self):
+        for field_name in ("anio", "mes", "fecha_corte", "rut_normalizado", "buk_payload"):
+            field = Persona._meta.get_field(field_name)
+            with self.subTest(field=field_name):
+                self.assertFalse(field.null)
+        self.assertFalse(Persona._meta.get_field("anio").has_default())
+        self.assertFalse(Persona._meta.get_field("mes").has_default())
+
+        statement = schema._read_frozen_statement()
+        self.assertIn(
+            "UNIQUE (`anio`, `mes`, `rut_normalizado`)",
+            statement,
+        )
+        self.assertIn("CHECK ((`mes` >= 1 AND `mes` <= 12))", statement)
+        self.assertIn("CHECK (`rut_normalizado` > '')", statement)
+
+    def test_model_exposes_required_organizational_filters_as_nullable_values(self):
+        expected_fields = {
+            "company_id",
+            "role_id",
+            "role_code",
+            "role_name",
+            "role_family_id",
+            "role_family_name",
+            "area_id",
+            "cost_center",
+            "recinto_asistencia_id",
+            "recinto_asistencia_code",
+            "recinto_primario_id",
+            "recinto_primario_code",
+            "ctrlit_recinto",
+            "job_id",
+            "job_start_date",
+            "job_end_date",
+            "contract_type",
+        }
+        for field_name in expected_fields:
+            with self.subTest(field=field_name):
+                self.assertTrue(Persona._meta.get_field(field_name).null)
+
+        expected = schema._expected_schema(schema._read_frozen_statement())
+        self.assertIn("`location_id` integer NULL", schema._read_frozen_statement())
+        self.assertFalse(
+            any("location_id" in columns for columns in expected["ordinary"])
         )
 
     def test_product_specific_minimum_versions_are_enforced(self):
@@ -251,8 +336,12 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
                 "evaluaciones",
             ),
             check_rows=(
-                ("CHECK", "`mes` >= 0"),
                 ("CHECK", "`anio` >= 0"),
+                ("CHECK", "`mes` >= 0"),
+                ("CHECK", "(`mes` >= 1 AND `mes` <= 12)"),
+                ("CHECK", "`anio` >= 1"),
+                ("CHECK", "`rut_normalizado` > ''"),
+                ("CHECK", "json_valid(`buk_payload`)"),
             ),
         )
 
@@ -266,15 +355,34 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
         self.assertNotIn("ENFORCED", check_query.upper())
         self.assertEqual(
             snapshot["actual"]["checks"],
-            {"mes>=0", "anio>=0"},
+            schema._expected_schema(schema._read_frozen_statement())["checks"],
         )
         self.assertEqual(snapshot["actual"]["unenforced_checks"], set())
+
+    def test_mariadb_json_alias_is_compatible_with_django_jsonfield(self):
+        connection = ReadOnlyConnection(
+            server_row=(
+                "10.11.13-MariaDB-ubu2004",
+                "mariadb.org binary distribution",
+                "evaluaciones",
+            ),
+            column_rows=(("buk_payload", "longtext", "NO", ""),),
+            check_rows=(("CHECK", "json_valid(`buk_payload`)"),),
+        )
+
+        snapshot = schema._collect_snapshot(connection, "evaluaciones")
+
+        self.assertEqual(snapshot["actual"]["columns"]["buk_payload"]["type"], "json")
+        self.assertEqual(snapshot["actual"]["checks"], set())
 
     def test_mysql_check_metadata_still_validates_enforced_state(self):
         connection = ReadOnlyConnection(
             check_rows=(
+                ("CHECK", "`anio` >= 0", "YES"),
                 ("CHECK", "`mes` >= 0", "YES"),
-                ("CHECK", "`anio` >= 0", "NO"),
+                ("CHECK", "(`mes` >= 1 AND `mes` <= 12)", "YES"),
+                ("CHECK", "`anio` >= 1", "NO"),
+                ("CHECK", "`rut_normalizado` > ''", "YES"),
             )
         )
 
@@ -286,10 +394,10 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
             if "INFORMATION_SCHEMA.CHECK_CONSTRAINTS" in query
         )
         self.assertIn("cc.ENFORCED", check_query)
-        self.assertEqual(snapshot["actual"]["checks"], {"mes>=0"})
+        self.assertIn("anio>=0", snapshot["actual"]["checks"])
         self.assertEqual(
             snapshot["actual"]["unenforced_checks"],
-            {"anio>=0"},
+            {"anio>=1"},
         )
 
     def test_api_remote_engine_remains_outside_supported_installer_engines(self):
@@ -314,6 +422,37 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
         self.assertEqual(result["existing"], ["evaluaciones_persona"])
         self.assertEqual(result["missing"], [])
         self.assertEqual(result["conflicts"], [])
+
+    def test_preview_classifies_compatible_table_as_existing(self):
+        connection = ReadOnlyConnection()
+        connection_context = TrackingConnectionContext(connection)
+        with patch.object(
+            schema,
+            "_collect_snapshot",
+            return_value=compatible_snapshot(),
+        ):
+            result = self._preview_with_connection_context(connection_context)
+
+        self.assertEqual(result["existing"], ["evaluaciones_persona"])
+        self.assertEqual(result["conflicts"], [])
+        self.assertTrue(connection_context.closed)
+
+    def test_preview_reports_incompatible_table_without_modifying_it(self):
+        connection = ReadOnlyConnection()
+        connection_context = TrackingConnectionContext(connection)
+        incompatible = compatible_snapshot()
+        incompatible["actual"]["columns"]["rut_normalizado"]["nullable"] = "YES"
+        with patch.object(schema, "_collect_snapshot", return_value=incompatible):
+            result = self._preview_with_connection_context(connection_context)
+
+        self.assertEqual(result["existing"], [])
+        self.assertEqual(result["conflicts"][0]["classification"], "INCOMPATIBLE")
+        self.assertIn(
+            "NULLABILITY_MISMATCH",
+            result["conflicts"][0]["issues"],
+        )
+        self.assertEqual(connection.executed_ddl, [])
+        self.assertFalse(connection.committed)
 
     def test_comparator_rejects_column_engine_collation_and_index_conflicts(self):
         mutations = (
@@ -341,7 +480,7 @@ class BaseEvaluacionesSchemaServiceTests(SimpleTestCase):
         snapshot["actual"]["indexes"] = [
             index
             for index in snapshot["actual"]["indexes"]
-            if index["name"] != "person_id"
+            if index["columns"] != ("anio", "mes", "rut_normalizado")
         ]
         result = schema._compare_snapshot(snapshot)
         self.assertIn("UNIQUE_INDEX_MISMATCH", result["conflicts"][0]["issues"])

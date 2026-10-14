@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import timezone as datetime_timezone
+import json
 import logging
 import re
 import sys
@@ -11,7 +12,7 @@ from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
 from django.db import DEFAULT_DB_ALIAS, transaction
 from django.db.backends.base.base import BaseDatabaseWrapper
-from django.db.models import DateTimeField
+from django.db.models import DateTimeField, JSONField
 from django.utils import timezone
 
 from settings.services.mysql_connections import MySQLConnectionOpenError
@@ -38,11 +39,25 @@ class DjangoPersonaStorage:
         with transaction.atomic(using=self.alias):
             yield
 
-    def existing_by_person_id(self, person_ids: Sequence[int]) -> dict[int, Persona]:
-        existing: dict[int, Persona] = {}
-        for batch in _chunks(person_ids, 200):
-            rows = Persona.objects.using(self.alias).filter(person_id__in=batch)
-            existing.update((row.person_id, row) for row in rows)
+    def existing_by_month_and_rut(
+        self,
+        *,
+        anio: int,
+        mes: int,
+        rut_normalizados: Sequence[str],
+    ) -> dict[str, Persona]:
+        existing: dict[str, Persona] = {}
+        for batch in _chunks(rut_normalizados, 200):
+            rows = (
+                Persona.objects.using(self.alias)
+                .filter(
+                    anio=anio,
+                    mes=mes,
+                    rut_normalizado__in=batch,
+                )
+                .defer("buk_payload")
+            )
+            existing.update((row.rut_normalizado, row) for row in rows)
         return existing
 
     def bulk_create(self, personas: Sequence[Persona], batch_size: int) -> None:
@@ -69,7 +84,24 @@ class DjangoPersonaStorage:
         return list(
             Persona.objects.using(self.alias)
             .all()
+            .defer("buk_payload")
             .order_by("-anio", "-mes", "full_name")[:limit]
+        )
+
+    def list_available_periods(self) -> list[tuple[int, int]]:
+        return list(
+            Persona.objects.using(self.alias)
+            .values_list("anio", "mes")
+            .distinct()
+            .order_by("-anio", "-mes")
+        )
+
+    def list_people_for_period(self, anio: int, mes: int) -> list[Persona]:
+        return list(
+            Persona.objects.using(self.alias)
+            .filter(anio=anio, mes=mes)
+            .defer("buk_payload")
+            .order_by("full_name")
         )
 
     def count(self) -> int:
@@ -94,28 +126,39 @@ class MySQLPersonaStorage:
                 self.connection.rollback()
             raise
 
-    def existing_by_person_id(self, person_ids: Sequence[int]) -> dict[int, Persona]:
-        fields = _concrete_fields()
+    def existing_by_month_and_rut(
+        self,
+        *,
+        anio: int,
+        mes: int,
+        rut_normalizados: Sequence[str],
+    ) -> dict[str, Persona]:
+        fields = _persona_fields_without_payload()
         columns = ", ".join(_quote_identifier(field.column) for field in fields)
         table = _quote_identifier(Persona._meta.db_table)
-        person_id_column = _quote_identifier(Persona._meta.get_field("person_id").column)
-        existing: dict[int, Persona] = {}
+        anio_column = _quote_identifier(Persona._meta.get_field("anio").column)
+        mes_column = _quote_identifier(Persona._meta.get_field("mes").column)
+        rut_column = _quote_identifier(
+            Persona._meta.get_field("rut_normalizado").column
+        )
+        existing: dict[str, Persona] = {}
 
-        for batch in _chunks(person_ids, 200):
+        for batch in _chunks(rut_normalizados, 200):
             placeholders = ", ".join(["%s"] * len(batch))
             query = (
                 f"SELECT {columns} FROM {table} "
-                f"WHERE {person_id_column} IN ({placeholders})"
+                f"WHERE {anio_column} = %s AND {mes_column} = %s "
+                f"AND {rut_column} IN ({placeholders})"
             )
             with _cursor(self.connection) as cursor:
-                cursor.execute(query, tuple(batch))
+                cursor.execute(query, (anio, mes, *batch))
                 for row in cursor.fetchall():
                     values = {
                         field.attname: _from_mysql_value(field, value)
                         for field, value in zip(fields, row)
                     }
                     persona = Persona(**values)
-                    existing[persona.person_id] = persona
+                    existing[persona.rut_normalizado] = persona
         return existing
 
     def bulk_create(self, personas: Sequence[Persona], batch_size: int) -> None:
@@ -171,7 +214,7 @@ class MySQLPersonaStorage:
                 cursor.executemany(query, values)
 
     def list_people(self, limit: int) -> list[Persona]:
-        fields = _concrete_fields()
+        fields = _persona_fields_without_payload()
         columns = ", ".join(_quote_identifier(field.column) for field in fields)
         ordering = _mysql_ordering()
         query = (
@@ -188,6 +231,40 @@ class MySQLPersonaStorage:
                 for field, value in zip(fields, row)
             })
             for row in rows
+        ]
+
+    def list_available_periods(self) -> list[tuple[int, int]]:
+        anio_column = _quote_identifier(Persona._meta.get_field("anio").column)
+        mes_column = _quote_identifier(Persona._meta.get_field("mes").column)
+        query = (
+                f"SELECT DISTINCT {anio_column}, {mes_column} "
+                f"FROM {_quote_identifier(Persona._meta.db_table)} "
+                f"ORDER BY {anio_column} DESC, {mes_column} DESC"
+        )
+        with _cursor(self.connection) as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
+        return [(int(anio), int(mes)) for anio, mes in rows]
+
+    def list_people_for_period(self, anio: int, mes: int) -> list[Persona]:
+        fields = _persona_fields_without_payload()
+        columns = ", ".join(_quote_identifier(field.column) for field in fields)
+        anio_column = _quote_identifier(Persona._meta.get_field("anio").column)
+        mes_column = _quote_identifier(Persona._meta.get_field("mes").column)
+        query = (
+                f"SELECT {columns} FROM {_quote_identifier(Persona._meta.db_table)} "
+                f"WHERE {anio_column} = %s AND {mes_column} = %s "
+                f"ORDER BY {_quote_identifier(Persona._meta.get_field('full_name').column)}"
+        )
+        with _cursor(self.connection) as cursor:
+                cursor.execute(query, (anio, mes))
+                rows = cursor.fetchall()
+        return [
+                Persona(**{
+                    field.attname: _from_mysql_value(field, value)
+                    for field, value in zip(fields, row)
+                })
+                for row in rows
         ]
 
     def count(self) -> int:
@@ -248,8 +325,41 @@ def list_personas(limit: int = 5000) -> tuple[list[Persona], int]:
         ) from None
 
 
+def list_persona_period_data(
+    requested_period: tuple[int, int] | None = None,
+) -> tuple[list[tuple[int, int]], tuple[int, int] | None, list[Persona]]:
+    try:
+        with open_persona_storage() as storage:
+            periods = storage.list_available_periods()
+            if not periods:
+                return periods, None, []
+            selected_period = (
+                requested_period
+                if requested_period in periods
+                else periods[0]
+            )
+            personas = storage.list_people_for_period(*selected_period)
+            return periods, selected_period, personas
+    except Exception as exc:
+        logger.error(
+            "Persona period listing failed (error_type=%s)",
+            type(exc).__name__,
+        )
+        raise PersonaStorageError(
+            "No se pudo consultar BASE_EVALUACIONES."
+        ) from None
+
+
 def _concrete_fields() -> list[Any]:
     return list(Persona._meta.concrete_fields)
+
+
+def _persona_fields_without_payload() -> list[Any]:
+    return [
+        field
+        for field in _concrete_fields()
+        if field.name != "buk_payload"
+    ]
 
 
 def _get_field(name: str) -> Any:
@@ -283,10 +393,21 @@ def _to_mysql_value(field: Any, value: Any) -> Any:
         and timezone.is_aware(value)
     ):
         return timezone.make_naive(value, datetime_timezone.utc)
+    if isinstance(field, JSONField):
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
     return value
 
 
 def _from_mysql_value(field: Any, value: Any) -> Any:
+    if isinstance(field, JSONField) and isinstance(value, (str, bytes)):
+        if isinstance(value, bytes):
+            value = value.decode("utf-8")
+        return json.loads(value)
     if (
         settings.USE_TZ
         and value is not None

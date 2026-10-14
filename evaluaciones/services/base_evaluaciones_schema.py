@@ -32,6 +32,16 @@ class BaseEvaluacionesSchemaInstallError(RuntimeError):
     """Controlled error for the Base Evaluaciones schema installer."""
 
 
+class _DisconnectedMySQLSchemaEditor(DatabaseSchemaEditor):
+    def quote_value(self, value: Any) -> str:
+        if isinstance(value, str):
+            escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+            return f"'{escaped}'"
+        if value is None:
+            return "NULL"
+        return str(value)
+
+
 ROLE = EvaluacionConnectionRole.ROLE_BASE_EVALUACIONES
 TABLE_NAME = Persona._meta.db_table
 EXPECTED_ENGINE = "InnoDB"
@@ -55,6 +65,21 @@ _COLUMN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _CHECK = re.compile(r"\bCHECK\s*\((?P<expression>.*)\)\s*$", re.IGNORECASE | re.DOTALL)
+_INLINE_INDEX = re.compile(
+    r"^(?P<unique>UNIQUE\s+)?KEY\s+`(?P<name>[A-Za-z0-9_]+)`\s*"
+    r"\((?P<columns>[^)]*)\)$",
+    re.IGNORECASE,
+)
+_UNIQUE_CONSTRAINT = re.compile(
+    r"^CONSTRAINT\s+`[A-Za-z0-9_]+`\s+UNIQUE\s*\((?P<columns>[^)]*)\)$",
+    re.IGNORECASE,
+)
+_CREATE_INDEX = re.compile(
+    r"^CREATE\s+(?P<unique>UNIQUE\s+)?INDEX\s+`(?P<name>[A-Za-z0-9_]+)`\s+"
+    r"ON\s+`(?P<table>[A-Za-z0-9_]+)`\s*\((?P<columns>[^)]*)\)"
+    r"(?:\s+USING\s+[A-Za-z0-9_]+)?$",
+    re.IGNORECASE,
+)
 _FORBIDDEN_SQL = re.compile(
     r"\b(?:ALTER|DROP|TRUNCATE|INSERT|UPDATE|DELETE|REPLACE|CREATE\s+DATABASE)\b",
     re.IGNORECASE,
@@ -127,10 +152,33 @@ def _expected_schema(statement: str) -> dict[str, Any]:
         "collation": EXPECTED_COLLATION,
     }
     for item in _split_sql_items(match.group("body")):
+        index = _INLINE_INDEX.match(item)
+        if index:
+            columns = tuple(
+                re.findall(r"`([A-Za-z0-9_]+)`", index.group("columns"))
+            )
+            if not columns:
+                raise BaseEvaluacionesSchemaInstallError(
+                    "El SQL de Base Evaluaciones define un índice vacío."
+                )
+            index_type = "unique" if index.group("unique") else "ordinary"
+            expected[index_type].add(columns)
+            continue
+
         if item.upper().startswith(("CONSTRAINT ", "CHECK ")):
             check = _CHECK.search(item)
             if check:
                 expected["checks"].add(_normalize_check(check.group("expression")))
+            unique = _UNIQUE_CONSTRAINT.match(item)
+            if unique:
+                columns = tuple(
+                    re.findall(r"`([A-Za-z0-9_]+)`", unique.group("columns"))
+                )
+                if not columns:
+                    raise BaseEvaluacionesSchemaInstallError(
+                        "El SQL de Base Evaluaciones define una clave única vacía."
+                    )
+                expected["unique"].add(columns)
             continue
 
         column = _COLUMN.match(item)
@@ -220,27 +268,43 @@ def build_base_evaluaciones_schema_statements(server_version: str) -> list[str]:
     connection = _schema_editor_connection(server_version)
     generated: list[str] = []
     try:
-        with DatabaseSchemaEditor(connection, collect_sql=True) as editor:
+        with _DisconnectedMySQLSchemaEditor(connection, collect_sql=True) as editor:
             editor.create_model(Persona)
-            generated.extend(editor.collected_sql)
+        generated.extend(editor.collected_sql)
     except Exception as exc:
         raise BaseEvaluacionesSchemaInstallError(
             "No se pudo derivar el esquema MySQL del modelo Persona."
         ) from exc
 
-    if len(generated) != 1:
+    if not generated:
         raise BaseEvaluacionesSchemaInstallError(
             "El modelo Persona generó objetos SQL fuera del alcance aprobado."
         )
-    statement = _normalize_sql(generated[0])
-    if _FORBIDDEN_SQL.search(statement):
+    if _FORBIDDEN_SQL.search("\n".join(generated)):
         raise BaseEvaluacionesSchemaInstallError(
             "El modelo Persona generó una operación SQL no permitida."
         )
+    statement = _normalize_sql(generated[0])
     if not statement.endswith(")"):
         raise BaseEvaluacionesSchemaInstallError(
             "El DDL generado para Persona no tiene una forma reconocida."
         )
+    index_clauses = []
+    for generated_index in generated[1:]:
+        index_statement = _normalize_sql(generated_index)
+        index = _CREATE_INDEX.match(index_statement)
+        if index is None or index.group("table") != TABLE_NAME:
+            raise BaseEvaluacionesSchemaInstallError(
+                "El modelo Persona generó un índice fuera del alcance aprobado."
+            )
+        columns = index.group("columns")
+        index_clauses.append(
+            f"{'UNIQUE ' if index.group('unique') else ''}"
+            f"KEY `{index.group('name')}` ({columns})"
+        )
+    if index_clauses:
+        statement = f"{statement[:-1]}, {', '.join(index_clauses)})"
+    statement = _normalize_sql(statement)
     statement = (
         f"{statement} ENGINE={EXPECTED_ENGINE} "
         f"DEFAULT CHARACTER SET={EXPECTED_CHARSET} "
@@ -390,7 +454,13 @@ def _collect_snapshot(connection, database_name: str) -> dict[str, Any]:
         )
         columns = {
             row[0]: {
-                "type": _normalize_type(row[1]),
+                "type": (
+                    "json"
+                    if server_product == "mariadb"
+                    and row[0] == "buk_payload"
+                    and _normalize_type(row[1]).startswith("longtext")
+                    else _normalize_type(row[1])
+                ),
                 "nullable": row[2],
                 "auto_increment": "auto_increment" in str(row[3] or "").lower(),
             }
@@ -438,6 +508,11 @@ def _collect_snapshot(connection, database_name: str) -> dict[str, Any]:
             if clause is None:
                 continue
             normalized = _normalize_check(clause)
+            if (
+                server_product == "mariadb"
+                and normalized == "json_validbuk_payload"
+            ):
+                continue
             if server_product == "mariadb":
                 # The supported MariaDB baseline enforces checks but has no ENFORCED column.
                 checks.add(normalized)
