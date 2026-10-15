@@ -37,15 +37,36 @@ from tareas.services.meeting_storage import (
 
 
 class _SQLiteCursor:
-    def __init__(self, cursor):
+    def __init__(self, cursor, commands):
         self._cursor = cursor
+        self.commands = commands
+        self.synthetic_row = None
 
     def execute(self, sql, params=()):
+        params = tuple(params)
+        self.commands.append((sql, params))
+        if sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+            return
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+            return
+        if sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+            return
         values = tuple(
             value.isoformat() if hasattr(value, "isoformat") else value
             for value in params
         )
-        self._cursor.execute(sql.replace("%s", "?"), values)
+        self._cursor.execute(sql.replace("%s", "?").replace(" FOR UPDATE", ""), values)
+
+    def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
+        return self._cursor.fetchone()
 
     def __getattr__(self, name):
         return getattr(self._cursor, name)
@@ -56,6 +77,7 @@ class _SQLiteConnection:
         self.database = sqlite3.connect(":memory:", isolation_level=None)
         self.task_id = task.pk + 50000
         self.meeting_id = meeting.pk + 50000
+        self.commands = []
         self.database.executescript(
             """
             CREATE TABLE tareas_tarea (
@@ -107,7 +129,10 @@ class _SQLiteConnection:
         )
 
     def cursor(self):
-        return _SQLiteCursor(self.database.cursor())
+        return _SQLiteCursor(
+            self.database.cursor(),
+            self.commands,
+        )
 
     def begin(self):
         self.database.execute("BEGIN")
@@ -463,6 +488,16 @@ class MeetingBackendParityTests(TestCase):
                 ReunionRevision.objects.using("default").get(pk=self.meeting.pk).titulo,
                 "Meeting parity",
             )
+            company_lock = next(
+                call for call in self.connection.commands
+                if "INSERT INTO `tareas_correlativoempresa`" in call[0]
+            )
+            self.assertEqual(company_lock[1], (self.company.pk, 1))
+            task_lock_index = next(
+                index for index, (sql, _params) in enumerate(self.connection.commands)
+                if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+            )
+            self.assertLess(self.connection.commands.index(company_lock), task_lock_index)
 
     def test_mysql_task_clean_preserves_published_task_rules_without_default_read(self):
         published_at = timezone.now().replace(microsecond=0)
@@ -539,11 +574,14 @@ class MeetingBackendParityTests(TestCase):
         self.assertEqual(meeting.tarea_planificada.pk, 9001)
         self.assertEqual(meeting.tarea_planificada.estado, Tarea.Estado.ACTIVA)
         self.assertEqual(meeting.tarea_planificada.correlativo, "A0000004")
-        self.assertEqual(connection.cursor.call_count, 1)
+        self.assertEqual(connection.cursor.call_count, 3)
         connection.begin.assert_called_once()
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
         sql = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(
+            any("SELECT @@SESSION.innodb_lock_wait_timeout" in statement for statement in sql)
+        )
         self.assertTrue(any("INSERT INTO tareas_tarea" in statement for statement in sql))
         self.assertTrue(any("INSERT INTO tareas_tareatransicion" in statement for statement in sql))
         self.assertTrue(any("INSERT INTO tareas_reunionrevision" in statement for statement in sql))

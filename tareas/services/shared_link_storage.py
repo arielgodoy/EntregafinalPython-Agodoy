@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 
@@ -14,6 +15,16 @@ from tareas.models import EnlaceTarea, EventoAccesoEnlace, Tarea
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
 from tareas.services.connection_roles import resolve_operational_backend
 from settings.services.mysql_connections import open_mysql_connection
+from tareas.services.task_mutation_locks import (
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+    TaskMutationConflict,
+    TaskMutationLockError,
+    TaskMutationScopeError,
+)
 
 
 def hash_link_token(token):
@@ -76,51 +87,138 @@ class DjangoSharedLinkStorage:
         self.alias = alias
 
     def create(self, command: SharedLinkCreateCommand):
-        try:
-            task = Tarea.objects.using(self.alias).select_related("empresa").get(pk=command.task_id, empresa_id=command.empresa_id)
-        except Tarea.DoesNotExist as exc:
-            raise EditTaskNotFound from exc
         with transaction.atomic(using=self.alias):
-            link = EnlaceTarea.objects.using(self.alias).create(
-                tarea_id=task.pk,
-                destinatario_id=command.destinatario_id,
-                creado_por_id=command.creado_por_id,
-                token_hash=command.token_hash,
-                fecha_expiracion=command.fecha_expiracion,
-            )
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        command.empresa_id,
+                        (command.task_id,),
+                    )
+                    task = Tarea.objects.using(self.alias).select_related(
+                        "empresa"
+                    ).get(
+                        pk=command.task_id,
+                        empresa_id=command.empresa_id,
+                    )
+                except (TaskMutationScopeError, Tarea.DoesNotExist) as exc:
+                    raise EditTaskNotFound from exc
+                link = EnlaceTarea.objects.using(self.alias).create(
+                    tarea_id=task.pk,
+                    destinatario_id=command.destinatario_id,
+                    creado_por_id=command.creado_por_id,
+                    token_hash=command.token_hash,
+                    fecha_expiracion=command.fecha_expiracion,
+                )
         return SharedLinkResult(link.pk, task.pk, task.empresa_id, link.token_hash, command.token, link.fecha_expiracion, link.destinatario_id, link.creado_por_id, task, link)
 
     def resolve(self, token, usuario_id, empresa_id):
-        try:
-            link = EnlaceTarea.objects.using(self.alias).select_related("tarea", "tarea__empresa").get(token_hash=hash_link_token(token))
-        except EnlaceTarea.DoesNotExist:
+        initial = (
+            EnlaceTarea.objects.using(self.alias)
+            .filter(token_hash=hash_link_token(token))
+            .values("pk", "tarea_id", "tarea__empresa_id")
+            .first()
+        )
+        if initial is None:
             raise ValidationError("RECHAZADO_TOKEN_INVALIDO")
-        if link.tarea.empresa_id != empresa_id:
-            resultado = EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA
-            EventoAccesoEnlace.objects.using(self.alias).create(enlace_id=link.pk, usuario_id=usuario_id, resultado=resultado)
-            raise ValidationError(resultado)
-        if link.destinatario_id != usuario_id or not _is_valid_external_user(link.tarea.empresa, usuario_id):
-            resultado = EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO
-            EventoAccesoEnlace.objects.using(self.alias).create(enlace_id=link.pk, usuario_id=usuario_id, resultado=resultado)
-            raise ValidationError(resultado)
-        if link.fecha_expiracion <= timezone.now():
-            EventoAccesoEnlace.objects.using(self.alias).create(enlace_id=link.pk, usuario_id=usuario_id, resultado=EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO)
-            raise ValidationError(EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO)
-        if link.revocado_at is not None:
-            EventoAccesoEnlace.objects.using(self.alias).create(enlace_id=link.pk, usuario_id=usuario_id, resultado=EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO)
-            raise ValidationError(EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO)
-        EventoAccesoEnlace.objects.using(self.alias).create(enlace_id=link.pk, usuario_id=usuario_id, resultado=EventoAccesoEnlace.Resultado.ACCESO_OK)
-        return SharedLinkAccessResult(link.tarea, link.pk)
+        rejection = None
+        access = None
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                task_company_id = initial["tarea__empresa_id"]
+                if task_company_id == empresa_id:
+                    try:
+                        lock_orm_task_rows(
+                            self.alias,
+                            empresa_id,
+                            (initial["tarea_id"],),
+                        )
+                    except TaskMutationScopeError as exc:
+                        raise EditTaskNotFound from exc
+                try:
+                    link = (
+                        EnlaceTarea.objects.using(self.alias)
+                        .select_for_update()
+                        .get(pk=initial["pk"])
+                    )
+                except EnlaceTarea.DoesNotExist as exc:
+                    raise ValidationError("RECHAZADO_TOKEN_INVALIDO") from exc
+                if link.tarea_id != initial["tarea_id"]:
+                    raise TaskMutationConflict(
+                        "El enlace cambió durante la operación."
+                    )
+                current_company_id = (
+                    Tarea.objects.using(self.alias)
+                    .filter(pk=link.tarea_id)
+                    .values_list("empresa_id", flat=True)
+                    .first()
+                )
+                if current_company_id is None:
+                    raise EditTaskNotFound
+                task = None
+                if current_company_id == empresa_id:
+                    task = Tarea.objects.using(self.alias).select_related(
+                        "empresa"
+                    ).get(pk=link.tarea_id, empresa_id=empresa_id)
+
+                if current_company_id != empresa_id:
+                    rejection = EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA
+                elif (
+                    link.destinatario_id != usuario_id
+                    or not _is_valid_external_user(task.empresa, usuario_id)
+                ):
+                    rejection = EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO
+                elif link.fecha_expiracion <= timezone.now():
+                    rejection = EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO
+                elif link.revocado_at is not None:
+                    rejection = EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO
+                else:
+                    rejection = EventoAccesoEnlace.Resultado.ACCESO_OK
+                    access = SharedLinkAccessResult(task, link.pk)
+                EventoAccesoEnlace.objects.using(self.alias).create(
+                    enlace_id=link.pk,
+                    usuario_id=usuario_id,
+                    resultado=rejection,
+                )
+        if rejection != EventoAccesoEnlace.Resultado.ACCESO_OK:
+            raise ValidationError(rejection)
+        return access
 
     def revoke(self, command):
-        try:
-            link = EnlaceTarea.objects.using(self.alias).get(pk=command.link_id, tarea__empresa_id=command.empresa_id)
-        except EnlaceTarea.DoesNotExist as exc:
-            raise EditTaskNotFound from exc
-        if link.revocado_at is None:
-            link.revocado_at = timezone.now()
-            link.revocado_por_id = command.actor_id
-            link.save(using=self.alias, update_fields=["revocado_at", "revocado_por"])
+        initial = (
+            EnlaceTarea.objects.using(self.alias)
+            .filter(pk=command.link_id, tarea__empresa_id=command.empresa_id)
+            .values("tarea_id", "tarea__empresa_id")
+            .first()
+        )
+        if initial is None:
+            raise EditTaskNotFound
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        command.empresa_id,
+                        (initial["tarea_id"],),
+                    )
+                    link = (
+                        EnlaceTarea.objects.using(self.alias)
+                        .select_for_update()
+                        .get(
+                            pk=command.link_id,
+                            tarea_id=initial["tarea_id"],
+                            tarea__empresa_id=command.empresa_id,
+                        )
+                    )
+                except (TaskMutationScopeError, EnlaceTarea.DoesNotExist) as exc:
+                    raise EditTaskNotFound from exc
+                if link.revocado_at is None:
+                    link.revocado_at = timezone.now()
+                    link.revocado_por_id = command.actor_id
+                    link.save(
+                        using=self.alias,
+                        update_fields=["revocado_at", "revocado_por"],
+                    )
         return link
 
 
@@ -128,6 +226,21 @@ class MySQLSharedLinkStorage:
     def __init__(self, connection_config, database_name: str):
         self.connection_config = connection_config
         self.database_name = database_name
+
+    @contextmanager
+    def _mutation(self, connection, *, company_id=None, task_ids=None):
+        with bounded_mysql_lock_wait(connection):
+            with mysql_mutation_transaction(connection):
+                if company_id is not None:
+                    try:
+                        lock_mysql_task_rows(connection, company_id, task_ids)
+                    except TaskMutationScopeError as exc:
+                        raise EditTaskNotFound from exc
+                cursor = connection.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
 
     def _validate_users(self, empresa_id, *user_ids):
         empresa = Empresa.objects.using("default").get(pk=empresa_id)
@@ -141,17 +254,25 @@ class MySQLSharedLinkStorage:
         self._validate_users(command.empresa_id, command.destinatario_id, command.creado_por_id)
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor=connection.cursor()
-                try:
-                    cursor.execute("SELECT id,titulo,descripcion,correlativo,estado,prioridad,responsable_id,empresa_id FROM tareas_tarea WHERE id=%s AND empresa_id=%s", (command.task_id,command.empresa_id))
+                with self._mutation(
+                    connection,
+                    company_id=command.empresa_id,
+                    task_ids=(command.task_id,),
+                ) as cursor:
+                    cursor.execute(
+                        "SELECT id,titulo,descripcion,correlativo,estado,prioridad,"
+                        "responsable_id,empresa_id FROM tareas_tarea "
+                        "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                        (command.task_id, command.empresa_id),
+                    )
                     task_row = cursor.fetchone()
-                    if task_row is None: raise EditTaskNotFound
+                    if task_row is None:
+                        raise EditTaskNotFound
                     cursor.execute("INSERT INTO tareas_enlacetarea (tarea_id,destinatario_id,creado_por_id,token_hash,fecha_creacion,fecha_expiracion) VALUES (%s,%s,%s,%s,%s,%s)", (command.task_id,command.destinatario_id,command.creado_por_id,command.token_hash,timezone.now(),command.fecha_expiracion))
-                    link_id=cursor.lastrowid; connection.commit()
-                except Exception:
-                    connection.rollback(); raise
-                finally: cursor.close()
+                    link_id=cursor.lastrowid
         except (EditTaskNotFound,ValidationError): raise
+        except TaskMutationLockError as exc:
+            raise TaskStorageError("No se pudo crear el enlace.") from exc
         except Exception as exc: raise TaskStorageError("No se pudo crear el enlace.") from exc
         task_id,title,description,correlativo,state,priority,responsible_id,task_company = task_row
         empresa = Empresa.objects.using("default").get(pk=task_company)
@@ -160,49 +281,147 @@ class MySQLSharedLinkStorage:
         return SharedLinkResult(link_id,task_id,task_company,command.token_hash,command.token,command.fecha_expiracion,command.destinatario_id,command.creado_por_id,task)
 
     def resolve(self, token, usuario_id, empresa_id):
+        rejection = None
+        task_values = None
+        link_id = None
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor=connection.cursor()
-                try:
-                    cursor.execute("SELECT l.id,l.tarea_id,l.destinatario_id,l.fecha_expiracion,l.revocado_at,t.titulo,t.descripcion,t.correlativo,t.estado,t.prioridad,t.responsable_id,t.empresa_id FROM tareas_enlacetarea l JOIN tareas_tarea t ON t.id=l.tarea_id WHERE l.token_hash=%s", (hash_link_token(token),))
-                    row=cursor.fetchone()
-                    if row is None: raise ValidationError("RECHAZADO_TOKEN_INVALIDO")
-                    link_id,task_id,destinatario,expires,revoked,title,description,correlativo,state,priority,responsible,task_company=row
-                    if timezone.is_naive(expires): expires=timezone.make_aware(expires)
-                    if task_company != empresa_id: result=EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA
-                    elif destinatario != usuario_id or not _is_valid_external_user_id(task_company, usuario_id): result=EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO
-                    elif expires <= timezone.now(): result=EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO
-                    elif revoked is not None: result=EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO
-                    else: result=EventoAccesoEnlace.Resultado.ACCESO_OK
-                    cursor.execute("INSERT INTO tareas_eventoaccesoenlace (enlace_id,usuario_id,fecha,resultado) VALUES (%s,%s,%s,%s)",(link_id,usuario_id,timezone.now(),result))
-                    if result != EventoAccesoEnlace.Resultado.ACCESO_OK: connection.commit(); raise ValidationError(result)
-                    connection.commit()
-                except Exception:
-                    if cursor: connection.rollback()
-                    raise
-                finally: cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        cursor = connection.cursor()
+                        try:
+                            cursor.execute(
+                                "SELECT link.id,link.tarea_id,link.destinatario_id,"
+                                "link.fecha_expiracion,link.revocado_at,task.empresa_id "
+                                "FROM tareas_enlacetarea AS link "
+                                "INNER JOIN tareas_tarea AS task ON task.id=link.tarea_id "
+                                "WHERE link.token_hash=%s",
+                                (hash_link_token(token),),
+                            )
+                            initial = cursor.fetchone()
+                            if initial is None:
+                                raise ValidationError("RECHAZADO_TOKEN_INVALIDO")
+                            (
+                                link_id,
+                                task_id,
+                                _initial_recipient,
+                                _initial_expires,
+                                _initial_revoked,
+                                task_company,
+                            ) = initial
+                            if task_company == empresa_id:
+                                try:
+                                    lock_mysql_task_rows(
+                                        connection,
+                                        task_company,
+                                        (task_id,),
+                                    )
+                                except TaskMutationScopeError as exc:
+                                    raise EditTaskNotFound from exc
+                            cursor.execute(
+                                "SELECT id,tarea_id,destinatario_id,fecha_expiracion,revocado_at "
+                                "FROM tareas_enlacetarea WHERE id=%s FOR UPDATE",
+                                (link_id,),
+                            )
+                            link = cursor.fetchone()
+                            if link is None or link[1] != task_id:
+                                raise ValidationError("RECHAZADO_TOKEN_INVALIDO")
+                            _, task_id, destinatario, expires, revoked = link
+                            if timezone.is_naive(expires):
+                                expires = timezone.make_aware(expires)
+                            if task_company != empresa_id:
+                                rejection = EventoAccesoEnlace.Resultado.RECHAZADO_EMPRESA
+                            elif (
+                                destinatario != usuario_id
+                                or not _is_valid_external_user_id(task_company, usuario_id)
+                            ):
+                                rejection = EventoAccesoEnlace.Resultado.RECHAZADO_USUARIO
+                            elif expires <= timezone.now():
+                                rejection = EventoAccesoEnlace.Resultado.RECHAZADO_EXPIRADO
+                            elif revoked is not None:
+                                rejection = EventoAccesoEnlace.Resultado.RECHAZADO_REVOCADO
+                            else:
+                                rejection = EventoAccesoEnlace.Resultado.ACCESO_OK
+                                cursor.execute(
+                                    "SELECT titulo,descripcion,correlativo,estado,prioridad,"
+                                    "responsable_id,empresa_id FROM tareas_tarea "
+                                    "WHERE id=%s AND empresa_id=%s",
+                                    (task_id, task_company),
+                                )
+                                task_values = cursor.fetchone()
+                                if task_values is None:
+                                    raise EditTaskNotFound
+                            cursor.execute(
+                                "INSERT INTO tareas_eventoaccesoenlace "
+                                "(enlace_id,usuario_id,fecha,resultado) "
+                                "VALUES (%s,%s,%s,%s)",
+                                (link_id, usuario_id, timezone.now(), rejection),
+                            )
+                        finally:
+                            cursor.close()
         except ValidationError: raise
+        except (EditTaskNotFound, TaskMutationLockError): raise
         except Exception as exc: raise TaskStorageError("No se pudo resolver el enlace.") from exc
+        if rejection != EventoAccesoEnlace.Resultado.ACCESO_OK:
+            raise ValidationError(rejection)
+        title, description, correlativo, state, priority, responsible, task_company = task_values
         empresa = Empresa.objects.using("default").get(pk=task_company)
         responsible_user = User.objects.using("default").filter(pk=responsible).first() if responsible else None
-        task=SharedLinkTaskData(task_id, task_company, title, description, correlativo, state, priority, responsible_user, empresa)
-        return SharedLinkAccessResult(task,link_id)
+        task = SharedLinkTaskData(
+            task_id, task_company, title, description, correlativo, state,
+            priority, responsible_user, empresa,
+        )
+        return SharedLinkAccessResult(task, link_id)
 
     def revoke(self, command):
         try:
             with open_mysql_connection(self.connection_config,database_name=self.database_name) as connection:
-                cursor=connection.cursor()
-                try:
-                    cursor.execute("SELECT l.id,l.revocado_at FROM tareas_enlacetarea l JOIN tareas_tarea t ON t.id=l.tarea_id WHERE l.id=%s AND t.empresa_id=%s FOR UPDATE",(command.link_id,command.empresa_id))
-                    row=cursor.fetchone()
-                    if row is None: raise EditTaskNotFound
-                    if row[1] is None:
-                        cursor.execute("UPDATE tareas_enlacetarea SET revocado_at=%s, revocado_por_id=%s WHERE id=%s",(timezone.now(),command.actor_id,command.link_id))
-                    connection.commit()
-                except Exception:
-                    connection.rollback(); raise
-                finally: cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        cursor = connection.cursor()
+                        try:
+                            cursor.execute(
+                                "SELECT tarea_id FROM tareas_enlacetarea WHERE id=%s",
+                                (command.link_id,),
+                            )
+                            initial = cursor.fetchone()
+                            if initial is None:
+                                raise EditTaskNotFound
+                            task_id = initial[0]
+                            try:
+                                lock_mysql_task_rows(
+                                    connection,
+                                    command.empresa_id,
+                                    (task_id,),
+                                )
+                            except TaskMutationScopeError as exc:
+                                raise EditTaskNotFound from exc
+                            cursor.execute(
+                                "SELECT link.revocado_at FROM tareas_enlacetarea AS link "
+                                "INNER JOIN tareas_tarea AS task ON task.id=link.tarea_id "
+                                "WHERE link.id=%s AND link.tarea_id=%s "
+                                "AND task.empresa_id=%s FOR UPDATE",
+                                (command.link_id, task_id, command.empresa_id),
+                            )
+                            row = cursor.fetchone()
+                            if row is None:
+                                raise EditTaskNotFound
+                            if row[0] is None:
+                                cursor.execute(
+                                    "UPDATE tareas_enlacetarea SET revocado_at=%s, "
+                                    "revocado_por_id=%s WHERE id=%s AND tarea_id=%s",
+                                    (
+                                        timezone.now(),
+                                        command.actor_id,
+                                        command.link_id,
+                                        task_id,
+                                    ),
+                                )
+                        finally:
+                            cursor.close()
         except (EditTaskNotFound,ValidationError): raise
+        except TaskMutationLockError as exc:
+            raise TaskStorageError("No se pudo revocar el enlace.") from exc
         except Exception as exc: raise TaskStorageError("No se pudo revocar el enlace.") from exc
         return command.link_id
 

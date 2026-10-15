@@ -9,6 +9,10 @@ from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import Tarea, TodoEvento
 from tareas.services.connection_roles import resolve_operational_backend
 from tareas.services.task_storage import TaskStorageError
+from tareas.services.task_mutation_locks import (
+    bounded_mysql_lock_wait,
+    mysql_mutation_transaction,
+)
 
 
 class DjangoOriginStorage:
@@ -51,14 +55,9 @@ class MySQLOriginStorage:
     @contextmanager
     def atomic(self):
         with self._connection() as (connection, cursor):
-            try:
-                if callable(getattr(connection, "begin", None)):
-                    connection.begin()
-                yield _MySQLOriginUnit(connection, cursor)
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    yield _MySQLOriginUnit(connection, cursor)
 
 
 class _MySQLOriginUnit:

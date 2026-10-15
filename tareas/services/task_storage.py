@@ -25,6 +25,14 @@ from .connection_roles import (
 from ..models import Empresa, Tarea, TareaLectura, TareaParticipante, TareaTransicion
 from .notifications import emit_task_event, task_recipients
 from settings.services.mysql_connections import open_mysql_connection
+from .task_mutation_locks import (
+    TaskMutationLockError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +204,12 @@ class DjangoTaskStorage:
         )
         try:
             with transaction.atomic(using=self.alias):
-                task.save(using=self.alias)
+                with bounded_django_lock_wait(self.alias):
+                    task.save(using=self.alias)
+        except TaskMutationLockError as exc:
+            raise TaskStorageError(
+                "No se pudo iniciar la transacción para crear la Tarea."
+            ) from exc
         except Exception as exc:
             raise TaskStorageError(
                 "No se pudo crear el borrador de Tarea."
@@ -230,16 +243,24 @@ class DjangoTaskStorage:
     def update_task(self, command: UpdateTaskCommand) -> TaskEditData:
         try:
             with transaction.atomic(using=self.alias):
-                updated = Tarea.objects.using(self.alias).filter(
-                    pk=command.task_id,
-                    empresa_id=command.empresa_id,
-                ).update(
-                    titulo=command.titulo,
-                    descripcion=command.descripcion,
-                    prioridad=command.prioridad,
-                    responsable_id=command.responsable_id,
-                    fecha_tope=command.fecha_tope,
-                )
+                with bounded_django_lock_wait(self.alias):
+                    lock_orm_task_rows(self.alias, command.empresa_id)
+                    updated = Tarea.objects.using(self.alias).filter(
+                        pk=command.task_id,
+                        empresa_id=command.empresa_id,
+                    ).update(
+                        titulo=command.titulo,
+                        descripcion=command.descripcion,
+                        prioridad=command.prioridad,
+                        responsable_id=command.responsable_id,
+                        fecha_tope=command.fecha_tope,
+                    )
+        except (EditTaskNotFound, ValidationError):
+            raise
+        except TaskMutationLockError as exc:
+            raise TaskStorageError(
+                "No se pudo actualizar la Tarea."
+            ) from exc
         except Exception as exc:
             raise TaskStorageError("No se pudo actualizar la Tarea.") from exc
         if not updated:
@@ -575,58 +596,62 @@ def _avatar_url(user) -> str:
 
 def _django_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -> TaskLifecycleResult:
     with transaction.atomic(using=self.alias):
-        try:
-            task = Tarea.objects.using(self.alias).select_for_update().get(pk=task_id, empresa_id=empresa_id)
-        except Tarea.DoesNotExist as exc:
-            raise EditTaskNotFound from exc
-        if task.estado != Tarea.Estado.BORRADOR:
-            raise ValidationError("La tarea ya está publicada.")
-        if task.anulada:
-            raise ValidationError("La tarea está anulada; no puede publicarse.")
-        responsible = User.objects.using("default").filter(
-            pk=task.responsable_id,
-            is_active=True,
-        ).first()
-        if responsible is None:
-            raise ValidationError("No se puede publicar: la tarea requiere un responsable válido y activo.")
-        if task.fecha_tope is None or not re.fullmatch(r"B[0-9]{7}", task.correlativo or ""):
-            raise ValidationError("No se puede publicar: la tarea requiere fecha tope y correlativo válido.")
-        now = timezone.now()
-        new_correlativo = f"A{task.correlativo[1:]}"
-        Tarea.objects.using(self.alias).filter(pk=task_id, empresa_id=empresa_id, estado=Tarea.Estado.BORRADOR).update(
-            estado=Tarea.Estado.ACTIVA,
-            correlativo=new_correlativo,
-            fecha_publicacion=now,
-            fecha_asignacion=task.fecha_asignacion or now,
-        )
-        transition = TareaTransicion.objects.using(self.alias).create(
-            tarea_id=task_id,
-            estado_origen=Tarea.Estado.BORRADOR,
-            estado_destino=Tarea.Estado.ACTIVA,
-            accion_evento="PUBLICAR",
-            usuario_id=actor_id,
-        )
+        with bounded_django_lock_wait(self.alias):
+            lock_orm_task_rows(self.alias, empresa_id)
+            try:
+                task = Tarea.objects.using(self.alias).select_for_update().get(pk=task_id, empresa_id=empresa_id)
+            except Tarea.DoesNotExist as exc:
+                raise EditTaskNotFound from exc
+            if task.estado != Tarea.Estado.BORRADOR:
+                raise ValidationError("La tarea ya está publicada.")
+            if task.anulada:
+                raise ValidationError("La tarea está anulada; no puede publicarse.")
+            responsible = User.objects.using("default").filter(
+                pk=task.responsable_id,
+                is_active=True,
+            ).first()
+            if responsible is None:
+                raise ValidationError("No se puede publicar: la tarea requiere un responsable válido y activo.")
+            if task.fecha_tope is None or not re.fullmatch(r"B[0-9]{7}", task.correlativo or ""):
+                raise ValidationError("No se puede publicar: la tarea requiere fecha tope y correlativo válido.")
+            now = timezone.now()
+            new_correlativo = f"A{task.correlativo[1:]}"
+            Tarea.objects.using(self.alias).filter(pk=task_id, empresa_id=empresa_id, estado=Tarea.Estado.BORRADOR).update(
+                estado=Tarea.Estado.ACTIVA,
+                correlativo=new_correlativo,
+                fecha_publicacion=now,
+                fecha_asignacion=task.fecha_asignacion or now,
+            )
+            transition = TareaTransicion.objects.using(self.alias).create(
+                tarea_id=task_id,
+                estado_origen=Tarea.Estado.BORRADOR,
+                estado_destino=Tarea.Estado.ACTIVA,
+                accion_evento="PUBLICAR",
+                usuario_id=actor_id,
+            )
     return TaskLifecycleResult(task_id, empresa_id, Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA, new_correlativo, now, task.fecha_asignacion or now, transition.pk)
 
 
 def _django_enter_management(self, *, task_id: int, empresa_id: int, actor_id: int) -> TaskLifecycleResult:
     with transaction.atomic(using=self.alias):
-        try:
-            task = Tarea.objects.using(self.alias).select_for_update().get(pk=task_id, empresa_id=empresa_id)
-        except Tarea.DoesNotExist as exc:
-            raise EditTaskNotFound from exc
-        if task.estado != Tarea.Estado.ACTIVA:
-            raise ValidationError("Transición no permitida: la tarea no está ACTIVA.")
-        if task.anulada:
-            raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
-        Tarea.objects.using(self.alias).filter(pk=task_id, empresa_id=empresa_id, estado=Tarea.Estado.ACTIVA).update(estado=Tarea.Estado.GESTION)
-        transition = TareaTransicion.objects.using(self.alias).create(
-            tarea_id=task_id,
-            estado_origen=Tarea.Estado.ACTIVA,
-            estado_destino=Tarea.Estado.GESTION,
-            accion_evento="INICIAR_GESTION",
-            usuario_id=actor_id,
-        )
+        with bounded_django_lock_wait(self.alias):
+            lock_orm_task_rows(self.alias, empresa_id)
+            try:
+                task = Tarea.objects.using(self.alias).select_for_update().get(pk=task_id, empresa_id=empresa_id)
+            except Tarea.DoesNotExist as exc:
+                raise EditTaskNotFound from exc
+            if task.estado != Tarea.Estado.ACTIVA:
+                raise ValidationError("Transición no permitida: la tarea no está ACTIVA.")
+            if task.anulada:
+                raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
+            Tarea.objects.using(self.alias).filter(pk=task_id, empresa_id=empresa_id, estado=Tarea.Estado.ACTIVA).update(estado=Tarea.Estado.GESTION)
+            transition = TareaTransicion.objects.using(self.alias).create(
+                tarea_id=task_id,
+                estado_origen=Tarea.Estado.ACTIVA,
+                estado_destino=Tarea.Estado.GESTION,
+                accion_evento="INICIAR_GESTION",
+                usuario_id=actor_id,
+            )
     return TaskLifecycleResult(task_id, empresa_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, task.correlativo, transition_id=transition.pk)
 
 
@@ -1048,6 +1073,16 @@ class MySQLTaskStorage:
         )
         return number
 
+    @staticmethod
+    def _locked_row(cursor, task_id: int, empresa_id: int):
+        cursor.execute(
+            "SELECT id, empresa_id, correlativo, anulada, estado, responsable_id, "
+            "fecha_tope, fecha_publicacion, fecha_asignacion FROM tareas_tarea "
+            "WHERE id = %s AND empresa_id = %s FOR UPDATE",
+            (task_id, empresa_id),
+        )
+        return cursor.fetchone()
+
     def create_draft(
         self,
         data: CreateTaskDraftInput,
@@ -1060,56 +1095,54 @@ class MySQLTaskStorage:
                 self.connection_config,
                 database_name=self.database_name,
             ) as connection:
-                cursor = connection.cursor()
-                try:
-                    number = self._reserve_number(cursor, empresa_id)
-                    correlativo = f"B{number:07d}"
-                    created_at = timezone.now()
-                    cursor.execute(
-                        "INSERT INTO tareas_tarea ("
-                        "titulo, descripcion, prioridad, correlativo, anulada, "
-                        "fechas_pendientes_confirmacion, cierre_completado, "
-                        "requiere_evidencia_cierre, estado, responsable_id, "
-                        "empresa_id, tipo_ambito, local_id, departamento_id, "
-                        "creada_por_id, fecha_creacion, fecha_publicacion, "
-                        "fecha_asignacion, fecha_tope, fecha_cumplimiento, "
-                        "todo_origen_id, tarea_origen_id"
-                        ") VALUES ("
-                        "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                        "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s"
-                        ")",
-                        (
-                            data.titulo,
-                            data.descripcion,
-                            data.prioridad,
-                            correlativo,
-                            False,
-                            False,
-                            False,
-                            False,
-                            Tarea.Estado.BORRADOR,
-                            data.responsable_id,
-                            empresa_id,
-                            None,
-                            None,
-                            None,
-                            creador_id,
-                            created_at,
-                            None,
-                            None,
-                            data.fecha_tope,
-                            None,
-                            None,
-                            None,
-                        ),
-                    )
-                    task_id = cursor.lastrowid
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        cursor = connection.cursor()
+                        try:
+                            number = self._reserve_number(cursor, empresa_id)
+                            correlativo = f"B{number:07d}"
+                            created_at = timezone.now()
+                            cursor.execute(
+                                "INSERT INTO tareas_tarea ("
+                                "titulo, descripcion, prioridad, correlativo, anulada, "
+                                "fechas_pendientes_confirmacion, cierre_completado, "
+                                "requiere_evidencia_cierre, estado, responsable_id, "
+                                "empresa_id, tipo_ambito, local_id, departamento_id, "
+                                "creada_por_id, fecha_creacion, fecha_publicacion, "
+                                "fecha_asignacion, fecha_tope, fecha_cumplimiento, "
+                                "todo_origen_id, tarea_origen_id"
+                                ") VALUES ("
+                                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                                "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s"
+                                ")",
+                                (
+                                    data.titulo,
+                                    data.descripcion,
+                                    data.prioridad,
+                                    correlativo,
+                                    False,
+                                    False,
+                                    False,
+                                    False,
+                                    Tarea.Estado.BORRADOR,
+                                    data.responsable_id,
+                                    empresa_id,
+                                    None,
+                                    None,
+                                    None,
+                                    creador_id,
+                                    created_at,
+                                    None,
+                                    None,
+                                    data.fecha_tope,
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                            )
+                            task_id = cursor.lastrowid
+                        finally:
+                            cursor.close()
         except TaskStorageError:
             raise
         except Exception as exc:
@@ -1156,31 +1189,33 @@ class MySQLTaskStorage:
                 self.connection_config,
                 database_name=self.database_name,
             ) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute(
-                        "UPDATE tareas_tarea SET titulo = %s, descripcion = %s, "
-                        "prioridad = %s, responsable_id = %s, fecha_tope = %s "
-                        "WHERE id = %s AND empresa_id = %s",
-                        (
-                            command.titulo,
-                            command.descripcion,
-                            command.prioridad,
-                            command.responsable_id,
-                            command.fecha_tope,
-                            command.task_id,
-                            command.empresa_id,
-                        ),
-                    )
-                    if cursor.rowcount == 0:
-                        connection.rollback()
-                        raise EditTaskNotFound
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            if self._locked_row(
+                                cursor,
+                                command.task_id,
+                                command.empresa_id,
+                            ) is None:
+                                raise EditTaskNotFound
+                            cursor.execute(
+                                "UPDATE tareas_tarea SET titulo = %s, descripcion = %s, "
+                                "prioridad = %s, responsable_id = %s, fecha_tope = %s "
+                                "WHERE id = %s AND empresa_id = %s",
+                                (
+                                    command.titulo,
+                                    command.descripcion,
+                                    command.prioridad,
+                                    command.responsable_id,
+                                    command.fecha_tope,
+                                    command.task_id,
+                                    command.empresa_id,
+                                ),
+                            )
+                        finally:
+                            cursor.close()
         except EditTaskNotFound:
             raise
         except Exception as exc:
@@ -1194,38 +1229,37 @@ class MySQLTaskStorage:
 def _mysql_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -> TaskLifecycleResult:
     try:
         with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-            cursor = connection.cursor()
-            try:
-                if callable(getattr(connection, "begin", None)):
-                    connection.begin()
-                cursor.execute(
-                    "SELECT id, empresa_id, correlativo, anulada, estado, responsable_id, fecha_tope, fecha_asignacion FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
-                    (task_id, empresa_id),
-                )
-                row = cursor.fetchone()
-                if row is None:
-                    raise EditTaskNotFound
-                _id, _company, correlativo, annulled, state, responsible_id, due_date, assigned_at = row
-                if state != Tarea.Estado.BORRADOR:
-                    raise ValidationError("La tarea ya está publicada.")
-                if annulled:
-                    raise ValidationError("La tarea está anulada; no puede publicarse.")
-                empresa = Empresa.objects.using("default").get(pk=empresa_id)
-                if responsible_id is None or not get_valid_users_for_empresa(empresa, active_only=True).filter(pk=responsible_id).exists():
-                    raise ValidationError("No se puede publicar: la tarea requiere un responsable válido y activo.")
-                if due_date is None or not re.fullmatch(r"B[0-9]{7}", correlativo or ""):
-                    raise ValidationError("No se puede publicar: la tarea requiere fecha tope y correlativo válido.")
-                now = timezone.now()
-                new_correlativo = f"A{correlativo[1:]}"
-                cursor.execute("UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id))
-                cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA, "PUBLICAR", actor_id, now, ""))
-                transition_id = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    lock_mysql_task_rows(connection, empresa_id)
+                    cursor = connection.cursor()
+                    try:
+                        cursor.execute(
+                            "SELECT id, empresa_id, correlativo, anulada, estado, "
+                            "responsable_id, fecha_tope, fecha_asignacion "
+                            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                            (task_id, empresa_id),
+                        )
+                        row = cursor.fetchone()
+                        if row is None:
+                            raise EditTaskNotFound
+                        _id, _company, correlativo, annulled, state, responsible_id, due_date, assigned_at = row
+                        if state != Tarea.Estado.BORRADOR:
+                            raise ValidationError("La tarea ya está publicada.")
+                        if annulled:
+                            raise ValidationError("La tarea está anulada; no puede publicarse.")
+                        empresa = Empresa.objects.using("default").get(pk=empresa_id)
+                        if responsible_id is None or not get_valid_users_for_empresa(empresa, active_only=True).filter(pk=responsible_id).exists():
+                            raise ValidationError("No se puede publicar: la tarea requiere un responsable válido y activo.")
+                        if due_date is None or not re.fullmatch(r"B[0-9]{7}", correlativo or ""):
+                            raise ValidationError("No se puede publicar: la tarea requiere fecha tope y correlativo válido.")
+                        now = timezone.now()
+                        new_correlativo = f"A{correlativo[1:]}"
+                        cursor.execute("UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id))
+                        cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA, "PUBLICAR", actor_id, now, ""))
+                        transition_id = cursor.lastrowid
+                    finally:
+                        cursor.close()
     except (EditTaskNotFound, LifecycleSimilarityUnsupported, ValidationError):
         raise
     except Exception as exc:
@@ -1236,29 +1270,26 @@ def _mysql_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -
 def _mysql_enter_management(self, *, task_id: int, empresa_id: int, actor_id: int) -> TaskLifecycleResult:
     try:
         with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-            cursor = connection.cursor()
-            try:
-                if callable(getattr(connection, "begin", None)):
-                    connection.begin()
-                cursor.execute("SELECT id, empresa_id, correlativo, anulada, estado FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE", (task_id, empresa_id))
-                row = cursor.fetchone()
-                if row is None:
-                    raise EditTaskNotFound
-                _id, _company, correlativo, annulled, state = row
-                if state != Tarea.Estado.ACTIVA:
-                    raise ValidationError("Transición no permitida: la tarea no está ACTIVA.")
-                if annulled:
-                    raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
-                now = timezone.now()
-                cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.GESTION, task_id, empresa_id))
-                cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, "INICIAR_GESTION", actor_id, now, ""))
-                transition_id = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    lock_mysql_task_rows(connection, empresa_id)
+                    cursor = connection.cursor()
+                    try:
+                        cursor.execute("SELECT id, empresa_id, correlativo, anulada, estado FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE", (task_id, empresa_id))
+                        row = cursor.fetchone()
+                        if row is None:
+                            raise EditTaskNotFound
+                        _id, _company, correlativo, annulled, state = row
+                        if state != Tarea.Estado.ACTIVA:
+                            raise ValidationError("Transición no permitida: la tarea no está ACTIVA.")
+                        if annulled:
+                            raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
+                        now = timezone.now()
+                        cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.GESTION, task_id, empresa_id))
+                        cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, "INICIAR_GESTION", actor_id, now, ""))
+                        transition_id = cursor.lastrowid
+                    finally:
+                        cursor.close()
     except (EditTaskNotFound, ValidationError):
         raise
     except Exception as exc:

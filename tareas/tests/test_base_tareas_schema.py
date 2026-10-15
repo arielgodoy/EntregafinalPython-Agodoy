@@ -17,11 +17,14 @@ from settings.models import SettingsMySQLConnection
 from tareas.models import TareaConnectionRole
 from tareas.services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
+    DELETION_LEDGER_SCHEMA_PATH,
     EXPECTED_OPERATIONAL_MODELS,
     SCHEMA_PATH,
     _compare_schema_snapshot,
+    _read_deletion_ledger_statements,
     _schema_fingerprint,
     build_base_tareas_schema_statements,
+    build_deletion_ledger_schema_statements,
     complete_base_tareas_reference_data,
     get_operational_models,
     install_base_tareas_schema,
@@ -180,6 +183,30 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
             )
 
         self.assertEqual(shape(preview), shape(frozen))
+
+    def test_deletion_ledger_contract_is_additive_and_innodb_only(self):
+        generated = build_deletion_ledger_schema_statements(
+            self._mysql_preview_connection()
+        )
+        frozen = _read_deletion_ledger_statements()
+        create_statements = [
+            statement
+            for statement in generated
+            if statement.upper().startswith("CREATE TABLE")
+        ]
+        self.assertEqual(len(create_statements), 3)
+        self.assertTrue(
+            all("ENGINE=InnoDB" in statement for statement in create_statements)
+        )
+        self.assertEqual(
+            sum(statement.upper().startswith("CREATE INDEX") for statement in generated),
+            sum(statement.upper().startswith("CREATE INDEX") for statement in frozen),
+        )
+        self.assertEqual(
+            sum(statement.upper().startswith("ALTER TABLE") for statement in generated),
+            sum(statement.upper().startswith("ALTER TABLE") for statement in frozen),
+        )
+        self.assertNotIn("tabladeprueba", " ".join(generated).casefold())
 
 
 class BaseTareasSchemaBasicTests(SimpleTestCase):

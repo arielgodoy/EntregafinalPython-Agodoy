@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Exists, Max, OuterRef, Q
 from django.utils import timezone
 
@@ -24,6 +24,18 @@ from tareas.models import (
 from tareas.services.connection_roles import resolve_operational_backend
 from tareas.services.document_storage import resolve_document_storage
 from tareas.services.task_storage import EditTaskNotFound, TaskStorageError
+from tareas.services.task_mutation_locks import (
+    TaskMutationConflict,
+    TaskMutationLockError,
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    is_task_mutation_conflict,
+    lock_mysql_task_groups,
+    lock_orm_task_groups,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 from settings.services.mysql_connections import open_mysql_connection
 
 
@@ -257,19 +269,45 @@ class DjangoCommentStorage:
         except Tarea.DoesNotExist as exc:
             raise EditTaskNotFound from exc
 
+    def _lock_task(self, task_id, empresa_id):
+        try:
+            rows = lock_orm_task_rows(
+                self.alias,
+                empresa_id,
+                (task_id,),
+            )
+        except TaskMutationScopeError as exc:
+            raise EditTaskNotFound from exc
+        if not rows:
+            raise EditTaskNotFound
+        return self.task(task_id, empresa_id)
+
     def create(self, command, *, documents=()):
-        task = self.task(command.task_id, command.empresa_id)
         with transaction.atomic(using=self.alias):
-            comment = Comentario.objects.using(self.alias).create(
-                tarea_id=task.pk, autor_id=command.author_id, contenido=command.content,
-            )
-            self._replace_attachments(comment.pk, command.task_id, command.document_ids)
-            version = ComentarioVersion.objects.using(self.alias).create(
-                comentario_id=comment.pk, evento=ComentarioVersion.Evento.CREADO,
-                numero_version=1, contenido=command.content, actor_id=command.author_id,
-                motivo="",
-            )
-            self._replace_version_documents(version.pk, command.document_ids)
+            with bounded_django_lock_wait(self.alias):
+                task = self._lock_task(command.task_id, command.empresa_id)
+                comment = Comentario.objects.using(self.alias).create(
+                    tarea_id=task.pk,
+                    autor_id=command.author_id,
+                    contenido=command.content,
+                )
+                self._replace_attachments(
+                    comment.pk,
+                    command.task_id,
+                    command.document_ids,
+                )
+                version = ComentarioVersion.objects.using(self.alias).create(
+                    comentario_id=comment.pk,
+                    evento=ComentarioVersion.Evento.CREADO,
+                    numero_version=1,
+                    contenido=command.content,
+                    actor_id=command.author_id,
+                    motivo="",
+                )
+                self._replace_version_documents(
+                    version.pk,
+                    command.document_ids,
+                )
         return comment
 
     def get(self, comment_id, task_id, empresa_id):
@@ -299,39 +337,81 @@ class DjangoCommentStorage:
 
     def edit(self, command, *, documents=()):
         with transaction.atomic(using=self.alias):
-            comment = self.get(command.comment_id, command.task_id, command.empresa_id)
-            comment.contenido = command.content
-            comment.save(using=self.alias, update_fields=["contenido", "updated_at"])
-            self._replace_attachments(comment.pk, command.task_id, command.document_ids)
-            number = ComentarioVersion.objects.using(self.alias).filter(
-                comentario_id=comment.pk,
-            ).aggregate(value=Max("numero_version"))["value"] or 0
-            version = ComentarioVersion.objects.using(self.alias).create(
-                comentario_id=comment.pk, evento=ComentarioVersion.Evento.EDITADO,
-                numero_version=number + 1, contenido=command.content,
-                actor_id=command.actor_id, motivo="",
-            )
-            self._replace_version_documents(version.pk, command.document_ids)
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                comment = self.get(
+                    command.comment_id,
+                    command.task_id,
+                    command.empresa_id,
+                )
+                comment.contenido = command.content
+                comment.save(
+                    using=self.alias,
+                    update_fields=["contenido", "updated_at"],
+                )
+                self._replace_attachments(
+                    comment.pk,
+                    command.task_id,
+                    command.document_ids,
+                )
+                number = ComentarioVersion.objects.using(self.alias).filter(
+                    comentario_id=comment.pk,
+                ).aggregate(value=Max("numero_version"))["value"] or 0
+                version = ComentarioVersion.objects.using(self.alias).create(
+                    comentario_id=comment.pk,
+                    evento=ComentarioVersion.Evento.EDITADO,
+                    numero_version=number + 1,
+                    contenido=command.content,
+                    actor_id=command.actor_id,
+                    motivo="",
+                )
+                self._replace_version_documents(
+                    version.pk,
+                    command.document_ids,
+                )
         return comment
 
     def set_visibility(self, command):
         with transaction.atomic(using=self.alias):
-            comment = self.get(command.comment_id, command.task_id, command.empresa_id)
-            documents = list(DocumentoTarea.objects.using(self.alias).filter(
-                adjuntos_comentarios__comentario_id=comment.pk, tarea_id=command.task_id,
-            ))
-            comment.oculto = command.oculto
-            comment.save(using=self.alias, update_fields=["oculto", "updated_at"])
-            version = ComentarioVersion.objects.using(self.alias).create(
-                comentario_id=comment.pk,
-                evento=(ComentarioVersion.Evento.OCULTADO if command.oculto else ComentarioVersion.Evento.RESTAURADO),
-                numero_version=None, contenido=comment.contenido,
-                actor_id=command.actor_id, motivo=command.motivo,
-            )
-            self._replace_version_documents(version.pk, tuple(doc.pk for doc in documents))
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                comment = self.get(
+                    command.comment_id,
+                    command.task_id,
+                    command.empresa_id,
+                )
+                documents = list(
+                    DocumentoTarea.objects.using(self.alias).filter(
+                        adjuntos_comentarios__comentario_id=comment.pk,
+                        tarea_id=command.task_id,
+                    )
+                )
+                comment.oculto = command.oculto
+                comment.save(
+                    using=self.alias,
+                    update_fields=["oculto", "updated_at"],
+                )
+                version = ComentarioVersion.objects.using(self.alias).create(
+                    comentario_id=comment.pk,
+                    evento=(
+                        ComentarioVersion.Evento.OCULTADO
+                        if command.oculto
+                        else ComentarioVersion.Evento.RESTAURADO
+                    ),
+                    numero_version=None,
+                    contenido=comment.contenido,
+                    actor_id=command.actor_id,
+                    motivo=command.motivo,
+                )
+                self._replace_version_documents(
+                    version.pk,
+                    tuple(doc.pk for doc in documents),
+                )
         return comment
 
     def _replace_attachments(self, comment_id, task_id, document_ids):
+        if len(document_ids) != len(set(document_ids)):
+            raise ValidationError("No se puede asociar dos veces el mismo documento.")
         ComentarioAdjunto.objects.using(self.alias).filter(comentario_id=comment_id).delete()
         valid = set(DocumentoTarea.objects.using(self.alias).filter(
             pk__in=document_ids, tarea_id=task_id,
@@ -363,9 +443,13 @@ class DjangoCommentStorage:
         )
 
     def reading(self, command):
-        reading, _ = TareaLectura.objects.using(self.alias).get_or_create(
-            tarea_id=command.task_id, usuario_id=command.user_id,
-        )
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                reading, _ = TareaLectura.objects.using(self.alias).get_or_create(
+                    tarea_id=command.task_id,
+                    usuario_id=command.user_id,
+                )
         return reading
 
     def pending(self, command):
@@ -414,74 +498,172 @@ class DjangoCommentStorage:
 
     def recognize(self, command):
         with transaction.atomic(using=self.alias):
-            reading = TareaLectura.objects.using(self.alias).select_for_update().get(
-                tarea_id=command.task_id, usuario_id=command.user_id,
-            )
-            expected_queryset = Comentario.objects.using(self.alias).filter(
-                tarea_id=command.task_id,
-            )
-            if reading.comentario_leido_hasta_id:
-                cursor = Comentario.objects.using(self.alias).get(
-                    pk=reading.comentario_leido_hasta_id,
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                reading = TareaLectura.objects.using(self.alias).select_for_update().get(
+                    tarea_id=command.task_id,
+                    usuario_id=command.user_id,
                 )
-                expected_queryset = expected_queryset.filter(
-                    Q(created_at__gt=cursor.created_at)
-                    | Q(created_at=cursor.created_at, pk__gt=cursor.pk)
+                expected_queryset = Comentario.objects.using(self.alias).filter(
+                    tarea_id=command.task_id,
                 )
-            expected = list(expected_queryset.order_by("created_at", "pk")[:20])
-            if [item.pk for item in expected] != list(command.comment_ids):
-                raise ValidationError("Solo se puede reconocer la siguiente página contigua.")
-            reading.comentario_leido_hasta_id = expected[-1].pk
-            reading.save(using=self.alias, update_fields=["comentario_leido_hasta"])
+                if reading.comentario_leido_hasta_id:
+                    cursor = Comentario.objects.using(self.alias).get(
+                        pk=reading.comentario_leido_hasta_id,
+                    )
+                    expected_queryset = expected_queryset.filter(
+                        Q(created_at__gt=cursor.created_at)
+                        | Q(created_at=cursor.created_at, pk__gt=cursor.pk)
+                    )
+                expected = list(
+                    expected_queryset.order_by("created_at", "pk")[:20]
+                )
+                if [item.pk for item in expected] != list(command.comment_ids):
+                    raise ValidationError(
+                        "Solo se puede reconocer la siguiente página contigua."
+                    )
+                reading.comentario_leido_hasta_id = expected[-1].pk
+                reading.save(
+                    using=self.alias,
+                    update_fields=["comentario_leido_hasta"],
+                )
         return reading
 
     def open_pause(self, command):
-        reading = self.reading(command)
-        current = ComentarioPausaLectura.objects.using(self.alias).filter(
-            lectura_id=reading.pk, hasta__isnull=True,
-        ).order_by("desde", "pk").first()
-        if current is not None:
-            return current
-        return ComentarioPausaLectura.objects.using(self.alias).create(
-            lectura_id=reading.pk, desde=command.at or timezone.now(),
-        )
-
-    def close_pause(self, command):
-        reading = self.reading(command)
-        current = ComentarioPausaLectura.objects.using(self.alias).filter(
-            lectura_id=reading.pk, hasta__isnull=True,
-        ).order_by("desde", "pk").first()
-        if current is None:
-            return None
-        current.hasta = max(command.at or timezone.now(), current.desde)
-        current.save(using=self.alias, update_fields=["hasta"])
-        return current
-
-    def ensure_readings(self, task_id, comment_id, user_ids, created_at):
         with transaction.atomic(using=self.alias):
-            predecessor = Comentario.objects.using(self.alias).filter(
-                tarea_id=task_id,
-            ).filter(
-                Q(created_at__lt=created_at)
-                | Q(created_at=created_at, pk__lt=comment_id)
-            ).order_by("-created_at", "-pk").first()
-            for user_id in user_ids:
-                TareaLectura.objects.using(self.alias).get_or_create(
-                    tarea_id=task_id,
-                    usuario_id=user_id,
-                    defaults={"comentario_leido_hasta": predecessor},
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                reading, _created = TareaLectura.objects.using(
+                    self.alias
+                ).get_or_create(
+                    tarea_id=command.task_id,
+                    usuario_id=command.user_id,
+                )
+                queryset = ComentarioPausaLectura.objects.using(self.alias).filter(
+                    lectura_id=reading.pk,
+                    hasta__isnull=True,
+                ).order_by("desde", "pk")
+                if connections[self.alias].features.has_select_for_update:
+                    queryset = queryset.select_for_update()
+                current = queryset.first()
+                if current is not None:
+                    return current
+                return ComentarioPausaLectura.objects.using(self.alias).create(
+                    lectura_id=reading.pk,
+                    desde=command.at or timezone.now(),
                 )
 
-    def handle_user_activity(self, user_id, active, at):
-        readings = TareaLectura.objects.using(self.alias).filter(usuario_id=user_id)
-        for reading in readings:
-            command = ReadingCommand(
-                reading.tarea_id, reading.tarea.empresa_id, reading.usuario_id, at,
+    def close_pause(self, command):
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(command.task_id, command.empresa_id)
+                reading, _created = TareaLectura.objects.using(
+                    self.alias
+                ).get_or_create(
+                    tarea_id=command.task_id,
+                    usuario_id=command.user_id,
+                )
+                queryset = ComentarioPausaLectura.objects.using(self.alias).filter(
+                    lectura_id=reading.pk,
+                    hasta__isnull=True,
+                ).order_by("desde", "pk")
+                if connections[self.alias].features.has_select_for_update:
+                    queryset = queryset.select_for_update()
+                current = queryset.first()
+                if current is None:
+                    return None
+                current.hasta = max(command.at or timezone.now(), current.desde)
+                current.save(using=self.alias, update_fields=["hasta"])
+                return current
+
+    def ensure_readings(
+        self,
+        task_id,
+        comment_id,
+        user_ids,
+        created_at,
+        empresa_id=None,
+    ):
+        if empresa_id is None:
+            empresa_id = (
+                Tarea.objects.using(self.alias)
+                .filter(pk=task_id)
+                .values_list("empresa_id", flat=True)
+                .first()
             )
-            if active:
-                self.close_pause(command)
-            else:
-                self.open_pause(command)
+        if empresa_id is None:
+            raise EditTaskNotFound
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                self._lock_task(task_id, empresa_id)
+                predecessor = Comentario.objects.using(self.alias).filter(
+                    tarea_id=task_id,
+                ).filter(
+                    Q(created_at__lt=created_at)
+                    | Q(created_at=created_at, pk__lt=comment_id)
+                ).order_by("-created_at", "-pk").first()
+                for user_id in user_ids:
+                    TareaLectura.objects.using(self.alias).get_or_create(
+                        tarea_id=task_id,
+                        usuario_id=user_id,
+                        defaults={"comentario_leido_hasta": predecessor},
+                    )
+
+    def handle_user_activity(self, user_id, active, at):
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                readings = TareaLectura.objects.using(self.alias).filter(
+                    usuario_id=user_id,
+                ).select_related("tarea").order_by(
+                    "tarea__empresa_id",
+                    "tarea_id",
+                    "pk",
+                )
+                initial = tuple(readings)
+                groups = {}
+                for reading in initial:
+                    groups.setdefault(reading.tarea.empresa_id, set()).add(
+                        reading.tarea_id
+                    )
+                try:
+                    locked = lock_orm_task_groups(self.alias, groups)
+                except TaskMutationScopeError as exc:
+                    raise EditTaskNotFound from exc
+                current_readings = tuple(
+                    TareaLectura.objects.using(self.alias)
+                    .filter(usuario_id=user_id)
+                    .select_for_update()
+                    .order_by("tarea_id", "pk")
+                    .values_list("pk", "tarea_id")
+                )
+                locked_company_by_id = {
+                    task.pk: task.empresa_id for task in locked
+                }
+                if any(
+                    task_id not in locked_company_by_id
+                    for _reading_id, task_id in current_readings
+                ):
+                    raise TaskMutationConflict(
+                        "Las tareas de lectura cambiaron; vuelva a intentarlo."
+                    )
+                for reading_id, task_id in current_readings:
+                    pause_query = ComentarioPausaLectura.objects.using(
+                        self.alias
+                    ).filter(
+                        lectura_id=reading_id,
+                        hasta__isnull=True,
+                    ).order_by("desde", "pk")
+                    if connections[self.alias].features.has_select_for_update:
+                        pause_query = pause_query.select_for_update()
+                    current = pause_query.first()
+                    if active and current is not None:
+                        current.hasta = max(at or timezone.now(), current.desde)
+                        current.save(using=self.alias, update_fields=["hasta"])
+                    elif not active and current is None:
+                        ComentarioPausaLectura.objects.using(self.alias).create(
+                            lectura_id=reading_id,
+                            desde=at or timezone.now(),
+                        )
 
 
 class MySQLCommentStorage:
@@ -544,23 +726,41 @@ class MySQLCommentStorage:
         )
         return tuple(sorted(user_ids))
 
-    def _execute(self, operation):
+    def _execute(self, operation, *, lock_groups=None):
         try:
             with self._connection() as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    result = operation(cursor)
-                    connection.commit()
-                    return result
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
-        except (ValidationError, EditTaskNotFound):
+                lock_wait = (
+                    bounded_mysql_lock_wait(connection)
+                    if lock_groups is not None
+                    else nullcontext()
+                )
+                with lock_wait:
+                    with mysql_mutation_transaction(connection):
+                        cursor = connection.cursor()
+                        try:
+                            groups = (
+                                lock_groups(cursor)
+                                if callable(lock_groups)
+                                else lock_groups
+                            )
+                            if groups is not None:
+                                try:
+                                    lock_mysql_task_groups(connection, groups)
+                                except TaskMutationScopeError as exc:
+                                    raise EditTaskNotFound from exc
+                                if callable(lock_groups):
+                                    lock_groups.resolved = groups
+                            return operation(cursor)
+                        finally:
+                            cursor.close()
+        except (ValidationError, EditTaskNotFound, TaskMutationLockError):
             raise
         except Exception as exc:
+            if is_task_mutation_conflict(exc):
+                raise TaskMutationConflict(
+                    "La tarea está siendo modificada por otra operación; "
+                    "vuelva a intentarlo."
+                ) from exc
             raise TaskStorageError("No se pudo persistir el comentario.") from exc
 
     def _task(self, cursor, task_id, empresa_id):
@@ -651,7 +851,10 @@ class MySQLCommentStorage:
                 (reading[0], started, None),
             )
             return SimpleNamespace(pk=cursor.lastrowid, lectura_id=reading[0], desde=started, hasta=None)
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
     def close_pause(self, command):
         def operation(cursor):
@@ -673,7 +876,10 @@ class MySQLCommentStorage:
                 (ended, row[0]),
             )
             return SimpleNamespace(pk=row[0], lectura_id=reading[0], desde=started, hasta=ended)
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
     def _reading_row(self, cursor, command):
         cursor.execute(
@@ -691,16 +897,49 @@ class MySQLCommentStorage:
         return row
 
     def handle_user_activity(self, user_id, active, at):
-        def operation(cursor):
+        def find_task_groups(cursor):
             cursor.execute(
-                "SELECT id FROM tareas_tarealectura WHERE usuario_id=%s",
+                "SELECT DISTINCT task.empresa_id, reading.tarea_id "
+                "FROM tareas_tarealectura AS reading "
+                "INNER JOIN tareas_tarea AS task ON task.id=reading.tarea_id "
+                "WHERE reading.usuario_id=%s "
+                "ORDER BY task.empresa_id, reading.tarea_id",
                 (user_id,),
             )
-            reading_ids = [row[0] for row in cursor.fetchall()]
-            for reading_id in reading_ids:
+            grouped = {}
+            for empresa_id, task_id in cursor.fetchall():
+                grouped.setdefault(empresa_id, set()).add(task_id)
+            groups = tuple(
+                (empresa_id, tuple(sorted(task_ids)))
+                for empresa_id, task_ids in sorted(grouped.items())
+            )
+            return groups
+
+        def operation(cursor):
+            cursor.execute(
+                "SELECT id, tarea_id FROM tareas_tarealectura "
+                "WHERE usuario_id=%s ORDER BY tarea_id, id FOR UPDATE",
+                (user_id,),
+            )
+            reading_rows = tuple(cursor.fetchall())
+            locked_groups = set(find_task_groups.resolved)
+            locked_task_ids = {
+                task_id
+                for _empresa_id, task_ids in locked_groups
+                for task_id in task_ids
+            }
+            if any(
+                task_id not in locked_task_ids
+                for _reading_id, task_id in reading_rows
+            ):
+                raise TaskMutationConflict(
+                    "Las tareas de lectura cambiaron; vuelva a intentarlo."
+                )
+            for reading_id, _task_id in reading_rows:
                 cursor.execute(
                     "SELECT id FROM tareas_comentariopausalectura "
-                    "WHERE lectura_id=%s AND hasta IS NULL ORDER BY desde, id LIMIT 1",
+                    "WHERE lectura_id=%s AND hasta IS NULL "
+                    "ORDER BY desde, id LIMIT 1 FOR UPDATE",
                     (reading_id,),
                 )
                 current = cursor.fetchone()
@@ -714,7 +953,8 @@ class MySQLCommentStorage:
                         "INSERT INTO tareas_comentariopausalectura (lectura_id, desde, hasta) VALUES (%s,%s,%s)",
                         (reading_id, at or timezone.now(), None),
                     )
-        return self._execute(operation)
+        find_task_groups.resolved = ()
+        return self._execute(operation, lock_groups=find_task_groups)
 
     def documents(self, task_id, document_ids, empresa_id):
         task = self.task(task_id, empresa_id)
@@ -742,7 +982,13 @@ class MySQLCommentStorage:
                 (comment_id, "CREADO", 1, command.content, command.author_id, timezone.now(), ""),
             )
             version_id = cursor.lastrowid
-            self._insert_document_links(cursor, comment_id, version_id, command.document_ids)
+            self._insert_document_links(
+                cursor,
+                comment_id,
+                version_id,
+                command.task_id,
+                command.document_ids,
+            )
             self._ensure_readings_with_cursor(
                 cursor,
                 task_id=command.task_id,
@@ -752,10 +998,43 @@ class MySQLCommentStorage:
             )
             cursor.execute("SELECT id, tarea_id, autor_id, contenido, created_at, updated_at, oculto FROM tareas_comentario WHERE id=%s", (comment_id,))
             return self._materialize_comment(cursor, cursor.fetchone())
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
-    def _insert_document_links(self, cursor, comment_id, version_id, document_ids):
-        for document_id in document_ids:
+    @staticmethod
+    def _validate_documents_for_task(cursor, task_id, document_ids):
+        document_ids = tuple(document_ids)
+        if len(document_ids) != len(set(document_ids)):
+            raise ValidationError("No se puede asociar dos veces el mismo documento.")
+        if not document_ids:
+            return document_ids
+        placeholders = ", ".join("%s" for _ in document_ids)
+        cursor.execute(
+            "SELECT id FROM tareas_documentotarea "
+            f"WHERE tarea_id=%s AND id IN ({placeholders}) "
+            "ORDER BY id FOR UPDATE",
+            (task_id, *document_ids),
+        )
+        valid_ids = {row[0] for row in cursor.fetchall()}
+        if valid_ids != set(document_ids):
+            raise ValidationError("El documento no pertenece a la tarea.")
+        return document_ids
+
+    def _insert_document_links(
+        self,
+        cursor,
+        comment_id,
+        version_id,
+        task_id,
+        document_ids,
+    ):
+        for document_id in self._validate_documents_for_task(
+            cursor,
+            task_id,
+            document_ids,
+        ):
             cursor.execute(
                 "INSERT INTO tareas_comentarioadjunto (comentario_id, documento_id) VALUES (%s,%s)",
                 (comment_id, document_id),
@@ -852,11 +1131,15 @@ class MySQLCommentStorage:
                 cursor,
                 command.comment_id,
                 version_id,
+                command.task_id,
                 command.document_ids,
             )
             cursor.execute("SELECT id,tarea_id,autor_id,contenido,created_at,updated_at,oculto FROM tareas_comentario WHERE id=%s", (comment.id,))
             return self._materialize_comment(cursor, cursor.fetchone())
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
     def set_visibility(self, command):
         def operation(cursor):
@@ -874,7 +1157,11 @@ class MySQLCommentStorage:
                 "WHERE comentario_id=%s ORDER BY id",
                 (command.comment_id,),
             )
-            document_ids = tuple(item[0] for item in cursor.fetchall())
+            document_ids = self._validate_documents_for_task(
+                cursor,
+                command.task_id,
+                tuple(item[0] for item in cursor.fetchall()),
+            )
             event = "OCULTADO" if command.oculto else "RESTAURADO"
             cursor.execute(
                 "UPDATE tareas_comentario SET oculto=%s, updated_at=%s WHERE id=%s AND tarea_id=%s",
@@ -891,10 +1178,14 @@ class MySQLCommentStorage:
                 self._insert_version_document_link(cursor, version_id, document_id)
             cursor.execute("SELECT id,tarea_id,autor_id,contenido,created_at,updated_at,oculto FROM tareas_comentario WHERE id=%s", (comment.id,))
             return self._materialize_comment(cursor, cursor.fetchone())
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
     def reading(self, command):
         def operation(cursor):
+            self._task(cursor, command.task_id, command.empresa_id)
             cursor.execute(
                 "SELECT id, tarea_id, usuario_id, leido, fecha_lectura, comentario_leido_hasta_id "
                 "FROM tareas_tarealectura WHERE tarea_id=%s AND usuario_id=%s FOR UPDATE",
@@ -908,10 +1199,14 @@ class MySQLCommentStorage:
                 )
                 return ReadingDTO(cursor.lastrowid, command.task_id, command.user_id, False, None, None)
             return ReadingDTO(*row)
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
     def recognize(self, command):
         def operation(cursor):
+            self._task(cursor, command.task_id, command.empresa_id)
             cursor.execute(
                 "SELECT id, tarea_id, usuario_id, leido, fecha_lectura, comentario_leido_hasta_id "
                 "FROM tareas_tarealectura WHERE tarea_id=%s AND usuario_id=%s FOR UPDATE",
@@ -926,10 +1221,37 @@ class MySQLCommentStorage:
                 (command.comment_ids[-1], reading.id),
             )
             return ReadingDTO(reading.id, reading.task_id, reading.user_id, reading.leido, reading.fecha_lectura, command.comment_ids[-1])
-        return self._execute(operation)
+        return self._execute(
+            operation,
+            lock_groups=((command.empresa_id, (command.task_id,)),),
+        )
 
-    def ensure_readings(self, task_id, comment_id, user_ids, created_at):
+    def ensure_readings(
+        self,
+        task_id,
+        comment_id,
+        user_ids,
+        created_at,
+        empresa_id=None,
+    ):
+        resolved_company = {}
+
+        def task_groups(cursor):
+            company_id = empresa_id
+            if company_id is None:
+                cursor.execute(
+                    "SELECT empresa_id FROM tareas_tarea WHERE id=%s",
+                    (task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise EditTaskNotFound
+                company_id = row[0]
+            resolved_company["id"] = company_id
+            return ((company_id, (task_id,)),)
+
         def operation(cursor):
+            self._task(cursor, task_id, resolved_company["id"])
             self._ensure_readings_with_cursor(
                 cursor,
                 task_id=task_id,
@@ -937,7 +1259,7 @@ class MySQLCommentStorage:
                 user_ids=user_ids,
                 created_at=created_at,
             )
-        return self._execute(operation)
+        return self._execute(operation, lock_groups=task_groups)
 
     @staticmethod
     def _ensure_readings_with_cursor(

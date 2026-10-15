@@ -4,6 +4,7 @@ import re
 from decimal import Decimal
 from os.path import splitext
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -291,15 +292,56 @@ class Tarea(models.Model):
         return self.responsable is not None and self.responsable.is_active
 
     def save(self, *args, **kwargs):
-        if self._state.adding and not self.correlativo:
-            if not self.empresa_id:
-                raise ValidationError("Una tarea requiere empresa para reservar correlativo.")
-            from .services.correlativos import reserve_next_number
+        if not self.empresa_id:
+            raise ValidationError("Una tarea requiere una empresa.")
+        from django.db import router
 
-            with transaction.atomic(using=kwargs.get("using")):
-                self.correlativo = f"B{reserve_next_number(self.empresa_id, using=kwargs.get('using')):07d}"
+        using = (
+            kwargs.get("using")
+            or self._state.db
+            or router.db_for_write(type(self), instance=self)
+            or "default"
+        )
+        kwargs["using"] = using
+        from .services.task_mutation_locks import (
+            bounded_django_lock_wait,
+            lock_orm_task_company,
+        )
+
+        with transaction.atomic(using=using):
+            with bounded_django_lock_wait(using):
+                if self._state.adding:
+                    lock_orm_task_company(using, self.empresa_id)
+                    if not self.correlativo:
+                        from .services.correlativos import reserve_next_number
+
+                        self.correlativo = (
+                            f"B{reserve_next_number(self.empresa_id, using=using):07d}"
+                        )
+                else:
+                    manager = type(self).objects.using(using)
+                    stored_company_id = (
+                        manager.filter(pk=self.pk)
+                        .values_list("empresa_id", flat=True)
+                        .first()
+                    )
+                    if stored_company_id is None:
+                        raise self.DoesNotExist
+                    for company_id in sorted(
+                        {stored_company_id, self.empresa_id}
+                    ):
+                        lock_orm_task_company(using, company_id)
+                    current_company_id = (
+                        manager.select_for_update()
+                        .filter(pk=self.pk)
+                        .values_list("empresa_id", flat=True)
+                        .first()
+                    )
+                    if current_company_id != stored_company_id:
+                        raise ValidationError(
+                            "La Tarea cambió de empresa durante la actualización."
+                        )
                 return super().save(*args, **kwargs)
-        return super().save(*args, **kwargs)
 
     def clean(self):
         """Reglas respaldadas por spec/clarifications.
@@ -429,35 +471,72 @@ class Tarea(models.Model):
         está inactivo, lanza ValidationError sin persistir (la tarea permanece en
         BORRADOR).
         """
-        if self.estado != self.Estado.BORRADOR:
-            raise ValidationError("La tarea ya está publicada.")
-        if not self._responsable_es_valido():
-            raise ValidationError(
-                "No se puede publicar: la tarea requiere un responsable válido y activo."
-            )
-        if self.fecha_tope is None:
-            raise ValidationError(
-                "No se puede publicar: la tarea requiere fecha tope."
-            )
-        if not re.fullmatch(r"B[0-9]{7}", self.correlativo or ""):
-            raise ValidationError(
-                "No se puede publicar: el correlativo de borrador no es válido."
-            )
-        self.estado = self.Estado.ACTIVA
-        self.correlativo = f"A{self.correlativo[1:]}"
-        ahora = timezone.now()
-        self.fecha_publicacion = ahora
-        if self.fecha_asignacion is None:
-            self.fecha_asignacion = ahora
-        self.full_clean()
-        self.save()
-        TareaTransicion.objects.create(
-            tarea=self,
-            estado_origen=self.Estado.BORRADOR,
-            estado_destino=self.Estado.ACTIVA,
-            accion_evento="PUBLICAR",
-            usuario=usuario or self.creada_por,
+        if not self.pk:
+            raise ValidationError("No se puede publicar una Tarea no persistida.")
+        from django.db import router
+
+        using = (
+            self._state.db
+            or router.db_for_write(type(self), instance=self)
+            or "default"
         )
+        from .services.task_mutation_locks import (
+            bounded_django_lock_wait,
+            lock_orm_task_rows,
+        )
+
+        with transaction.atomic(using=using):
+            with bounded_django_lock_wait(using):
+                lock_orm_task_rows(using, self.empresa_id, (self.pk,))
+                try:
+                    task = type(self).objects.using(using).select_for_update().get(
+                        pk=self.pk,
+                        empresa_id=self.empresa_id,
+                    )
+                except type(self).DoesNotExist as exc:
+                    raise self.DoesNotExist from exc
+                if task.estado != self.Estado.BORRADOR:
+                    raise ValidationError("La tarea ya está publicada.")
+                if task.fecha_tope is None and self.fecha_tope is not None:
+                    task.fecha_tope = self.fecha_tope
+                if not task._responsable_es_valido():
+                    raise ValidationError(
+                        "No se puede publicar: la tarea requiere un responsable "
+                        "válido y activo."
+                    )
+                if task.fecha_tope is None:
+                    raise ValidationError(
+                        "No se puede publicar: la tarea requiere fecha tope."
+                    )
+                if not re.fullmatch(r"B[0-9]{7}", task.correlativo or ""):
+                    raise ValidationError(
+                        "No se puede publicar: el correlativo de borrador no es válido."
+                    )
+                task.estado = self.Estado.ACTIVA
+                task.correlativo = f"A{task.correlativo[1:]}"
+                ahora = timezone.now()
+                task.fecha_publicacion = ahora
+                if task.fecha_asignacion is None:
+                    task.fecha_asignacion = ahora
+                task.full_clean()
+                task.save(
+                    using=using,
+                    update_fields=[
+                        "estado",
+                        "correlativo",
+                        "fecha_publicacion",
+                        "fecha_asignacion",
+                        "fecha_tope",
+                    ],
+                )
+                TareaTransicion.objects.using(using).create(
+                    tarea_id=task.pk,
+                    estado_origen=self.Estado.BORRADOR,
+                    estado_destino=self.Estado.ACTIVA,
+                    accion_evento="PUBLICAR",
+                    usuario_id=(usuario or task.creada_por).pk,
+                )
+        self.refresh_from_db(using=using)
 
 
 class EvaluacionSimilitud(models.Model):
@@ -1651,3 +1730,154 @@ class DocumentoCotizacion(models.Model):
     class Meta:
         ordering = ["-fecha", "-pk"]
         indexes = [models.Index(fields=["cotizacion", "fecha"])]
+
+
+def generate_deletion_operation_id():
+    return uuid4().hex
+
+
+class TareaEliminacionOperacion(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = "PENDING", "Pendiente"
+        COMMITTED = "COMMITTED", "Confirmada"
+
+    class EstadoAuditoria(models.TextChoices):
+        NO_ENCOLADA = "NOT_QUEUED", "No encolada"
+        PENDIENTE = "PENDING", "Pendiente"
+        CONFIRMADA = "CONFIRMED", "Confirmada"
+        ERROR = "ERROR", "Error"
+
+    class EstadoArchivos(models.TextChoices):
+        NO_REQUERIDA = "NOT_REQUIRED", "No requerida"
+        PENDIENTE = "PENDING", "Pendiente"
+        COMPLETA = "COMPLETE", "Completa"
+        ERROR = "ERROR", "Error"
+
+    operation_id = models.CharField(
+        primary_key=True,
+        default=generate_deletion_operation_id,
+        editable=False,
+        max_length=32,
+    )
+    actor_id = models.PositiveBigIntegerField()
+    empresa_id = models.PositiveBigIntegerField()
+    root_task_id = models.PositiveBigIntegerField()
+    root_correlativo = models.CharField(max_length=9)
+    backend_type = models.CharField(max_length=16)
+    backend_identity = models.CharField(max_length=160)
+    backend_config_version = models.CharField(max_length=64, blank=True, default="")
+    fingerprint = models.CharField(max_length=64)
+    dependency_summary = models.TextField(blank=True, default="{}")
+    status = models.CharField(
+        max_length=16,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE,
+        db_index=True,
+    )
+    result_code = models.CharField(max_length=32, blank=True, default="")
+    audit_status = models.CharField(
+        max_length=16,
+        choices=EstadoAuditoria.choices,
+        default=EstadoAuditoria.NO_ENCOLADA,
+        db_index=True,
+    )
+    audit_attempts = models.PositiveIntegerField(default=0)
+    audit_last_attempt_at = models.DateTimeField(null=True, blank=True)
+    audit_event_id = models.PositiveBigIntegerField(null=True, blank=True)
+    audit_error_code = models.CharField(max_length=64, blank=True, default="")
+    file_cleanup_status = models.CharField(
+        max_length=16,
+        choices=EstadoArchivos.choices,
+        default=EstadoArchivos.NO_REQUERIDA,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    committed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "tareas_eliminacion_operacion"
+        ordering = ["-created_at", "operation_id"]
+        indexes = [
+            models.Index(
+                fields=["audit_status", "created_at"],
+                name="tareas_delop_audit_created_idx",
+            ),
+            models.Index(
+                fields=["file_cleanup_status", "updated_at"],
+                name="tareas_delop_file_updated_idx",
+            ),
+            models.Index(
+                fields=["empresa_id", "root_task_id", "created_at"],
+                name="tareas_delop_root_created_idx",
+            ),
+        ]
+
+
+class TareaEliminacionElemento(models.Model):
+    operacion = models.ForeignKey(
+        TareaEliminacionOperacion,
+        on_delete=models.PROTECT,
+        related_name="elementos",
+    )
+    tipo = models.CharField(max_length=64)
+    object_id = models.PositiveBigIntegerField()
+
+    class Meta:
+        db_table = "tareas_eliminacion_elemento"
+        ordering = ["tipo", "object_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["operacion", "tipo", "object_id"],
+                name="tareas_del_elemento_unico",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["tipo", "object_id"],
+                name="tareas_del_elemento_obj_idx",
+            ),
+        ]
+
+
+class TareaEliminacionArchivo(models.Model):
+    class Estado(models.TextChoices):
+        NO_ENCOLADO = "NOT_QUEUED", "No encolado"
+        PENDIENTE = "PENDING", "Pendiente"
+        COMPLETO = "COMPLETE", "Completo"
+        ERROR = "ERROR", "Error"
+
+    operacion = models.ForeignKey(
+        TareaEliminacionOperacion,
+        on_delete=models.PROTECT,
+        related_name="archivos",
+    )
+    storage_key = models.CharField(max_length=64)
+    file_name = models.CharField(max_length=500)
+    reference_hash = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=16,
+        choices=Estado.choices,
+        default=Estado.NO_ENCOLADO,
+    )
+    attempts = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tareas_eliminacion_archivo"
+        ordering = ["operacion_id", "storage_key", "reference_hash"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["operacion", "storage_key", "reference_hash"],
+                name="tareas_del_archivo_unico",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "updated_at"],
+                name="tareas_del_archivo_estado_idx",
+            ),
+        ]

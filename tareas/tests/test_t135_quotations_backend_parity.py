@@ -74,11 +74,25 @@ class ControlledMySQL:
     def cursor(self):
         return self
 
+    def begin(self):
+        self.db.execute("BEGIN")
+
     def close(self):
         pass
 
     def execute(self, sql, params=()):
         self.commands.append((sql, tuple(params)))
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self._rows = [(30,)]
+            return
+        if sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self._rows = []
+            return
+        if sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+            self._rows = []
+            return
         statement = sql.replace("%s", "?").replace(" FOR UPDATE", "")
         if statement == "START TRANSACTION":
             statement = "BEGIN"
@@ -187,6 +201,16 @@ class QuotationBackendParityTests(TestCase):
             self.assertIn("INSERT INTO tareas_cotizacion", table_writes)
             self.assertIn("UPDATE tareas_cotizacion", table_writes)
             self.assertIn("INSERT INTO tareas_documentocotizacion", table_writes)
+            company_lock = next(
+                call for call in self.mysql.commands
+                if "INSERT INTO `tareas_correlativoempresa`" in call[0]
+            )
+            self.assertEqual(company_lock[1], (self.task.empresa_id, 1))
+            task_lock_index = next(
+                index for index, (sql, _params) in enumerate(self.mysql.commands)
+                if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+            )
+            self.assertLess(self.mysql.commands.index(company_lock), task_lock_index)
 
     def test_mysql_storage_keeps_external_provider_and_user_references_as_ids(self):
         with self.configured_mysql():

@@ -349,9 +349,14 @@ class FakeReprogrammingConnection:
         self.lastrowid = None
         self.results = []
         self.closed = False
+        self.synthetic_result = None
 
     def cursor(self):
         return self
+
+    def begin(self):
+        self.calls.append(("BEGIN", ()))
+        self.snapshot = deepcopy((self.task, self.history, self.m2m))
 
     def commit(self):
         self.commits += 1
@@ -366,7 +371,16 @@ class FakeReprogrammingConnection:
     def execute(self, sql, params=()):
         self.calls.append((sql, params))
         self.results = []
-        if sql == "START TRANSACTION":
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_result = (30,)
+        elif sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_result = None
+        elif sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+        elif "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql:
+            self.results = [(self.task[0],)] if params == (self.empresa_id,) else []
+        elif sql == "START TRANSACTION":
             self.snapshot = deepcopy((self.task, self.history, self.m2m))
         elif sql.startswith("SELECT id, estado"):
             self.results = [self.task] if params == (self.task[0], self.empresa_id) else []
@@ -392,6 +406,10 @@ class FakeReprogrammingConnection:
             raise AssertionError(sql)
 
     def fetchone(self):
+        if self.synthetic_result is not None:
+            row = self.synthetic_result
+            self.synthetic_result = None
+            return row
         return self.results[0] if self.results else None
 
     def fetchall(self):
@@ -415,9 +433,9 @@ class MySQLReprogrammingTests(ReprogrammingFixture):
 
     def test_mysql_same_pk_and_cause_collision(self):
         fake = self.fake()
-        self.assertFalse(hasattr(fake, "begin"))
         original = self.task.fecha_tope
         result, notify = self.fake_operation(fake)
+        self.assertIn(("BEGIN", ()), fake.calls)
         self.assertEqual(fake.task[3], self.command.fecha_tope_nueva)
         self.assertEqual(result.fecha_tope_anterior, timezone.localdate() + timedelta(days=5))
         self.assertEqual(len(fake.history), 1)
@@ -426,7 +444,19 @@ class MySQLReprogrammingTests(ReprogrammingFixture):
         self.assertEqual(self.task.fecha_tope, original)
         self.assertFalse(self.task.reprogramaciones.exists())
         self.assertEqual(fake.commits, 1)
-        self.assertEqual(fake.calls[0], ("START TRANSACTION", ()))
+        self.assertTrue(
+            any("SELECT @@SESSION.innodb_lock_wait_timeout" in sql for sql, _ in fake.calls)
+        )
+        company_lock = next(
+            call for call in fake.calls
+            if "INSERT INTO `tareas_correlativoempresa`" in call[0]
+        )
+        self.assertEqual(company_lock[1], (self.empresa.pk, 1))
+        task_lock_index = next(
+            index for index, (sql, _params) in enumerate(fake.calls)
+            if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+        )
+        self.assertLess(fake.calls.index(company_lock), task_lock_index)
         notify.assert_called_once()
         self.assertTrue(any("FOR UPDATE" in sql and "empresa_id=%s" in sql
                             for sql, params in fake.calls))

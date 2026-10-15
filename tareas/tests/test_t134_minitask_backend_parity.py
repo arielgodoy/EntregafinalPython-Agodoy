@@ -1,4 +1,4 @@
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from copy import deepcopy
 from datetime import date
 import json
@@ -45,6 +45,7 @@ class MiniSQLConnection:
         self.fail_table = None
         self.annulled_parent = False
         self.existing_effective = set()
+        self.synthetic_row = None
 
     def cursor(self):
         return self
@@ -55,6 +56,9 @@ class MiniSQLConnection:
     def commit(self):
         self.commits += 1
 
+    def begin(self):
+        self.snapshot = deepcopy(self.tables)
+
     def rollback(self):
         self.rollbacks += 1
         self.tables = self.snapshot
@@ -64,7 +68,20 @@ class MiniSQLConnection:
         params = tuple(params)
         self.commands.append((sql, params))
         self.rows = []
-        if sql == "START TRANSACTION":
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+        elif sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+        elif sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+        elif "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql:
+            if params and params[0] == self.task.empresa_id:
+                self.rows = [(self.task.pk,)]
+        elif sql.startswith("SELECT empresa_id FROM tareas_tarea"):
+            if params == (self.task.pk,):
+                self.rows = [(self.task.empresa_id,)]
+        elif sql == "START TRANSACTION":
             self.snapshot = deepcopy(self.tables)
         elif sql.startswith("INSERT INTO "):
             match = re.match(r"INSERT INTO (\w+) \((.*?)\) VALUES", sql)
@@ -126,6 +143,10 @@ class MiniSQLConnection:
             raise AssertionError(f"Unhandled fake SQL: {sql}")
 
     def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
         return self.rows[0] if self.rows else None
 
     def fetchall(self):
@@ -250,6 +271,19 @@ class MiniTaskParityTests(TestCase):
         self.assertEqual(self.sql.commits, 4)
         self.assertEqual(self.sql.rollbacks, 0)
         locks = [(sql, params) for sql, params in self.sql.commands if "FOR UPDATE" in sql]
+        company_lock_index = next(
+            index for index, (sql, _params) in enumerate(self.sql.commands)
+            if "INSERT INTO `tareas_correlativoempresa`" in sql
+        )
+        self.assertEqual(
+            self.sql.commands[company_lock_index][1],
+            (self.company.pk, 1),
+        )
+        task_lock_index = next(
+            index for index, (sql, _params) in enumerate(self.sql.commands)
+            if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+        )
+        self.assertLess(company_lock_index, task_lock_index)
         self.assertTrue(any("empresa_id=%s" in sql and params == (
             self.task.pk, self.company.pk) for sql, params in locks))
         self.assertTrue(any("tarea_id=%s" in sql and params == (mini_id, self.task.pk)
@@ -466,6 +500,22 @@ class MiniTaskParityTests(TestCase):
                 return on_commit(callback, using="default")
 
             stack.enter_context(patch.object(transaction, "on_commit", commit))
+            lock_aliases = []
+
+            def lock_rows(alias, empresa_id, task_ids=None, **kwargs):
+                lock_aliases.append((alias, empresa_id, task_ids))
+                return (self.task,)
+
+            stack.enter_context(patch.object(
+                storage,
+                "bounded_django_lock_wait",
+                return_value=nullcontext(),
+            ))
+            stack.enter_context(patch.object(
+                storage,
+                "lock_orm_task_rows",
+                side_effect=lock_rows,
+            ))
             backend = storage.DjangoMiniTaskStorage("operational_alias")
             mini_id = self.create(backend).mini_task_id
             self.close(backend, mini_id, uploaded_files=(SimpleUploadedFile("alias.pdf", b"x"),))
@@ -477,6 +527,8 @@ class MiniTaskParityTests(TestCase):
             self.assertIn(model, {item[0] for item in aliases})
         self.assertEqual(set(atomic_aliases), {"operational_alias"})
         self.assertEqual(callback_aliases, ["operational_alias"])
+        self.assertTrue(lock_aliases)
+        self.assertEqual({alias for alias, _empresa, _ids in lock_aliases}, {"operational_alias"})
 
     def test_five_files_and_image_validation_both_backends(self):
         for backend in (self.django, self.mysql):

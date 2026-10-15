@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 import logging
@@ -23,6 +24,16 @@ from tareas.services.connection_roles import (
     resolve_operational_backend,
 )
 from tareas.services.image_processing import optimize_uploaded_image
+from tareas.services.task_mutation_locks import (
+    TaskMutationScopeError,
+    TaskMutationLockError,
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,71 +233,116 @@ class DjangoQuotationStorage:
     def create_round(self, *, task_id, company_id, minimum, opened_at=None):
         _company_exists(company_id)
         with transaction.atomic(using=self.alias):
-            task = self._task(task_id, company_id, lock=True)
-            last = (
-                RondaCotizacion.objects.using(self.alias)
-                .filter(tarea_id=task_id)
-                .aggregate(last=Max("numero"))["last"]
-                or 0
-            )
-            values = {
-                "tarea_id": task.pk,
-                "numero": last + 1,
-                "minimo_cotizaciones": minimum,
-            }
-            if opened_at is not None:
-                values["fecha_apertura"] = opened_at
-            ronda = _field_clean(RondaCotizacion, values, excluded=("tarea",))
-            ronda.save(using=self.alias)
-            return self.round_data(ronda.pk)
-
-    def close_round(self, *, round_id):
-        with transaction.atomic(using=self.alias):
-            ronda = self._round(round_id, lock=True)
-            if ronda.estado == RondaCotizacion.Estado.CERRADA:
-                return self.round_data(round_id)
-            if self.count_available_quotations(round_id) < ronda.minimo_cotizaciones:
-                raise ValidationError(
-                    "QUOTATION_MINIMUM_NOT_MET: La ronda no cumple el mínimo de cotizaciones vigentes."
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(self.alias, company_id, (task_id,))
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea no existe en BASE_TAREAS."
+                    ) from exc
+                task = self._task(task_id, company_id, lock=True)
+                last = (
+                    RondaCotizacion.objects.using(self.alias)
+                    .filter(tarea_id=task_id)
+                    .aggregate(last=Max("numero"))["last"]
+                    or 0
                 )
-            ronda.estado = RondaCotizacion.Estado.CERRADA
-            ronda.fecha_cierre = timezone.now()
-            _field_clean(
-                RondaCotizacion,
-                {
-                    "tarea_id": ronda.tarea_id,
-                    "numero": ronda.numero,
-                    "minimo_cotizaciones": ronda.minimo_cotizaciones,
-                    "estado": ronda.estado,
-                    "fecha_apertura": ronda.fecha_apertura,
-                    "fecha_cierre": ronda.fecha_cierre,
-                },
-                excluded=("tarea",),
-            )
-            ronda.save(using=self.alias, update_fields=["estado", "fecha_cierre"])
-            return self.round_data(round_id)
-
-    def open_next_round(self, *, round_id, company_id=None):
-        with transaction.atomic(using=self.alias):
-            previous = self._round(round_id, lock=True)
-            task = self._task(previous.tarea_id, company_id, lock=True)
-            last = (
-                RondaCotizacion.objects.using(self.alias)
-                .filter(tarea_id=task.pk)
-                .aggregate(last=Max("numero"))["last"]
-                or 0
-            )
-            ronda = _field_clean(
-                RondaCotizacion,
-                {
+                values = {
                     "tarea_id": task.pk,
                     "numero": last + 1,
-                    "minimo_cotizaciones": previous.minimo_cotizaciones,
-                },
-                excluded=("tarea",),
-            )
-            ronda.save(using=self.alias)
-            return self.round_data(ronda.pk)
+                    "minimo_cotizaciones": minimum,
+                }
+                if opened_at is not None:
+                    values["fecha_apertura"] = opened_at
+                ronda = _field_clean(RondaCotizacion, values, excluded=("tarea",))
+                ronda.save(using=self.alias)
+                return self.round_data(ronda.pk)
+
+    def close_round(self, *, round_id):
+        initial = self.round_data(round_id)
+        if initial is None:
+            raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        initial.company_id,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(initial.task_id, initial.company_id, lock=True)
+                ronda = self._round(round_id, lock=True)
+                if ronda.tarea_id != initial.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
+                if ronda.estado == RondaCotizacion.Estado.CERRADA:
+                    return self.round_data(round_id)
+                if self.count_available_quotations(round_id) < ronda.minimo_cotizaciones:
+                    raise ValidationError(
+                        "QUOTATION_MINIMUM_NOT_MET: La ronda no cumple el mínimo de cotizaciones vigentes."
+                    )
+                ronda.estado = RondaCotizacion.Estado.CERRADA
+                ronda.fecha_cierre = timezone.now()
+                _field_clean(
+                    RondaCotizacion,
+                    {
+                        "tarea_id": ronda.tarea_id,
+                        "numero": ronda.numero,
+                        "minimo_cotizaciones": ronda.minimo_cotizaciones,
+                        "estado": ronda.estado,
+                        "fecha_apertura": ronda.fecha_apertura,
+                        "fecha_cierre": ronda.fecha_cierre,
+                    },
+                    excluded=("tarea",),
+                )
+                ronda.save(using=self.alias, update_fields=["estado", "fecha_cierre"])
+                return self.round_data(round_id)
+
+    def open_next_round(self, *, round_id, company_id=None):
+        initial = self.round_data(round_id)
+        if initial is None:
+            raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+        company_id = initial.company_id if company_id is None else company_id
+        with transaction.atomic(using=self.alias):
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        company_id,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                task = self._task(initial.task_id, company_id, lock=True)
+                previous = self._round(round_id, lock=True)
+                if previous.tarea_id != task.pk:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
+                last = (
+                    RondaCotizacion.objects.using(self.alias)
+                    .filter(tarea_id=task.pk)
+                    .aggregate(last=Max("numero"))["last"]
+                    or 0
+                )
+                ronda = _field_clean(
+                    RondaCotizacion,
+                    {
+                        "tarea_id": task.pk,
+                        "numero": last + 1,
+                        "minimo_cotizaciones": previous.minimo_cotizaciones,
+                    },
+                    excluded=("tarea",),
+                )
+                ronda.save(using=self.alias)
+                return self.round_data(ronda.pk)
 
     def create_quotation(
         self, *, round_id, provider_id, version, amount, current, state,
@@ -295,68 +351,122 @@ class DjangoQuotationStorage:
         _provider_id(provider_id)
         if version < 1 or version > 3:
             raise ValidationError("QUOTATION_VERSION_OUT_OF_RANGE: La versión debe estar entre 1 y 3.")
+        initial = self.round_data(round_id)
+        if initial is None:
+            raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
         with transaction.atomic(using=self.alias):
-            self._round(round_id, lock=True)
-            versions = Cotizacion.objects.using(self.alias).filter(
-                ronda_id=round_id, proveedor_id=provider_id,
-            )
-            if versions.filter(version=version).exists():
-                raise ValidationError(
-                    "QUOTATION_VERSION_DUPLICATE: La versión ya existe para este proveedor y ronda."
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        initial.company_id,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(initial.task_id, initial.company_id, lock=True)
+                round_row = self._round(round_id, lock=True)
+                if round_row.tarea_id != initial.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
+                versions = Cotizacion.objects.using(self.alias).filter(
+                    ronda_id=round_id, proveedor_id=provider_id,
                 )
-            if versions.count() >= 3:
-                raise ValidationError(
-                    "QUOTATION_VERSION_LIMIT: El proveedor ya tiene tres versiones en esta ronda."
+                if versions.filter(version=version).exists():
+                    raise ValidationError(
+                        "QUOTATION_VERSION_DUPLICATE: La versión ya existe para este proveedor y ronda."
+                    )
+                if versions.count() >= 3:
+                    raise ValidationError(
+                        "QUOTATION_VERSION_LIMIT: El proveedor ya tiene tres versiones en esta ronda."
+                    )
+                quotation = _field_clean(
+                    Cotizacion,
+                    {
+                        "ronda_id": round_id,
+                        "proveedor_id": provider_id,
+                        "version": version,
+                        "monto": amount,
+                        "vigente": current,
+                        "estado": state,
+                        "fecha_cotizacion": quote_date,
+                        "observaciones": notes,
+                    },
+                    excluded=("ronda", "proveedor"),
                 )
-            quotation = _field_clean(
-                Cotizacion,
-                {
-                    "ronda_id": round_id,
-                    "proveedor_id": provider_id,
-                    "version": version,
-                    "monto": amount,
-                    "vigente": current,
-                    "estado": state,
-                    "fecha_cotizacion": quote_date,
-                    "observaciones": notes,
-                },
-                excluded=("ronda", "proveedor"),
-            )
-            quotation.save(using=self.alias)
-            return self.quotation_data(quotation.pk)
+                quotation.save(using=self.alias)
+                return self.quotation_data(quotation.pk)
 
     def update_quotation_status(self, *, quotation_id, state, round_id=None):
         filters = {"pk": quotation_id}
         if round_id is not None:
             filters["ronda_id"] = round_id
+        initial = self.quotation_data(quotation_id, round_id=round_id)
+        if initial is None:
+            raise QuotationNotFound("La cotización no existe en BASE_TAREAS.")
+        initial_round = self.round_data(initial.round_id)
+        if initial_round is None:
+            raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
         with transaction.atomic(using=self.alias):
-            try:
-                quotation = (
-                    Cotizacion.objects.using(self.alias)
-                    .select_for_update()
-                    .get(**filters)
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        initial_round.company_id,
+                        (initial_round.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(
+                    initial_round.task_id,
+                    initial_round.company_id,
+                    lock=True,
                 )
-            except Cotizacion.DoesNotExist as exc:
-                raise QuotationNotFound("La cotización no existe en BASE_TAREAS.") from exc
-            quotation.estado = state
-            clean = {
-                "ronda_id": quotation.ronda_id,
-                "proveedor_id": quotation.proveedor_id,
-                "version": quotation.version,
-                "monto": quotation.monto,
-                "vigente": quotation.vigente,
-                "estado": quotation.estado,
-                "fecha_cotizacion": quotation.fecha_cotizacion,
-                "observaciones": quotation.observaciones,
-            }
-            _field_clean(Cotizacion, clean, excluded=("ronda", "proveedor"))
-            quotation.save(using=self.alias, update_fields=["estado"])
-            return self.quotation_data(quotation.pk)
+                round_row = self._round(initial.round_id, lock=True)
+                if round_row.tarea_id != initial_round.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
+                try:
+                    quotation = (
+                        Cotizacion.objects.using(self.alias)
+                        .select_for_update()
+                        .get(**filters)
+                    )
+                except Cotizacion.DoesNotExist as exc:
+                    raise QuotationNotFound(
+                        "La cotización no existe en BASE_TAREAS."
+                    ) from exc
+                quotation.estado = state
+                clean = {
+                    "ronda_id": quotation.ronda_id,
+                    "proveedor_id": quotation.proveedor_id,
+                    "version": quotation.version,
+                    "monto": quotation.monto,
+                    "vigente": quotation.vigente,
+                    "estado": quotation.estado,
+                    "fecha_cotizacion": quotation.fecha_cotizacion,
+                    "observaciones": quotation.observaciones,
+                }
+                _field_clean(Cotizacion, clean, excluded=("ronda", "proveedor"))
+                quotation.save(using=self.alias, update_fields=["estado"])
+                return self.quotation_data(quotation.pk)
 
     def add_quotation_document(
         self, *, quotation_id, format, user_id, uploaded_file=None, url="", created_at=None,
     ):
         _user_id(user_id)
+        initial = self.quotation_data(quotation_id)
+        if initial is None:
+            raise QuotationNotFound("La cotización no existe en BASE_TAREAS.")
+        initial_round = self.round_data(initial.round_id)
+        if initial_round is None:
+            raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
         uploaded_file = optimize_uploaded_image(uploaded_file, format)
         document = DocumentoCotizacion(
             cotizacion_id=quotation_id,
@@ -382,9 +492,30 @@ class DjangoQuotationStorage:
             saved_name = document.archivo.name
         try:
             with transaction.atomic(using=self.alias):
-                self._quotation_for_document(quotation_id)
-                document.save(using=self.alias)
-                return self.document_data(document.pk)
+                with bounded_django_lock_wait(self.alias):
+                    try:
+                        lock_orm_task_rows(
+                            self.alias,
+                            initial_round.company_id,
+                            (initial_round.task_id,),
+                        )
+                    except TaskMutationScopeError as exc:
+                        raise QuotationNotFound(
+                            "La tarea de la ronda no existe en BASE_TAREAS."
+                        ) from exc
+                    self._task(
+                        initial_round.task_id,
+                        initial_round.company_id,
+                        lock=True,
+                    )
+                    round_row = self._round(initial.round_id, lock=True)
+                    if round_row.tarea_id != initial_round.task_id:
+                        raise ValidationError(
+                            "La tarea de la ronda cambió; vuelva a intentarlo."
+                        )
+                    self._quotation_for_document(quotation_id)
+                    document.save(using=self.alias)
+                    return self.document_data(document.pk)
         except Exception:
             if saved_name:
                 document.archivo.storage.delete(saved_name)
@@ -414,6 +545,32 @@ class MySQLQuotationStorage:
             self.connection_config,
             database_name=self.database_name,
         )
+
+    @contextmanager
+    def _mutation(self, connection, *, company_id=None, task_ids=None):
+        try:
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    if company_id is not None:
+                        try:
+                            lock_mysql_task_rows(
+                                connection,
+                                company_id,
+                                task_ids,
+                            )
+                        except TaskMutationScopeError as exc:
+                            raise QuotationNotFound(
+                                "La tarea no existe en BASE_TAREAS."
+                            ) from exc
+                    cursor = connection.cursor()
+                    try:
+                        yield cursor
+                    finally:
+                        cursor.close()
+        except TaskMutationLockError as exc:
+            raise QuotationStorageError(
+                "No se pudo bloquear la tarea para cotizaciones."
+            ) from exc
 
     @staticmethod
     def _task(cursor, task_id, company_id=None, *, lock=False):
@@ -567,9 +724,11 @@ class MySQLQuotationStorage:
             excluded=("tarea",),
         )
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("START TRANSACTION")
+            with self._mutation(
+                connection,
+                company_id=company_id,
+                task_ids=(task_id,),
+            ) as cursor:
                 self._task(cursor, task_id, company_id, lock=True)
                 cursor.execute(
                     "SELECT numero FROM tareas_rondacotizacion WHERE tarea_id=%s "
@@ -588,24 +747,36 @@ class MySQLQuotationStorage:
                     ),
                 )
                 result = self._round(cursor, cursor.lastrowid)
-                connection.commit()
                 return result
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def close_round(self, *, round_id):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("START TRANSACTION")
-                ronda = self._round(cursor, round_id, lock=True)
-                if ronda is None:
+            with self._mutation(connection) as cursor:
+                initial = self._round(cursor, round_id)
+                if initial is None:
                     raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        initial.company_id,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(
+                    cursor,
+                    initial.task_id,
+                    initial.company_id,
+                    lock=True,
+                )
+                ronda = self._round(cursor, round_id, lock=True)
+                if ronda is None or ronda.task_id != initial.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
                 if ronda.state == RondaCotizacion.Estado.CERRADA:
-                    connection.commit()
                     return ronda
                 if self._count_available(cursor, round_id) < ronda.minimum:
                     raise ValidationError(
@@ -616,26 +787,40 @@ class MySQLQuotationStorage:
                     "UPDATE tareas_rondacotizacion SET estado=%s, fecha_cierre=%s WHERE id=%s",
                     (RondaCotizacion.Estado.CERRADA, closed_at, round_id),
                 )
-                result = self._round(cursor, round_id)
-                connection.commit()
-                return result
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+                return self._round(cursor, round_id)
 
     def open_next_round(self, *, round_id, company_id=None):
         if company_id is not None:
             _company_exists(company_id)
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("START TRANSACTION")
-                previous = self._round(cursor, round_id, lock=True)
-                if previous is None:
+            with self._mutation(connection) as cursor:
+                initial = self._round(cursor, round_id)
+                if initial is None:
                     raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
-                self._task(cursor, previous.task_id, company_id, lock=True)
+                effective_company = (
+                    initial.company_id if company_id is None else company_id
+                )
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        effective_company,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(
+                    cursor,
+                    initial.task_id,
+                    effective_company,
+                    lock=True,
+                )
+                previous = self._round(cursor, round_id, lock=True)
+                if previous is None or previous.task_id != initial.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
                 cursor.execute(
                     "SELECT numero FROM tareas_rondacotizacion WHERE tarea_id=%s "
                     "ORDER BY numero DESC LIMIT 1 FOR UPDATE",
@@ -654,13 +839,7 @@ class MySQLQuotationStorage:
                     ),
                 )
                 result = self._round(cursor, cursor.lastrowid)
-                connection.commit()
                 return result
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def create_quotation(
         self, *, round_id, provider_id, version, amount, current, state,
@@ -684,11 +863,31 @@ class MySQLQuotationStorage:
             excluded=("ronda", "proveedor"),
         )
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("START TRANSACTION")
-                if self._round(cursor, round_id, lock=True) is None:
+            with self._mutation(connection) as cursor:
+                initial = self._round(cursor, round_id)
+                if initial is None:
                     raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        initial.company_id,
+                        (initial.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(
+                    cursor,
+                    initial.task_id,
+                    initial.company_id,
+                    lock=True,
+                )
+                round_row = self._round(cursor, round_id, lock=True)
+                if round_row is None or round_row.task_id != initial.task_id:
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
                 cursor.execute(
                     "SELECT version FROM tareas_cotizacion "
                     "WHERE ronda_id=%s AND proveedor_id=%s FOR UPDATE",
@@ -713,20 +912,55 @@ class MySQLQuotationStorage:
                     ),
                 )
                 result = self._quotation(cursor, cursor.lastrowid)
-                connection.commit()
                 return result
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def update_quotation_status(self, *, quotation_id, state, round_id=None):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("START TRANSACTION")
-                quotation = self._quotation(cursor, quotation_id, round_id, lock=True)
+            with self._mutation(connection) as cursor:
+                initial_quotation = self._quotation(
+                    cursor,
+                    quotation_id,
+                    round_id,
+                )
+                if initial_quotation is None:
+                    raise QuotationNotFound("La cotización no existe en BASE_TAREAS.")
+                initial_round = self._round(cursor, initial_quotation.round_id)
+                if initial_round is None:
+                    raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        initial_round.company_id,
+                        (initial_round.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise QuotationNotFound(
+                        "La tarea de la ronda no existe en BASE_TAREAS."
+                    ) from exc
+                self._task(
+                    cursor,
+                    initial_round.task_id,
+                    initial_round.company_id,
+                    lock=True,
+                )
+                current_round = self._round(
+                    cursor,
+                    initial_quotation.round_id,
+                    lock=True,
+                )
+                if (
+                    current_round is None
+                    or current_round.task_id != initial_round.task_id
+                ):
+                    raise ValidationError(
+                        "La tarea de la ronda cambió; vuelva a intentarlo."
+                    )
+                quotation = self._quotation(
+                    cursor,
+                    quotation_id,
+                    round_id,
+                    lock=True,
+                )
                 if quotation is None:
                     raise QuotationNotFound("La cotización no existe en BASE_TAREAS.")
                 clean = {
@@ -745,13 +979,7 @@ class MySQLQuotationStorage:
                     (state, quotation_id, quotation.round_id),
                 )
                 result = self._quotation(cursor, quotation_id, quotation.round_id)
-                connection.commit()
                 return result
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def add_quotation_document(
         self, *, quotation_id, format, user_id, uploaded_file=None, url="", created_at=None,
@@ -780,11 +1008,48 @@ class MySQLQuotationStorage:
             )
         try:
             with self._connection() as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    if self._quotation(cursor, quotation_id) is None:
+                with self._mutation(connection) as cursor:
+                    initial_quotation = self._quotation(cursor, quotation_id)
+                    if initial_quotation is None:
                         raise QuotationNotFound("La cotización no existe en BASE_TAREAS.")
+                    initial_round = self._round(
+                        cursor,
+                        initial_quotation.round_id,
+                    )
+                    if initial_round is None:
+                        raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
+                    try:
+                        lock_mysql_task_rows(
+                            connection,
+                            initial_round.company_id,
+                            (initial_round.task_id,),
+                        )
+                    except TaskMutationScopeError as exc:
+                        raise QuotationNotFound(
+                            "La tarea de la ronda no existe en BASE_TAREAS."
+                        ) from exc
+                    self._task(
+                        cursor,
+                        initial_round.task_id,
+                        initial_round.company_id,
+                        lock=True,
+                    )
+                    current_round = self._round(
+                        cursor,
+                        initial_quotation.round_id,
+                        lock=True,
+                    )
+                    if (
+                        current_round is None
+                        or current_round.task_id != initial_round.task_id
+                    ):
+                        raise ValidationError(
+                            "La tarea de la ronda cambió; vuelva a intentarlo."
+                        )
+                    if self._quotation(cursor, quotation_id, lock=True) is None:
+                        raise QuotationNotFound(
+                            "La cotización no existe en BASE_TAREAS."
+                        )
                     created = created_at or timezone.now()
                     cursor.execute(
                         "INSERT INTO tareas_documentocotizacion "
@@ -793,13 +1058,7 @@ class MySQLQuotationStorage:
                         (quotation_id, format, filename, url or "", user_id, created),
                     )
                     result = self._document(cursor, cursor.lastrowid)
-                    connection.commit()
                     return result
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
         except Exception:
             if filename:
                 default_storage.delete(filename)

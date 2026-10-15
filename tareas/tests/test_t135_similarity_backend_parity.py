@@ -29,16 +29,37 @@ from tareas.services.similarity_storage import (
 
 
 class _SQLiteCursor:
-    def __init__(self, cursor):
+    def __init__(self, cursor, commands):
         self.cursor = cursor
+        self.commands = commands
+        self.synthetic_row = None
 
     def execute(self, sql, params=()):
+        params = tuple(params)
+        self.commands.append((sql, params))
+        if sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+            return
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+            return
+        if sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+            return
         sql = sql.replace("%s", "?").replace(" FOR UPDATE", "")
         values = tuple(
             value.isoformat() if hasattr(value, "isoformat") else value
             for value in params
         )
         self.cursor.execute(sql, values)
+
+    def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
+        return self.cursor.fetchone()
 
     def __getattr__(self, name):
         return getattr(self.cursor, name)
@@ -47,6 +68,7 @@ class _SQLiteCursor:
 class _SQLiteConnection:
     def __init__(self):
         self.database = sqlite3.connect(":memory:", isolation_level=None)
+        self.commands = []
         self.database.executescript(
             """
             CREATE TABLE tareas_tarea (
@@ -77,7 +99,7 @@ class _SQLiteConnection:
         )
 
     def cursor(self):
-        return _SQLiteCursor(self.database.cursor())
+        return _SQLiteCursor(self.database.cursor(), self.commands)
 
     def begin(self):
         self.database.execute("BEGIN")
@@ -252,6 +274,16 @@ class SimilarityBackendParityTests(TestCase):
             EvaluacionSimilitud.Decision.PENDIENTE,
         )
         self.assertIsNone(self.task.tarea_origen_id)
+        company_lock = next(
+            call for call in self.connection.commands
+            if "INSERT INTO `tareas_correlativoempresa`" in call[0]
+        )
+        self.assertEqual(company_lock[1], (self.company.pk, 1))
+        task_lock_index = next(
+            index for index, (sql, _params) in enumerate(self.connection.commands)
+            if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+        )
+        self.assertLess(self.connection.commands.index(company_lock), task_lock_index)
 
     def test_mysql_confirmed_similarity_allows_lifecycle_publication(self):
         with self.configured_mysql():

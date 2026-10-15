@@ -17,12 +17,29 @@ class FakeCursor:
         self.rows = list(rows)
         self.executed = []
         self.lastrowid = 71
+        self.synthetic_row = None
+        self.lock_rows = []
 
     def execute(self, sql, params=()):
         self.executed.append((sql, params))
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+        elif sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+        elif "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql:
+            task_id = params[-1] if len(params) > 1 else 17
+            self.lock_rows = [(task_id,)]
 
     def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
         return self.rows.pop(0) if self.rows else None
+
+    def fetchall(self):
+        rows, self.lock_rows = self.lock_rows, []
+        return rows
 
     def close(self):
         pass
@@ -36,6 +53,9 @@ class FakeConnection:
 
     def cursor(self):
         return self.fake_cursor
+
+    def begin(self):
+        return None
 
     def commit(self):
         self.commits += 1
@@ -114,8 +134,9 @@ class MySQLSharedLinkStorageTests(TestCase):
         self.assertTrue(any("tareas_enlacetarea" in sql for sql, _ in create_cursor.executed))
 
         resolve_cursor = FakeCursor([
-            (71, 17, self.user.pk, timezone.now() + timezone.timedelta(days=1), None,
-             "MySQL backend task", "description", "SLM-0001", "BORRADOR", "NORMAL", None, self.empresa.pk),
+            (71, 17, self.user.pk, timezone.now() + timezone.timedelta(days=1), None, self.empresa.pk),
+            (71, 17, self.user.pk, timezone.now() + timezone.timedelta(days=1), None),
+            ("MySQL backend task", "description", "SLM-0001", "BORRADOR", "NORMAL", None, self.empresa.pk),
         ])
         resolve_connection = FakeConnection(resolve_cursor)
         with patch(
@@ -128,7 +149,7 @@ class MySQLSharedLinkStorageTests(TestCase):
         self.assertEqual(resolved.task.pk, 17)
         self.assertEqual(resolve_connection.commits, 1)
 
-        revoke_cursor = FakeCursor([(71, None)])
+        revoke_cursor = FakeCursor([(17,), (None,)])
         revoke_connection = FakeConnection(revoke_cursor)
         with patch(
             "tareas.services.shared_link_storage.open_mysql_connection",

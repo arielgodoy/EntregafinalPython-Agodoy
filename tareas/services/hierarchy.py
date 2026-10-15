@@ -27,12 +27,12 @@ def get_descendants(task):
     return children + grandchildren
 
 
-def get_depth(task):
+def _get_depth(task, parent_resolver):
     depth = 0
     current = task
     seen = {task.pk}
     while True:
-        parent = get_parent(current)
+        parent = parent_resolver(current)
         if parent is None:
             return depth
         if parent.pk in seen:
@@ -42,7 +42,12 @@ def get_depth(task):
         current = parent
 
 
-def _would_create_cycle(parent, child):
+def get_depth(task):
+    return _get_depth(task, get_parent)
+
+
+def _would_create_cycle(parent, child, parent_resolver=None):
+    parent_resolver = parent_resolver or get_parent
     current = parent
     seen = set()
     while current is not None:
@@ -51,29 +56,35 @@ def _would_create_cycle(parent, child):
         if current.pk in seen:
             return True
         seen.add(current.pk)
-        current = get_parent(current)
+        current = parent_resolver(current)
     return False
 
 
-def validate_relation(parent, child):
+def validate_relation(parent, child, *, parent_resolver=None):
+    parent_resolver = parent_resolver or get_parent
     if parent.pk is None or child.pk is None:
         raise ValidationError("Padre e hija deben existir antes de relacionarse.")
     if parent.pk == child.pk:
         raise ValidationError("Una tarea no puede ser hija de sí misma.")
     if parent.empresa_id != child.empresa_id:
         raise ValidationError("Padre e hija deben pertenecer a la misma empresa.")
-    if get_parent(child) is not None:
+    if parent_resolver(child) is not None:
         raise ValidationError("La tarea hija ya tiene un padre.")
-    if get_depth(parent) >= 2:
+    if _get_depth(parent, parent_resolver) >= 2:
         raise ValidationError("No se permite crear un nivel adicional bajo una nieta.")
-    if _would_create_cycle(parent, child):
+    if _would_create_cycle(parent, child, parent_resolver):
         raise ValidationError("La relación genera un ciclo jerárquico.")
 
 
 def add_child(parent, child):
-    validate_relation(parent, child)
+    if parent.pk is None or child.pk is None:
+        raise ValidationError("Padre e hija deben existir antes de relacionarse.")
     from tareas.services.hierarchy_lifecycle_storage import resolve_hierarchy_lifecycle_storage
-    return resolve_hierarchy_lifecycle_storage().create_relation(parent.pk, child.pk)
+    return resolve_hierarchy_lifecycle_storage().create_relation(
+        parent.pk,
+        child.pk,
+        company_id=parent.empresa_id,
+    )
 
 
 def is_effectively_annulled(task):

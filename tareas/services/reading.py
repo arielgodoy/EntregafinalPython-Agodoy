@@ -112,4 +112,5 @@ def ensure_readings_for_comment(*, comentario):
         comentario.pk,
         tuple(effective_participant_ids(comentario.tarea)),
         comentario.created_at,
+        empresa_id=comentario.tarea.empresa_id,
     )

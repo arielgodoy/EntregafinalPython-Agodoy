@@ -9,6 +9,7 @@ from access_control.models import Empresa, Permiso, Vista
 from tareas.models import Tarea
 from tareas.services.task_storage import (
     DjangoTaskStorage,
+    EditTaskNotFound,
     MySQLTaskStorage,
     TaskEditData,
     UpdateTaskCommand,
@@ -59,19 +60,31 @@ class MySQLEditStorageTests(TestCase):
         self.assertIn("WHERE id = %s AND empresa_id = %s", update_call.args[0])
         self.assertEqual(update_call.args[1][-2:], (3, self.empresa.pk))
         self.assertEqual(result.id, 3)
+        self.assertTrue(
+            any(
+                "empresa_id" in call.args[0]
+                and "ORDER BY" in call.args[0]
+                and "FOR UPDATE" in call.args[0]
+                for call in cursor.execute.call_args_list
+            )
+        )
         connection.commit.assert_called_once()
 
     @patch("tareas.services.task_storage.open_mysql_connection")
-    def test_zero_rowcount_rolls_back_and_does_not_fallback(self, open_connection):
+    def test_missing_task_rolls_back_and_does_not_fallback(self, open_connection):
         connection, cursor = self._connection(rowcount=0)
+        cursor.fetchone.side_effect = [(5,), None]
         open_connection.return_value = nullcontext(connection)
         storage = MySQLTaskStorage(self.connection, "tareas")
         command = UpdateTaskCommand(3, self.empresa.pk, "X", "", "NORMAL", None, "2026-10-31")
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(EditTaskNotFound):
             storage.update_task(command)
 
         connection.rollback.assert_called()
+        self.assertFalse(
+            any("UPDATE tareas_tarea" in call.args[0] for call in cursor.execute.call_args_list)
+        )
 
 
 class MySQLEditViewTests(TestCase):

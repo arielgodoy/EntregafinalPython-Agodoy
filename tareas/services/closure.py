@@ -176,9 +176,53 @@ def _mini_compat_result(storage, result, empresa_id):
 
 
 def set_mini_task_done(mini_tarea, hecho=True):
-    mini_tarea.hecho = bool(hecho)
-    mini_tarea.fecha_completado = timezone.now() if mini_tarea.hecho else None
-    mini_tarea.save(update_fields=["hecho", "fecha_completado"])
+    from django.core.exceptions import ValidationError
+    from django.db import transaction
+
+    from ..models import Tarea
+    from .task_mutation_locks import (
+        bounded_django_lock_wait,
+        lock_orm_task_rows,
+    )
+
+    using = mini_tarea._state.db or "default"
+    with transaction.atomic(using=using):
+        with bounded_django_lock_wait(using):
+            current_task_id = (
+                type(mini_tarea).objects.using(using)
+                .filter(pk=mini_tarea.pk)
+                .values_list("tarea_id", flat=True)
+                .first()
+            )
+            if current_task_id is None:
+                raise type(mini_tarea).DoesNotExist
+            company_id = (
+                Tarea.objects.using(using)
+                .filter(pk=current_task_id)
+                .values_list("empresa_id", flat=True)
+                .first()
+            )
+            if company_id is None:
+                raise Tarea.DoesNotExist
+            lock_orm_task_rows(using, company_id, (current_task_id,))
+            task = (
+                type(mini_tarea).objects.using(using)
+                .select_for_update()
+                .get(pk=mini_tarea.pk)
+            )
+            if task.tarea_id != current_task_id:
+                raise ValidationError(
+                    "La Tarea de la minitarea cambió durante la actualización."
+                )
+            task.hecho = bool(hecho)
+            task.fecha_completado = (
+                timezone.now() if task.hecho else None
+            )
+            task.save(
+                using=using,
+                update_fields=["hecho", "fecha_completado"],
+            )
+    mini_tarea.refresh_from_db(using=using)
     return mini_tarea
 
 

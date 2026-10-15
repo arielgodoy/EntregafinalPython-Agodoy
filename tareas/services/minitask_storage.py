@@ -28,6 +28,14 @@ from .connection_roles import resolve_operational_backend
 from .image_processing import optimize_uploaded_image
 from .notifications import emit_task_event, send_task_email
 from .task_storage import TaskStorageError
+from .task_mutation_locks import (
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 ERROR_KEY = "tareas.messages.generic_error"
@@ -342,14 +350,32 @@ class DjangoMiniTaskStorage(_Queries):
     def create_unattributed(self, *, task_id, persona_id, descripcion):
         now = timezone.now()
         with transaction.atomic(using=self.alias):
-            mini = MiniTarea.objects.using(self.alias).create(
-                tarea_id=task_id,
-                descripcion=descripcion,
-                persona_id=persona_id,
-                hecho=False,
-                fecha_creacion=now,
-                fecha_completado=None,
-            )
+            with bounded_django_lock_wait(self.alias):
+                empresa_id = (
+                    Tarea.objects.using(self.alias)
+                    .filter(pk=task_id)
+                    .values_list("empresa_id", flat=True)
+                    .first()
+                )
+                if empresa_id is None:
+                    raise MiniTaskNotFound
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        empresa_id,
+                        (task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MiniTaskNotFound from exc
+                _DjangoMutation(self.alias).task(task_id, empresa_id)
+                mini = MiniTarea.objects.using(self.alias).create(
+                    tarea_id=task_id,
+                    descripcion=descripcion,
+                    persona_id=persona_id,
+                    hecho=False,
+                    fecha_creacion=now,
+                    fecha_completado=None,
+                )
         return MiniTaskResult(task_id, mini.pk)
 
     def _execute(self, command):
@@ -357,10 +383,16 @@ class DjangoMiniTaskStorage(_Queries):
         commit_attempted = False
         try:
             with transaction.atomic(using=self.alias):
-                result, callback = _mutate(_DjangoMutation(self.alias), command, files)
-                if callback:
-                    transaction.on_commit(callback, using=self.alias)
-                commit_attempted = True
+                with bounded_django_lock_wait(self.alias):
+                    lock_orm_task_rows(self.alias, command.empresa_id)
+                    result, callback = _mutate(
+                        _DjangoMutation(self.alias),
+                        command,
+                        files,
+                    )
+                    if callback:
+                        transaction.on_commit(callback, using=self.alias)
+                    commit_attempted = True
             return result
         except (MiniTaskNotFound, PermissionDenied, ValidationError):
             _failed_files(files, commit_attempted=commit_attempted)
@@ -468,21 +500,39 @@ class MySQLMiniTaskStorage(_Queries):
         with open_mysql_connection(
             self.connection_config, database_name=self.database_name,
         ) as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute(
-                    "INSERT INTO tareas_minitarea ("
-                    "tarea_id,descripcion,persona_id,hecho,fecha_creacion,fecha_completado"
-                    ") VALUES (%s,%s,%s,%s,%s,%s)",
-                    (task_id, descripcion, persona_id, False, now, None),
-                )
-                mini_id = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    cursor = connection.cursor()
+                    try:
+                        cursor.execute(
+                            "SELECT empresa_id FROM tareas_tarea WHERE id=%s",
+                            (task_id,),
+                        )
+                        row = cursor.fetchone()
+                        if row is None:
+                            raise MiniTaskNotFound
+                        try:
+                            lock_mysql_task_rows(
+                                connection,
+                                row[0],
+                                (task_id,),
+                            )
+                        except TaskMutationScopeError as exc:
+                            raise MiniTaskNotFound from exc
+                        _MySQLMutation(cursor).task(
+                            task_id,
+                            row[0],
+                            lock=True,
+                        )
+                        cursor.execute(
+                            "INSERT INTO tareas_minitarea ("
+                            "tarea_id,descripcion,persona_id,hecho,fecha_creacion,fecha_completado"
+                            ") VALUES (%s,%s,%s,%s,%s,%s)",
+                            (task_id, descripcion, persona_id, False, now, None),
+                        )
+                        mini_id = cursor.lastrowid
+                    finally:
+                        cursor.close()
         return MiniTaskResult(task_id, mini_id)
 
     def _execute(self, command):
@@ -490,17 +540,19 @@ class MySQLMiniTaskStorage(_Queries):
         commit_attempted = False
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    result, callback = _mutate(_MySQLMutation(cursor), command, files)
-                    commit_attempted = True
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            result, callback = _mutate(
+                                _MySQLMutation(cursor),
+                                command,
+                                files,
+                            )
+                            commit_attempted = True
+                        finally:
+                            cursor.close()
         except (MiniTaskNotFound, PermissionDenied, ValidationError):
             _failed_files(files, commit_attempted=commit_attempted)
             raise

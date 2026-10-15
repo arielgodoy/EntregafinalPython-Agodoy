@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connections, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .connection_roles import resolve_operational_backend
@@ -13,6 +14,17 @@ from .lifecycle import annul_task, reactivate_task
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
+from .task_mutation_locks import (
+    TaskMutationConflict,
+    TaskMutationLockError,
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    is_task_mutation_conflict,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 from ..models import Empresa, Tarea, TareaRelacion, TareaTransicion
 
 
@@ -53,11 +65,71 @@ class DjangoHierarchyLifecycleStorage:
             relaciones_padre__padre_id=task_id,
         ).order_by("id")
 
-    def create_relation(self, parent_id, child_id):
-        with transaction.atomic(using=self.alias):
-            return TareaRelacion.objects.using(self.alias).create(
-                padre_id=parent_id, hija_id=child_id,
+    def _relation_parent_map(self, empresa_id):
+        queryset = (
+            TareaRelacion.objects.using(self.alias)
+            .filter(
+                Q(padre__empresa_id=empresa_id)
+                | Q(hija__empresa_id=empresa_id)
             )
+            .select_related("padre", "hija")
+            .order_by("padre_id", "hija_id")
+        )
+        if connections[self.alias].features.has_select_for_update:
+            queryset = queryset.select_for_update()
+        parent_by_child = {}
+        for relation in queryset:
+            if (
+                relation.padre.empresa_id != empresa_id
+                or relation.hija.empresa_id != empresa_id
+            ):
+                raise ValidationError(
+                    "La jerarquía contiene una relación entre empresas."
+                )
+            if relation.hija_id in parent_by_child:
+                raise ValidationError(
+                    "La jerarquía contiene más de un padre para una tarea."
+                )
+            parent_by_child[relation.hija_id] = relation.padre
+        return parent_by_child
+
+    def create_relation(self, parent_id, child_id, *, company_id):
+        try:
+            with transaction.atomic(using=self.alias):
+                with bounded_django_lock_wait(self.alias):
+                    locked_tasks = lock_orm_task_rows(
+                        self.alias,
+                        company_id,
+                    )
+                    tasks = {task.pk: task for task in locked_tasks}
+                    parent = tasks.get(parent_id)
+                    child = tasks.get(child_id)
+                    if parent is None or child is None:
+                        raise ValidationError(
+                            "Padre e hija deben existir en la empresa activa."
+                        )
+                    parent_by_child = self._relation_parent_map(company_id)
+                    from .hierarchy import validate_relation
+
+                    validate_relation(
+                        parent,
+                        child,
+                        parent_resolver=lambda task: parent_by_child.get(task.pk),
+                    )
+                    return TareaRelacion.objects.using(self.alias).create(
+                        padre_id=parent_id,
+                        hija_id=child_id,
+                    )
+        except (ValidationError, TaskMutationLockError):
+            raise
+        except Exception as exc:
+            if is_task_mutation_conflict(exc):
+                raise TaskMutationConflict(
+                    "La jerarquía cambió en otra operación; vuelva a intentarlo."
+                ) from exc
+            raise TaskStorageError(
+                "No se pudo crear la relación jerárquica."
+            ) from exc
 
     def annulment_timestamp(self, task_id):
         return TareaTransicion.objects.using(self.alias).filter(
@@ -65,20 +137,22 @@ class DjangoHierarchyLifecycleStorage:
         ).order_by("-timestamp").values_list("timestamp", flat=True).first()
 
     def annul(self, command):
-        task = self._task(command)
-        actor = User.objects.using("default").get(pk=command.actor_id)
-        annul_task(task, actor, command.motivo)
-        task.refresh_from_db(using=self.alias)
-        transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="ANULAR").order_by("-pk").first()
-        return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
+        with transaction.atomic(using=self.alias):
+            task = self._task(command)
+            actor = User.objects.using("default").get(pk=command.actor_id)
+            annul_task(task, actor, command.motivo)
+            task.refresh_from_db(using=self.alias)
+            transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="ANULAR").order_by("-pk").first()
+            return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
 
     def reactivate(self, command):
-        task = self._task(command)
-        actor = User.objects.using("default").get(pk=command.actor_id)
-        reactivate_task(task, actor, command.motivo)
-        task.refresh_from_db(using=self.alias)
-        transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="REACTIVAR").order_by("-pk").first()
-        return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
+        with transaction.atomic(using=self.alias):
+            task = self._task(command)
+            actor = User.objects.using("default").get(pk=command.actor_id)
+            reactivate_task(task, actor, command.motivo)
+            task.refresh_from_db(using=self.alias)
+            transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="REACTIVAR").order_by("-pk").first()
+            return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
 
 
 class MySQLHierarchyLifecycleStorage:
@@ -150,24 +224,98 @@ class MySQLHierarchyLifecycleStorage:
             finally:
                 cursor.close()
 
-    def create_relation(self, parent_id, child_id):
-        with open_mysql_connection(
-            self.connection_config, database_name=self.database_name,
-        ) as connection:
-            cursor = connection.cursor()
-            try:
-                cursor.execute(
-                    "INSERT INTO tareas_tarearelacion (padre_id,hija_id) VALUES (%s,%s)",
-                    (parent_id, child_id),
+    @staticmethod
+    def _relation_parent_map(connection, empresa_id):
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT relation.padre_id, relation.hija_id, "
+                "parent.empresa_id, child.empresa_id "
+                "FROM tareas_tarearelacion AS relation "
+                "INNER JOIN tareas_tarea AS parent "
+                "ON parent.id = relation.padre_id "
+                "INNER JOIN tareas_tarea AS child "
+                "ON child.id = relation.hija_id "
+                "WHERE parent.empresa_id = %s OR child.empresa_id = %s "
+                "ORDER BY relation.padre_id, relation.hija_id FOR UPDATE",
+                (empresa_id, empresa_id),
+            )
+            rows = tuple(cursor.fetchall())
+        finally:
+            cursor.close()
+        parent_by_child = {}
+        for parent_id, child_id, parent_company, child_company in rows:
+            if parent_company != empresa_id or child_company != empresa_id:
+                raise ValidationError(
+                    "La jerarquía contiene una relación entre empresas."
                 )
-                relation_id = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
-        return SimpleNamespace(id=relation_id, padre_id=parent_id, hija_id=child_id)
+            if child_id in parent_by_child:
+                raise ValidationError(
+                    "La jerarquía contiene más de un padre para una tarea."
+                )
+            parent_by_child[child_id] = SimpleNamespace(
+                pk=parent_id,
+                empresa_id=parent_company,
+            )
+        return parent_by_child
+
+    def create_relation(self, parent_id, child_id, *, company_id):
+        try:
+            with open_mysql_connection(
+                self.connection_config,
+                database_name=self.database_name,
+            ) as connection:
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        task_ids = lock_mysql_task_rows(connection, company_id)
+                        if parent_id not in task_ids or child_id not in task_ids:
+                            raise ValidationError(
+                                "Padre e hija deben existir en la empresa activa."
+                            )
+                        parent_by_id = {}
+                        for task_id in (parent_id, child_id):
+                            parent_by_id[task_id] = SimpleNamespace(
+                                pk=task_id,
+                                empresa_id=company_id,
+                            )
+                        parent_by_child = self._relation_parent_map(
+                            connection,
+                            company_id,
+                        )
+                        from .hierarchy import validate_relation
+
+                        validate_relation(
+                            parent_by_id[parent_id],
+                            parent_by_id[child_id],
+                            parent_resolver=lambda task: parent_by_child.get(
+                                task.pk
+                            ),
+                        )
+                        cursor = connection.cursor()
+                        try:
+                            cursor.execute(
+                                "INSERT INTO tareas_tarearelacion "
+                                "(padre_id,hija_id) VALUES (%s,%s)",
+                                (parent_id, child_id),
+                            )
+                            relation_id = cursor.lastrowid
+                        finally:
+                            cursor.close()
+        except (ValidationError, TaskMutationLockError):
+            raise
+        except Exception as exc:
+            if is_task_mutation_conflict(exc):
+                raise TaskMutationConflict(
+                    "La jerarquía cambió en otra operación; vuelva a intentarlo."
+                ) from exc
+            raise TaskStorageError(
+                "No se pudo crear la relación jerárquica."
+            ) from exc
+        return SimpleNamespace(
+            id=relation_id,
+            padre_id=parent_id,
+            hija_id=child_id,
+        )
 
     def annulment_timestamp(self, task_id):
         with open_mysql_connection(

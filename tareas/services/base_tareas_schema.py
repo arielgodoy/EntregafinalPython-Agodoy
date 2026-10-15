@@ -17,7 +17,11 @@ from settings.services.mysql_connections import (
 )
 
 from ..models import TareaConnectionRole
-from .connection_roles import get_tarea_connection, get_tarea_mysql_connection
+from .connection_roles import (
+    get_tarea_connection,
+    get_tarea_mysql_connection,
+    resolve_operational_backend,
+)
 from .reference_data import (
     BaseTareasReferenceDataError,
     ensure_mysql_delay_causes,
@@ -52,6 +56,9 @@ _CREATE_INDEX = re.compile(
     re.IGNORECASE,
 )
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "base_tareas_schema.sql"
+DELETION_LEDGER_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "sql" / "deletion_ledger_schema.sql"
+)
 
 
 EXPECTED_OPERATIONAL_MODELS = (
@@ -94,6 +101,11 @@ EXPECTED_OPERATIONAL_MODELS = (
     "Cotizacion",
     "DocumentoCotizacion",
 )
+EXPECTED_DELETION_LEDGER_MODELS = (
+    "TareaEliminacionOperacion",
+    "TareaEliminacionElemento",
+    "TareaEliminacionArchivo",
+)
 
 
 def get_operational_models():
@@ -110,6 +122,139 @@ def get_operational_models():
             "El inventario de modelos operacionales de Tareas no coincide con el contrato."
         )
     return models
+
+
+def get_deletion_ledger_models():
+    """Return only the additive deletion-ledger tables."""
+    models = tuple(
+        apps.get_model("tareas", model_name)
+        for model_name in EXPECTED_DELETION_LEDGER_MODELS
+    )
+    if {model.__name__ for model in models} != set(
+        EXPECTED_DELETION_LEDGER_MODELS
+    ):
+        raise BaseTareasSchemaInstallError(
+            "El inventario del ledger de eliminación no coincide con el contrato."
+        )
+    return models
+
+
+def get_deletion_item_models():
+    """Return operational rows that may be represented in a deletion manifest."""
+    models = list(get_operational_models())
+    for model in tuple(models):
+        for field in model._meta.local_many_to_many:
+            through_model = field.remote_field.through
+            if through_model._meta.auto_created and through_model not in models:
+                models.append(through_model)
+    return tuple(models)
+
+
+def build_deletion_ledger_schema_statements(connection) -> list[str]:
+    """Collect DDL for the ledger tables only, requiring InnoDB."""
+    with DatabaseSchemaEditor(connection, collect_sql=True) as editor:
+        for model in get_deletion_ledger_models():
+            editor.create_model(model)
+
+    expected_tables = {
+        model._meta.db_table for model in get_deletion_ledger_models()
+    }
+    statements = []
+    created_tables = set()
+    for raw_statement in editor.collected_sql:
+        statement = _normalize_statement(raw_statement).rstrip(";")
+        table_match = _TABLE_NAME.match(statement)
+        if table_match:
+            table_name = table_match.group("table")
+            if table_name not in expected_tables:
+                raise BaseTareasSchemaInstallError(
+                    "El contrato del ledger contiene DDL fuera de las tablas autorizadas."
+                )
+            created_tables.add(table_name)
+            engine_match = re.search(
+                r"\bENGINE\s*=\s*[A-Za-z0-9_]+",
+                statement,
+                re.IGNORECASE,
+            )
+            if engine_match:
+                statement = (
+                    statement[:engine_match.start()]
+                    + "ENGINE=InnoDB"
+                    + statement[engine_match.end():]
+                )
+            else:
+                statement += " ENGINE=InnoDB"
+        else:
+            target = _statement_target(statement)
+            if (
+                target not in expected_tables
+                or _is_external_foreign_key(statement)
+                or not (
+                    statement.upper().startswith("CREATE INDEX ")
+                    or statement.upper().startswith("CREATE UNIQUE INDEX ")
+                    or re.match(
+                        r"^ALTER\s+TABLE\b.*\bADD\s+CONSTRAINT\b",
+                        statement,
+                        re.IGNORECASE,
+                    )
+                )
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "El contrato del ledger contiene DDL fuera de las tablas autorizadas."
+                )
+        statements.append(statement)
+
+    if created_tables != expected_tables:
+        raise BaseTareasSchemaInstallError(
+            "No se generó el DDL completo para el ledger de eliminación."
+        )
+    if not statements:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo generar la estructura del ledger de eliminación."
+        )
+    return statements
+
+
+def _validate_deletion_ledger_statements(statements: list[str]) -> None:
+    expected_tables = {
+        model._meta.db_table for model in get_deletion_ledger_models()
+    }
+    created_tables = set()
+    for statement in statements:
+        normalized = _normalize_statement(statement)
+        table_match = _TABLE_NAME.match(normalized)
+        if table_match:
+            table_name = table_match.group("table")
+            if (
+                table_name not in expected_tables
+                or "ENGINE=INNODB" not in normalized.upper().replace(" ", "")
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "El esquema del ledger contiene una sentencia no permitida."
+                )
+            created_tables.add(table_name)
+            continue
+        target = _statement_target(normalized)
+        if (
+            target not in expected_tables
+            or _is_external_foreign_key(normalized)
+            or not (
+                normalized.upper().startswith("CREATE INDEX ")
+                or normalized.upper().startswith("CREATE UNIQUE INDEX ")
+                or re.match(
+                    r"^ALTER\s+TABLE\b.*\bADD\s+CONSTRAINT\b",
+                    normalized,
+                    re.IGNORECASE,
+                )
+            )
+        ):
+            raise BaseTareasSchemaInstallError(
+                "El esquema del ledger contiene una sentencia no permitida."
+            )
+    if created_tables != expected_tables or not statements:
+        raise BaseTareasSchemaInstallError(
+            "El esquema del ledger no contiene exactamente sus tres tablas."
+        )
 
 
 def _is_external_foreign_key(statement: str) -> bool:
@@ -652,6 +797,280 @@ def preview_base_tareas_schema() -> dict[str, Any]:
         }
     )
     return result
+
+
+def _deletion_ledger_schema_snapshot(
+    connection,
+    database_name: str,
+    connection_id: int,
+) -> dict[str, Any]:
+    tables = tuple(
+        model._meta.db_table for model in get_deletion_ledger_models()
+    )
+    placeholders = ", ".join("%s" for _ in tables)
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT DATABASE()")
+        selected_database = cursor.fetchone()
+        if not selected_database or selected_database[0] != database_name:
+            raise BaseTareasSchemaInstallError(
+                "La conexión abierta no apunta a la base configurada de BASE_TAREAS."
+            )
+        cursor.execute(
+            "SELECT table_name, engine FROM information_schema.tables "
+            f"WHERE table_schema = %s AND table_name IN ({placeholders})",
+            (database_name, *tables),
+        )
+        existing = sorted(
+            (str(name), str(engine or "")) for name, engine in cursor.fetchall()
+        )
+        cursor.execute("SELECT VERSION()")
+        version_row = cursor.fetchone()
+        cursor.execute(
+            "SELECT support FROM information_schema.engines "
+            "WHERE engine = 'InnoDB' LIMIT 1"
+        )
+        support_row = cursor.fetchone()
+    finally:
+        cursor.close()
+    operational_snapshot = _fetch_schema_snapshot(connection, database_name)
+    operational_plan = _compare_schema_snapshot(
+        operational_snapshot,
+        database_name,
+    )
+    if operational_plan["missing"] or operational_plan["conflicts"]:
+        raise BaseTareasSchemaInstallError(
+            "El esquema operacional de Tareas no es compatible con el ledger."
+        )
+    operational_tables = tuple(
+        dict.fromkeys(
+            model._meta.db_table for model in get_deletion_item_models()
+        )
+    )
+    operational_placeholders = ", ".join("%s" for _ in operational_tables)
+    cursor = connection.cursor()
+    try:
+        cursor.execute(
+            "SELECT table_name, engine FROM information_schema.tables "
+            f"WHERE table_schema = %s AND table_name IN ({operational_placeholders})",
+            (database_name, *operational_tables),
+        )
+        operational_engines = {
+            str(name): str(engine or "") for name, engine in cursor.fetchall()
+        }
+    finally:
+        cursor.close()
+    if (
+        set(operational_tables) - set(operational_engines)
+        or any(engine.casefold() != "innodb" for engine in operational_engines.values())
+    ):
+        raise BaseTareasSchemaInstallError(
+            "Todas las tablas operacionales de Tareas deben existir en InnoDB."
+        )
+    return {
+        "expected_tables": tables,
+        "existing_tables": existing,
+        "server_version": str(version_row[0]) if version_row else "",
+        "innodb_support": str(support_row[0]).upper() if support_row else "",
+        "operational_fingerprint": _schema_fingerprint(
+            database_name,
+            connection_id,
+            operational_snapshot,
+        ),
+    }
+
+
+def _deletion_ledger_fingerprint(
+    database_name: str,
+    connection_id: int,
+    connection_updated_at: str,
+    snapshot: dict[str, Any],
+) -> str:
+    payload = {
+        "database_name": database_name,
+        "connection_id": connection_id,
+        "connection_updated_at": connection_updated_at,
+        "expected_tables": sorted(snapshot["expected_tables"]),
+        "existing_tables": snapshot["existing_tables"],
+        "server_version": snapshot["server_version"],
+        "innodb_support": snapshot["innodb_support"],
+        "operational_fingerprint": snapshot["operational_fingerprint"],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _read_deletion_ledger_statements() -> list[str]:
+    try:
+        content = DELETION_LEDGER_SCHEMA_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo leer el esquema aditivo del ledger de Tareas."
+        ) from exc
+    content = "\n".join(
+        line for line in content.splitlines() if not line.lstrip().startswith("--")
+    )
+    statements = [item.strip() for item in content.split(";") if item.strip()]
+    _validate_deletion_ledger_statements(statements)
+    return statements
+
+
+def preview_deletion_ledger_schema() -> dict[str, Any]:
+    """Inspect the configured MySQL target without executing DDL."""
+    context = resolve_operational_backend("BASE_TAREAS")
+    if (
+        context.backend_type != "MYSQL_CONFIG"
+        or context.mysql_connection is None
+        or not context.database_name
+    ):
+        raise BaseTareasSchemaInstallError(
+            "El instalador aditivo requiere BASE_TAREAS en MYSQL_CONFIG."
+        )
+    connection_config = context.mysql_connection
+    try:
+        with open_mysql_connection(
+            connection_config,
+            database_name=context.database_name,
+        ) as connection:
+            snapshot = _deletion_ledger_schema_snapshot(
+                connection,
+                context.database_name,
+                int(connection_config.pk),
+            )
+    except MySQLConnectionOpenError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo abrir BASE_TAREAS para inspeccionar el ledger."
+        ) from exc
+    except BaseTareasSchemaInstallError:
+        raise
+    except Exception as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo inspeccionar el esquema aditivo del ledger."
+        ) from exc
+
+    if snapshot["innodb_support"] not in {"YES", "DEFAULT"}:
+        status = "UNSUPPORTED"
+    elif not snapshot["existing_tables"]:
+        status = "NOT_INSTALLED"
+    elif (
+        {name for name, _engine in snapshot["existing_tables"]}
+        == set(snapshot["expected_tables"])
+        and all(
+            engine.casefold() == "innodb"
+            for _name, engine in snapshot["existing_tables"]
+        )
+    ):
+        status = "PRESENT_REQUIRES_SCHEMA_VALIDATION"
+    else:
+        status = "PARTIAL_OR_INCOMPATIBLE"
+
+    updated_at = connection_config.updated_at.isoformat()
+    fingerprint = _deletion_ledger_fingerprint(
+        context.database_name,
+        int(connection_config.pk),
+        updated_at,
+        snapshot,
+    )
+    return {
+        "status": status,
+        "database_name": context.database_name,
+        "connection_id": int(connection_config.pk),
+        "connection_updated_at": updated_at,
+        "server_version": snapshot["server_version"],
+        "innodb_support": snapshot["innodb_support"],
+        "existing_tables": snapshot["existing_tables"],
+        "fingerprint": fingerprint,
+    }
+
+
+def install_deletion_ledger_schema(
+    *,
+    expected_connection_id: int,
+    expected_connection_updated_at: str,
+    expected_database_name: str,
+    expected_fingerprint: str,
+) -> int:
+    """Install only the three ledger tables after a fresh, matching preview."""
+    try:
+        context = resolve_operational_backend("BASE_TAREAS")
+        if (
+            context.backend_type != "MYSQL_CONFIG"
+            or context.mysql_connection is None
+            or not context.database_name
+        ):
+            raise BaseTareasSchemaInstallError(
+                "El instalador aditivo requiere BASE_TAREAS en MYSQL_CONFIG."
+            )
+        connection_config = context.mysql_connection
+        if (
+            int(connection_config.pk) != expected_connection_id
+            or connection_config.updated_at.isoformat()
+            != expected_connection_updated_at
+            or context.database_name != expected_database_name
+        ):
+            raise BaseTareasSchemaInstallError(
+                "La configuración de BASE_TAREAS cambió; vuelva a inspeccionar."
+            )
+        with open_mysql_connection(
+            connection_config,
+            database_name=context.database_name,
+        ) as connection:
+            snapshot = _deletion_ledger_schema_snapshot(
+                connection,
+                context.database_name,
+                int(connection_config.pk),
+            )
+            current_fingerprint = _deletion_ledger_fingerprint(
+                context.database_name,
+                int(connection_config.pk),
+                connection_config.updated_at.isoformat(),
+                snapshot,
+            )
+            if (
+                current_fingerprint != expected_fingerprint
+                or snapshot["existing_tables"]
+                or snapshot["innodb_support"] not in {"YES", "DEFAULT"}
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "El esquema o la conexión cambió desde la inspección; "
+                    "no se instaló el ledger."
+                )
+            statements = _read_deletion_ledger_statements()
+            cursor = connection.cursor()
+            try:
+                for statement in statements:
+                    cursor.execute(statement)
+            finally:
+                cursor.close()
+
+            installed = _deletion_ledger_schema_snapshot(
+                connection,
+                context.database_name,
+            )
+            if (
+                {name for name, _engine in installed["existing_tables"]}
+                != set(installed["expected_tables"])
+                or any(
+                    engine.casefold() != "innodb"
+                    for _name, engine in installed["existing_tables"]
+                )
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "La instalación aditiva quedó incompleta; requiere inspección manual."
+                )
+        return len(statements)
+    except BaseTareasSchemaInstallError:
+        raise
+    except MySQLConnectionOpenError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo abrir BASE_TAREAS para instalar el ledger."
+        ) from exc
+    except Exception as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo instalar el esquema aditivo del ledger."
+        ) from exc
 
 
 def complete_base_tareas_reference_data(

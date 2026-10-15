@@ -5,7 +5,12 @@ from django.contrib import admin
 from django.db import router
 from django.test import RequestFactory, SimpleTestCase
 
-from tareas.models import EnlaceTarea, MiniTareaEvento
+from tareas.models import (
+    EnlaceTarea,
+    MiniTareaEvento,
+    TareaEliminacionArchivo,
+    TareaEliminacionOperacion,
+)
 
 
 class TareasAdminTests(SimpleTestCase):
@@ -37,7 +42,12 @@ class TareasAdminTests(SimpleTestCase):
             'descripcion',
             'destinatarios_email',
             'destinatarios_notificacion',
+            'dependency_summary',
+            'file_name',
+            'fingerprint',
             'mini_tarea',
+            'reference_hash',
+            'storage_key',
             'token_hash',
             'url',
         }
@@ -52,3 +62,11 @@ class TareasAdminTests(SimpleTestCase):
         self.assertIn('token_hash', enlace_admin.get_exclude(self.request))
         mini_tarea_event_admin = admin.site._registry[MiniTareaEvento]
         self.assertIn('mini_tarea', mini_tarea_event_admin.get_exclude(self.request))
+        deletion_operation_admin = admin.site._registry[TareaEliminacionOperacion]
+        self.assertIn(
+            'fingerprint',
+            deletion_operation_admin.get_exclude(self.request),
+        )
+        deletion_file_admin = admin.site._registry[TareaEliminacionArchivo]
+        self.assertIn('file_name', deletion_file_admin.get_exclude(self.request))
+        self.assertIn('storage_key', deletion_file_admin.get_exclude(self.request))

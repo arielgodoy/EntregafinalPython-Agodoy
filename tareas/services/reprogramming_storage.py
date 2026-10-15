@@ -21,6 +21,14 @@ from ..models import CausaAtraso, Reprogramacion, Tarea, TareaParticipante, Tare
 from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError
+from .task_mutation_locks import (
+    TaskMutationLockError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 ALLOWED_REPROGRAMMING_STATES = {Tarea.Estado.ACTIVA, Tarea.Estado.GESTION}
@@ -146,64 +154,65 @@ class DjangoReprogrammingStorage:
         command = normalize_reprogramming(command)
         try:
             with transaction.atomic(using=self.alias):
-                try:
-                    task = Tarea.objects.using(self.alias).select_for_update().get(
+                with bounded_django_lock_wait(self.alias):
+                    lock_orm_task_rows(self.alias, command.empresa_id)
+                    try:
+                        task = Tarea.objects.using(self.alias).select_for_update().get(
+                            pk=command.task_id, empresa_id=command.empresa_id
+                        )
+                    except Tarea.DoesNotExist as exc:
+                        raise EditTaskNotFound from exc
+                    annulled = task.anulada
+                    current_id = task.pk
+                    for _ in range(2):
+                        parent_id = TareaRelacion.objects.using(self.alias).filter(
+                            hija_id=current_id,
+                            hija__empresa_id=command.empresa_id,
+                            padre__empresa_id=command.empresa_id,
+                        ).values_list("padre_id", flat=True).first()
+                        if parent_id is None:
+                            break
+                        parent = Tarea.objects.using(self.alias).select_for_update().get(
+                            pk=parent_id, empresa_id=command.empresa_id
+                        )
+                        annulled = annulled or parent.anulada
+                        current_id = parent.pk
+                    validate_reprogramming_task(
+                        task.estado, annulled, task.fecha_tope, command.fecha_tope_nueva
+                    )
+                    causes = set(CausaAtraso.objects.using(self.alias).filter(
+                        pk__in=command.causa_ids
+                    ).values_list("pk", flat=True))
+                    if causes != set(command.causa_ids):
+                        raise ValidationError("tareas.reprogramming.errors.invalid_causes")
+                    old_date = task.fecha_tope
+                    now = timezone.now()
+                    Tarea.objects.using(self.alias).filter(
                         pk=command.task_id, empresa_id=command.empresa_id
+                    ).update(fecha_tope=command.fecha_tope_nueva)
+                    history = Reprogramacion.objects.using(self.alias).create(
+                        tarea_id=task.pk, fecha_tope_anterior=old_date,
+                        fecha_tope_nueva=command.fecha_tope_nueva,
+                        justificacion=command.justificacion, usuario_id=command.actor_id,
+                        fecha_operacion=now,
                     )
-                except Tarea.DoesNotExist as exc:
-                    raise EditTaskNotFound from exc
-                annulled = task.anulada
-                current_id = task.pk
-                # Same task/parent/grandparent policy, with explicit backend and locks.
-                for _ in range(2):
-                    parent_id = TareaRelacion.objects.using(self.alias).filter(
-                        hija_id=current_id,
-                        hija__empresa_id=command.empresa_id,
-                        padre__empresa_id=command.empresa_id,
-                    ).values_list("padre_id", flat=True).first()
-                    if parent_id is None:
-                        break
-                    parent = Tarea.objects.using(self.alias).select_for_update().get(
-                        pk=parent_id, empresa_id=command.empresa_id
+                    through = Reprogramacion.causas.through
+                    through.objects.using(self.alias).bulk_create([
+                        through(reprogramacion_id=history.pk, causaatraso_id=cause_id)
+                        for cause_id in command.causa_ids
+                    ])
+                    recipient_ids = set(TareaParticipante.objects.using(self.alias).filter(
+                        tarea_id=task.pk, tarea__empresa_id=command.empresa_id
+                    ).values_list("usuario_id", flat=True))
+                    recipient_ids.add(task.responsable_id)
+                    transaction.on_commit(
+                        lambda: _notify(command, task.prioridad, recipient_ids),
+                        using=self.alias,
                     )
-                    annulled = annulled or parent.anulada
-                    current_id = parent.pk
-                validate_reprogramming_task(
-                    task.estado, annulled, task.fecha_tope, command.fecha_tope_nueva
-                )
-                causes = set(CausaAtraso.objects.using(self.alias).filter(
-                    pk__in=command.causa_ids
-                ).values_list("pk", flat=True))
-                if causes != set(command.causa_ids):
-                    raise ValidationError("tareas.reprogramming.errors.invalid_causes")
-                old_date = task.fecha_tope
-                now = timezone.now()
-                Tarea.objects.using(self.alias).filter(
-                    pk=command.task_id, empresa_id=command.empresa_id
-                ).update(fecha_tope=command.fecha_tope_nueva)
-                history = Reprogramacion.objects.using(self.alias).create(
-                    tarea_id=task.pk, fecha_tope_anterior=old_date,
-                    fecha_tope_nueva=command.fecha_tope_nueva,
-                    justificacion=command.justificacion, usuario_id=command.actor_id,
-                    fecha_operacion=now,
-                )
-                through = Reprogramacion.causas.through
-                through.objects.using(self.alias).bulk_create([
-                    through(reprogramacion_id=history.pk, causaatraso_id=cause_id)
-                    for cause_id in command.causa_ids
-                ])
-                recipient_ids = set(TareaParticipante.objects.using(self.alias).filter(
-                    tarea_id=task.pk, tarea__empresa_id=command.empresa_id
-                ).values_list("usuario_id", flat=True))
-                recipient_ids.add(task.responsable_id)
-                transaction.on_commit(
-                    lambda: _notify(command, task.prioridad, recipient_ids),
-                    using=self.alias,
-                )
-                return ReprogramTaskResult(
-                    task.pk, command.empresa_id, history.pk, old_date,
-                    command.fecha_tope_nueva, now,
-                )
+                    return ReprogramTaskResult(
+                        task.pk, command.empresa_id, history.pk, old_date,
+                        command.fecha_tope_nueva, now,
+                    )
         except (EditTaskNotFound, ValidationError):
             raise
         except Exception as exc:
@@ -221,76 +230,74 @@ class MySQLReprogrammingStorage:
             with open_mysql_connection(
                 self.connection_config, database_name=self.database_name
             ) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    cursor.execute(
-                        "SELECT id, estado, anulada, fecha_tope, prioridad, responsable_id "
-                        "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
-                        (command.task_id, command.empresa_id),
-                    )
-                    row = cursor.fetchone()
-                    if row is None:
-                        raise EditTaskNotFound
-                    task_id, state, annulled, old_date, priority, responsible_id = row
-                    current_id = task_id
-                    for _ in range(2):
-                        cursor.execute(
-                            "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
-                            "JOIN tareas_tarea p ON p.id=r.padre_id "
-                            "JOIN tareas_tarea c ON c.id=r.hija_id "
-                            "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s "
-                            "FOR UPDATE",
-                            (current_id, command.empresa_id, command.empresa_id),
-                        )
-                        parent = cursor.fetchone()
-                        if parent is None:
-                            break
-                        current_id = parent[0]
-                        annulled = bool(annulled) or bool(parent[1])
-                    validate_reprogramming_task(
-                        state, bool(annulled), old_date, command.fecha_tope_nueva
-                    )
-                    marks = ", ".join("%s" for _ in command.causa_ids)
-                    cursor.execute(
-                        f"SELECT id FROM tareas_causaatraso WHERE id IN ({marks})",
-                        command.causa_ids,
-                    )
-                    if {item[0] for item in cursor.fetchall()} != set(command.causa_ids):
-                        raise ValidationError("tareas.reprogramming.errors.invalid_causes")
-                    cursor.execute(
-                        "SELECT p.usuario_id FROM tareas_tareaparticipante p "
-                        "JOIN tareas_tarea t ON t.id=p.tarea_id "
-                        "WHERE p.tarea_id=%s AND t.empresa_id=%s",
-                        (task_id, command.empresa_id),
-                    )
-                    recipient_ids = {item[0] for item in cursor.fetchall()}
-                    recipient_ids.add(responsible_id)
-                    now = timezone.now()
-                    cursor.execute(
-                        "UPDATE tareas_tarea SET fecha_tope=%s WHERE id=%s AND empresa_id=%s",
-                        (command.fecha_tope_nueva, task_id, command.empresa_id),
-                    )
-                    cursor.execute(
-                        "INSERT INTO tareas_reprogramacion "
-                        "(tarea_id, fecha_tope_anterior, fecha_tope_nueva, justificacion, "
-                        "usuario_id, fecha_operacion) VALUES (%s,%s,%s,%s,%s,%s)",
-                        (task_id, old_date, command.fecha_tope_nueva,
-                         command.justificacion, command.actor_id, now),
-                    )
-                    history_id = cursor.lastrowid
-                    for cause_id in command.causa_ids:
-                        cursor.execute(
-                            "INSERT INTO tareas_reprogramacion_causas "
-                            "(reprogramacion_id, causaatraso_id) VALUES (%s,%s)",
-                            (history_id, cause_id),
-                        )
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            cursor.execute(
+                                "SELECT id, estado, anulada, fecha_tope, prioridad, responsable_id "
+                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                                (command.task_id, command.empresa_id),
+                            )
+                            row = cursor.fetchone()
+                            if row is None:
+                                raise EditTaskNotFound
+                            task_id, state, annulled, old_date, priority, responsible_id = row
+                            current_id = task_id
+                            for _ in range(2):
+                                cursor.execute(
+                                    "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
+                                    "JOIN tareas_tarea p ON p.id=r.padre_id "
+                                    "JOIN tareas_tarea c ON c.id=r.hija_id "
+                                    "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s "
+                                    "FOR UPDATE",
+                                    (current_id, command.empresa_id, command.empresa_id),
+                                )
+                                parent = cursor.fetchone()
+                                if parent is None:
+                                    break
+                                current_id = parent[0]
+                                annulled = bool(annulled) or bool(parent[1])
+                            validate_reprogramming_task(
+                                state, bool(annulled), old_date, command.fecha_tope_nueva
+                            )
+                            marks = ", ".join("%s" for _ in command.causa_ids)
+                            cursor.execute(
+                                f"SELECT id FROM tareas_causaatraso WHERE id IN ({marks})",
+                                command.causa_ids,
+                            )
+                            if {item[0] for item in cursor.fetchall()} != set(command.causa_ids):
+                                raise ValidationError("tareas.reprogramming.errors.invalid_causes")
+                            cursor.execute(
+                                "SELECT p.usuario_id FROM tareas_tareaparticipante p "
+                                "JOIN tareas_tarea t ON t.id=p.tarea_id "
+                                "WHERE p.tarea_id=%s AND t.empresa_id=%s",
+                                (task_id, command.empresa_id),
+                            )
+                            recipient_ids = {item[0] for item in cursor.fetchall()}
+                            recipient_ids.add(responsible_id)
+                            now = timezone.now()
+                            cursor.execute(
+                                "UPDATE tareas_tarea SET fecha_tope=%s WHERE id=%s AND empresa_id=%s",
+                                (command.fecha_tope_nueva, task_id, command.empresa_id),
+                            )
+                            cursor.execute(
+                                "INSERT INTO tareas_reprogramacion "
+                                "(tarea_id, fecha_tope_anterior, fecha_tope_nueva, justificacion, "
+                                "usuario_id, fecha_operacion) VALUES (%s,%s,%s,%s,%s,%s)",
+                                (task_id, old_date, command.fecha_tope_nueva,
+                                 command.justificacion, command.actor_id, now),
+                            )
+                            history_id = cursor.lastrowid
+                            for cause_id in command.causa_ids:
+                                cursor.execute(
+                                    "INSERT INTO tareas_reprogramacion_causas "
+                                    "(reprogramacion_id, causaatraso_id) VALUES (%s,%s)",
+                                    (history_id, cause_id),
+                                )
+                        finally:
+                            cursor.close()
         except (EditTaskNotFound, ValidationError):
             raise
         except Exception as exc:

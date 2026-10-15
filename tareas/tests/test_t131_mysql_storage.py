@@ -125,7 +125,11 @@ class MySQLTaskStorageTests(TestCase):
         )
 
         self.assertEqual(result.correlativo, "B0000001")
-        sequence_insert = cursor.execute.call_args_list[0]
+        sequence_insert = next(
+            call
+            for call in cursor.execute.call_args_list
+            if "ON DUPLICATE KEY UPDATE" in call.args[0]
+        )
         self.assertIn("ON DUPLICATE KEY UPDATE", sequence_insert.args[0])
 
     @patch("tareas.services.task_storage.open_mysql_connection")

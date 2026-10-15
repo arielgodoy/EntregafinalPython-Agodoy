@@ -11,6 +11,7 @@ from ..models import Tarea, TareaReasignacion
 from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .correlativos import reserve_next_number
 from settings.services.mysql_connections import open_mysql_connection
+from .task_mutation_locks import bounded_mysql_lock_wait, mysql_mutation_transaction
 
 
 @dataclass(frozen=True)
@@ -104,58 +105,56 @@ class MySQLAssignmentStorage:
             self.connection_config,
             database_name=self.database_name,
         ) as connection:
-            cursor = connection.cursor()
-            try:
-                for assignment in assignments:
-                    number = self._reserve_number(cursor, empresa_id)
-                    now = timezone.now()
-                    cursor.execute(
-                        "INSERT INTO tareas_tarea ("
-                        "titulo,descripcion,prioridad,correlativo,anulada,"
-                        "fechas_pendientes_confirmacion,cierre_completado,"
-                        "requiere_evidencia_cierre,estado,responsable_id,empresa_id,"
-                        "tipo_ambito,local_id,departamento_id,creada_por_id,"
-                        "fecha_creacion,fecha_publicacion,fecha_asignacion,"
-                        "fecha_tope,fecha_cumplimiento,todo_origen_id,tarea_origen_id"
-                        ") VALUES ("
-                        "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s"
-                        ")",
-                        (
-                            assignment["titulo"], assignment["descripcion"],
-                            assignment["prioridad"], f"B{number:07d}", False,
-                            False, False, False, Tarea.Estado.BORRADOR,
-                            assignment["responsable_id"], empresa_id, None, None, None,
-                            creador_id, now, None, None, None, None, None, None,
-                        ),
-                    )
-                    task_id = cursor.lastrowid
-                    cursor.execute(
-                        "INSERT INTO tareas_tareareasignacion ("
-                        "tarea_id,responsable_anterior_id,responsable_nuevo_id,"
-                        "usuario_id,fecha,motivo"
-                        ") VALUES (%s,%s,%s,%s,%s,%s)",
-                        (
-                            task_id, None, assignment["responsable_id"], creador_id,
-                            assignment["fecha_comun"], assignment["motivo"],
-                        ),
-                    )
-                    created.append(AssignmentTask(
-                        id=task_id,
-                        empresa_id=empresa_id,
-                        correlativo=f"B{number:07d}",
-                        titulo=assignment["titulo"],
-                        descripcion=assignment["descripcion"],
-                        prioridad=assignment["prioridad"],
-                        responsable_id=assignment["responsable_id"],
-                        creada_por_id=creador_id,
-                        fecha_comun=assignment["fecha_comun"],
-                    ))
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    cursor = connection.cursor()
+                    try:
+                        for assignment in assignments:
+                            number = self._reserve_number(cursor, empresa_id)
+                            now = timezone.now()
+                            cursor.execute(
+                                "INSERT INTO tareas_tarea ("
+                                "titulo,descripcion,prioridad,correlativo,anulada,"
+                                "fechas_pendientes_confirmacion,cierre_completado,"
+                                "requiere_evidencia_cierre,estado,responsable_id,empresa_id,"
+                                "tipo_ambito,local_id,departamento_id,creada_por_id,"
+                                "fecha_creacion,fecha_publicacion,fecha_asignacion,"
+                                "fecha_tope,fecha_cumplimiento,todo_origen_id,tarea_origen_id"
+                                ") VALUES ("
+                                "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s"
+                                ")",
+                                (
+                                    assignment["titulo"], assignment["descripcion"],
+                                    assignment["prioridad"], f"B{number:07d}", False,
+                                    False, False, False, Tarea.Estado.BORRADOR,
+                                    assignment["responsable_id"], empresa_id, None, None, None,
+                                    creador_id, now, None, None, None, None, None, None,
+                                ),
+                            )
+                            task_id = cursor.lastrowid
+                            cursor.execute(
+                                "INSERT INTO tareas_tareareasignacion ("
+                                "tarea_id,responsable_anterior_id,responsable_nuevo_id,"
+                                "usuario_id,fecha,motivo"
+                                ") VALUES (%s,%s,%s,%s,%s,%s)",
+                                (
+                                    task_id, None, assignment["responsable_id"], creador_id,
+                                    assignment["fecha_comun"], assignment["motivo"],
+                                ),
+                            )
+                            created.append(AssignmentTask(
+                                id=task_id,
+                                empresa_id=empresa_id,
+                                correlativo=f"B{number:07d}",
+                                titulo=assignment["titulo"],
+                                descripcion=assignment["descripcion"],
+                                prioridad=assignment["prioridad"],
+                                responsable_id=assignment["responsable_id"],
+                                creada_por_id=creador_id,
+                                fecha_comun=assignment["fecha_comun"],
+                            ))
+                    finally:
+                        cursor.close()
         return tuple(created)
 
 

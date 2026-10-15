@@ -119,7 +119,7 @@ def evaluate_task_similarity(*, tarea, threshold):
         raise ValidationError("La Tarea evaluada debe existir y pertenecer a una Empresa.")
     threshold = _validate_threshold(threshold)
     storage = resolve_similarity_storage()
-    with storage.atomic() as unit:
+    with storage.atomic(empresa_id=tarea.empresa_id) as unit:
         operational_task = unit.get_task(tarea.pk, company_id=tarea.empresa_id)
         candidates = [
             candidate
@@ -141,8 +141,19 @@ def confirm_similarity(*, evaluacion, decision, actor):
     if decision not in EvaluacionSimilitud.Decision.values:
         raise ValidationError("La decisión de similitud no es válida.")
     storage = resolve_similarity_storage()
-    with storage.atomic() as unit:
+    empresa_id = getattr(getattr(evaluacion, "tarea", None), "empresa_id", None)
+    task_ids = tuple(sorted({
+        getattr(evaluacion, "tarea_id", None),
+        getattr(evaluacion, "tarea_candidata_id", None),
+    }))
+    if empresa_id is None or None in task_ids:
+        raise ValidationError("La evaluación no contiene las tareas operacionales esperadas.")
+    with storage.atomic(empresa_id=empresa_id, task_ids=task_ids) as unit:
         evaluation = unit.get_evaluation(evaluacion.pk)
+        if {evaluation.tarea_id, evaluation.tarea_candidata_id} != set(task_ids):
+            raise ValidationError(
+                "Las tareas de la evaluación cambiaron; vuelva a intentarlo."
+            )
         if evaluation.tarea.empresa_id != evaluation.tarea_candidata.empresa_id:
             raise ValidationError("Las Tareas deben pertenecer a la misma Empresa.")
         if decision != EvaluacionSimilitud.Decision.PENDIENTE:

@@ -15,6 +15,11 @@ from settings.services.mysql_connections import open_mysql_connection
 from ..models import Empresa, Tarea, TareaCierre
 from .notifications import emit_task_event
 from django.contrib.auth.models import User
+from .task_mutation_locks import (
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    mysql_mutation_transaction,
+)
 
 
 @dataclass(frozen=True)
@@ -174,42 +179,147 @@ class MySQLClosureStorage:
     def _complete_or_reject(self, command, approve):
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor = connection.cursor()
-                try:
-                    if callable(getattr(connection, "begin", None)):
-                        connection.begin()
-                    row = self._open_task(cursor, command)
-                    _id, _company, state, annulled, _closed, _completed_at, _requires, _responsible, _creator = row
-                    if (approve and state != Tarea.Estado.PENDIENTE_APROBACION_CIERRE) or (not approve and state != Tarea.Estado.GESTION):
-                        raise ValidationError("Transición no permitida para el estado actual de la tarea.")
-                    if annulled:
-                        raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
-                    if not approve:
-                        now = timezone.now()
-                        cursor.execute("UPDATE tareas_tarea SET cierre_completado=%s, fecha_cumplimiento=%s, estado=%s WHERE id=%s AND empresa_id=%s", (True, now, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, command.task_id, command.empresa_id))
-                        cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (command.task_id, Tarea.Estado.GESTION, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, "MARCAR_100", command.actor_id, now, ""))
-                        transition_id = cursor.lastrowid
-                        connection.commit()
-                        self._notify(command.empresa_id, command.task_id, command.actor_id, [row[8], row[7]], "solicitud_aprobacion_cierre", "Solicitud de aprobación de cierre", "La tarea está pendiente de aprobación de cierre.")
-                        return ClosureResult(command.task_id, command.empresa_id, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, True, now, transition_id)
-                    self._validate_blockers(cursor, command.task_id, command.empresa_id, row[6])
-                    cursor.execute("UPDATE tareas_tarea SET estado=%s, cierre_completado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.CERRADA, True, command.task_id, command.empresa_id))
-                    cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (command.task_id, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, Tarea.Estado.CERRADA, "APROBAR_CIERRE", command.actor_id, timezone.now(), command.comentario))
-                    transition_id = cursor.lastrowid
-                    cursor.execute("INSERT INTO tareas_tareacierre (tarea_id, usuario_id, timestamp, resultado, comentario) VALUES (%s,%s,%s,%s,%s)", (command.task_id, command.actor_id, timezone.now(), TareaCierre.Resultado.APROBADO, command.comentario))
-                    cierre_id = cursor.lastrowid
-                    connection.commit()
-                    self._notify(command.empresa_id, command.task_id, command.actor_id, [row[8], row[7]], "aprobacion_cierre", "Cierre de tarea aprobado", "El cierre de la tarea fue aprobado.")
-                    return ClosureResult(command.task_id, command.empresa_id, Tarea.Estado.CERRADA, True, row[5], transition_id, cierre_id)
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            row = self._open_task(cursor, command)
+                            (
+                                _id, _company, state, annulled, _closed,
+                                _completed_at, requires_evidence, responsible, creator,
+                            ) = row
+                            if (
+                                (approve and state != Tarea.Estado.PENDIENTE_APROBACION_CIERRE)
+                                or (
+                                    not approve
+                                    and state != Tarea.Estado.GESTION
+                                )
+                            ):
+                                raise ValidationError(
+                                    "Transición no permitida para el estado actual de la tarea."
+                                )
+                            if annulled:
+                                raise ValidationError(
+                                    "La tarea está anulada; no admite operaciones de ciclo."
+                                )
+                            if not approve:
+                                now = timezone.now()
+                                cursor.execute(
+                                    "UPDATE tareas_tarea SET cierre_completado=%s, "
+                                    "fecha_cumplimiento=%s, estado=%s "
+                                    "WHERE id=%s AND empresa_id=%s",
+                                    (
+                                        True,
+                                        now,
+                                        Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                                        command.task_id,
+                                        command.empresa_id,
+                                    ),
+                                )
+                                cursor.execute(
+                                    "INSERT INTO tareas_tareatransicion "
+                                    "(tarea_id, estado_origen, estado_destino, accion_evento, "
+                                    "usuario_id, timestamp, motivo) "
+                                    "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                                    (
+                                        command.task_id,
+                                        Tarea.Estado.GESTION,
+                                        Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                                        "MARCAR_100",
+                                        command.actor_id,
+                                        now,
+                                        "",
+                                    ),
+                                )
+                                transition_id = cursor.lastrowid
+                                result = ClosureResult(
+                                    command.task_id,
+                                    command.empresa_id,
+                                    Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                                    True,
+                                    now,
+                                    transition_id,
+                                )
+                                event = (
+                                    "solicitud_aprobacion_cierre",
+                                    "Solicitud de aprobación de cierre",
+                                    "La tarea está pendiente de aprobación de cierre.",
+                                )
+                            else:
+                                self._validate_blockers(
+                                    cursor,
+                                    command.task_id,
+                                    command.empresa_id,
+                                    requires_evidence,
+                                )
+                                cursor.execute(
+                                    "UPDATE tareas_tarea SET estado=%s, cierre_completado=%s "
+                                    "WHERE id=%s AND empresa_id=%s",
+                                    (
+                                        Tarea.Estado.CERRADA,
+                                        True,
+                                        command.task_id,
+                                        command.empresa_id,
+                                    ),
+                                )
+                                cursor.execute(
+                                    "INSERT INTO tareas_tareatransicion "
+                                    "(tarea_id, estado_origen, estado_destino, accion_evento, "
+                                    "usuario_id, timestamp, motivo) "
+                                    "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                                    (
+                                        command.task_id,
+                                        Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                                        Tarea.Estado.CERRADA,
+                                        "APROBAR_CIERRE",
+                                        command.actor_id,
+                                        timezone.now(),
+                                        command.comentario,
+                                    ),
+                                )
+                                transition_id = cursor.lastrowid
+                                cursor.execute(
+                                    "INSERT INTO tareas_tareacierre "
+                                    "(tarea_id, usuario_id, timestamp, resultado, comentario) "
+                                    "VALUES (%s,%s,%s,%s,%s)",
+                                    (
+                                        command.task_id,
+                                        command.actor_id,
+                                        timezone.now(),
+                                        TareaCierre.Resultado.APROBADO,
+                                        command.comentario,
+                                    ),
+                                )
+                                cierre_id = cursor.lastrowid
+                                result = ClosureResult(
+                                    command.task_id,
+                                    command.empresa_id,
+                                    Tarea.Estado.CERRADA,
+                                    True,
+                                    _completed_at,
+                                    transition_id,
+                                    cierre_id,
+                                )
+                                event = (
+                                    "aprobacion_cierre",
+                                    "Cierre de tarea aprobado",
+                                    "El cierre de la tarea fue aprobado.",
+                                )
+                        finally:
+                            cursor.close()
         except (EditTaskNotFound, ValidationError):
             raise
         except Exception as exc:
             raise TaskStorageError("No se pudo procesar el cierre de la Tarea.") from exc
+        self._notify(
+            command.empresa_id,
+            command.task_id,
+            command.actor_id,
+            [creator, responsible],
+            *event,
+        )
+        return result
 
     def approve(self, command):
         return self._complete_or_reject(command, approve=True)
@@ -217,33 +327,86 @@ class MySQLClosureStorage:
     def reject(self, command: ClosureCommand) -> ClosureResult:
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor = connection.cursor()
-                try:
-                    if callable(getattr(connection, "begin", None)):
-                        connection.begin()
-                    row = self._open_task(cursor, command)
-                    if row[2] != Tarea.Estado.PENDIENTE_APROBACION_CIERRE:
-                        raise ValidationError("Transición no permitida para el estado actual de la tarea.")
-                    if row[3]:
-                        raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
-                    now = timezone.now()
-                    cursor.execute("UPDATE tareas_tarea SET estado=%s, fecha_cumplimiento=%s, cierre_completado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.GESTION, None, True, command.task_id, command.empresa_id))
-                    cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (command.task_id, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, Tarea.Estado.GESTION, "RECHAZAR_CIERRE", command.actor_id, now, command.comentario))
-                    transition_id = cursor.lastrowid
-                    cursor.execute("INSERT INTO tareas_tareacierre (tarea_id, usuario_id, timestamp, resultado, comentario) VALUES (%s,%s,%s,%s,%s)", (command.task_id, command.actor_id, now, TareaCierre.Resultado.RECHAZADO, command.comentario))
-                    cierre_id = cursor.lastrowid
-                    connection.commit()
-                    self._notify(command.empresa_id, command.task_id, command.actor_id, [row[8], row[7]], "rechazo_cierre", "Cierre de tarea rechazado", "El cierre de la tarea fue rechazado.")
-                    return ClosureResult(command.task_id, command.empresa_id, Tarea.Estado.GESTION, True, None, transition_id, cierre_id)
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            row = self._open_task(cursor, command)
+                            if row[2] != Tarea.Estado.PENDIENTE_APROBACION_CIERRE:
+                                raise ValidationError(
+                                    "Transición no permitida para el estado actual de la tarea."
+                                )
+                            if row[3]:
+                                raise ValidationError(
+                                    "La tarea está anulada; no admite operaciones de ciclo."
+                                )
+                            now = timezone.now()
+                            cursor.execute(
+                                "UPDATE tareas_tarea SET estado=%s, fecha_cumplimiento=%s, "
+                                "cierre_completado=%s WHERE id=%s AND empresa_id=%s",
+                                (
+                                    Tarea.Estado.GESTION,
+                                    None,
+                                    True,
+                                    command.task_id,
+                                    command.empresa_id,
+                                ),
+                            )
+                            cursor.execute(
+                                "INSERT INTO tareas_tareatransicion "
+                                "(tarea_id, estado_origen, estado_destino, accion_evento, "
+                                "usuario_id, timestamp, motivo) "
+                                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                                (
+                                    command.task_id,
+                                    Tarea.Estado.PENDIENTE_APROBACION_CIERRE,
+                                    Tarea.Estado.GESTION,
+                                    "RECHAZAR_CIERRE",
+                                    command.actor_id,
+                                    now,
+                                    command.comentario,
+                                ),
+                            )
+                            transition_id = cursor.lastrowid
+                            cursor.execute(
+                                "INSERT INTO tareas_tareacierre "
+                                "(tarea_id, usuario_id, timestamp, resultado, comentario) "
+                                "VALUES (%s,%s,%s,%s,%s)",
+                                (
+                                    command.task_id,
+                                    command.actor_id,
+                                    now,
+                                    TareaCierre.Resultado.RECHAZADO,
+                                    command.comentario,
+                                ),
+                            )
+                            cierre_id = cursor.lastrowid
+                            responsible, creator = row[7], row[8]
+                        finally:
+                            cursor.close()
         except (EditTaskNotFound, ValidationError):
             raise
         except Exception as exc:
             raise TaskStorageError("No se pudo rechazar el cierre de la Tarea.") from exc
+        self._notify(
+            command.empresa_id,
+            command.task_id,
+            command.actor_id,
+            [creator, responsible],
+            "rechazo_cierre",
+            "Cierre de tarea rechazado",
+            "El cierre de la tarea fue rechazado.",
+        )
+        return ClosureResult(
+            command.task_id,
+            command.empresa_id,
+            Tarea.Estado.GESTION,
+            True,
+            None,
+            transition_id,
+            cierre_id,
+        )
 
 
 def resolve_closure_storage():

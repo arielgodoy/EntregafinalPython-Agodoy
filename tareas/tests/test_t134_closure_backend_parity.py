@@ -24,7 +24,13 @@ class MySQLClosureStorageTests(TestCase):
         def execute(sql, params=()):
             lower = sql.lower()
             cursor._sql = sql
-            if "select id, empresa_id, estado" in lower:
+            if "select @@session.innodb_lock_wait_timeout" in lower:
+                cursor._result = [(30,)]
+            elif lower.startswith("set session innodb_lock_wait_timeout"):
+                cursor._result = []
+            elif "from `tareas_tarea`" in lower and "for update" in lower:
+                cursor._result = [(3,)] if params and params[0] == self.empresa.pk else []
+            elif "select id, empresa_id, estado" in lower:
                 cursor._result = [task_row]
             elif "count(*) from tareas_minitarea" in lower:
                 cursor._result = [(1 if pending_mini else 0,)]

@@ -21,7 +21,7 @@ class MySQLLifecycleStorageTests(TestCase):
         cursor = MagicMock()
         cursor.rowcount = rowcount
         cursor.lastrowid = 9
-        cursor.fetchone.side_effect = [task_row, task_row]
+        cursor.fetchone.side_effect = [(30,), task_row]
         cursor.fetchall.return_value = [(1,)] if candidate else []
         connection.cursor.return_value = cursor
         return connection, cursor
@@ -47,6 +47,14 @@ class MySQLLifecycleStorageTests(TestCase):
         self.assertIn("UPDATE tareas_tarea", sql)
         self.assertIn("INSERT INTO tareas_tareatransicion", sql)
         self.assertIn("empresa_id=%s", sql)
+        self.assertTrue(
+            any(
+                "empresa_id" in call.args[0]
+                and "ORDER BY" in call.args[0]
+                and "FOR UPDATE" in call.args[0]
+                for call in cursor.execute.call_args_list
+            )
+        )
         self.assertEqual(result.state, Tarea.Estado.ACTIVA)
         self.assertEqual(result.correlativo, "A0000003")
         connection.commit.assert_called_once()
@@ -66,6 +74,14 @@ class MySQLLifecycleStorageTests(TestCase):
 
         self.assertEqual(result.state, Tarea.Estado.GESTION)
         self.assertTrue(any("FOR UPDATE" in call.args[0] for call in cursor.execute.call_args_list))
+        self.assertTrue(
+            any(
+                "empresa_id" in call.args[0]
+                and "ORDER BY" in call.args[0]
+                and "FOR UPDATE" in call.args[0]
+                for call in cursor.execute.call_args_list
+            )
+        )
         self.assertTrue(any("INICIAR_GESTION" in call.args[1] for call in cursor.execute.call_args_list if len(call.args) > 1))
         connection.commit.assert_called_once()
 

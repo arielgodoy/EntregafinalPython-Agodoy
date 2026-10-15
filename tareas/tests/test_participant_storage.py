@@ -493,11 +493,27 @@ class ParticipantStorageTests(TestCase):
         read_q.filter.return_value.exists.return_value = False
         comment_q.filter.return_value.order_by.return_value.values_list.return_value.first.return_value = None
         part_q.select_for_update.return_value.filter.return_value.first.return_value = None
-        with patch.object(service.transaction, "atomic", return_value=nullcontext()) as atomic, \
+        with patch.object(
+            service,
+            "lock_orm_task_rows",
+            return_value=(self.task,),
+        ) as lock_rows, \
+                patch.object(
+                    service,
+                    "bounded_django_lock_wait",
+                    return_value=nullcontext(),
+                ) as lock_wait, \
+                patch.object(service.transaction, "atomic", return_value=nullcontext()) as atomic, \
                 patch.object(service.transaction, "on_commit") as on_commit, \
                 patch.object(Tarea, "full_clean", side_effect=AssertionError("must not validate default")):
             storage.reassign_responsible(self.reassign())
             storage.add_task_participant(self.add())
+        self.assertTrue(
+            all(call.args[0] == alias for call in lock_rows.call_args_list)
+        )
+        self.assertTrue(
+            all(call.args == (alias,) for call in lock_wait.call_args_list)
+        )
         for mock in mocks:
             self.assertTrue(mock.called)
             self.assertTrue(all(call.args == (alias,) for call in mock.call_args_list))
@@ -519,6 +535,7 @@ class TransactionalMySQLFake:
         self.calls = []
         self.lastrowid = 100
         self.result = None
+        self.rows = []
         self.fail_sql = fail_sql
         self.commit_error = commit_error
         self.committed = False
@@ -532,7 +549,17 @@ class TransactionalMySQLFake:
         self.calls.append((sql, params))
         if self.fail_sql and self.fail_sql in sql:
             raise RuntimeError("private connection detail")
-        if sql == "START TRANSACTION":
+        self.rows = []
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.result = (30,)
+        elif sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.result = None
+        elif sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+        elif "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql:
+            self.rows = [(10,)] if params and params[0] == 7 else []
+        elif sql == "START TRANSACTION":
             self.snapshot = (list(self.task), self.link, self.reading, list(self.history), dict(self.edits))
         elif sql.startswith("SELECT id, empresa_id"):
             self.result = tuple(self.task) if params == (10, 7) else None
@@ -563,6 +590,19 @@ class TransactionalMySQLFake:
 
     def fetchone(self):
         return self.result
+
+    def fetchall(self):
+        return list(self.rows)
+
+    def begin(self):
+        self.calls.append(("BEGIN", ()))
+        self.snapshot = (
+            list(self.task),
+            self.link,
+            self.reading,
+            list(self.history),
+            dict(self.edits),
+        )
 
     def commit(self):
         if self.commit_error:
@@ -794,9 +834,19 @@ class MySQLParticipantStorageTests(TestCase):
         self.assertEqual(fake.task[3], 3)
         self.assertEqual(fake.reading, (88,))
         self.assertEqual(fake.history[0][-1], "Real reason")
-        self.assertEqual(fake.calls[0], ("START TRANSACTION", ()))
-        self.assertIn("empresa_id=%s FOR UPDATE", fake.calls[1][0])
-        self.assertEqual(fake.calls[1][1], (10, 7))
+        self.assertIn(("BEGIN", ()), fake.calls)
+        company_lock = next(
+            call for call in fake.calls
+            if "INSERT INTO `tareas_correlativoempresa`" in call[0]
+        )
+        self.assertEqual(company_lock[1], (7, 1))
+        locked_task = next(
+            call for call in fake.calls
+            if "FROM `tareas_tarea`" in call[0] and "FOR UPDATE" in call[0]
+        )
+        self.assertLess(fake.calls.index(company_lock), fake.calls.index(locked_task))
+        self.assertEqual(locked_task[1], (7,))
+        self.assertIn("FOR UPDATE", locked_task[0])
         self.assertTrue(fake.closed)
         self.assertFalse(fake.rolled_back)
         self.assertTrue(all("%s" in sql for sql, params in fake.calls if params))
@@ -821,7 +871,12 @@ class MySQLParticipantStorageTests(TestCase):
         result, _ = self.run_fake(fake, "change_participant_role",
                                  service.ChangeParticipantRoleCommand(10, 7, 1, 3, "INVITADO_OBSERVADOR"))
         self.assertEqual(result.participant_id, 100)
-        self.assertFalse(any(sql.startswith(("DELETE", "INSERT")) for sql, _ in fake.calls))
+        participant_writes = [
+            sql for sql, _ in fake.calls
+            if sql.startswith(("DELETE", "INSERT"))
+            and "INSERT INTO `tareas_correlativoempresa`" not in sql
+        ]
+        self.assertFalse(participant_writes)
         result, notify = self.run_fake(fake, "change_participant_role",
                                       service.ChangeParticipantRoleCommand(10, 7, 1, 3, "INVITADO_OBSERVADOR"))
         self.assertFalse(result.changed)
@@ -846,11 +901,14 @@ class MySQLParticipantStorageTests(TestCase):
                     with self.assertRaises(TaskStorageError) as caught:
                         self.storage.edit_task(edit, actor_id=1, reason="")
                 self.assertEqual(str(caught.exception), "tareas.assignment.errors.storage")
-                self.assertTrue(fake.rolled_back)
-                self.assertEqual(fake.task[3], 2)
-                self.assertEqual(fake.edits, {})
-                self.assertIsNone(fake.reading)
-                self.assertEqual(fake.history, [])
+                if boundary is None:
+                    self.assertFalse(fake.rolled_back)
+                else:
+                    self.assertTrue(fake.rolled_back)
+                    self.assertEqual(fake.task[3], 2)
+                    self.assertEqual(fake.edits, {})
+                    self.assertIsNone(fake.reading)
+                    self.assertEqual(fake.history, [])
                 notify.assert_not_called()
 
     def test_every_participant_write_boundary_rolls_back(self):

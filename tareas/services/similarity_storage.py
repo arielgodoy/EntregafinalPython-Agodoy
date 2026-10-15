@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime
 from decimal import Decimal
 
@@ -18,6 +18,13 @@ from tareas.models import EvaluacionSimilitud, Tarea, UmbralSimilitudEmpresa
 from tareas.services.connection_roles import (
     TareaConnectionError,
     resolve_operational_backend,
+)
+from tareas.services.task_mutation_locks import (
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
 )
 
 
@@ -203,9 +210,18 @@ class DjangoSimilarityStorage:
         self.alias = alias
 
     @contextmanager
-    def atomic(self):
+    def atomic(self, *, empresa_id=None, task_ids=None):
         with transaction.atomic(using=self.alias):
-            yield DjangoSimilarityUnit(self.alias)
+            if empresa_id is None:
+                yield DjangoSimilarityUnit(self.alias)
+                return
+            with bounded_django_lock_wait(self.alias):
+                lock_orm_task_rows(
+                    self.alias,
+                    empresa_id,
+                    task_ids,
+                )
+                yield DjangoSimilarityUnit(self.alias)
 
 
 class MySQLSimilarityUnit:
@@ -417,22 +433,29 @@ class MySQLSimilarityStorage:
         self.database_name = database_name
 
     @contextmanager
-    def atomic(self):
+    def atomic(self, *, empresa_id=None, task_ids=None):
         with open_mysql_connection(
             self.connection_config,
             database_name=self.database_name,
         ) as connection:
-            cursor = connection.cursor()
-            try:
-                if callable(getattr(connection, "begin", None)):
-                    connection.begin()
-                yield MySQLSimilarityUnit(cursor)
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            lock_wait = (
+                bounded_mysql_lock_wait(connection)
+                if empresa_id is not None
+                else nullcontext()
+            )
+            with lock_wait:
+                with mysql_mutation_transaction(connection):
+                    if empresa_id is not None:
+                        lock_mysql_task_rows(
+                            connection,
+                            empresa_id,
+                            task_ids,
+                        )
+                    cursor = connection.cursor()
+                    try:
+                        yield MySQLSimilarityUnit(cursor)
+                    finally:
+                        cursor.close()
 
 
 def resolve_similarity_storage():

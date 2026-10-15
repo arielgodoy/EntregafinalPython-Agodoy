@@ -51,13 +51,27 @@ class _OriginSQLiteConnection:
 class _OriginSQLiteCursor:
     def __init__(self, cursor):
         self.cursor = cursor
+        self.synthetic_row = None
 
     def execute(self, sql, params=()):
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+            return
+        if sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+            return
         if "correlativoempresa" in sql:
             sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
             sql = sql.replace(" ON DUPLICATE KEY UPDATE empresa_id = empresa_id", "")
         sql = sql.replace(" FOR UPDATE", "").replace("%s", "?")
         self.cursor.execute(sql, params)
+
+    def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
+        return self.cursor.fetchone()
 
     def __getattr__(self, name):
         return getattr(self.cursor, name)

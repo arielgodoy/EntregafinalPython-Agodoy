@@ -23,6 +23,15 @@ from ..models import Comentario, Tarea, TareaLectura, TareaParticipante, TareaRe
 from .connection_roles import resolve_operational_backend
 from .notifications import emit_task_event
 from .task_storage import EditTaskNotFound, TaskStorageError, UpdateTaskCommand
+from .task_mutation_locks import (
+    TaskMutationLockError,
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 PUBLIC_ROLES = frozenset({"PARTICIPANTE", "INVITADO_OBSERVADOR"})
@@ -294,15 +303,32 @@ class DjangoParticipantStorage(_ParticipantStorage):
     def _execute(self, command):
         try:
             with transaction.atomic(using=self.alias):
-                result, priority = _mutate(self, command)
-                if result.changed:
-                    mutation_id = uuid4().hex
-                    transaction.on_commit(
-                        lambda: _notify(command, result, priority, mutation_id), using=self.alias
-                    )
+                with bounded_django_lock_wait(self.alias):
+                    try:
+                        lock_orm_task_rows(
+                            self.alias,
+                            command.empresa_id,
+                        )
+                    except TaskMutationScopeError as exc:
+                        raise EditTaskNotFound from exc
+                    result, priority = _mutate(self, command)
+                    if result.changed:
+                        mutation_id = uuid4().hex
+                        transaction.on_commit(
+                            lambda: _notify(command, result, priority, mutation_id),
+                            using=self.alias,
+                        )
             return result
-        except (PermissionDenied, ValidationError, EditTaskNotFound):
+        except (
+            PermissionDenied,
+            ValidationError,
+            EditTaskNotFound,
+        ):
             raise
+        except TaskMutationLockError:
+            logger.error("Participant lock or transaction failed: task=%s company=%s",
+                         command.task_id, command.empresa_id)
+            raise TaskStorageError("tareas.assignment.errors.storage") from None
         except Exception:
             logger.error("Participant storage failed: task=%s company=%s",
                          command.task_id, command.empresa_id)
@@ -310,10 +336,15 @@ class DjangoParticipantStorage(_ParticipantStorage):
 
     def lock_task(self, command):
         try:
-            return Tarea.objects.using(self.alias).select_for_update().get(
-                pk=command.task_id, empresa_id=command.empresa_id
+            rows = lock_orm_task_rows(
+                self.alias,
+                command.empresa_id,
+                (command.task_id,),
             )
-        except Tarea.DoesNotExist:
+            if not rows:
+                raise EditTaskNotFound
+            return rows[0]
+        except TaskMutationScopeError:
             raise EditTaskNotFound from None
 
     def annulled(self, task, command):
@@ -377,14 +408,23 @@ class DjangoParticipantStorage(_ParticipantStorage):
 
     def mark_task_read(self, command):
         with transaction.atomic(using=self.alias):
-            reading, _created = TareaLectura.objects.using(self.alias).update_or_create(
-                tarea_id=command.task_id,
-                usuario_id=command.user_id,
-                defaults={
-                    "leido": command.leido,
-                    "fecha_lectura": timezone.now() if command.leido else None,
-                },
-            )
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        command.empresa_id,
+                        (command.task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise EditTaskNotFound from exc
+                reading, _created = TareaLectura.objects.using(self.alias).update_or_create(
+                    tarea_id=command.task_id,
+                    usuario_id=command.user_id,
+                    defaults={
+                        "leido": command.leido,
+                        "fecha_lectura": timezone.now() if command.leido else None,
+                    },
+                )
         return reading
 
 
@@ -398,20 +438,28 @@ class MySQLParticipantStorage(_ParticipantStorage):
             with open_mysql_connection(
                 self.connection_config, database_name=self.database_name
             ) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    # Per-operation adapter: storage objects can safely be reused.
-                    adapter = _MySQLMutation(cursor)
-                    result, priority = _mutate(adapter, command)
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
-        except (PermissionDenied, ValidationError, EditTaskNotFound):
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(
+                            connection,
+                            command.empresa_id,
+                        )
+                        cursor = connection.cursor()
+                        try:
+                            adapter = _MySQLMutation(cursor)
+                            result, priority = _mutate(adapter, command)
+                        finally:
+                            cursor.close()
+        except (
+            PermissionDenied,
+            ValidationError,
+            EditTaskNotFound,
+        ):
             raise
+        except TaskMutationLockError:
+            logger.error("Participant lock or transaction failed: task=%s company=%s",
+                         command.task_id, command.empresa_id)
+            raise TaskStorageError("tareas.assignment.errors.storage") from None
         except Exception:
             logger.error("Participant storage failed: task=%s company=%s",
                          command.task_id, command.empresa_id)
@@ -425,17 +473,26 @@ class MySQLParticipantStorage(_ParticipantStorage):
             with open_mysql_connection(
                 self.connection_config, database_name=self.database_name
             ) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    reading = _MySQLMutation(cursor).mark_task_read(command)
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        try:
+                            lock_mysql_task_rows(
+                                connection,
+                                command.empresa_id,
+                                (command.task_id,),
+                            )
+                        except TaskMutationScopeError as exc:
+                            raise EditTaskNotFound from exc
+                        cursor = connection.cursor()
+                        try:
+                            reading = _MySQLMutation(cursor).mark_task_read(command)
+                        finally:
+                            cursor.close()
             return reading
+        except (EditTaskNotFound, ValidationError):
+            raise
+        except TaskMutationLockError:
+            raise TaskStorageError("tareas.assignment.errors.storage") from None
         except Exception as exc:
             raise TaskStorageError("tareas.assignment.errors.storage") from exc
 

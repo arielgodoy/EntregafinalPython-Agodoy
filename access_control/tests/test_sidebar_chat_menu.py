@@ -187,10 +187,44 @@ class SidebarChatMenuTests(TestCase):
         self.assertNotContains(response, "Auditoría Gestión DTE")
         auditoria_permisos = Permiso.objects.filter(
             usuario=self.user,
+            empresa=self.empresa,
             vista__nombre__in=("Auditoría - Biblioteca", "Auditoría - Gestión DTE"),
         )
-        self.assertTrue(auditoria_permisos.exists())
-        self.assertFalse(any(permission.ver for permission in auditoria_permisos))
+        self.assertFalse(auditoria_permisos.exists())
+
+    def test_sidebar_auditoria_oculta_con_permisos_explicitos_sin_ver(self):
+        self._login_with_empresa()
+        Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.vista_dashboard,
+            ingresar=True,
+        )
+        auditoria_permisos = [
+            Permiso.objects.create(
+                usuario=self.user,
+                empresa=self.empresa,
+                vista=vista,
+                ver=False,
+                ingresar=False,
+                crear=False,
+                modificar=False,
+                eliminar=False,
+                autorizar=False,
+                supervisor=False,
+            )
+            for vista in (
+                self.vista_auditoria_biblioteca,
+                self.vista_auditoria_gestiondte,
+            )
+        ]
+
+        response = self.client.get(reverse("control_operacional:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Auditoría Biblioteca")
+        self.assertNotContains(response, "Auditoría Gestión DTE")
+        self.assertTrue(all(not permiso.ver for permiso in auditoria_permisos))
 
     def test_sidebar_auditoria_sin_permiso_conduce_a_403(self):
         self._login_with_empresa()

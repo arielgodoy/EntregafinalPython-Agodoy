@@ -20,6 +20,11 @@ from tareas.services.task_storage import (
     TaskStorageError,
     resolve_edit_storage,
 )
+from tareas.services.task_mutation_locks import (
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    lock_orm_task_rows,
+)
 
 
 _ALLOWED = {
@@ -62,12 +67,14 @@ def _raise_si_anulada(tarea):
 
 def _lock_task(tarea, storage):
     try:
-        return (
-            Tarea.objects.using(storage.alias)
-            .select_for_update()
-            .get(pk=tarea.pk, empresa_id=tarea.empresa_id)
-        )
-    except Tarea.DoesNotExist as exc:
+        with bounded_django_lock_wait(storage.alias):
+            lock_orm_task_rows(storage.alias, tarea.empresa_id)
+            return (
+                Tarea.objects.using(storage.alias)
+                .select_for_update()
+                .get(pk=tarea.pk, empresa_id=tarea.empresa_id)
+            )
+    except (Tarea.DoesNotExist, TaskMutationScopeError) as exc:
         raise TaskStorageError("tareas.messages.generic_error") from exc
 
 

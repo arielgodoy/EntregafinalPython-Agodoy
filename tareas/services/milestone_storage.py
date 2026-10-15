@@ -27,6 +27,13 @@ from .progress_storage import (
     calculate_weighted_progress, progress_percentage, refresh_weighted_progress,
 )
 from .task_storage import TaskStorageError
+from .task_mutation_locks import (
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
+)
 
 logger = logging.getLogger(__name__)
 ERROR_KEY = "tareas.messages.generic_error"
@@ -470,10 +477,20 @@ class DjangoMilestoneStorage(_Queries):
         commit_attempted = False
         try:
             with transaction.atomic(using=self.alias):
-                result = _mutate(_DjangoAdapter(self.alias, lock=True), command, files)
-                commit_attempted = True
+                with bounded_django_lock_wait(self.alias):
+                    lock_orm_task_rows(self.alias, command.empresa_id)
+                    result = _mutate(
+                        _DjangoAdapter(self.alias, lock=True),
+                        command,
+                        files,
+                    )
+                    commit_attempted = True
             return result
-        except (MilestoneNotFound, PermissionDenied, ValidationError):
+        except (
+            MilestoneNotFound,
+            PermissionDenied,
+            ValidationError,
+        ):
             _failed_files(files, commit_attempted)
             raise
         except Exception:
@@ -608,19 +625,25 @@ class MySQLMilestoneStorage(_Queries):
         commit_attempted = False
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor = connection.cursor()
-                try:
-                    cursor.execute("START TRANSACTION")
-                    result = _mutate(_MySQLAdapter(cursor, lock=True), command, files)
-                    commit_attempted = True
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            result = _mutate(
+                                _MySQLAdapter(cursor, lock=True),
+                                command,
+                                files,
+                            )
+                            commit_attempted = True
+                        finally:
+                            cursor.close()
             return result
-        except (MilestoneNotFound, PermissionDenied, ValidationError):
+        except (
+            MilestoneNotFound,
+            PermissionDenied,
+            ValidationError,
+        ):
             _failed_files(files, commit_attempted)
             raise
         except Exception:

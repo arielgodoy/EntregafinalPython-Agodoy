@@ -262,6 +262,7 @@ class CommentsReadingBackendParityTests(TestCase):
         cursor.lastrowid = 20
         created_at = timezone.now()
         cursor.fetchone.side_effect = [
+            (30,),
             None,
             None,
             None,
@@ -270,7 +271,7 @@ class CommentsReadingBackendParityTests(TestCase):
             None,
             (20, 7, 11, "Nuevo comentario", created_at, created_at, False),
         ]
-        cursor.fetchall.return_value = []
+        cursor.fetchall.side_effect = [((7,),), [], []]
         storage = MySQLCommentStorage(object(), "configured_tasks")
         with patch(
             "tareas.services.comment_storage.open_mysql_connection",
@@ -292,7 +293,18 @@ class CommentsReadingBackendParityTests(TestCase):
             {11, 12, 13, 14, 15},
         )
         self.assertEqual(comment.contenido, "Nuevo comentario")
-        self.assertEqual(connection.cursor.call_count, 1)
+        calls = cursor.execute.call_args_list
+        company_lock = next(
+            call for call in calls
+            if "INSERT INTO `tareas_correlativoempresa`" in call.args[0]
+        )
+        self.assertEqual(company_lock.args[1], (self.default_empresa.pk, 1))
+        task_lock_index = next(
+            index for index, call in enumerate(calls)
+            if "FROM `tareas_tarea`" in call.args[0] and "FOR UPDATE" in call.args[0]
+        )
+        self.assertLess(calls.index(company_lock), task_lock_index)
+        self.assertEqual(connection.cursor.call_count, 5)
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
 
@@ -432,21 +444,39 @@ class CommentsReadingBackendParityTests(TestCase):
 
     def test_mysql_activity_opens_and_closes_pause(self):
         class Cursor:
-            def __init__(self, reading_rows, pause_rows):
-                self.reading_rows = list(reading_rows)
-                self.rows = list(pause_rows)
+            def __init__(self, company_id, task_id, reading_id, pause_row):
+                self.company_id = company_id
+                self.task_id = task_id
+                self.reading_id = reading_id
+                self.pause_row = pause_row
+                self.rows = ()
+                self.row = None
                 self.sql = []
                 self.lastrowid = 9
 
             def execute(self, sql, params=()):
                 self.sql.append(sql)
+                if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+                    self.row = (30,)
+                elif "SELECT DISTINCT task.empresa_id" in sql:
+                    self.rows = ((self.company_id, self.task_id),)
+                elif "SELECT `id` FROM `tareas_tarea`" in sql:
+                    self.rows = ((self.task_id,),)
+                elif (
+                    "SELECT id, tarea_id FROM tareas_tarealectura" in sql
+                ):
+                    self.rows = ((self.reading_id, self.task_id),)
+                elif "FROM tareas_comentariopausalectura" in sql:
+                    self.row = self.pause_row
+                else:
+                    self.rows = ()
+                    self.row = None
 
             def fetchone(self):
-                return self.rows.pop(0) if self.rows else None
+                return self.row
 
             def fetchall(self):
-                rows, self.reading_rows = self.reading_rows, []
-                return rows
+                return self.rows
 
             def close(self):
                 pass
@@ -454,24 +484,49 @@ class CommentsReadingBackendParityTests(TestCase):
         class Connection:
             def __init__(self, cursor):
                 self.cursor_value = cursor
+                self.begin_calls = 0
+                self.commit_calls = 0
+                self.rollback_calls = 0
 
             def cursor(self):
                 return self.cursor_value
 
+            def begin(self):
+                self.begin_calls += 1
+
             def commit(self):
-                pass
+                self.commit_calls += 1
 
             def rollback(self):
-                pass
+                self.rollback_calls += 1
 
-        inactive = Cursor([(5,)], [None])
-        active = Cursor([(5,)], [(9, object())])
+        inactive = Cursor(
+            self.default_empresa.pk,
+            self.default_task.pk,
+            5,
+            None,
+        )
+        active = Cursor(
+            self.default_empresa.pk,
+            self.default_task.pk,
+            5,
+            (9, object()),
+        )
+        inactive_connection = Connection(inactive)
+        active_connection = Connection(active)
         storage = MySQLCommentStorage(object(), "configured_tasks")
         with patch(
             "tareas.services.comment_storage.open_mysql_connection",
-            side_effect=[nullcontext(Connection(inactive)), nullcontext(Connection(active))],
+            side_effect=[
+                nullcontext(inactive_connection),
+                nullcontext(active_connection),
+            ],
         ):
             storage.handle_user_activity(self.default_user.pk, False, timezone.now())
             storage.handle_user_activity(self.default_user.pk, True, timezone.now())
         self.assertTrue(any("INSERT INTO tareas_comentariopausalectura" in sql for sql in inactive.sql))
         self.assertTrue(any("UPDATE tareas_comentariopausalectura" in sql for sql in active.sql))
+        self.assertEqual(inactive_connection.begin_calls, 1)
+        self.assertEqual(inactive_connection.commit_calls, 1)
+        self.assertEqual(active_connection.begin_calls, 1)
+        self.assertEqual(active_connection.commit_calls, 1)

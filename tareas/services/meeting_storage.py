@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from datetime import date, datetime
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -18,6 +20,15 @@ from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Ta
 from tareas.services.connection_roles import (
     TareaConnectionError,
     resolve_operational_backend,
+)
+from tareas.services.task_mutation_locks import (
+    TaskMutationScopeError,
+    bounded_django_lock_wait,
+    bounded_mysql_lock_wait,
+    lock_mysql_task_rows,
+    lock_orm_task_groups,
+    lock_orm_task_rows,
+    mysql_mutation_transaction,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,9 +47,17 @@ def _mark_persisted(instance):
     return instance
 
 
-def _mysql_transaction(connection):
-    if callable(getattr(connection, "begin", None)):
-        connection.begin()
+@contextmanager
+def _mysql_mutation(connection, *, company_id=None, task_ids=None):
+    with bounded_mysql_lock_wait(connection):
+        with mysql_mutation_transaction(connection):
+            if company_id is not None:
+                lock_mysql_task_rows(connection, company_id, task_ids)
+            cursor = connection.cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
 
 
 def _default_related(model, object_id):
@@ -101,24 +120,157 @@ class DjangoMeetingStorage:
 
     def save_meeting_and_task(self, meeting, task):
         with transaction.atomic(using=self.alias):
-            task.save(
-                using=self.alias,
-                update_fields=[
-                    "titulo", "descripcion", "fecha_tope", "tipo_ambito", "local", "departamento",
-                ],
-            )
-            meeting.save(using=self.alias)
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        task.empresa_id,
+                        (task.pk,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound(
+                        "La tarea planificada ya no existe en la empresa."
+                    ) from exc
+                try:
+                    current_meeting = (
+                        ReunionRevision.objects.using(self.alias)
+                        .select_for_update()
+                        .get(
+                            pk=meeting.pk,
+                            empresa_id=task.empresa_id,
+                            tarea_planificada_id=task.pk,
+                        )
+                    )
+                    current_task = Tarea.objects.using(self.alias).get(
+                        pk=task.pk,
+                        empresa_id=task.empresa_id,
+                    )
+                except (ReunionRevision.DoesNotExist, Tarea.DoesNotExist) as exc:
+                    raise MeetingNotFound(
+                        "La reunión o su tarea planificada ya no existe."
+                    ) from exc
+                for field in (
+                    "titulo",
+                    "descripcion",
+                    "fecha_tope",
+                    "tipo_ambito",
+                    "local",
+                    "departamento",
+                ):
+                    setattr(current_task, field, getattr(task, field))
+                current_task.save(
+                    using=self.alias,
+                    update_fields=[
+                        "titulo", "descripcion", "fecha_tope", "tipo_ambito",
+                        "local", "departamento",
+                    ],
+                )
+                for field in (
+                    "titulo",
+                    "descripcion",
+                    "fecha_hora_programada",
+                    "modalidad",
+                    "lugar_o_enlace",
+                    "tipo_ambito",
+                    "local",
+                    "departamento",
+                    "updated_at",
+                ):
+                    setattr(current_meeting, field, getattr(meeting, field))
+                current_meeting.save(
+                    using=self.alias,
+                    update_fields=[
+                        "titulo", "descripcion", "fecha_hora_programada",
+                        "modalidad", "lugar_o_enlace", "tipo_ambito", "local",
+                        "departamento", "updated_at",
+                    ],
+                )
 
     def add_agenda_item(self, item):
         with transaction.atomic(using=self.alias):
-            item.save(using=self.alias)
+            company_id = item.reunion.empresa_id
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    locked = lock_orm_task_rows(
+                        self.alias,
+                        company_id,
+                        (item.tarea_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound(
+                        "La tarea no existe en la empresa de la reunión."
+                    ) from exc
+                if not locked:
+                    raise MeetingNotFound(
+                        "La tarea no existe en la empresa de la reunión."
+                    )
+                try:
+                    meeting = (
+                        ReunionRevision.objects.using(self.alias)
+                        .select_for_update()
+                        .get(pk=item.reunion_id, empresa_id=company_id)
+                    )
+                except ReunionRevision.DoesNotExist as exc:
+                    raise MeetingNotFound from exc
+                item.reunion = meeting
+                item.tarea = locked[0]
+                existing = list(
+                    ReunionTarea.objects.using(self.alias)
+                    .filter(reunion_id=meeting.pk)
+                    .select_related("tarea")
+                    .order_by("orden", "pk")
+                )
+                if any(item.tarea.empresa_id != company_id for item in existing):
+                    raise ValidationError(
+                        "La agenda contiene una tarea de otra empresa."
+                    )
+                if any(
+                    current.tarea_id == item.tarea_id
+                    or current.orden == item.orden
+                    for current in existing
+                ):
+                    raise ValidationError(
+                        "La tarea o el orden ya está presente en la agenda."
+                    )
+                from tareas.services.meetings import _validate_agenda
+                _validate_agenda(meeting, [*existing, item])
+                item.full_clean()
+                item.save(using=self.alias)
         return item
 
     def remove_agenda_item(self, meeting_id, task_id):
         with transaction.atomic(using=self.alias):
-            return ReunionTarea.objects.using(self.alias).filter(
-                reunion_id=meeting_id, tarea_id=task_id
-            ).delete()
+            company_id = (
+                ReunionRevision.objects.using(self.alias)
+                .filter(pk=meeting_id)
+                .values_list("empresa_id", flat=True)
+                .first()
+            )
+            if company_id is None:
+                raise MeetingNotFound
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        company_id,
+                        (task_id,),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound(
+                        "La tarea no existe en la empresa de la reunión."
+                    ) from exc
+                meeting = (
+                    ReunionRevision.objects.using(self.alias)
+                    .select_for_update()
+                    .filter(pk=meeting_id, empresa_id=company_id)
+                    .first()
+                )
+                if meeting is None:
+                    raise MeetingNotFound
+                return ReunionTarea.objects.using(self.alias).filter(
+                    reunion_id=meeting.pk,
+                    tarea_id=task_id,
+                ).delete()
 
     def add_participant(self, participant):
         with transaction.atomic(using=self.alias):
@@ -133,13 +285,74 @@ class DjangoMeetingStorage:
 
     def complete_meeting(self, meeting, agenda_items):
         with transaction.atomic(using=self.alias):
-            for item in agenda_items:
-                item.save(using=self.alias, update_fields=["comentario_cierre"])
-            meeting.save(using=self.alias, update_fields=["estado", "updated_at"])
+            company_id = meeting.empresa_id
+            task_ids = tuple(item.tarea_id for item in agenda_items)
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_groups(
+                        self.alias,
+                        {company_id: task_ids},
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound(
+                        "Una tarea de la agenda ya no existe en la empresa."
+                    ) from exc
+                current_meeting = (
+                    ReunionRevision.objects.using(self.alias)
+                    .select_for_update()
+                    .filter(pk=meeting.pk, empresa_id=company_id)
+                    .first()
+                )
+                if current_meeting is None:
+                    raise MeetingNotFound
+                if current_meeting.estado != ReunionRevision.Estado.PLANIFICADA:
+                    raise ValidationError("La reunión ya fue realizada.")
+                current_items = tuple(
+                    ReunionTarea.objects.using(self.alias)
+                    .select_for_update()
+                    .filter(reunion_id=current_meeting.pk)
+                    .order_by("tarea_id", "pk")
+                )
+                if {item.tarea_id for item in current_items} != set(task_ids):
+                    raise ValidationError(
+                        "La agenda cambió durante la operación; vuelva a intentarlo."
+                    )
+                supplied_comments = {
+                    item.tarea_id: item.comentario_cierre for item in agenda_items
+                }
+                if any(
+                    not (supplied_comments.get(item.tarea_id) or "").strip()
+                    for item in current_items
+                ):
+                    raise ValidationError(
+                        "Cada tarea de la agenda requiere comentario de cierre."
+                    )
+                for item in current_items:
+                    item.comentario_cierre = supplied_comments[item.tarea_id]
+                    item.save(
+                        using=self.alias,
+                        update_fields=["comentario_cierre"],
+                    )
+                current_meeting.estado = meeting.estado
+                current_meeting.updated_at = meeting.updated_at
+                current_meeting.save(
+                    using=self.alias,
+                    update_fields=["estado", "updated_at"],
+                )
 
     def mark_convened(self, meeting):
         with transaction.atomic(using=self.alias):
-            meeting.save(using=self.alias, update_fields=["convocada_at", "updated_at"])
+            current = (
+                ReunionRevision.objects.using(self.alias)
+                .select_for_update()
+                .filter(pk=meeting.pk, empresa_id=meeting.empresa_id)
+                .first()
+            )
+            if current is None:
+                raise MeetingNotFound
+            current.convocada_at = meeting.convocada_at
+            current.updated_at = meeting.updated_at
+            current.save(using=self.alias, update_fields=["convocada_at", "updated_at"])
         return meeting
 
 
@@ -194,9 +407,7 @@ class MySQLMeetingStorage:
     def create_meeting_and_task(self, meeting, task, *, actor_id):
         try:
             with self._connection() as connection:
-                cursor = connection.cursor()
-                try:
-                    _mysql_transaction(connection)
+                with _mysql_mutation(connection) as cursor:
                     cursor.execute(
                         "INSERT INTO tareas_correlativoempresa "
                         "(empresa_id,siguiente_numero) VALUES (%s,%s) "
@@ -331,12 +542,6 @@ class MySQLMeetingStorage:
                     )
                     meeting.pk = cursor.lastrowid
                     meeting._state.adding = False
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
         except (MeetingStorageError, ValidationError):
             raise
         except Exception as exc:
@@ -443,39 +648,106 @@ class MySQLMeetingStorage:
 
     def save_meeting_and_task(self, meeting, task):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
+            with _mysql_mutation(
+                connection,
+                company_id=task.empresa_id,
+                task_ids=(task.pk,),
+            ) as cursor:
+                cursor.execute(
+                    "SELECT empresa_id,tarea_planificada_id "
+                    "FROM tareas_reunionrevision WHERE id=%s FOR UPDATE",
+                    (meeting.pk,),
+                )
+                linked_meeting = cursor.fetchone()
+                if (
+                    linked_meeting is None
+                    or linked_meeting[0] != task.empresa_id
+                    or linked_meeting[1] != task.pk
+                ):
+                    raise MeetingNotFound(
+                        "La reunión ya no está vinculada a la tarea planificada."
+                    )
                 cursor.execute(
                     "UPDATE tareas_tarea SET titulo=%s,descripcion=%s,fecha_tope=%s,"
-                    "tipo_ambito=%s,local_id=%s,departamento_id=%s WHERE id=%s",
+                    "tipo_ambito=%s,local_id=%s,departamento_id=%s "
+                    "WHERE id=%s AND empresa_id=%s",
                     (
                         task.titulo, task.descripcion, task.fecha_tope, task.tipo_ambito,
-                        task.local_id, task.departamento_id, task.pk,
+                        task.local_id, task.departamento_id, task.pk, task.empresa_id,
                     ),
                 )
                 cursor.execute(
                     "UPDATE tareas_reunionrevision SET titulo=%s,descripcion=%s,"
                     "fecha_hora_programada=%s,modalidad=%s,lugar_o_enlace=%s,tipo_ambito=%s,"
-                    "local_id=%s,departamento_id=%s,updated_at=%s WHERE id=%s",
+                    "local_id=%s,departamento_id=%s,updated_at=%s "
+                    "WHERE id=%s AND empresa_id=%s AND tarea_planificada_id=%s",
                     (
                         meeting.titulo, meeting.descripcion, meeting.fecha_hora_programada,
                         meeting.modalidad, meeting.lugar_o_enlace, meeting.tipo_ambito,
-                        meeting.local_id, meeting.departamento_id, meeting.updated_at, meeting.pk,
+                        meeting.local_id, meeting.departamento_id, meeting.updated_at,
+                        meeting.pk, task.empresa_id, task.pk,
                     ),
                 )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def add_agenda_item(self, item):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
+            company_id = item.reunion.empresa_id
+            with _mysql_mutation(
+                connection,
+                company_id=company_id,
+                task_ids=(item.tarea_id,),
+            ) as cursor:
+                cursor.execute(
+                    "SELECT id,empresa_id,estado FROM tareas_reunionrevision "
+                    "WHERE id=%s FOR UPDATE",
+                    (item.reunion_id,),
+                )
+                meeting_row = cursor.fetchone()
+                if meeting_row is None or meeting_row[1] != company_id:
+                    raise MeetingNotFound
+                cursor.execute(
+                    "SELECT id,prioridad,empresa_id FROM tareas_tarea "
+                    "WHERE id=%s AND empresa_id=%s",
+                    (item.tarea_id, company_id),
+                )
+                task_row = cursor.fetchone()
+                if task_row is None:
+                    raise MeetingNotFound(
+                        "La tarea no existe en la empresa de la reunión."
+                    )
+                item.tarea.empresa_id = task_row[2]
+                item.tarea.prioridad = task_row[1]
+                cursor.execute(
+                    "SELECT agenda.orden,task.prioridad,agenda.tarea_id,task.empresa_id "
+                    "FROM tareas_reuniontarea AS agenda "
+                    "INNER JOIN tareas_tarea AS task ON task.id=agenda.tarea_id "
+                    "WHERE agenda.reunion_id=%s ORDER BY agenda.orden,agenda.id",
+                    (item.reunion_id,),
+                )
+                existing_rows = cursor.fetchall()
+                if any(row[3] != company_id for row in existing_rows):
+                    raise ValidationError(
+                        "La agenda contiene una tarea de otra empresa."
+                    )
+                if any(
+                    task_id == item.tarea_id or order == item.orden
+                    for order, _priority, task_id, _company in existing_rows
+                ):
+                    raise ValidationError(
+                        "La tarea o el orden ya está presente en la agenda."
+                    )
+                from tareas.services.meetings import _validate_agenda
+                current_items = [
+                    SimpleNamespace(
+                        orden=order,
+                        tarea=SimpleNamespace(prioridad=priority),
+                    )
+                    for order, priority, _task_id, _company in existing_rows
+                ]
+                _validate_agenda(
+                    item.reunion,
+                    [*current_items, item],
+                )
                 item.created_at = item.created_at or timezone.now()
                 cursor.execute(
                     "INSERT INTO tareas_reuniontarea "
@@ -487,37 +759,61 @@ class MySQLMeetingStorage:
                     ),
                 )
                 item.pk = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
         return item
 
     def remove_agenda_item(self, meeting_id, task_id):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
-                cursor.execute(
-                    "DELETE FROM tareas_reuniontarea WHERE reunion_id=%s AND tarea_id=%s",
-                    (meeting_id, task_id),
-                )
-                count = cursor.rowcount
-                connection.commit()
-                return count, {"tareas.ReunionTarea": count} if count else {}
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+            with bounded_mysql_lock_wait(connection):
+                with mysql_mutation_transaction(connection):
+                    cursor = connection.cursor()
+                    try:
+                        cursor.execute(
+                            "SELECT empresa_id FROM tareas_reunionrevision WHERE id=%s",
+                            (meeting_id,),
+                        )
+                        meeting_row = cursor.fetchone()
+                        if meeting_row is None:
+                            raise MeetingNotFound
+                        company_id = meeting_row[0]
+                        try:
+                            lock_mysql_task_rows(
+                                connection,
+                                company_id,
+                                (task_id,),
+                            )
+                        except TaskMutationScopeError as exc:
+                            raise MeetingNotFound(
+                                "La tarea no existe en la empresa de la reunión."
+                            ) from exc
+                        cursor.execute(
+                            "SELECT empresa_id FROM tareas_reunionrevision "
+                            "WHERE id=%s FOR UPDATE",
+                            (meeting_id,),
+                        )
+                        current_meeting = cursor.fetchone()
+                        if current_meeting is None or current_meeting[0] != company_id:
+                            raise MeetingNotFound
+                        cursor.execute(
+                            "DELETE FROM tareas_reuniontarea "
+                            "WHERE reunion_id=%s AND tarea_id=%s",
+                            (meeting_id, task_id),
+                        )
+                        count = cursor.rowcount
+                    finally:
+                        cursor.close()
+        return count, {"tareas.ReunionTarea": count} if count else {}
 
     def add_participant(self, participant):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
+            with _mysql_mutation(connection) as cursor:
+                cursor.execute(
+                    "SELECT empresa_id FROM tareas_reunionrevision "
+                    "WHERE id=%s FOR UPDATE",
+                    (participant.reunion_id,),
+                )
+                meeting = cursor.fetchone()
+                if meeting is None or meeting[0] != participant.reunion.empresa_id:
+                    raise MeetingNotFound
                 participant.created_at = participant.created_at or timezone.now()
                 cursor.execute(
                     "INSERT INTO tareas_reunionparticipante (reunion_id,usuario_id,created_at) "
@@ -525,68 +821,103 @@ class MySQLMeetingStorage:
                     (participant.reunion_id, participant.usuario_id, participant.created_at),
                 )
                 participant.pk = cursor.lastrowid
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
         return participant
 
     def remove_participant(self, meeting_id, user_id):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
+            with _mysql_mutation(connection) as cursor:
+                cursor.execute(
+                    "SELECT id FROM tareas_reunionrevision WHERE id=%s FOR UPDATE",
+                    (meeting_id,),
+                )
+                if cursor.fetchone() is None:
+                    raise MeetingNotFound
                 cursor.execute(
                     "DELETE FROM tareas_reunionparticipante WHERE reunion_id=%s AND usuario_id=%s",
                     (meeting_id, user_id),
                 )
                 count = cursor.rowcount
-                connection.commit()
-                return count, {"tareas.ReunionParticipante": count} if count else {}
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+        return count, {"tareas.ReunionParticipante": count} if count else {}
 
     def complete_meeting(self, meeting, agenda_items):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
-                for item in agenda_items:
+            task_ids = tuple(item.tarea_id for item in agenda_items)
+            with _mysql_mutation(
+                connection,
+                company_id=meeting.empresa_id,
+                task_ids=task_ids,
+            ) as cursor:
+                cursor.execute(
+                    "SELECT id,empresa_id,estado FROM tareas_reunionrevision "
+                    "WHERE id=%s FOR UPDATE",
+                    (meeting.pk,),
+                )
+                current_meeting = cursor.fetchone()
+                if (
+                    current_meeting is None
+                    or current_meeting[1] != meeting.empresa_id
+                ):
+                    raise MeetingNotFound
+                if current_meeting[2] != ReunionRevision.Estado.PLANIFICADA:
+                    raise ValidationError("La reunión ya fue realizada.")
+                cursor.execute(
+                    "SELECT tarea_id FROM tareas_reuniontarea "
+                    "WHERE reunion_id=%s ORDER BY tarea_id,id FOR UPDATE",
+                    (meeting.pk,),
+                )
+                current_task_ids = tuple(row[0] for row in cursor.fetchall())
+                if set(current_task_ids) != set(task_ids):
+                    raise ValidationError(
+                        "La agenda cambió durante la operación; vuelva a intentarlo."
+                    )
+                comments = {
+                    item.tarea_id: item.comentario_cierre for item in agenda_items
+                }
+                if any(
+                    not (comments.get(task_id) or "").strip()
+                    for task_id in current_task_ids
+                ):
+                    raise ValidationError(
+                        "Cada tarea de la agenda requiere comentario de cierre."
+                    )
+                for task_id in current_task_ids:
                     cursor.execute(
-                        "UPDATE tareas_reuniontarea SET comentario_cierre=%s WHERE id=%s",
-                        (item.comentario_cierre, item.pk),
+                        "UPDATE tareas_reuniontarea SET comentario_cierre=%s "
+                        "WHERE reunion_id=%s AND tarea_id=%s",
+                        (comments[task_id], meeting.pk, task_id),
                     )
                 cursor.execute(
-                    "UPDATE tareas_reunionrevision SET estado=%s,updated_at=%s WHERE id=%s",
-                    (meeting.estado, meeting.updated_at, meeting.pk),
+                    "UPDATE tareas_reunionrevision SET estado=%s,updated_at=%s "
+                    "WHERE id=%s AND empresa_id=%s",
+                    (
+                        meeting.estado,
+                        meeting.updated_at,
+                        meeting.pk,
+                        meeting.empresa_id,
+                    ),
                 )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
 
     def mark_convened(self, meeting):
         with self._connection() as connection:
-            cursor = connection.cursor()
-            try:
-                _mysql_transaction(connection)
+            with _mysql_mutation(connection) as cursor:
                 cursor.execute(
-                    "UPDATE tareas_reunionrevision SET convocada_at=%s,updated_at=%s WHERE id=%s",
-                    (meeting.convocada_at, meeting.updated_at, meeting.pk),
+                    "SELECT id,empresa_id FROM tareas_reunionrevision "
+                    "WHERE id=%s FOR UPDATE",
+                    (meeting.pk,),
                 )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-            finally:
-                cursor.close()
+                current = cursor.fetchone()
+                if current is None or current[1] != meeting.empresa_id:
+                    raise MeetingNotFound
+                cursor.execute(
+                    "UPDATE tareas_reunionrevision SET convocada_at=%s,updated_at=%s "
+                    "WHERE id=%s AND empresa_id=%s",
+                    (
+                        meeting.convocada_at,
+                        meeting.updated_at,
+                        meeting.pk,
+                        meeting.empresa_id,
+                    ),
+                )
         return meeting
 
 

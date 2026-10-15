@@ -1,4 +1,4 @@
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import date
 from decimal import Decimal
 import sqlite3
@@ -64,6 +64,7 @@ class ControlledMilestoneSQL:
         self.description = ()
         self.lastrowid = None
         self.rows = []
+        self.synthetic_row = None
 
     def cursor(self):
         return self
@@ -71,10 +72,23 @@ class ControlledMilestoneSQL:
     def close(self):
         pass
 
+    def begin(self):
+        self.db.execute("BEGIN")
+
     def execute(self, sql, params=()):
         self.commands.append((sql, tuple(params)))
+        if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
+            self.synthetic_row = (30,)
+            return
+        if sql.startswith("SET SESSION innodb_lock_wait_timeout"):
+            self.synthetic_row = None
+            return
         if self.fail_sql and self.fail_sql in sql:
             raise RuntimeError("injected storage failure")
+        if sql.startswith("INSERT INTO `tareas_correlativoempresa`"):
+            if len(params) != 2 or params[1] != 1:
+                raise AssertionError((sql, params))
+            return
         translated = sql.replace("%s", "?").replace(" FOR UPDATE", "")
         if sql == "START TRANSACTION":
             translated = "BEGIN"
@@ -94,6 +108,10 @@ class ControlledMilestoneSQL:
                            for i, value in enumerate(row)) for row in self.rows]
 
     def fetchone(self):
+        if self.synthetic_row is not None:
+            row = self.synthetic_row
+            self.synthetic_row = None
+            return row
         return self.rows[0] if self.rows else None
 
     def fetchall(self):
@@ -534,6 +552,17 @@ class MilestoneProgressParityTests(TestCase):
         hito_id = self.create(self.mysql, nombre="'); DELETE FROM tareas_tarea; --")
         self.mysql.execute(self.command(storage.UpdateMilestoneCommand, hito_id, cumplimiento=30))
         sqls = [sql for sql, params in self.sql.commands]
+        company_lock = next(
+            (sql, params) for sql, params in self.sql.commands
+            if "INSERT INTO `tareas_correlativoempresa`" in sql
+        )
+        self.assertEqual(company_lock[1], (self.company.pk, 1))
+        company_lock_index = self.sql.commands.index(company_lock)
+        task_lock_index = next(
+            index for index, (sql, _params) in enumerate(self.sql.commands)
+            if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
+        )
+        self.assertLess(company_lock_index, task_lock_index)
         self.assertTrue(any("WHERE id=%s AND empresa_id=%s FOR UPDATE" in sql for sql in sqls))
         self.assertTrue(any("WHERE id=%s AND tarea_id=%s FOR UPDATE" in sql for sql in sqls))
         self.assertTrue(all("DELETE FROM tareas_tarea;" not in sql for sql in sqls))
@@ -604,6 +633,7 @@ class MilestoneProgressParityTests(TestCase):
 
     def test_nondefault_alias_propagates_every_operational_access(self):
         aliases = []
+        lock_aliases = []
         atomic = transaction.atomic
         with ExitStack() as stack:
             for model in (Tarea, TareaRelacion, TareaParticipante, Hito, Avance, HitoHistorial, HitoEvidencia):
@@ -618,6 +648,21 @@ class MilestoneProgressParityTests(TestCase):
                     transaction_aliases.append(using)
                 return atomic(using="default", **kwargs)
             stack.enter_context(patch.object(transaction, "atomic", begin))
+            stack.enter_context(patch.object(
+                storage,
+                "bounded_django_lock_wait",
+                return_value=nullcontext(),
+            ))
+
+            def lock_rows(alias, empresa_id, task_ids=None, **kwargs):
+                lock_aliases.append((alias, empresa_id, task_ids))
+                return (self.task,)
+
+            stack.enter_context(patch.object(
+                storage,
+                "lock_orm_task_rows",
+                side_effect=lock_rows,
+            ))
             backend = storage.DjangoMilestoneStorage("operational_alias")
             hito_id = self.create(backend)
             backend.execute(self.command(storage.SetWeightedProgressModeCommand))
@@ -626,4 +671,6 @@ class MilestoneProgressParityTests(TestCase):
             backend.execute(self.command(storage.SetMilestoneAnnulledCommand, hito_id, anulado=True))
         self.assertEqual(set(aliases), {"operational_alias"})
         self.assertEqual(set(transaction_aliases), {"operational_alias"})
+        self.assertTrue(lock_aliases)
+        self.assertEqual({alias for alias, _empresa, _ids in lock_aliases}, {"operational_alias"})
         self.assertEqual(len(transaction_aliases), 4)
