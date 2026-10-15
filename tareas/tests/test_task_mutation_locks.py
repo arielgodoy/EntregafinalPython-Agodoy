@@ -35,6 +35,8 @@ class _MySQLCursor:
         elif "INSERT INTO `tareas_correlativoempresa`" in sql:
             if params[1:] != (1,):
                 raise AssertionError((sql, params))
+            if self.connection.duplicate_sequence_insert:
+                raise Exception(1062, "duplicate key")
             self.row = None
         elif "FROM `tareas_correlativoempresa`" in sql and "FOR UPDATE" in sql:
             self.row = (params[0],)
@@ -66,6 +68,7 @@ class _MySQLConnection:
     def __init__(self, tasks, relations=()):
         self.tasks = tasks
         self.relations = relations
+        self.duplicate_sequence_insert = False
         self.statements = []
         self.begin_count = 0
         self.commit_count = 0
@@ -240,6 +243,7 @@ class MySQLTaskMutationLockTests(TestCase):
         connection = _MySQLConnection(
             {8: 10, 2: 10, 4: 11},
         )
+        connection.duplicate_sequence_insert = True
         connection.begin()
         locked_ids = lock_mysql_task_rows(connection, 10)
 
@@ -257,20 +261,26 @@ class MySQLTaskMutationLockTests(TestCase):
             if "INSERT INTO `tareas_correlativoempresa`" in call[0]
         )
         self.assertIn("VALUES (%s, %s)", sequence_lock[0])
-        self.assertIn("ON DUPLICATE KEY UPDATE", sequence_lock[0])
+        self.assertNotIn("UPDATE", sequence_lock[0])
         self.assertEqual(sequence_lock[1], (10, 1))
         sequence_lock_index = next(
             index
             for index, (statement, _params) in enumerate(connection.statements)
             if "INSERT INTO `tareas_correlativoempresa`" in statement
-            and "ON DUPLICATE KEY UPDATE" in statement
+        )
+        company_lock_index = next(
+            index
+            for index, (statement, _params) in enumerate(connection.statements)
+            if "FROM `tareas_correlativoempresa`" in statement
+            and "FOR UPDATE" in statement
         )
         task_lock_index = next(
             index
             for index, (statement, _params) in enumerate(connection.statements)
             if "FROM `tareas_tarea`" in statement and "FOR UPDATE" in statement
         )
-        self.assertLess(sequence_lock_index, task_lock_index)
+        self.assertLess(sequence_lock_index, company_lock_index)
+        self.assertLess(company_lock_index, task_lock_index)
 
     @patch("tareas.services.hierarchy_lifecycle_storage.open_mysql_connection")
     def test_mysql_relation_uses_one_transaction_and_same_connection(
@@ -279,6 +289,7 @@ class MySQLTaskMutationLockTests(TestCase):
     ):
         company_id = 20
         connection = _MySQLConnection({1: company_id, 2: company_id})
+        connection.duplicate_sequence_insert = True
         open_connection.return_value = nullcontext(connection)
 
         relation = MySQLHierarchyLifecycleStorage(
@@ -291,6 +302,18 @@ class MySQLTaskMutationLockTests(TestCase):
         self.assertEqual(connection.commit_count, 1)
         self.assertEqual(connection.rollback_count, 0)
         sql_statements = [statement for statement, _params in connection.statements]
+        relation_insert = next(
+            (statement, params)
+            for statement, params in connection.statements
+            if statement.startswith("INSERT INTO tareas_tarearelacion")
+        )
+        self.assertEqual(
+            relation_insert[0],
+            "INSERT INTO tareas_tarearelacion "
+            "(padre_id,hija_id,fecha) VALUES (%s,%s,%s)",
+        )
+        self.assertEqual(relation_insert[1][:2], (1, 2))
+        self.assertIsNotNone(relation_insert[1][2])
         self.assertTrue(
             any(
                 "ORDER BY `id` FOR UPDATE" in statement

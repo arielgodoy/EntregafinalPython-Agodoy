@@ -295,8 +295,8 @@ class MySQLHierarchyLifecycleStorage:
                         try:
                             cursor.execute(
                                 "INSERT INTO tareas_tarearelacion "
-                                "(padre_id,hija_id) VALUES (%s,%s)",
-                                (parent_id, child_id),
+                                "(padre_id,hija_id,fecha) VALUES (%s,%s,%s)",
+                                (parent_id, child_id, timezone.now()),
                             )
                             relation_id = cursor.lastrowid
                         finally:

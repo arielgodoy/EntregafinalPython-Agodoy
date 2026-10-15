@@ -180,14 +180,40 @@ def lock_mysql_task_company(connection, empresa_id: int) -> None:
     )
     cursor = connection.cursor()
     try:
-        cursor.execute(
-            f"INSERT INTO {table} ({company_column}, {sequence_column}) "
-            f"VALUES (%s, %s) ON DUPLICATE KEY UPDATE "
-            f"{company_column} = VALUES({company_column})",
-            (empresa_id, 1),
-        )
+        try:
+            cursor.execute(
+                f"INSERT INTO {table} ({company_column}, {sequence_column}) "
+                f"VALUES (%s, %s)",
+                (empresa_id, 1),
+            )
+        except Exception as exc:
+            if not _is_duplicate_key_error(exc):
+                raise
+            cursor.execute(
+                f"SELECT {company_column} FROM {table} "
+                f"WHERE {company_column} = %s FOR UPDATE",
+                (empresa_id,),
+            )
+            if cursor.fetchone() is None:
+                raise TaskMutationLockError(
+                    "No se pudo obtener el lock de coordinación de la empresa."
+                )
     finally:
         cursor.close()
+
+
+def _is_duplicate_key_error(error: BaseException) -> bool:
+    seen = set()
+    current = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if getattr(current, "errno", None) == 1062:
+            return True
+        args = getattr(current, "args", ())
+        if args and args[0] == 1062:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def lock_orm_task_groups(
