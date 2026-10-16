@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -11,7 +12,7 @@ from django.utils import timezone
 
 from .connection_roles import resolve_operational_backend
 from .lifecycle import annul_task, reactivate_task
-from .notifications import emit_task_event
+from .notifications import emit_task_event, task_recipients
 from .task_storage import EditTaskNotFound, TaskStorageError
 from settings.services.mysql_connections import open_mysql_connection
 from .task_mutation_locks import (
@@ -25,7 +26,21 @@ from .task_mutation_locks import (
     lock_orm_task_rows,
     mysql_mutation_transaction,
 )
-from ..models import Empresa, Tarea, TareaRelacion, TareaTransicion
+from ..models import (
+    Empresa,
+    Tarea,
+    TareaParticipante,
+    TareaRelacion,
+    TareaTransicion,
+)
+
+
+logger = logging.getLogger(__name__)
+
+
+def _validate_relation_parent(parent):
+    if parent.anulada:
+        raise ValidationError("Una tarea anulada no puede recibir hijas.")
 
 
 @dataclass(frozen=True)
@@ -108,6 +123,7 @@ class DjangoHierarchyLifecycleStorage:
                         raise ValidationError(
                             "Padre e hija deben existir en la empresa activa."
                         )
+                    _validate_relation_parent(parent)
                     parent_by_child = self._relation_parent_map(company_id)
                     from .hierarchy import validate_relation
 
@@ -138,21 +154,53 @@ class DjangoHierarchyLifecycleStorage:
 
     def annul(self, command):
         with transaction.atomic(using=self.alias):
-            task = self._task(command)
-            actor = User.objects.using("default").get(pk=command.actor_id)
-            annul_task(task, actor, command.motivo)
-            task.refresh_from_db(using=self.alias)
-            transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="ANULAR").order_by("-pk").first()
-            return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
+            with bounded_django_lock_wait(self.alias):
+                locked_tasks = lock_orm_task_rows(self.alias, command.empresa_id)
+                self._relation_parent_map(command.empresa_id)
+                task = next(
+                    (item for item in locked_tasks if item.pk == command.task_id),
+                    None,
+                )
+                if task is None:
+                    raise EditTaskNotFound
+                actor = User.objects.using("default").get(pk=command.actor_id)
+                annul_task(task, actor, command.motivo)
+                task.refresh_from_db(using=self.alias)
+                transition = TareaTransicion.objects.using(self.alias).filter(
+                    tarea_id=task.pk,
+                    accion_evento="ANULAR",
+                ).order_by("-pk").first()
+                return HierarchyLifecycleResult(
+                    task.pk,
+                    task.empresa_id,
+                    task.anulada,
+                    transition.pk if transition else None,
+                )
 
     def reactivate(self, command):
         with transaction.atomic(using=self.alias):
-            task = self._task(command)
-            actor = User.objects.using("default").get(pk=command.actor_id)
-            reactivate_task(task, actor, command.motivo)
-            task.refresh_from_db(using=self.alias)
-            transition = TareaTransicion.objects.using(self.alias).filter(tarea_id=task.pk, accion_evento="REACTIVAR").order_by("-pk").first()
-            return HierarchyLifecycleResult(task.pk, task.empresa_id, task.anulada, transition.pk if transition else None)
+            with bounded_django_lock_wait(self.alias):
+                locked_tasks = lock_orm_task_rows(self.alias, command.empresa_id)
+                self._relation_parent_map(command.empresa_id)
+                task = next(
+                    (item for item in locked_tasks if item.pk == command.task_id),
+                    None,
+                )
+                if task is None:
+                    raise EditTaskNotFound
+                actor = User.objects.using("default").get(pk=command.actor_id)
+                reactivate_task(task, actor, command.motivo)
+                task.refresh_from_db(using=self.alias)
+                transition = TareaTransicion.objects.using(self.alias).filter(
+                    tarea_id=task.pk,
+                    accion_evento="REACTIVAR",
+                ).order_by("-pk").first()
+                return HierarchyLifecycleResult(
+                    task.pk,
+                    task.empresa_id,
+                    task.anulada,
+                    transition.pk if transition else None,
+                )
 
 
 class MySQLHierarchyLifecycleStorage:
@@ -160,20 +208,112 @@ class MySQLHierarchyLifecycleStorage:
         self.connection_config = connection_config
         self.database_name = database_name
 
-    def _notify(self, empresa_id, task_id, actor_id, creator_id, responsible_id, event, title, body):
+    def _notification_tasks(self, connection, company_id, root_task_id):
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT id, empresa_id, prioridad, creada_por_id, responsable_id "
+                "FROM tareas_tarea WHERE empresa_id=%s ORDER BY id",
+                (company_id,),
+            )
+            rows = tuple(cursor.fetchall())
+        finally:
+            cursor.close()
+
+        task_data = {
+            row[0]: {
+                "empresa_id": row[1],
+                "prioridad": row[2],
+                "creada_por_id": row[3],
+                "responsable_id": row[4],
+            }
+            for row in rows
+        }
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT padre_id, hija_id FROM tareas_tarearelacion "
+                "WHERE padre_id IN ("
+                "SELECT id FROM tareas_tarea WHERE empresa_id=%s"
+                ") ORDER BY padre_id, hija_id",
+                (company_id,),
+            )
+            relations = tuple(cursor.fetchall())
+        finally:
+            cursor.close()
+
+        children_by_parent = {}
+        for parent_id, child_id in relations:
+            children_by_parent.setdefault(parent_id, []).append(child_id)
+
+        ordered_ids = []
+        queue = [(root_task_id, 0)]
+        seen = set()
+        while queue:
+            task_id, depth = queue.pop(0)
+            if task_id in seen or task_id not in task_data:
+                continue
+            seen.add(task_id)
+            ordered_ids.append(task_id)
+            if depth < 2:
+                queue.extend(
+                    (child_id, depth + 1)
+                    for child_id in children_by_parent.get(task_id, ())
+                )
+        return tuple(
+            (task_id, task_data[task_id])
+            for task_id in ordered_ids
+        )
+
+    def _notify(
+        self,
+        empresa_id,
+        task_id,
+        actor_id,
+        event,
+        title,
+        body,
+        notification_tasks,
+    ):
         try:
             empresa = Empresa.objects.using("default").get(pk=empresa_id)
-            recipients = list(User.objects.using("default").filter(pk__in={creator_id, responsible_id}, is_active=True).exclude(pk=actor_id))
-            emit_task_event(
-                tarea=SimpleNamespace(pk=task_id, empresa=empresa),
-                event=event,
-                recipients=recipients,
-                title=title,
-                body=body,
-                actor=User.objects.using("default").get(pk=actor_id),
-            )
+            actor = User.objects.using("default").get(pk=actor_id)
+            user_ids = {
+                user_id
+                for _, data in notification_tasks
+                for user_id in (data["creada_por_id"], data["responsable_id"])
+                if user_id is not None
+            }
+            users = User.objects.using("default").in_bulk(user_ids)
+            for affected_task_id, data in notification_tasks:
+                task = SimpleNamespace(
+                    pk=affected_task_id,
+                    empresa_id=empresa_id,
+                    empresa=empresa,
+                    prioridad=data["prioridad"],
+                    creada_por=users.get(data["creada_por_id"]),
+                    responsable=users.get(data["responsable_id"]),
+                )
+                emit_task_event(
+                    tarea=task,
+                    event=event,
+                    recipients=task_recipients(
+                        task,
+                        actor=actor,
+                        include_creator=True,
+                        include_responsible=True,
+                        participant_roles=list(TareaParticipante.Rol),
+                    ),
+                    title=title,
+                    body=body,
+                    actor=actor,
+                )
         except Exception:
-            return
+            logger.exception(
+                "Lifecycle notification dispatch failed: task=%s event=%s",
+                task_id,
+                event,
+            )
 
     @staticmethod
     def _task_data(row):
@@ -273,11 +413,32 @@ class MySQLHierarchyLifecycleStorage:
                                 "Padre e hija deben existir en la empresa activa."
                             )
                         parent_by_id = {}
-                        for task_id in (parent_id, child_id):
-                            parent_by_id[task_id] = SimpleNamespace(
-                                pk=task_id,
-                                empresa_id=company_id,
+                        cursor = connection.cursor()
+                        try:
+                            for task_id in sorted({parent_id, child_id}):
+                                cursor.execute(
+                                    "SELECT id, empresa_id, estado, anulada "
+                                    "FROM `tareas_tarea` "
+                                    "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                                    (task_id, company_id),
+                                )
+                                row = cursor.fetchone()
+                                if row is not None:
+                                    parent_by_id[row[0]] = SimpleNamespace(
+                                        pk=row[0],
+                                        empresa_id=row[1],
+                                        estado=row[2],
+                                        anulada=bool(row[3]),
+                                    )
+                        finally:
+                            cursor.close()
+                        parent = parent_by_id.get(parent_id)
+                        child = parent_by_id.get(child_id)
+                        if parent is None or child is None:
+                            raise ValidationError(
+                                "Padre e hija deben existir en la empresa activa."
                             )
+                        _validate_relation_parent(parent)
                         parent_by_child = self._relation_parent_map(
                             connection,
                             company_id,
@@ -340,42 +501,61 @@ class MySQLHierarchyLifecycleStorage:
         target = False if reactivate else True
         try:
             with open_mysql_connection(self.connection_config, database_name=self.database_name) as connection:
-                cursor = connection.cursor()
-                try:
-                    if callable(getattr(connection, "begin", None)):
-                        connection.begin()
-                    cursor.execute(
-                        "SELECT id, empresa_id, estado, anulada, creada_por_id, responsable_id "
-                        "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
-                        (command.task_id, command.empresa_id),
-                    )
-                    row = cursor.fetchone()
-                    if row is None:
-                        raise EditTaskNotFound
-                    task_id, empresa_id, state, annulled, creator_id, responsible_id = row
-                    if bool(annulled) != expected:
-                        raise ValidationError(
-                            "La tarea ya está anulada." if not reactivate else "La tarea no está anulada."
-                        )
-                    if not reactivate and state == Tarea.Estado.BORRADOR:
-                        raise ValidationError("Una tarea en borrador no puede anularse.")
-                    cursor.execute(
-                        "UPDATE tareas_tarea SET anulada=%s WHERE id=%s AND empresa_id=%s",
-                        (target, command.task_id, command.empresa_id),
-                    )
-                    cursor.execute(
-                        "INSERT INTO tareas_tareatransicion "
-                        "(tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                        (command.task_id, state, state, action, command.actor_id, timezone.now(), command.motivo),
-                    )
-                    transition_id = cursor.lastrowid
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-                finally:
-                    cursor.close()
+                notification_tasks = ()
+                with bounded_mysql_lock_wait(connection):
+                    with mysql_mutation_transaction(connection):
+                        lock_mysql_task_rows(connection, command.empresa_id)
+                        self._relation_parent_map(connection, command.empresa_id)
+                        cursor = connection.cursor()
+                        try:
+                            cursor.execute(
+                                "SELECT id, empresa_id, estado, anulada, "
+                                "creada_por_id, responsable_id "
+                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
+                                (command.task_id, command.empresa_id),
+                            )
+                            row = cursor.fetchone()
+                            if row is None:
+                                raise EditTaskNotFound
+                            task_id, empresa_id, state, annulled, creator_id, responsible_id = row
+                            if bool(annulled) != expected:
+                                raise ValidationError(
+                                    "La tarea ya está anulada."
+                                    if not reactivate
+                                    else "La tarea no está anulada."
+                                )
+                            if not reactivate and state == Tarea.Estado.BORRADOR:
+                                raise ValidationError(
+                                    "Una tarea en borrador no puede anularse."
+                                )
+                            cursor.execute(
+                                "UPDATE tareas_tarea SET anulada=%s "
+                                "WHERE id=%s AND empresa_id=%s",
+                                (target, command.task_id, command.empresa_id),
+                            )
+                            cursor.execute(
+                                "INSERT INTO tareas_tareatransicion "
+                                "(tarea_id, estado_origen, estado_destino, "
+                                "accion_evento, usuario_id, timestamp, motivo) "
+                                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                                (
+                                    command.task_id,
+                                    state,
+                                    state,
+                                    action,
+                                    command.actor_id,
+                                    timezone.now(),
+                                    command.motivo,
+                                ),
+                            )
+                            transition_id = cursor.lastrowid
+                            notification_tasks = self._notification_tasks(
+                                connection,
+                                command.empresa_id,
+                                command.task_id,
+                            )
+                        finally:
+                            cursor.close()
         except (EditTaskNotFound, ValidationError):
             raise
         except Exception as exc:
@@ -384,11 +564,10 @@ class MySQLHierarchyLifecycleStorage:
             empresa_id,
             task_id,
             command.actor_id,
-            creator_id,
-            responsible_id,
             "reactivacion" if reactivate else "anulacion",
             "Tarea reactivada" if reactivate else "Tarea anulada",
             "La tarea fue reactivada." if reactivate else "La tarea fue anulada.",
+            notification_tasks,
         )
         return HierarchyLifecycleResult(task_id, empresa_id, target, transition_id)
 

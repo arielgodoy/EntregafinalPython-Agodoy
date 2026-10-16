@@ -643,14 +643,16 @@ class T054NotificationTests(TestCase):
         add_participant(task, self.participant, actor=self.participants_admin)
         self.start_task(task)
 
-        annul_task(task, self.creator)
+        with self.captureOnCommitCallbacks(execute=True):
+            annul_task(task, self.creator)
         destinatarios_anulacion = {
             call.kwargs["destinatario"] for call in notify_task_event.call_args_list
         }
         self.assertEqual(destinatarios_anulacion, {self.responsible, self.participant})
 
         notify_task_event.reset_mock()
-        reactivate_task(task, self.creator)
+        with self.captureOnCommitCallbacks(execute=True):
+            reactivate_task(task, self.creator)
         destinatarios_reactivacion = {
             call.kwargs["destinatario"] for call in notify_task_event.call_args_list
         }

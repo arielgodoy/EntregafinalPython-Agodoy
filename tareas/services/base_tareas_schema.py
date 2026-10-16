@@ -355,6 +355,15 @@ def _normalize_schema_type(value: str | None) -> str:
     return normalized
 
 
+def _is_json_valid_check(check_clause: str) -> str | None:
+    match = re.search(
+        r"\bJSON_VALID\s*\(\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*\)",
+        check_clause or "",
+        re.IGNORECASE,
+    )
+    return match.group("column") if match else None
+
+
 def _column_names(value: str) -> tuple[str, ...]:
     return tuple(
         item.strip().strip("` ")
@@ -397,6 +406,7 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
                 "primary": (),
                 "unique": set(),
                 "ordinary": set(),
+                "collation": None,
             }
             for item in _split_sql_items(body):
                 upper = item.upper()
@@ -410,6 +420,25 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
                     if foreign_key:
                         schema["foreign_keys"].add((table, *foreign_key))
                     continue
+                column_match = re.match(
+                    r"`?(?P<column>[A-Za-z0-9_]+)`?\s+"
+                    r"(?P<type>[A-Za-z]+(?:\s+unsigned)?(?:\s*\([^)]*\))?)"
+                    r"(?P<rest>.*)$",
+                    item,
+                    re.IGNORECASE,
+                )
+                if column_match:
+                    rest = column_match.group("rest")
+                    if re.search(r"\bPRIMARY\s+KEY\b", rest, re.IGNORECASE):
+                        table_info["primary"] = (column_match.group("column"),)
+                    if re.search(r"\bUNIQUE\b", rest, re.IGNORECASE):
+                        table_info["unique"].add((column_match.group("column"),))
+                    table_info["columns"][column_match.group("column")] = {
+                        "type": _normalize_schema_type(column_match.group("type")),
+                        "nullable": "NO" if re.search(r"\bNOT\s+NULL\b", rest, re.I) else "YES",
+                        "auto_increment": bool(re.search(r"\bAUTO_INCREMENT\b", rest, re.I)),
+                    }
+                    continue
                 if upper.startswith("UNIQUE") or " UNIQUE " in f" {upper} ":
                     match = re.search(r"\(([^)]*)\)", item)
                     if match:
@@ -422,20 +451,14 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
                     continue
                 if upper.startswith(("CONSTRAINT ", "CHECK ")):
                     continue
-                column_match = re.match(
-                    r"`?(?P<column>[A-Za-z0-9_]+)`?\s+"
-                    r"(?P<type>[A-Za-z]+(?:\s+unsigned)?(?:\s*\([^)]*\))?)"
-                    r"(?P<rest>.*)$",
-                    item,
-                    re.IGNORECASE,
-                )
-                if column_match:
-                    rest = column_match.group("rest")
-                    table_info["columns"][column_match.group("column")] = {
-                        "type": _normalize_schema_type(column_match.group("type")),
-                        "nullable": "NO" if re.search(r"\bNOT\s+NULL\b", rest, re.I) else "YES",
-                        "auto_increment": bool(re.search(r"\bAUTO_INCREMENT\b", rest, re.I)),
-                    }
+            options = statement[closing + 1 :]
+            collation_match = re.search(
+                r"\bCOLLATE\s*=?\s*(?P<collation>[A-Za-z0-9_]+)",
+                options,
+                re.IGNORECASE,
+            )
+            if collation_match:
+                table_info["collation"] = collation_match.group("collation")
             schema["tables"][table] = table_info
             continue
 
@@ -486,6 +509,7 @@ def _fetch_schema_snapshot(connection, database_name: str) -> dict[str, Any]:
         "columns": {},
         "indexes": {},
         "foreign_keys": set(),
+        "json_valid_columns": {},
     }
     with connection.cursor() as cursor:
         cursor.execute(
@@ -513,6 +537,21 @@ def _fetch_schema_snapshot(connection, database_name: str) -> dict[str, Any]:
                 "nullable": nullable,
                 "auto_increment": "auto_increment" in (extra or "").lower(),
             }
+        cursor.execute(
+            f"SELECT tc.TABLE_NAME, cc.CHECK_CLAUSE "
+            "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS tc "
+            "JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS AS cc "
+            "ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA "
+            "AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME "
+            "WHERE tc.CONSTRAINT_SCHEMA = %s "
+            f"AND tc.TABLE_NAME IN ({placeholders}) "
+            "AND tc.CONSTRAINT_TYPE = 'CHECK'",
+            (database_name, *tables),
+        )
+        for table, check_clause in cursor.fetchall():
+            column = _is_json_valid_check(check_clause)
+            if column:
+                actual["json_valid_columns"].setdefault(table, set()).add(column)
         cursor.execute(
             "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME "
             "FROM INFORMATION_SCHEMA.STATISTICS "
@@ -573,12 +612,17 @@ def _snapshot_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "primary": expected_info["primary"],
                 "unique": sorted(expected_info["unique"]),
                 "ordinary": sorted(expected_info["ordinary"]),
+                "collation": expected_info.get("collation"),
             }
             for table, expected_info in sorted(expected["tables"].items())
         },
         "expected_foreign_keys": sorted(expected["foreign_keys"]),
         "actual_tables": actual["tables"],
         "actual_columns": actual["columns"],
+        "actual_json_valid_columns": {
+            table: sorted(columns)
+            for table, columns in actual.get("json_valid_columns", {}).items()
+        },
         "actual_indexes": {
             table: sorted(
                 (
@@ -643,7 +687,8 @@ def _compare_schema_snapshot(
             issues.append("OBJECT_TYPE_MISMATCH")
         if table_info["engine"] != "InnoDB":
             issues.append("ENGINE_MISMATCH")
-        if table_info["collation"] != "utf8mb4_unicode_ci":
+        expected_collation = expected_info.get("collation")
+        if expected_collation and table_info["collation"] != expected_collation:
             issues.append("COLLATION_MISMATCH")
 
         actual_columns = actual["columns"].get(table, {})
@@ -654,18 +699,25 @@ def _compare_schema_snapshot(
             expected_column = expected_columns[column]
             actual_column = actual_columns[column]
             if expected_column["type"] != actual_column["type"]:
-                issues.append("COLUMN_TYPE_MISMATCH")
-                differences.append(
-                    {
-                        "column": column,
-                        "expected_type": expected_column["type"],
-                        "actual_type": actual_column["type"],
-                        "expected_nullability": expected_column["nullable"],
-                        "actual_nullability": actual_column["nullable"],
-                        "action_proposed": "Revisión manual",
-                        "risk": "No se modifica automáticamente",
-                    }
+                json_equivalent = (
+                    expected_column["type"] == "json"
+                    and actual_column["type"] == "longtext"
+                    and column
+                    in actual.get("json_valid_columns", {}).get(table, set())
                 )
+                if not json_equivalent:
+                    issues.append("COLUMN_TYPE_MISMATCH")
+                    differences.append(
+                        {
+                            "column": column,
+                            "expected_type": expected_column["type"],
+                            "actual_type": actual_column["type"],
+                            "expected_nullability": expected_column["nullable"],
+                            "actual_nullability": actual_column["nullable"],
+                            "action_proposed": "Revisión manual",
+                            "risk": "No se modifica automáticamente",
+                        }
+                    )
             if expected_column["nullable"] != actual_column["nullable"]:
                 issues.append("NULLABILITY_MISMATCH")
             if expected_column["auto_increment"] != actual_column["auto_increment"]:
@@ -1048,6 +1100,7 @@ def install_deletion_ledger_schema(
             installed = _deletion_ledger_schema_snapshot(
                 connection,
                 context.database_name,
+                int(connection_config.pk),
             )
             if (
                 {name for name, _engine in installed["existing_tables"]}

@@ -275,7 +275,16 @@ def annul_task(tarea, usuario, motivo=""):
             motivo=motivo,
         )
         tarea.anulada = locked_tarea.anulada
-    _emit_hierarchy_event(tarea, usuario, "anulacion", "Tarea anulada", "La tarea fue anulada.")
+    transaction.on_commit(
+        lambda: _emit_hierarchy_event(
+            tarea,
+            usuario,
+            "anulacion",
+            "Tarea anulada",
+            "La tarea fue anulada.",
+        ),
+        using=storage.alias,
+    )
     return tarea
 
 
@@ -297,11 +306,14 @@ def reactivate_task(tarea, usuario, motivo=""):
             motivo=motivo,
         )
         tarea.anulada = locked_tarea.anulada
-    _emit_hierarchy_event(
-        tarea,
-        usuario,
-        "reactivacion",
-        "Tarea reactivada",
-        "La tarea fue reactivada.",
+    transaction.on_commit(
+        lambda: _emit_hierarchy_event(
+            tarea,
+            usuario,
+            "reactivacion",
+            "Tarea reactivada",
+            "La tarea fue reactivada.",
+        ),
+        using=storage.alias,
     )
     return tarea

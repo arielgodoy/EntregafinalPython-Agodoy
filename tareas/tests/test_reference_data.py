@@ -86,6 +86,8 @@ class ReferenceConnection:
                 for table in params[1:]
                 if table in self.tables
             ]
+        elif sql.startswith("SELECT tc.TABLE_NAME, cc.CHECK_CLAUSE"):
+            self.results = []
         elif sql.startswith("SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME"):
             self.results = []
         elif sql.startswith("SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME"):

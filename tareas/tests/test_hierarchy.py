@@ -2,7 +2,10 @@ from datetime import date
 
 """Tests Phase 3 T028: task hierarchy and effective annulment."""
 
+from unittest.mock import patch
+
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.test import TestCase
 
 from tareas.models import Tarea, TareaConnectionRole, TareaRelacion
@@ -135,6 +138,21 @@ class HierarchyPhase3Tests(TestCase):
         with self.assertRaises(ValidationError):
             add_child(parent, child)
 
+    def test_padre_anulado_rechaza_nueva_hija(self):
+        parent = self.make_gestion_task("Padre anulado")
+        child = self.make_gestion_task("Hija")
+        annul_task(parent, self.creator)
+
+        with self.assertRaises(ValidationError):
+            add_child(parent, child)
+
+        self.assertFalse(
+            TareaRelacion.objects.filter(
+                padre_id=parent.pk,
+                hija_id=child.pk,
+            ).exists()
+        )
+
     def test_get_parent_get_children(self):
         parent = self.make_task("Padre")
         child = self.make_task("Hija")
@@ -220,6 +238,51 @@ class HierarchyPhase3Tests(TestCase):
         grandchild.refresh_from_db()
         self.assertFalse(child.anulada)
         self.assertFalse(grandchild.anulada)
+
+    @patch("tareas.services.lifecycle._emit_hierarchy_event")
+    def test_lifecycle_notifications_wait_for_outer_commit(self, emit_event):
+        task = self.make_gestion_task("Notificacion after commit")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                annul_task(task, self.creator)
+                emit_event.assert_not_called()
+
+        emit_event.assert_called_once()
+
+    @patch("tareas.services.lifecycle._emit_hierarchy_event")
+    def test_lifecycle_rollback_discards_notifications(self, emit_event):
+        task = self.make_gestion_task("Notificacion rollback")
+
+        try:
+            with transaction.atomic():
+                annul_task(task, self.creator)
+                raise RuntimeError("rollback lifecycle")
+        except RuntimeError:
+            pass
+
+        emit_event.assert_not_called()
+        task.refresh_from_db()
+        self.assertFalse(task.anulada)
+
+    def test_anulacion_preserva_flags_estados_y_fechas_descendientes(self):
+        parent = self.make_gestion_task("Padre fechas")
+        child = self.make_gestion_task("Hija fechas")
+        add_child(parent, child)
+        parent_deadline = parent.fecha_tope
+        child_deadline = child.fecha_tope
+        child_state = child.estado
+
+        annul_task(parent, self.creator)
+        parent.refresh_from_db()
+        child.refresh_from_db()
+
+        self.assertTrue(parent.anulada)
+        self.assertFalse(child.anulada)
+        self.assertEqual(child.estado, child_state)
+        self.assertEqual(parent.fecha_tope, parent_deadline)
+        self.assertEqual(child.fecha_tope, child_deadline)
+        self.assertFalse(child.fechas_pendientes_confirmacion)
 
     def test_relacion_invalida_no_crea_registro_parcial(self):
         parent = self.make_task("Padre")

@@ -21,6 +21,7 @@ from tareas.services.base_tareas_schema import (
     EXPECTED_OPERATIONAL_MODELS,
     SCHEMA_PATH,
     _compare_schema_snapshot,
+    _parse_expected_schema,
     _read_deletion_ledger_statements,
     _schema_fingerprint,
     build_base_tareas_schema_statements,
@@ -353,6 +354,125 @@ class BaseTareasSchemaComparatorPureTests(SimpleTestCase):
         self.assertEqual(result["existing"], ["tareas_tarea"])
         self.assertEqual(result["conflicts"], [])
 
+    def test_parser_recognizes_inline_primary_key(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` ("
+                "`id` bigint AUTO_INCREMENT NOT NULL PRIMARY KEY, "
+                "`nombre` varchar(100) NULL"
+                ")"
+            ]
+        )
+        self.assertEqual(schema["tables"]["tareas_tarea"]["primary"], ("id",))
+
+    def test_parser_recognizes_composite_primary_key(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` ("
+                "`empresa_id` bigint NOT NULL, "
+                "`correlativo` varchar(9) NOT NULL, "
+                "PRIMARY KEY (`empresa_id`, `correlativo`)"
+                ")"
+            ]
+        )
+        self.assertEqual(
+            schema["tables"]["tareas_tarea"]["primary"],
+            ("empresa_id", "correlativo"),
+        )
+
+    def test_parser_recognizes_inline_unique_bigint(self):
+        schema = _parse_expected_schema(
+            ["CREATE TABLE `tareas_tarea` (`empresa_id` bigint NOT NULL UNIQUE)"]
+        )
+        table = schema["tables"]["tareas_tarea"]
+        self.assertEqual(table["columns"]["empresa_id"]["type"], "bigint")
+        self.assertEqual(table["unique"], {("empresa_id",)})
+
+    def test_parser_recognizes_inline_unique_varchar_without_size_column(self):
+        schema = _parse_expected_schema(
+            ["CREATE TABLE `tareas_tarea` (`token_hash` varchar(64) NOT NULL UNIQUE)"]
+        )
+        table = schema["tables"]["tareas_tarea"]
+        self.assertEqual(set(table["columns"]), {"token_hash"})
+        self.assertEqual(table["columns"]["token_hash"]["type"], "varchar(64)")
+        self.assertEqual(table["unique"], {("token_hash",)})
+
+    def test_parser_recognizes_two_inline_unique_columns(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` ("
+                "`empresa_id` bigint NOT NULL UNIQUE, "
+                "`token_hash` varchar(64) NOT NULL UNIQUE"
+                ")"
+            ]
+        )
+        self.assertEqual(
+            schema["tables"]["tareas_tarea"]["unique"],
+            {("empresa_id",), ("token_hash",)},
+        )
+
+    def test_parser_preserves_composite_table_unique(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` ("
+                "`empresa_id` bigint NOT NULL, "
+                "`correlativo` varchar(9) NOT NULL, "
+                "UNIQUE (`empresa_id`, `correlativo`)"
+                ")"
+            ]
+        )
+        self.assertEqual(
+            schema["tables"]["tareas_tarea"]["unique"],
+            {("empresa_id", "correlativo")},
+        )
+
+    def test_parser_preserves_real_primary_key_mismatch_detection(self):
+        snapshot = self._snapshot()
+        snapshot["actual"]["indexes"]["tareas_tarea"][0]["columns"] = ("nombre",)
+        issues = self._issues(snapshot)
+        self.assertIn("PRIMARY_KEY_MISMATCH", issues)
+
+    def test_parser_leaves_collation_unconstrained_when_ddl_omits_it(self):
+        schema = _parse_expected_schema(
+            ["CREATE TABLE `tareas_tarea` (`id` bigint NOT NULL PRIMARY KEY)"]
+        )
+        self.assertIsNone(schema["tables"]["tareas_tarea"]["collation"])
+
+        snapshot = self._snapshot()
+        snapshot["actual"]["tables"]["tareas_tarea"]["collation"] = "utf8mb4_general_ci"
+        result = _compare_schema_snapshot(snapshot, "tareas")
+        self.assertEqual(result["conflicts"], [])
+
+    def test_parser_accepts_matching_explicit_collation(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` (`id` bigint NOT NULL PRIMARY KEY) "
+                "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+            ]
+        )
+        snapshot = self._snapshot()
+        snapshot["expected"]["tables"]["tareas_tarea"]["collation"] = (
+            schema["tables"]["tareas_tarea"]["collation"]
+        )
+        snapshot["actual"]["tables"]["tareas_tarea"]["collation"] = "utf8mb4_general_ci"
+        result = _compare_schema_snapshot(snapshot, "tareas")
+        self.assertEqual(result["conflicts"], [])
+
+    def test_parser_detects_different_explicit_collation(self):
+        schema = _parse_expected_schema(
+            [
+                "CREATE TABLE `tareas_tarea` (`id` bigint NOT NULL PRIMARY KEY) "
+                "COLLATE=utf8mb4_unicode_ci"
+            ]
+        )
+        snapshot = self._snapshot()
+        snapshot["expected"]["tables"]["tareas_tarea"]["collation"] = (
+            schema["tables"]["tareas_tarea"]["collation"]
+        )
+        snapshot["actual"]["tables"]["tareas_tarea"]["collation"] = "utf8mb4_general_ci"
+        issues = self._issues(snapshot)
+        self.assertIn("COLLATION_MISMATCH", issues)
+
     def test_nullability_column_and_primary_key_mismatches(self):
         snapshot = self._snapshot()
         snapshot["actual"]["columns"]["tareas_tarea"]["nombre"]["nullable"] = "NO"
@@ -368,6 +488,7 @@ class BaseTareasSchemaComparatorPureTests(SimpleTestCase):
         snapshot["actual"]["columns"]["tareas_tarea"]["nombre"]["type"] = "text"
         snapshot["actual"]["tables"]["tareas_tarea"]["engine"] = "MyISAM"
         snapshot["actual"]["tables"]["tareas_tarea"]["collation"] = "latin1_swedish_ci"
+        snapshot["expected"]["tables"]["tareas_tarea"]["collation"] = "utf8mb4_unicode_ci"
         issues = self._issues(snapshot)
         self.assertIn("COLUMN_TYPE_MISMATCH", issues)
         self.assertIn("ENGINE_MISMATCH", issues)
@@ -381,6 +502,81 @@ class BaseTareasSchemaComparatorPureTests(SimpleTestCase):
         issues = self._issues(snapshot)
         self.assertIn("INDEX_MISSING", issues)
         self.assertIn("UNIQUE_CONSTRAINT_MISSING", issues)
+
+    def test_detects_incorrect_unique_constraint(self):
+        snapshot = self._snapshot()
+        snapshot["actual"]["indexes"]["tareas_tarea"] = [
+            {"name": "PRIMARY", "unique": True, "columns": ("id",)},
+            {"name": "wrong_unique", "unique": True, "columns": ("id",)},
+        ]
+        issues = self._issues(snapshot)
+        self.assertIn("UNIQUE_CONSTRAINT_MISSING", issues)
+        self.assertIn("UNIQUE_CONSTRAINT_MISMATCH", issues)
+
+    def _json_snapshot(self, json_valid_columns):
+        return self._snapshot(
+            expected={
+                "tareas_hitohistorial": {
+                    "columns": {
+                        "id": {
+                            "type": "bigint",
+                            "nullable": "NO",
+                            "auto_increment": False,
+                        },
+                        "datos": {
+                            "type": "json",
+                            "nullable": "NO",
+                            "auto_increment": False,
+                        },
+                    },
+                    "primary": ("id",),
+                    "unique": set(),
+                    "ordinary": set(),
+                }
+            },
+            actual={
+                "tables": {
+                    "tareas_hitohistorial": {
+                        "type": "BASE TABLE",
+                        "engine": "InnoDB",
+                        "collation": "utf8mb4_general_ci",
+                    }
+                },
+                "columns": {
+                    "tareas_hitohistorial": {
+                        "id": {
+                            "type": "bigint",
+                            "nullable": "NO",
+                            "auto_increment": False,
+                        },
+                        "datos": {
+                            "type": "longtext",
+                            "nullable": "NO",
+                            "auto_increment": False,
+                        },
+                    }
+                },
+                "indexes": {
+                    "tareas_hitohistorial": [
+                        {"name": "PRIMARY", "unique": True, "columns": ("id",)}
+                    ]
+                },
+                "foreign_keys": set(),
+                "json_valid_columns": {
+                    "tareas_hitohistorial": set(json_valid_columns)
+                },
+            },
+        )
+
+    def test_accepts_mariadb_json_longtext_with_json_valid_check(self):
+        result = _compare_schema_snapshot(
+            self._json_snapshot({"datos"}), "tareas"
+        )
+        self.assertEqual(result["conflicts"], [])
+
+    def test_rejects_unvalidated_longtext_as_json(self):
+        issues = self._issues(self._json_snapshot(set()))
+        self.assertIn("COLUMN_TYPE_MISMATCH", issues)
 
     def test_missing_internal_foreign_key_blocks(self):
         snapshot = self._snapshot(

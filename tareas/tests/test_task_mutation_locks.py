@@ -42,11 +42,19 @@ class _MySQLCursor:
             self.row = (params[0],)
         elif "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql:
             company_id = params[0]
-            self.rows = tuple(
-                (task_id,)
-                for task_id, task_company in sorted(self.connection.tasks.items())
-                if task_company == company_id
-            )
+            if "estado, anulada" in sql:
+                task_id = params[0]
+                task_company = params[1]
+                if self.connection.tasks.get(task_id) == task_company:
+                    self.row = (task_id, task_company, Tarea.Estado.GESTION, 0)
+                else:
+                    self.row = None
+            else:
+                self.rows = tuple(
+                    (task_id,)
+                    for task_id, task_company in sorted(self.connection.tasks.items())
+                    if task_company == company_id
+                )
         elif "FROM tareas_tarearelacion AS relation" in sql:
             self.rows = self.connection.relations
         elif sql.startswith("INSERT INTO tareas_tarearelacion"):
