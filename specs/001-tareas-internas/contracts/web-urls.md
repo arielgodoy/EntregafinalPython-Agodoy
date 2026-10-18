@@ -4,9 +4,11 @@
 
 Contrato de la interfaz web server-side rendered. No se inventa una API REST pública;
 si una fase requiere integración, se documenta un adaptador dentro de `tareas/` y se
-mantiene bloqueado hasta autorización del contrato externo. La eliminación física de Tareas
-no existe; la anulación es una acción protegida y auditada. T105 define la única excepción
-física para MiniTareas sin estado hecho ni historial.
+mantiene bloqueado hasta autorización del contrato externo. La decisión 2H.0.3 sustituye
+la eliminación física administrativa por eliminación lógica definitiva del árbol, sin
+restauración, conforme a FR-R06…FR-R17. No existe executor lógico ni POST implementado o
+habilitado. La anulación/reactivación sigue siendo una acción distinta; T105 conserva su
+excepción individual de borrado físico para MiniTareas sin estado hecho ni historial.
 
 > **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
 > `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
@@ -197,12 +199,38 @@ autorizan crear endpoints ausentes.
 - **Errores**: los `ValidationError` se devuelven como respuesta controlada y
   se muestran en la UI.
 
-### Eliminación de Tareas — FUERA DE ALCANCE
+### Eliminación lógica administrativa definitiva — contrato futuro, sin ruta de ejecución
 
-No existe eliminación física de Tareas, ruta de borrado de Tareas ni permiso `eliminar`.
-La anulación/reactivación se exponen como acciones de ciclo de vida protegidas por ICMEAS
-y no destruyen datos. La excepción T105 para MiniTareas está definida en la tabla de
-rutas y no altera esta regla histórica de Tareas.
+FR-R06…FR-R17 autorizan una eliminación lógica administrativa: raíz y descendientes
+dejan de operar, pero se conservan filas, relaciones, historiales, documentos y archivos.
+Es definitiva funcionalmente y no existe restauración. La anulación/reactivación
+ordinarias siguen siendo acciones distintas y no cambian las reglas individuales de
+Hitos, MiniTareas o Comentarios.
+
+La ruta existente
+`GET /tareas/<pk>/eliminacion-definitiva/previsualizar/` (`previsualizar_eliminacion_definitiva`)
+es únicamente una previsualización GET de solo lectura del WIP físico anterior. No es un
+contrato ni una autorización para ejecutar la nueva eliminación lógica. Su respuesta y
+fingerprint deberán revisarse durante L5 antes de utilizarla como preview/confirmación.
+No existe POST lógico, endpoint de restauración ni executor conectado a HTTP.
+
+Contrato web futuro propuesto, no registrado ni implementado:
+
+| Fase | Operación | Método | Ruta/nombre sugerido | Regla |
+|---|---|---|---|---|
+| L4 | Listado histórico | GET | `/tareas/eliminadas/` (`tareas:eliminadas_lista`) | Solo lectura; VICMEAS `ingresar` (I) explícito para `Tareas eliminadas` |
+| L4 | Detalle histórico | GET | `/tareas/eliminadas/<uuid:operation_id>/` (`tareas:eliminadas_detalle`) | Solo lectura del árbol y relaciones retenidas; mismo permiso I |
+
+El permiso I se asigna a la Vista independiente `Tareas eliminadas`; no se infiere del
+permiso S de eliminación ni de `Tareas`. La pantalla todavía no está implementada. Las
+tareas eliminadas quedan fuera de KPI operacionales y reportes habituales.
+
+Cuando se autorice L5, preview y POST deberán comprobar usuario autenticado/activo,
+Empresa activa Base 00, CSRF en la mutación, permiso S explícito para eliminar,
+pertenencia y autorización antes de consultar inventario sensible. La confirmación se
+vinculará a usuario, empresa, raíz, backend/configuración y fingerprint, tendrá caducidad
+y se revalidará bajo locks. La transacción persiste las marcas lógicas y ledger juntas;
+auditoría central posterior no promete atomicidad distribuida. No se eliminan archivos.
 
 ## Rutas adicionales por fase
 

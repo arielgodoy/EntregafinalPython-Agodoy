@@ -160,8 +160,64 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
                     re.IGNORECASE | re.DOTALL,
                 )),
             ),
-            (39, True, True, True, True, True, True, 46, 115, 11, 21, True, True),
+            (39, True, True, True, True, True, True, 46,             117, 11, 21, True, True),
         )
+
+    def test_frozen_schema_includes_logical_deletion_metadata(self):
+        sql = SCHEMA_PATH.read_text(encoding="utf-8")
+        sql = "\n".join(
+            line for line in sql.splitlines() if not line.lstrip().startswith("--")
+        )
+        statements = [
+            item.strip() for item in sql.split(";") if item.strip()
+        ]
+        schema = _parse_expected_schema(statements)
+        task_schema = schema["tables"]["tareas_tarea"]
+
+        self.assertTrue(
+            {
+                "eliminada",
+                "eliminada_en",
+                "eliminada_por_id",
+                "eliminacion_operacion_id",
+            }.issubset(task_schema["columns"])
+        )
+        self.assertIn(("empresa_id", "eliminada"), task_schema["ordinary"])
+        self.assertIn(
+            ("eliminacion_operacion_id",),
+            task_schema["ordinary"],
+        )
+
+    def test_model_generated_mysql_schemas_include_l1_fields(self):
+        operational = build_base_tareas_schema_statements(
+            self._mysql_preview_connection()
+        )
+        task_create = next(
+            statement
+            for statement in operational
+            if statement.startswith("CREATE TABLE IF NOT EXISTS `tareas_tarea`")
+        )
+        for column in (
+            "`eliminada`",
+            "`eliminada_en`",
+            "`eliminada_por_id`",
+            "`eliminacion_operacion_id`",
+            "`tareas_elim_metadata_consistent`",
+        ):
+            self.assertIn(column, task_create)
+
+        ledger = build_deletion_ledger_schema_statements(
+            self._mysql_preview_connection()
+        )
+        operation_create = next(
+            statement
+            for statement in ledger
+            if statement.startswith(
+                "CREATE TABLE IF NOT EXISTS `tareas_eliminacion_operacion`"
+            )
+        )
+        self.assertIn("`motivo` longtext NULL", operation_create)
+        self.assertIn("`tareas_delop_motivo_required`", operation_create)
 
     def test_mysql_preview_shape_matches_frozen_sql(self):
         preview = build_base_tareas_schema_statements(

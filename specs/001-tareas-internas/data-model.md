@@ -13,6 +13,11 @@ modelo real todavía. Su alcance es `GLOBAL POR APP`.
 propias operacionales actuales de `tareas` pertenecen a este storage: 38 modelos propios
 y la tabla through automática de `Reprogramacion.causas`, 39 tablas en total.
 
+El ledger de eliminación administrativa añade tres tablas propias a `BASE_TAREAS`:
+`TareaEliminacionOperacion`, `TareaEliminacionElemento` y
+`TareaEliminacionArchivo`. Son evidencia durable de la operación, no elementos del árbol
+que se elimina.
+
 `TareaConnectionRole` es configuración para resolver el storage y no forma parte del
 bootstrap operacional. `AUDITORIA_TAREAS` permanece reservado y no recibe tablas.
 
@@ -309,7 +314,7 @@ preservan lecturas/cursor al reingresar. Limpiar responsable en BORRADOR no crea
 `TareaReasignacion` porque `responsable_nuevo` no admite NULL. No se agrega
 ledger de participantes: `PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES`.
 - `TareaRelacion`: padre/hija con máximo dos niveles bajo el padre.
-- `MiniTarea`: tarea, descripción, persona única, hecho y fechas. La entidad permanece deliberadamente simple: `hecho` solo representa `PENDIENTE`/`HECHA`; `fecha_completado` refleja el estado actual y no sustituye la bitácora. T105 usa `persona` como fuente dinámica de participación funcional de la Tarea madre, sin crear `TareaParticipante`. La eliminación física solo procede con `hecho=False` y sin `MiniTareaEvento`; una MiniTarea hecha o con cualquier evento se conserva.
+- `MiniTarea`: tarea, descripción, persona única, hecho y fechas. La entidad permanece deliberadamente simple: `hecho` solo representa `PENDIENTE`/`HECHA`; `fecha_completado` refleja el estado actual y no sustituye la bitácora. T105 usa `persona` como fuente dinámica de participación funcional de la Tarea madre, sin crear `TareaParticipante`. La eliminación física individual ordinaria solo procede con `hecho=False` y sin `MiniTareaEvento`; una MiniTarea hecha o con cualquier evento se conserva en esa operación individual. La eliminación lógica administrativa del árbol de FR-R06…FR-R17 conserva la MiniTarea y sus eventos, sin cambiar el endpoint ni las reglas individuales de T105.
 - `MiniTareaEvento`: `mini_tarea` FK `PROTECT`, `tipo` (`CIERRE`/`REAPERTURA`), `actor` FK `PROTECT` a `auth.User`, `fecha` DateTime, `comentario` obligatorio, relación 1:1 opcional `comentario_feed` a `Comentario` con `on_delete=PROTECT`, y dos `JSONField` de listas de identificadores (`destinatarios_notificacion`, `destinatarios_email`) usados únicamente en eventos `CIERRE`. Solo los eventos `CIERRE` nuevos relacionan su Comentario automático; `REAPERTURA` y eventos históricos pueden mantenerla nula. Conserva múltiples ciclos sin sobrescribirlos y no duplica notificaciones, emails, estados técnicos, documentos ni tracking de entrega.
 
 ### Avance, fechas, reprogramación y documentos
@@ -332,7 +337,7 @@ ledger de participantes: `PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES`.
   especializado. No escribe `TareaTransicion` ni fechas de la jerarquía.
 - `dias_atraso` es derivado: durante la edición de un `BORRADOR` sin `fecha_tope` vale cero; toda Tarea publicada tiene fecha y, si no está cumplida, se calcula contra `fecha_referencia`; con Tarea cumplida se usa `fecha_cumplimiento` como corte. La aprobación posterior no suma atraso. La anulación no reescribe fechas ni elimina el atraso histórico, y la reactivación no recalcula fechas.
 - `MiniTarea`: mantiene una persona única y estado hecho/no hecho; no pondera el avance y no se fusiona con `Hito`. Crear, cerrar y reabrir mantienen Empresa activa y autorización de Tarea en backend. `MiniTareaEvento` es el historial mínimo exclusivamente funcional de cierres/reaperturas. Mientras exista, `persona` participa funcionalmente aunque la MiniTarea esté hecha; al eliminarse desaparece esa fuente. T105 no agrega campos, modelos ni migraciones.
-- `HitoHistorial`: historial específico append-only con `hito`, `tipo_evento`, `usuario`, fecha/hora, JSON anterior/nuevo y motivo cuando corresponda. Cubre creación, cambios de nombre/cumplimiento/peso/responsable, anulación, reactivación y completitud (`COMPLETADO`); conserva actividad histórica aunque el cumplimiento vuelva a `0`. `COMPLETADO` referencia la reseña y la evidencia, sin duplicar archivos. T134.4B solo elimina físicamente un Hito no completado cuyo único evento es CREACION, sin evidencia; elimina esa creación sin evento de auditoría ficticio. Si existe otra actividad o evidencia, Eliminar anula lógicamente y conserva el agregado.
+- `HitoHistorial`: historial específico append-only con `hito`, `tipo_evento`, `usuario`, fecha/hora, JSON anterior/nuevo y motivo cuando corresponda. Cubre creación, cambios de nombre/cumplimiento/peso/responsable, anulación, reactivación y completitud (`COMPLETADO`); conserva actividad histórica aunque el cumplimiento vuelva a `0`. `COMPLETADO` referencia la reseña y la evidencia, sin duplicar archivos. T134.4B solo elimina individualmente un Hito no completado cuyo único evento es CREACION, sin evidencia; elimina esa creación sin evento de auditoría ficticio. Si existe otra actividad o evidencia, la operación individual anula lógicamente y conserva el agregado.
 - La reasignación de Hito se resuelve en `HitoHistorial` como fuente auditable única, sin reutilizar físicamente `TareaReasignacion`.
 - T134.4B mantiene Hito/HitoHistorial/HitoEvidencia/Avance y sus relaciones internas
   en el BASE_TAREAS resuelto, con identidad externa SYSTEM validada por IDs.
@@ -349,7 +354,7 @@ ledger de participantes: `PARTICIPANT_AUDIT_FOLLOWUP_REQUIRED = YES`.
 - La consulta de cumplimiento formal no requiere campos nuevos ni una copia de `HitoEvidencia`: lee `Hito.completado`, `responsable`, `completado_por`, `fecha_completado`, `resena_cierre` y la relación `HitoEvidencia` `0..N`. `HitoHistorial` permanece como auditoría y no es la fuente primaria para reconstruir estos datos.
 - La consulta solo lectura distingue `EvidenciaCierre` de Tarea de `HitoEvidencia` de Hito; para cada evidencia muestra formato, archivo o URL, usuario y fecha. No agrega una relación ni entidad paralela para la vista.
 - Anular un Hito completado conserva todos sus campos de completitud, evidencias e historial; únicamente deja de participar en el avance ponderado y de operar como Hito vigente. El responsable exclusivo del Hito no puede anularlo por ese rol. Al reactivar un Hito anulado se restaura exactamente su estado funcional previo: si estaba pendiente vuelve pendiente y si estaba completado vuelve completado, conservando `completado`, `cumplimiento`, `completado_por`, `fecha_completado`, `resena_cierre` y todas sus `HitoEvidencia`. La reactivación solo limpia `anulado`, no exige una nueva completitud ni elimina, recrea, duplica o degrada evidencias.
-- Un Hito sin actividad histórica puede eliminarse físicamente. Un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica debe conservarse con `anulado=True`; anular preserva datos e historial, lo excluye del avance y de asignaciones pendientes, y lo mantiene disponible para historial/consulta. Reactivar limpia solo `anulado`, conserva responsable, cumplimiento, peso e historial y lo reincorpora al avance y asignaciones activas.
+- Un Hito sin actividad histórica puede eliminarse físicamente de forma individual. Un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica debe conservarse con `anulado=True`; anular preserva datos e historial, lo excluye del avance y de asignaciones pendientes, y lo mantiene disponible para historial/consulta. Reactivar limpia solo `anulado`, conserva responsable, cumplimiento, peso e historial y lo reincorpora al avance y asignaciones activas. La eliminación lógica administrativa de FR-R06…FR-R17 conserva físicamente el agregado Hito y no cambia la operación individual.
 - Al introducir `Hito.anulado`, los Hitos históricos existentes se consideran inicialmente no anulados salvo evidencia contractual en contrario.
 - Los Hitos históricos existentes sin responsable requieren una estrategia de migración segura posterior. La implementación futura debe detenerse/reportar ante esos registros y no puede asignar automáticamente el responsable de la Tarea, creador, administrador ni otro usuario sin autorización explícita.
 - `DocumentoTarea`: tipo, archivo o URL, fechas informativas, usuario y estado.
@@ -585,7 +590,7 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 
 | Entidad | Campos y reglas contractuales |
 |---|---|
-| `Comentario` | `tarea` FK obligatoria a `Tarea` (`on_delete=PROTECT`); `autor` FK obligatoria a `User` (`on_delete=PROTECT`); `contenido` opcional (`blank=True`, `default=""`); `created_at`, `updated_at`; `oculto` booleano, default `False`. Servicio exige texto no vacío o al menos un adjunto. No representa eventos automáticos ni tiene eliminación física. |
+| `Comentario` | `tarea` FK obligatoria a `Tarea` (`on_delete=PROTECT`); `autor` FK obligatoria a `User` (`on_delete=PROTECT`); `contenido` opcional (`blank=True`, `default=""`); `created_at`, `updated_at`; `oculto` booleano, default `False`. Servicio exige texto no vacío o al menos un adjunto. No representa eventos automáticos ni tiene eliminación física individual; la eliminación lógica administrativa conserva el Comentario y sus relaciones conforme a FR-R06…FR-R17. |
 | `ComentarioAdjunto` | Relación actual única entre `Comentario` y `DocumentoTarea`, con protección ante borrado del documento; cada documento debe pertenecer a la misma Tarea. El servicio valida máximo cinco adjuntos. Quitar esta relación no elimina `DocumentoTarea`. |
 | `ComentarioVersion` | FK a `Comentario`; `evento` (`CREADO`, `EDITADO`, `OCULTADO`, `RESTAURADO`); `numero_version` nullable para eventos de visibilidad; snapshot del contenido, actor, fecha/hora y `motivo` obligatorio para ocultar/restaurar; relaciones a `DocumentoTarea` vía `ComentarioVersionDocumento`. Unicidad de número por Comentario cuando exista. La primera versión de contenido es 1; cada edición agrega la siguiente sin sobrescribir anteriores. |
 | `ComentarioVersionDocumento` | Asociación inmutable de `ComentarioVersion` y `DocumentoTarea`, única por par y con `on_delete=PROTECT` sobre el documento; cada versión conserva el conjunto exacto de referencias y valida que cada documento pertenezca a la Tarea del Comentario. Las diferencias entre conjuntos consecutivos identifican documentos agregados/retirados junto al actor y fecha de la versión. No copia ni versiona archivos, bytes o metadatos del documento. |
@@ -594,7 +599,7 @@ Las notificaciones se refieren a la infraestructura existente de `notificaciones
 
 La lectura de Comentarios usa el cursor `comentario_leido_hasta`, ordenado por `(created_at, pk)`, para participantes funcionales efectivos: creador, responsable actual, participante explícito, responsable de Hito vigente o usuario asignado a una MiniTarea existente; las columnas `leido`/`fecha_lectura` existentes conservan su semántica general de Tarea y no se actualizan al abrir la Tarea ni al expandir la tarjeta. El contador se calcula sobre Comentarios posteriores al cursor, excluye los escritos por el lector y los que caen en un `ComentarioPausaLectura`, e incluye los ocultos pendientes. Las páginas se cargan cronológicamente en bloques de 20: con pendientes, la carga inicial comienza tras el cursor; sin pendientes, muestra las 20 más recientes. Puede recorrerse el historial anterior sin mover el cursor. El reconocimiento solo acepta y avanza por la siguiente página contigua realmente cargada, nunca por una página histórica/arbitraria. Los ocultos se entregan como tombstone neutro a quienes no pueden ver su contenido, para preservar orden, paginación, contador y primer pendiente; solo S ve contenido, adjuntos e historial ocultos. El responsable nuevo inicializa el cursor en el Comentario más reciente; si ya era participante explícito, conserva su cursor. La unión se deduplica por usuario. Un lector VICMEAS no vinculado puede ver el feed, pero no obtiene contador, badge, cursor ni reconocimiento de Comentarios. La inactividad no genera pendientes retroactivos al reactivarse.
 
-La edición la puede realizar solo el autor durante la primera hora desde `Comentario.created_at` original; el plazo no se renueva. Se pueden editar texto y conjunto de adjuntos; un Comentario oculto no se edita. Cada creación/edición conserva el texto y conjunto de referencias `DocumentoTarea` de esa versión. Esto no congela bytes ni metadatos mutables de `DocumentoTarea`, no duplica archivos ni reemplaza el historial documental. `DocumentoTarea` creado por el servicio existente obtiene historial `CREADO`, cuya FK `PROTECT` impide su borrado ordinario; el FK `PROTECT` de `ComentarioVersionDocumento` protege además toda referencia histórica. La edición que retira un adjunto solo elimina el vínculo actual y nunca llama a `DocumentoTarea.delete()`. Un cambio posterior del archivo/URL conserva la identidad del documento relacionado, pero no reconstruye su contenido anterior.
+La edición la puede realizar solo el autor durante la primera hora desde `Comentario.created_at` original; el plazo no se renueva. Se pueden editar texto y conjunto de adjuntos; un Comentario oculto no se edita. Cada creación/edición conserva el texto y conjunto de referencias `DocumentoTarea` de esa versión. Esto no congela bytes ni metadatos mutables de `DocumentoTarea`, no duplica archivos ni reemplaza el historial documental. `DocumentoTarea` creado por el servicio existente obtiene historial `CREADO`, cuya FK `PROTECT` impide su borrado individual ordinario; el FK `PROTECT` de `ComentarioVersionDocumento` protege además toda referencia histórica. La edición que retira un adjunto solo elimina el vínculo actual y nunca llama a `DocumentoTarea.delete()`. Un cambio posterior del archivo/URL conserva la identidad del documento relacionado, pero no reconstruye su contenido anterior. La eliminación lógica administrativa conserva físicamente el Comentario, DocumentoTarea y sus relaciones, sin alterar estas operaciones ordinarias.
 
 Ocultar cambia `Comentario.oculto=True`; restaurar lo vuelve a `False`. Solo S (`Permiso.supervisor`) puede realizar ambas acciones, con motivo obligatorio no vacío tras trim. Ambos eventos quedan en `ComentarioVersion` con actor, fecha/hora y motivo; no incrementan versión de contenido ni leído/no leído. El tombstone de la bitácora no revela contenido, adjuntos, actor, motivo ni versiones a usuarios no-S. El historial de un comentario visible sigue siendo visible al autor o S; el historial de un comentario oculto solo es visible a S, sujeto al acceso vigente a la Tarea.
 
@@ -687,9 +692,100 @@ mediante ORM y las relaciones existentes.
   borrador/publicada (FR-010).
 - `(empresa, fecha_creacion)` — orden del listado (más recientes primero).
 
+## Eliminación lógica administrativa definitiva del árbol de Tarea (2H.0.3)
+
+La autorización de eliminación física de 2H.0.2 queda sustituida. La eliminación
+administrativa vigente es lógica y definitiva funcionalmente: una marca independiente
+del lifecycle hace que la raíz y todos sus descendientes recursivos dejen de operar, pero
+ninguna Tarea, fila relacionada, relación jerárquica, documento, Comentario, historial,
+evidencia, reunión, cotización, TO-DO o archivo físico se elimina.
+
+La marca es independiente de `Tarea.estado` y `Tarea.anulada`. L1 implementa en
+`Tarea` `eliminada` (`BooleanField`, default `False`), `eliminada_en` (nullable),
+`eliminada_por` (FK nullable a Usuario, `PROTECT`) y `eliminacion_operacion_id`
+(`UUIDField` nullable, sin FK cross-table). La migración aditiva `0032` mantiene el
+valor falso y los metadatos nulos para las filas existentes. Un índice `(empresa,
+eliminada)` soporta aislamiento/listado y otro índice identifica las tareas de una
+operación. Una constraint exige que la marca y sus tres metadatos estén completos o
+todos vacíos. La operación conserva estados funcionales, fechas, avance, responsables,
+participantes, correlativos y relaciones históricos.
+
+La operación abarca raíz, descendientes, relaciones jerárquicas, participantes,
+asignaciones, Avance, Hitos e historiales/evidencias, MiniTareas y eventos,
+documentos/versiones/historiales, Comentarios/adjuntos/versiones/lecturas,
+reprogramaciones y through, cotizaciones, reuniones/agenda/participantes, enlaces,
+transiciones, cierres, snapshots y `TodoEvento`. Todo se conserva físicamente. Los
+registros externos y compartidos no se desvinculan ni modifican; si impiden garantizar
+la exclusión operacional del árbol, la operación se bloquea hasta aprobar una política
+segura.
+
+Usuarios, Empresas, Locales, Departamentos, Proveedores, catálogos, maestros y el TO-DO
+de origen con toda su información propia permanecen intactos conforme a FR-S06. La
+Tarea eliminada y sus descendientes dejan de aparecer en superficies operacionales y
+solo se consultan en una pantalla histórica administrativa de solo lectura, sujeta a
+autorización explícita y aislamiento por Empresa.
+
+### Ledger durable existente
+
+El ledger conserva la identidad y metadata de la operación. La eliminación lógica
+mantiene los registros canónicos en el Data Plane, por lo que la pantalla histórica
+consulta esos registros bajo autorización; el ledger no es un snapshot completo:
+
+- `TareaEliminacionOperacion`: `operation_id` UUID (PK), `actor_id`, `empresa_id`,
+  `root_task_id` y correlativo raíz como valores escalares, tipo/identidad/versión de
+  backend, fingerprint, resumen de dependencias, resultado, estados, intentos/ID de
+  auditoría y marcas de tiempo. `root_task_id` no es FK a `Tarea`, por lo que la operación
+  permanece asociada a la marca lógica. L1 añade `motivo` como `TextField` nullable para
+  no inventar motivos en filas históricas anteriores; cada operación lógica usa un motivo
+  obligatorio, no vacío tras trim, conservado en el ledger. La constraint impide confirmar
+  con `result_code=LOGICALLY_DELETED` un motivo nulo/vacío; la validación de espacios y la
+  provisión del motivo pertenecen al servicio transaccional L2. Los adaptadores ORM y
+  MYSQL_CONFIG leen/escriben el campo.
+- `TareaEliminacionElemento`: FK `operacion` con `PROTECT`, tipo de modelo e `object_id`
+  escalar. La restricción UNIQUE por operación/tipo/ID evita repetir elementos dentro
+  del mismo manifiesto; no es FK al objeto marcado. Las filas referenciadas permanecen
+  para consulta y no se reconstruyen desde snapshots del ledger.
+- `TareaEliminacionArchivo`: FK `operacion` con `PROTECT`, `storage_key`, nombre,
+  hash de referencia, estado, intentos, error y fechas. Registra referencias/limpieza,
+  no almacena bytes ni prueba por sí sola que el archivo sea exclusivo. El procedimiento
+  lógico conserva el archivo y no debe programar limpieza física ni presentar un estado
+  de limpieza como si el archivo hubiera sido borrado.
+
+Los estados de operación `PENDING`/`COMMITTED` pueden conservar su semántica de workflow:
+`COMMITTED` significa que las marcas lógicas y el ledger quedaron confirmados, no que se
+borraron filas. Auditoría y filesystem siguen siendo estados separados. El procedimiento
+lógico no debe encolar limpieza de archivos ni reutilizar `PENDING`/`COMPLETE`/`ERROR` como
+si los archivos se hubieran borrado; el uso del subledger de archivos para referencias
+retenidas queda pendiente de diseño técnico.
+Para una operación lógica, `file_cleanup_status` debe ser `NOT_REQUIRED`; no se encolan
+filas de limpieza ni se presentan estados `COMPLETE` o `ERROR` de borrado físico.
+
+El `result_code="DELETED"` del executor WIP conserva su semántica física y no se usa para
+la operación lógica. El código inequívoco `LOGICALLY_DELETED` usa el campo existente, sin
+añadir estados. `audit_event_id` es escalar, no FK cross-database. La auditoría central es
+durable separada; la correlación por UUID no implica deduplicación si la API central no
+la garantiza.
+
+Para `MYSQL_CONFIG`, la evolución existente se representa en
+`tareas/sql/logical_deletion_schema.sql` y se expone mediante una previsualización
+metadata-only. La previsualización no ejecuta DDL; las bases reales requieren una
+autorización y ejecución posterior. La constraint SQL puede no ser aplicada por motores
+MySQL antiguos; los servicios deben validar la consistencia de la marca y el motivo.
+
+Las marcas lógicas de la raíz y sus descendientes, y la actualización del ledger,
+deben compartir una única transacción operacional. Un rollback conserva el árbol
+completo en su visibilidad anterior. No se limpian archivos antes ni después del commit:
+permanecen físicamente y con sus relaciones. La auditoría central ocurre después del
+commit y no se declara atómica con BASE_TAREAS.
+
 ## Límites y fuera de alcance
 
-- No hay eliminación física; la anulación es un flag persistente con auditoría.
+- Ninguna Tarea o descendiente se elimina físicamente mediante la operación administrativa.
+  La eliminación lógica definitiva queda autorizada en FR-R06…FR-R17, pero sus marcas,
+  filtros y pantalla histórica están en fases separadas; L1 implementa únicamente
+  metadatos, ledger y preparación de esquema.
+- No existe restauración de tareas eliminadas. Reactivar una tarea anulada no elimina ni
+  cambia la marca conceptual de eliminación.
 - No hay usuarios externos ni enlaces públicos.
 - No hay plantilla de hitos ni vencimiento automático de documentos.
 - Local permanece `LEGACY API PENDIENTE`; no se modelan tabla, ID o elegibilidad cerrada.

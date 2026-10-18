@@ -18,6 +18,7 @@ from tareas.services.deletion_ledger import (
     DeletionLedgerBackendError,
     DeletionLedgerConflict,
     DeletionLedgerError,
+    DeletionLedgerSchemaError,
     DeletionLedgerStateError,
     DeletionOperationInput,
     DjangoDeletionLedgerStorage,
@@ -25,15 +26,23 @@ from tareas.services.deletion_ledger import (
     MySQLDeletionLedgerUnitOfWork,
     _OPERATION_COLUMNS,
     _check_mysql_transactional_tables,
+    _required_logical_deletion_columns,
 )
 from tareas.tests.factories import create_empresa, create_tarea, create_user
 
 
 class _MetadataCursor:
-    def __init__(self, database_name="tareas", engine="InnoDB", support="YES"):
+    def __init__(
+        self,
+        database_name="tareas",
+        engine="InnoDB",
+        support="YES",
+        missing_columns=(),
+    ):
         self.database_name = database_name
         self.engine = engine
         self.support = support
+        self.missing_columns = set(missing_columns)
         self.rows = ()
         self.row = None
 
@@ -43,6 +52,13 @@ class _MetadataCursor:
         elif "information_schema.tables" in sql:
             names = params[1:]
             self.rows = tuple((name, self.engine) for name in names)
+        elif "information_schema.columns" in sql:
+            self.rows = tuple(
+                (table_name, column_name)
+                for table_name, columns in _required_logical_deletion_columns().items()
+                for column_name in columns
+                if (table_name, column_name) not in self.missing_columns
+            )
         else:
             self.row = (self.support,)
 
@@ -57,10 +73,17 @@ class _MetadataCursor:
 
 
 class _MetadataConnection:
-    def __init__(self, engine="InnoDB", support="YES", database_name="tareas"):
+    def __init__(
+        self,
+        engine="InnoDB",
+        support="YES",
+        database_name="tareas",
+        missing_columns=(),
+    ):
         self.database_name = database_name
         self.engine = engine
         self.support = support
+        self.missing_columns = set(missing_columns)
         self.begin_count = 0
         self.commit_count = 0
         self.rollback_count = 0
@@ -70,6 +93,7 @@ class _MetadataConnection:
             database_name=self.database_name,
             engine=self.engine,
             support=self.support,
+            missing_columns=self.missing_columns,
         )
 
     def begin(self):
@@ -104,6 +128,7 @@ class DeletionLedgerTests(TestCase):
             fingerprint="a" * 64,
             dependency_summary={"tareas.tarea": 1},
             operation_id=uuid4(),
+            motivo="Resguardo administrativo autorizado",
         )
         self.items = (DeletionInventoryItem("tareas.tarea", self.task.pk),)
         self.files = (DeletionFileReference("default", "tareas/test/privado.pdf"),)
@@ -129,7 +154,12 @@ class DeletionLedgerTests(TestCase):
             )
 
         self.assertEqual(record.operation_id, self.operation.operation_id)
+        self.assertEqual(record.motivo, self.operation.motivo)
         self.assertEqual(TareaEliminacionOperacion.objects.count(), 1)
+        self.assertEqual(
+            TareaEliminacionOperacion.objects.get().motivo,
+            "Resguardo administrativo autorizado",
+        )
         self.assertEqual(TareaEliminacionElemento.objects.count(), 1)
         self.assertEqual(TareaEliminacionArchivo.objects.count(), 1)
 
@@ -142,6 +172,23 @@ class DeletionLedgerTests(TestCase):
             dependency_summary={"tareas.tarea": 1},
             operation_id=self.operation.operation_id,
         )
+        with self.storage.atomic() as unit:
+            with self.assertRaises(DeletionLedgerConflict):
+                unit.create_pending(conflicting)
+
+    def test_reusing_uuid_with_different_reason_is_a_payload_conflict(self):
+        self._persist_pending()
+        conflicting = DeletionOperationInput(
+            actor_id=self.operation.actor_id,
+            empresa_id=self.operation.empresa_id,
+            root_task_id=self.operation.root_task_id,
+            root_correlativo=self.operation.root_correlativo,
+            fingerprint=self.operation.fingerprint,
+            dependency_summary=self.operation.dependency_summary,
+            operation_id=self.operation.operation_id,
+            motivo="Motivo diferente",
+        )
+
         with self.storage.atomic() as unit:
             with self.assertRaises(DeletionLedgerConflict):
                 unit.create_pending(conflicting)
@@ -274,6 +321,15 @@ class DeletionLedgerTests(TestCase):
                 _MetadataConnection(database_name="other_database"),
                 "tareas",
             )
+        required_columns = _required_logical_deletion_columns()
+        first_table, first_columns = next(iter(required_columns.items()))
+        with self.assertRaises(DeletionLedgerSchemaError):
+            _check_mysql_transactional_tables(
+                _MetadataConnection(
+                    missing_columns={(first_table, first_columns[0])}
+                ),
+                "tareas",
+            )
 
     def test_mysql_adapter_uses_explicit_transaction_and_rolls_back_failures(self):
         connection_config = SimpleNamespace(
@@ -328,6 +384,7 @@ class DeletionLedgerTests(TestCase):
             "created_at": now,
             "updated_at": now,
             "committed_at": None,
+            "motivo": operation.motivo,
         }
         row = tuple(row_values[name] for name in _OPERATION_COLUMNS)
         root_cursor = MagicMock()
@@ -345,6 +402,12 @@ class DeletionLedgerTests(TestCase):
 
         self.assertEqual(record.operation_id, operation.operation_id)
         self.assertEqual(record.status, "PENDING")
+        self.assertEqual(record.motivo, operation.motivo)
         statements = [entry.args[0] for entry in unit._execute.call_args_list]
         self.assertIn("FOR UPDATE", statements[0])
         self.assertIn("ON DUPLICATE KEY UPDATE", statements[1])
+        self.assertIn("`motivo`", statements[1])
+        self.assertEqual(
+            unit._execute.call_args_list[1].args[1][-1],
+            operation.motivo,
+        )

@@ -75,6 +75,10 @@
 - T105 no agrega modelos, campos, relaciones persistentes ni migraciones. T104 y sus
 	eventos, comentarios automáticos, adjuntos, reapertura y trazabilidad permanecen
 	cerrados y sin cambios.
+- FR-F57 y FR-F58 gobiernan la eliminación individual ordinaria de MiniTarea. La
+	eliminación lógica administrativa del árbol definida en FR-R07…FR-R17 conserva la
+	MiniTarea y todos sus eventos; no amplía ni altera los permisos o reglas del endpoint
+	individual.
 
 **Plan de pruebas T105**: exigir pruebas de dashboard para asignado visible, no asignado
 ausente, aislamiento de Empresa, pendientes y hechas visibles, y Tarea anulada excluida;
@@ -95,6 +99,33 @@ automático, adjuntos e historial de T104 sin cambios.
 - Q: ¿Cómo debe calcularse exactamente el avance ponderado cuando los hitos tienen pesos distintos y se agrega un nuevo hito? → A: Los pesos son relativos y se normalizan automáticamente; el avance es la suma de (cumplimiento × peso) dividida por la suma de pesos, redistribuyéndose proporcionalmente al agregar hitos.
 - Q: ¿Cuál debe ser el catálogo cerrado de KPI disponible en los dashboards y repetido en cada dimensión permitida? → A: Total de tareas por estado; tareas atrasadas; tareas próximas a vencer; tareas sin movimiento; tareas esperando aprobación; carga abierta por responsable; porcentaje de cumplimiento; tiempo promedio de cierre.
 - Q: ¿Debe el umbral de similitud del 80% ser configurable y, si lo es, cuál debe ser su alcance? → A: Configurable por empresa, con valor predeterminado de 80%, modificación restringida a usuarios autorizados y aplicación a nuevas evaluaciones de similitud.
+
+### Session 2026-10-16 — Enmienda 2H.0.2 (supersedida)
+
+- El propietario autorizó entonces la eliminación física administrativa del árbol
+  completo de Tareas. Esa autorización queda sustituida por la decisión 2H.0.3 que
+  sigue; no es una política vigente ni autoriza ejecutar el executor físico WIP.
+- Las reglas ordinarias de eliminación individual de Hitos, MiniTareas y Comentarios,
+  así como la anulación/reactivación lógica de Tareas, no cambiaron con esa decisión.
+
+### Session 2026-10-16 — Enmienda 2H.0.3: eliminación lógica definitiva
+
+- El propietario sustituye la autorización 2H.0.2 por la **eliminación lógica definitiva
+  de la raíz y todos sus descendientes, sin restauración y con consulta histórica de solo
+  lectura**. No se elimina físicamente ninguna Tarea, descendiente, relación, fila
+  operacional ni archivo físico mediante este procedimiento.
+- La raíz y todo su árbol desaparecen de las superficies operacionales y no admiten
+  mutaciones ni reactivación. Los registros, estados, relaciones, documentos, Comentarios,
+  historiales, evidencias, TO-DO y archivos se conservan para trazabilidad e historial.
+- La decisión es exclusivamente funcional/documental. No autoriza implementación,
+  migraciones, cambios de schema, SQL ni endpoints. La anulación/reactivación vigente y
+  las reglas ordinarias de eliminación individual de Hitos, MiniTareas y Comentarios no
+  cambian.
+- La pantalla histórica será de solo lectura y tendrá una autorización VICMEAS
+  administrativa explícita. La capacidad exacta para consultarla, separada del permiso S
+  de eliminación, queda pendiente de aprobación funcional. También quedan pendientes la
+  obligatoriedad/persistencia de un motivo de eliminación y la inclusión de tareas
+  eliminadas en KPI o reportes históricos; no se infieren de los contratos actuales.
 
 ---
 
@@ -369,7 +400,7 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-F13**: La reasignación de responsable de Hito está permitida y MUST ser auditada con Hito, responsable anterior, responsable nuevo, usuario que reasigna, fecha/hora y motivo obligatorio no vacío tras trim. El nuevo responsable MUST estar activo y ser válido para la Empresa de la Tarea. La auditoría debe usar historial propio de Hito, no `TareaReasignacion` por analogía.
 - **FR-F14**: Todo cambio relevante de Hito MUST conservar historial específico de creación, nombre, cumplimiento, peso, responsable, anulación, reactivación y completitud, incluyendo usuario, fecha/hora, valores anterior/nuevo y motivo cuando aplique. El historial MUST permitir determinar actividad/progreso histórico aunque el cumplimiento actual vuelva a `0`. La excepción de eliminación física de FR-F15 elimina únicamente el Hito sin actividad y su creación; no genera un evento destinado a desaparecer por cascade ni pretende auditoría persistente fuera del agregado.
 - **FR-F15**: T134.4B permite eliminación física exclusivamente si el historial contiene solo `CREACION`, no existe actividad posterior, completitud ni evidencia. Cualquier otro caso convierte `Eliminar` en anulación lógica, conserva historial/evidencias y no crea otra tabla de auditoría ni `TareaTransicion`.
-- **FR-F16**: Un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica MUST conservarse mediante anulación lógica (`anulado=True`); no se elimina físicamente. El Hito anulado conserva datos e historial, deja de ser pendiente operativo y no aparece como asignación pendiente, pero permanece disponible en historial/consulta.
+- **FR-F16**: En la operación individual ordinaria, un Hito con progreso, cambios relevantes, reasignaciones u otra actividad histórica MUST conservarse mediante anulación lógica (`anulado=True`); no se elimina físicamente. El Hito anulado conserva datos e historial, deja de ser pendiente operativo y no aparece como asignación pendiente, pero permanece disponible en historial/consulta. La eliminación lógica administrativa del árbol de FR-R06…FR-R17 también conserva físicamente el Hito y no cambia esta operación individual.
 - **FR-F17**: Se permite reactivar un Hito anulado. Reactivar MUST limpiar únicamente la condición de anulación, conservar responsable, cumplimiento, peso e historial, registrar el evento y reincorporar el Hito al avance ponderado y a la asignación activa; no debe resetear cumplimiento ni peso.
 - **FR-F18**: Solo los Hitos operativos (`anulado=False`) participan en el avance ponderado. Crear, editar cumplimiento/peso, anular, reactivar o eliminar físicamente un Hito MUST recalcular el `Avance` ponderado de la Tarea cuando corresponda, usando `sum(cumplimiento * peso) / sum(pesos)` sobre Hitos operativos. MiniTarea sigue fuera de la fórmula.
 - **FR-F19**: La edición, reasignación, anulación/reactivación y eliminación de Hitos MUST pasar por la política de autorización vigente de `tareas`; no se crean perfiles nuevos. La autorización canónica queda definida en FR-F20…FR-F25.
@@ -398,6 +429,11 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-F42**: Anular un Hito completado conserva `completado=True`, `completado_por`, `fecha_completado`, `resena_cierre`, todas sus `HitoEvidencia` y `HitoHistorial`. La anulación solo lo excluye del avance ponderado y de la operación vigente; no borra ni reemplaza la trazabilidad de completitud.
 - **FR-F43**: Los Hitos anulados, incluidos los completados que luego se anulen, quedan excluidos del cálculo de avance ponderado conforme a FR-F18. No se redefine la fórmula vigente.
 - **FR-F44**: Al reactivar un Hito anulado se restaura exactamente su estado funcional previo a la anulación. Si estaba pendiente, vuelve pendiente; si estaba completado, vuelve completado conservando `completado`, `cumplimiento`, `completado_por`, `fecha_completado`, `resena_cierre` y todas sus `HitoEvidencia`. La reactivación solo limpia `anulado`, no exige completar nuevamente, no elimina, recrea, duplica ni degrada evidencias, y registra el evento de reactivación en `HitoHistorial`.
+
+FR-F14…FR-F44 definen las operaciones individuales ordinarias de Hito. La
+eliminación lógica administrativa del árbol bajo FR-R06…FR-R17 marca la Tarea y
+descendientes como eliminados funcionalmente, pero conserva cada Hito, historial y
+evidencia. No altera ni amplía el borrado físico individual limitado por FR-F15.
 
 #### T134.4B — Hitos y Avance en almacenamiento configurable
 
@@ -433,6 +469,11 @@ No se agregan REOPEN, notificaciones ni migraciones.
 - **FR-F56 — T105**: En el dashboard, MiniTareas de Tareas `ACTIVA` o `GESTION` son operativas según autorización; las de `PENDIENTE_APROBACION_CIERRE` o `CERRADA` son visibles de solo lectura; las de Tareas anuladas no se muestran. La MiniTarea no se convierte en Tarea completa ni adquiere campos propios.
 - **FR-F57 — T105**: Una MiniTarea solo puede eliminarse físicamente cuando `hecho=False` y no existe ningún `MiniTareaEvento`. Si está hecha, fue cerrada/reabierta o tiene cualquier evento, debe rechazarse de forma controlada. La validación precede a `delete`; no se borran ni alteran eventos, Comentarios, `DocumentoTarea` o `ComentarioAdjunto`.
 - **FR-F58 — T105**: El borrado de MiniTarea requiere `Tareas` + `modificar` y que el actor sea responsable principal de la Tarea madre o supervisor `S`. La persona asignada, un participante ordinario, el creador sin responsabilidad principal y el responsable de Hito no pueden eliminar por esas relaciones. La UI usa modal Bootstrap y POST protegido con CSRF; el backend revalida Empresa, Tarea, autorización, actor y regla de historial.
+
+FR-F45…FR-F58 conservan su semántica para las operaciones ordinarias sobre
+MiniTarea. La eliminación lógica administrativa bajo FR-R06…FR-R17 conserva las
+MiniTareas y sus eventos; no amplía el permiso ni modifica las condiciones del endpoint
+individual.
 
 **Key Entities — F**: Avance, Hito (responsable, anulado, completado, completado_por, fecha_completado, resena_cierre, peso, cumplimiento, fecha_creacion), HitoEvidencia, HitoHistorial, Mini-tarea (hecho/no hecho, persona), MiniTareaEvento (cierre/reapertura, actor, fecha/hora, comentario y destinatarios solicitados de comunicación).
 
@@ -1110,14 +1151,78 @@ notificaciones y email existentes.
 
 ---
 
-## R. Exclusiones Actuales
+## R. Exclusiones y eliminación lógica administrativa definitiva
 
 - **FR-R01**: Sin usuarios externos por ahora.
 - **FR-R02**: Sin plantilla de hitos por ahora.
 - **FR-R03**: Sin vencimiento automático de documentos (vencimiento informativo solamente).
 - **FR-R04**: Sin prioridad "baja" (solo Simple/Normal/Urgente/Crítica).
 - **FR-R05**: Integración real con legacy de LOCALES queda fuera de alcance por P1; la integración ERP de PROVEEDORES queda fuera de alcance por P2, sin bloquear el maestro local.
-- **FR-R06**: Sin eliminación física de tareas (la anulación usa el flag `anulada`, ver E; no se borran registros ni se cambian estados).
+- **FR-R06 — Anulación y eliminación son distintas**: La anulación ordinaria continúa
+  cambiando únicamente `Tarea.anulada` conforme a E y conserva su reactivación vigente.
+  La eliminación lógica administrativa es una marca independiente, definitiva
+  funcionalmente y sin restauración. No modifica los estados de ciclo de vida y no es
+  una anulación.
+- **FR-R07 — Alcance lógico del árbol**: Al eliminar administrativamente una raíz, la
+  raíz y todos sus descendientes recursivos MUST quedar eliminados lógicamente en una
+  sola operación todo-o-nada. La pertenencia se determina por la jerarquía vigente y se
+  conserva para consulta histórica; no se eliminan ni desvinculan filas o relaciones.
+- **FR-R08 — Autorización**: Se requiere usuario autenticado y activo, sesión con Empresa
+  activa Base 00 y VICMEAS `supervisor` (S) explícito para la Vista `Tareas` en Base 00.
+  El backend valida autorización, empresa y pertenencia antes de consultar o revelar el
+  inventario sensible. La confirmación es explícita e informada; no se crean permisos ni
+  bypasses nuevos.
+- **FR-R09 — Conservación integral**: La operación conserva físicamente todas las Tareas
+  afectadas y sus registros operacionales: jerarquía, participantes, avances, Hitos,
+  MiniTareas, documentos, Comentarios, historiales, lecturas, reprogramaciones,
+  cotizaciones, reuniones, enlaces, transiciones, cierres, snapshots, eventos y
+  asociaciones. También conserva Usuarios, Empresas, Locales, Departamentos, Proveedores,
+  catálogos, maestros, TO-DO y su información propia, y datos de otras aplicaciones.
+  El ledger y la auditoría registran identificadores y metadata conforme a sus capacidades;
+  no se afirma que mantengan snapshots completos del contenido.
+- **FR-R10 — Referencias externas**: No se modifica ni desvincula automáticamente una
+  tarea o registro externo. Las referencias permanecen como historial; si impiden excluir
+  de forma segura el árbol de las operaciones vigentes, la operación MUST bloquearse
+  hasta que exista una política segura aprobada. Una referencia no verificable es blocker.
+- **FR-R11 — Reuniones y relaciones compartidas**: Reuniones, agendas, participantes,
+  similitudes, relaciones de origen y otras referencias permanecen intactas. No se
+  eliminan reuniones ni asociaciones compartidas. La representación operacional y
+  histórica debe distinguir las Tareas eliminadas sin alterar el registro compartido.
+- **FR-R12 — Archivos y documentos**: Se conservan todos los registros documentales,
+  referencias y archivos físicos, incluso si son compartidos o no se puede demostrar su
+  exclusividad. No se programa limpieza de archivos ni se llama a `storage.delete()`.
+  La consulta histórica respeta los permisos existentes de documentos y aislamiento
+  multiempresa.
+- **FR-R13 — Preview y confirmación**: Antes de confirmar se informa raíz, descendientes,
+  cantidades por tipo, archivos, bloqueos y advertencia de irreversibilidad funcional.
+  La confirmación se vincula a usuario, empresa, raíz, backend/configuración y fingerprint,
+  tiene caducidad y se revalida bajo locks. Un preview vencido, alterado o reutilizado no
+  autoriza la operación.
+- **FR-R14 — Atomicidad, idempotencia y recuperación**: Las marcas lógicas de raíz y
+  descendientes, el ledger y sus manifiestos se persisten en una única transacción
+  operacional; cualquier falla previa al commit conserva íntegramente la visibilidad y
+  los datos anteriores. El UUID es idempotente; un payload distinto o una segunda
+  operación contradictoria sobre la raíz se rechaza. El commit incierto se reconcilia
+  por UUID y nunca se restaura falsamente una operación confirmada. El motivo no vacío
+  es obligatorio para una operación lógica y se conserva permanentemente en el ledger.
+  La auditoría central es posterior y recuperable; no se promete atomicidad distribuida.
+- **FR-R15 — Rechazo seguro y compatibilidad**: Permiso insuficiente, empresa distinta de
+  Base 00, referencias externas que comprometen la operación, inventario incompleto,
+  inconsistencias, cambios concurrentes o falta de recuperación producen rechazo sin
+  cambios parciales. Las FK permanecen activas. Las reglas ordinarias de anulación,
+  reactivación y eliminación individual de Hitos, MiniTareas y Comentarios no cambian.
+- **FR-R16 — Consulta histórica de solo lectura**: Las Tareas eliminadas y sus
+  descendientes solo se consultan desde una superficie histórica separada, estrictamente
+  de lectura. No permite editar, publicar, cerrar, anular, reactivar, reasignar,
+  reprogramar, comentar, adjuntar documentos, crear descendientes, cambiar participantes
+  ni restaurar. La vista independiente `Tareas eliminadas` requiere VICMEAS `ingresar` (I)
+  explícito. El permiso S para eliminar no concede acceso de consulta histórica. Las
+  Tareas eliminadas quedan excluidas de KPI operacionales y reportes históricos habituales;
+  solo aparecen en la consulta histórica autorizada.
+- **FR-R17 — Sin restauración**: La eliminación lógica es definitiva desde el punto de
+  vista funcional. Ningún endpoint, servicio, permiso ni interfaz permite restaurar o
+  reactivar una Tarea eliminada. Reactivar una Tarea anulada conforme a E no restaura ni
+  cambia la marca independiente de eliminación.
 
 ---
 
@@ -1133,7 +1238,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - Edición por formulario sin estado → **FR-C03** (estado no editable por formulario).
 - Listar borrador/publicada → **FR-C01**.
 - VICMEAS: `Permiso.ver` para menú y los flags funcionales para autorización y 403 → **FR-P02**.
-- Eliminación fuera de alcance → **FR-R06**.
+- Anulación/reactivación ordinaria y eliminación lógica administrativa definitiva → **FR-R06…FR-R17**.
 
 ## Success Criteria
 
@@ -1148,6 +1253,25 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - **SC-009**: Advertencia de similitud al publicar cuando coincidencia ≥ 80%.
 - **SC-010**: Correlativo borrador `B*` se convierte a activo `A*` al publicar, sin duplicar la tarea.
 - **SC-011**: Comentarios aplican pertenencia/VICMEAS, estados mutables, motivos S, cinco adjuntos, bloques de 20, historial/versiones, cursor parcial, contador `9+`, actividad propia, altas/desvínculos e inactividad sin alterar el lifecycle ni la evidencia formal.
+- **SC-012**: Solo un usuario autenticado/activo con S explícito en `Tareas` y sesión en
+  Empresa Base 00 puede iniciar la operación; la denegación precede al inventario sensible.
+- **SC-013**: La raíz y todos sus descendientes quedan marcados lógicamente de forma
+  atómica; una falla/rollback no deja marcas parciales.
+- **SC-014**: Ninguna fila operacional, relación, historial, documento o archivo físico
+  se elimina por esta operación; ledger y auditoría conservan la trazabilidad disponible
+  junto con el motivo obligatorio.
+- **SC-015**: Las Tareas eliminadas desaparecen de listados y operaciones normales en
+  ambos backends y se excluyen de KPI operacionales/reportes habituales; no reciben
+  nuevas mutaciones ni generan actividad operacional.
+- **SC-016**: La pantalla histórica permite consulta de solo lectura de raíz, descendientes,
+  estado original y registros relacionados con permiso VICMEAS I explícito; no expone
+  acciones de escritura o restauración.
+- **SC-017**: Una Tarea eliminada no puede restaurarse ni reactivarse; anulación y
+  reactivación ordinarias y eliminaciones individuales vigentes conservan su semántica.
+- **SC-018**: Las solicitudes concurrentes no producen marcas parciales ni resultados
+  contradictorios; el mismo UUID no repite la operación.
+- **SC-019**: Django ORM y MYSQL_CONFIG mantienen equivalencia de aislamiento, visibilidad
+  operacional, consulta histórica y ledger.
 
 ## Assumptions
 

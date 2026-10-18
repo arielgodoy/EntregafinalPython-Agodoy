@@ -350,13 +350,27 @@ Product Owner y no se repitió durante este cierre.
 
 ## Límites y bloqueos
 
-- No hay eliminación física; se usa anulación auditada.
+- La anulación ordinaria de Tareas sigue siendo reactiva según su contrato. La eliminación
+  administrativa definida en FR-R06…FR-R17 es una marca lógica definitiva independiente,
+  sin restauración y con consulta histórica de solo lectura. Sus campos, filtros, pantalla
+  y rutas aún no están implementados; no asumir que existe un POST.
 - P1 Local: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN; permanece `LEGACY API PENDIENTE`.
 - P2 Proveedor: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN para integración,
   validación y conciliación con ERP legacy; el maestro Django local no queda bloqueado.
 - No hay usuarios externos, plantilla de hitos ni vencimiento automático de documentos.
 - El alta inicial ya está resuelta; cualquier modificación futura de `AppDocs/*` requiere
    autorización expresa.
+
+### Eliminación lógica administrativa — verificación futura
+
+L1 implementa los campos, ledger y preflight del esquema. Las verificaciones futuras de
+L2–L6 comprobarán en ambos backends que la eliminación marca atómicamente raíz y
+descendientes sin borrar filas, relaciones ni archivos; que el árbol desaparece de
+listados, dashboards y mutaciones operacionales; que una falla deja todo el árbol visible;
+y que la pantalla histórica, con permiso VICMEAS I explícito, muestra el estado original
+en modo solo lectura, sin restauración. Las tareas eliminadas se excluyen de KPI
+operacionales y reportes habituales. No ejecutar DDL sobre BASE_TAREAS productivo ni
+borrar archivos físicos.
 
 ## Verificación de cierre
 

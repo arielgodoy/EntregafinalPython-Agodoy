@@ -16,6 +16,9 @@ from access_control.models import Empresa
 from settings.models import SettingsMySQLConnection
 
 
+LOGICAL_DELETION_RESULT_CODE = "LOGICALLY_DELETED"
+
+
 class FormatoArchivo(models.TextChoices):
     PDF = "PDF", "PDF"
     JPG = "JPG", "JPG"
@@ -171,6 +174,17 @@ class Tarea(models.Model):
     )
     correlativo = models.CharField(max_length=9)
     anulada = models.BooleanField(default=False)
+    eliminada = models.BooleanField(default=False)
+    eliminada_en = models.DateTimeField(null=True, blank=True)
+    eliminada_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        db_index=False,
+        related_name="tareas_eliminadas",
+    )
+    eliminacion_operacion_id = models.UUIDField(null=True, blank=True)
     fechas_pendientes_confirmacion = models.BooleanField(default=False)
     cierre_completado = models.BooleanField(default=False)
     requiere_evidencia_cierre = models.BooleanField(default=False)
@@ -241,6 +255,11 @@ class Tarea(models.Model):
             models.Index(fields=["empresa", "estado"]),
             models.Index(fields=["empresa", "fecha_creacion"]),
             models.Index(fields=["empresa", "correlativo"]),
+            models.Index(fields=["empresa", "eliminada"], name="tareas_emp_elim_idx"),
+            models.Index(
+                fields=["eliminacion_operacion_id"],
+                name="tareas_delop_task_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -276,6 +295,23 @@ class Tarea(models.Model):
                     )
                 ),
                 name="tareas_ambito_xor",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        eliminada=False,
+                        eliminada_en__isnull=True,
+                        eliminada_por__isnull=True,
+                        eliminacion_operacion_id__isnull=True,
+                    )
+                    | models.Q(
+                        eliminada=True,
+                        eliminada_en__isnull=False,
+                        eliminada_por__isnull=False,
+                        eliminacion_operacion_id__isnull=False,
+                    )
+                ),
+                name="tareas_elim_metadata_consistent",
             ),
         ]
 
@@ -395,6 +431,22 @@ class Tarea(models.Model):
         ):
             errores["departamento"] = (
                 "El Departamento debe pertenecer a la misma empresa que la tarea."
+            )
+
+        deletion_metadata = (
+            self.eliminada_en,
+            self.eliminada_por_id,
+            self.eliminacion_operacion_id,
+        )
+        if self.eliminada and any(value is None for value in deletion_metadata):
+            errores["eliminada"] = (
+                "Una tarea eliminada requiere fecha, actor y operación."
+            )
+        elif not self.eliminada and any(
+            value is not None for value in deletion_metadata
+        ):
+            errores["eliminada"] = (
+                "Los metadatos de eliminación requieren la marca eliminada."
             )
 
         if self.estado in {
@@ -1768,6 +1820,7 @@ class TareaEliminacionOperacion(models.Model):
     backend_config_version = models.CharField(max_length=64, blank=True, default="")
     fingerprint = models.CharField(max_length=64)
     dependency_summary = models.TextField(blank=True, default="{}")
+    motivo = models.TextField(null=True, blank=True)
     status = models.CharField(
         max_length=16,
         choices=Estado.choices,
@@ -1812,6 +1865,27 @@ class TareaEliminacionOperacion(models.Model):
                 name="tareas_delop_root_created_idx",
             ),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(result_code=LOGICAL_DELETION_RESULT_CODE)
+                    | (
+                        models.Q(motivo__isnull=False)
+                        & ~models.Q(motivo="")
+                    )
+                ),
+                name="tareas_delop_motivo_required",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.result_code == LOGICAL_DELETION_RESULT_CODE and (
+            not self.motivo or not self.motivo.strip()
+        ):
+            raise ValidationError(
+                {"motivo": "El motivo de eliminación es obligatorio."}
+            )
 
 
 class TareaEliminacionElemento(models.Model):

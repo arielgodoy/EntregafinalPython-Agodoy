@@ -213,11 +213,59 @@ proveedores Django distintos vigentes sin sumar rondas.
 - **Alternatives considered**: migrador externo o versionado SQL en T124-T130; diferidos
   a una task de evolución separada.
 
+### D23. Eliminación física administrativa del árbol (2H.0.2, supersedida)
+
+- **Decisión histórica**: el propietario autorizó en 2H.0.2 la eliminación física
+  administrativa de la raíz, descendientes y registros operacionales exclusivos.
+- **Estado actual**: esa decisión queda sustituida por D24/2H.0.3 y ya no es una
+  autorización funcional vigente. El executor físico WIP no debe ejecutarse ni
+  conectarse a una ruta HTTP. Se conserva la referencia histórica para trazabilidad.
+- La autorización anterior no cambió las reglas ordinarias de anulación/reactivación ni
+  las operaciones individuales de Hitos, MiniTareas y Comentarios.
+
+### D24. Eliminación lógica definitiva sin restauración (2H.0.3)
+
+- **Decisión funcional autorizada por el propietario**: eliminar lógicamente una raíz y
+  todos sus descendientes de forma atómica, sin restauración, conservando físicamente
+  todas las filas, relaciones, documentos, historiales, evidencias, reuniones, TO-DO,
+  archivos y datos de otras aplicaciones. Las tareas dejan de operar y pasan a una
+  superficie histórica de solo lectura.
+- **Boundary documental**: esta decisión reemplaza FR-R06…FR-R15 de 2H.0.2 y añade
+  FR-R16…FR-R17 para el contrato vigente de consulta histórica/no restauración. El
+  contrato vigente queda en FR-R06…FR-R17. No autoriza campos, migraciones, código, SQL, POST ni
+  cambios de conexiones. No modifica anulación/reactivación ordinarias ni eliminación
+  individual de Hitos, MiniTareas o Comentarios.
+- **Rationale**: preservar íntegramente datos e historial y reducir riesgo de pérdida,
+  manteniendo la separación entre lifecycle, anulación y eliminación funcional definitiva.
+- **Adaptación técnica pendiente**: revisar el ledger existente para que `COMMITTED` y el
+  resultado representen una marca lógica; el `result_code="DELETED"` del executor físico
+  no puede conservarse con semántica falsa. No agregar estados ni duplicar metadata.
+
+### D25. Autorización técnica L1 y decisiones funcionales confirmadas
+
+- **Decisiones aprobadas por el propietario**: la pantalla independiente `Tareas
+  eliminadas` requiere VICMEAS `ingresar` (I) explícito; eliminar requiere `supervisor`
+  (S) explícito en la Vista `Tareas` y Empresa Base 00; las tareas eliminadas se excluyen
+  de KPI operacionales y reportes históricos habituales; el motivo es obligatorio y
+  persistente; no existe restauración ni eliminación física administrativa.
+- **Autorización técnica L1**: implementar campos/metadatos del modelo, migración Django
+  aditiva, persistencia del motivo en ORM/MYSQL_CONFIG, SQL contractual y preflight
+  metadata-only. No autoriza aplicar DDL a BASE_TAREAS real, ejecutar el executor físico,
+  implementar el servicio transaccional L2 ni habilitar POST.
+- **Estado**: L1 queda implementada; el servicio transaccional, exclusión operacional,
+  consulta histórica e integración HTTP permanecen en sus fases futuras.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
 - P2: integración del maestro local de Proveedor con ERP: lookup, validación, identificador
   legacy, conciliación, sincronización y actualización.
+- Fase 2H.1 física: su objetivo quedó obsoleto funcionalmente por D24; el código WIP
+  permanece sin autorización de ejecución y no se considera una vía de borrado vigente.
+- Fase L1: implementada según D25; cualquier evolución de esquema en BASE_TAREAS real
+  requiere autorización y ejecución separadas.
+- Fases L2…L6: implementación futura no iniciada; el POST permanece bloqueado.
+- Habilitación de POST: gate futuro separado; permanece bloqueada y sin autorización.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
   ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
   autorización expresa.

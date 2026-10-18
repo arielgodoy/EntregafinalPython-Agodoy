@@ -59,6 +59,9 @@ SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "base_tareas_schema.
 DELETION_LEDGER_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "sql" / "deletion_ledger_schema.sql"
 )
+LOGICAL_DELETION_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "sql" / "logical_deletion_schema.sql"
+)
 
 
 EXPECTED_OPERATIONAL_MODELS = (
@@ -255,6 +258,115 @@ def _validate_deletion_ledger_statements(statements: list[str]) -> None:
         raise BaseTareasSchemaInstallError(
             "El esquema del ledger no contiene exactamente sus tres tablas."
         )
+
+
+def _validate_logical_deletion_statements(statements: list[str]) -> None:
+    task_table = apps.get_model("tareas", "Tarea")._meta.db_table
+    ledger_table = apps.get_model(
+        "tareas",
+        "TareaEliminacionOperacion",
+    )._meta.db_table
+    expected_columns = {
+        task_table: {
+            "eliminada",
+            "eliminada_en",
+            "eliminada_por_id",
+            "eliminacion_operacion_id",
+        },
+        ledger_table: {"motivo"},
+    }
+    expected_constraints = {
+        (task_table, "tareas_elim_metadata_consistent"),
+        (ledger_table, "tareas_delop_motivo_required"),
+    }
+    expected_indexes = {
+        (task_table, "tareas_emp_elim_idx"),
+        (task_table, "tareas_delop_task_idx"),
+    }
+    actual_columns: set[tuple[str, str]] = set()
+    actual_constraints: set[tuple[str, str]] = set()
+    actual_indexes: set[tuple[str, str]] = set()
+    seen_statements: set[str] = set()
+
+    for raw_statement in statements:
+        statement = _normalize_statement(raw_statement).rstrip(";")
+        if statement in seen_statements:
+            raise BaseTareasSchemaInstallError(
+                "El contrato de evolución lógica contiene sentencias duplicadas."
+            )
+        seen_statements.add(statement)
+        alter_match = re.match(
+            r"^ALTER\s+TABLE\s+`?(?P<table>[A-Za-z0-9_]+)`?\s+"
+            r"ADD\s+(?P<kind>COLUMN|CONSTRAINT)\s+`?(?P<name>[A-Za-z0-9_]+)`?",
+            statement,
+            re.IGNORECASE,
+        )
+        if alter_match:
+            table = alter_match.group("table")
+            kind = alter_match.group("kind").upper()
+            name = alter_match.group("name")
+            if kind == "COLUMN":
+                if name not in expected_columns.get(table, set()):
+                    raise BaseTareasSchemaInstallError(
+                        "El contrato lógico incluye una columna no autorizada."
+                    )
+                actual_columns.add((table, name))
+            elif (table, name) in expected_constraints:
+                actual_constraints.add((table, name))
+            else:
+                raise BaseTareasSchemaInstallError(
+                    "El contrato lógico incluye una restricción no autorizada."
+                )
+            continue
+
+        index_match = _CREATE_OBJECT.match(statement)
+        if index_match:
+            table = index_match.group("table")
+            name = index_match.group("name")
+            if (table, name) not in expected_indexes:
+                raise BaseTareasSchemaInstallError(
+                    "El contrato lógico incluye un índice no autorizado."
+                )
+            actual_indexes.add((table, name))
+            continue
+
+        raise BaseTareasSchemaInstallError(
+            "El contrato de evolución lógica solo admite adiciones declaradas."
+        )
+
+    if (
+        actual_columns
+        != {
+            (table, column)
+            for table, columns in expected_columns.items()
+            for column in columns
+        }
+        or actual_constraints != expected_constraints
+        or actual_indexes != expected_indexes
+    ):
+        raise BaseTareasSchemaInstallError(
+            "El contrato de evolución lógica está incompleto o duplicado."
+        )
+
+
+def read_logical_deletion_schema_contract() -> tuple[str, ...]:
+    """Read and validate additive SQL without executing it."""
+    try:
+        content = LOGICAL_DELETION_SCHEMA_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo leer el contrato aditivo de eliminación lógica."
+        ) from exc
+    content = "\n".join(
+        line for line in content.splitlines() if not line.lstrip().startswith("--")
+    )
+    statements = tuple(item.strip() for item in content.split(";") if item.strip())
+    if not statements:
+        raise BaseTareasSchemaInstallError(
+            "El contrato aditivo de eliminación lógica está vacío."
+        )
+    _validate_logical_deletion_statements(list(statements))
+    return statements
 
 
 def _is_external_foreign_key(statement: str) -> bool:
@@ -876,6 +988,17 @@ def _deletion_ledger_schema_snapshot(
         existing = sorted(
             (str(name), str(engine or "")) for name, engine in cursor.fetchall()
         )
+        cursor.execute(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            f"WHERE table_schema = %s AND table_name IN ({placeholders})",
+            (database_name, *tables),
+        )
+        actual_columns = {
+            str(table_name): set()
+            for table_name, _engine in existing
+        }
+        for table_name, column_name in cursor.fetchall():
+            actual_columns.setdefault(str(table_name), set()).add(str(column_name))
         cursor.execute("SELECT VERSION()")
         version_row = cursor.fetchone()
         cursor.execute(
@@ -919,9 +1042,25 @@ def _deletion_ledger_schema_snapshot(
         raise BaseTareasSchemaInstallError(
             "Todas las tablas operacionales de Tareas deben existir en InnoDB."
         )
+    expected_columns = {
+        model._meta.db_table: {
+            field.column for field in model._meta.local_concrete_fields
+        }
+        for model in get_deletion_ledger_models()
+    }
+    missing_columns = sorted(
+        (table, column)
+        for table, columns in expected_columns.items()
+        for column in columns - actual_columns.get(table, set())
+    )
     return {
         "expected_tables": tables,
         "existing_tables": existing,
+        "existing_columns": {
+            table: tuple(sorted(columns))
+            for table, columns in sorted(actual_columns.items())
+        },
+        "missing_columns": missing_columns,
         "server_version": str(version_row[0]) if version_row else "",
         "innodb_support": str(support_row[0]).upper() if support_row else "",
         "operational_fingerprint": _schema_fingerprint(
@@ -944,6 +1083,8 @@ def _deletion_ledger_fingerprint(
         "connection_updated_at": connection_updated_at,
         "expected_tables": sorted(snapshot["expected_tables"]),
         "existing_tables": snapshot["existing_tables"],
+        "existing_columns": snapshot["existing_columns"],
+        "missing_columns": snapshot["missing_columns"],
         "server_version": snapshot["server_version"],
         "innodb_support": snapshot["innodb_support"],
         "operational_fingerprint": snapshot["operational_fingerprint"],
@@ -1014,7 +1155,11 @@ def preview_deletion_ledger_schema() -> dict[str, Any]:
             for _name, engine in snapshot["existing_tables"]
         )
     ):
-        status = "PRESENT_REQUIRES_SCHEMA_VALIDATION"
+        status = (
+            "SCHEMA_UPDATE_REQUIRED"
+            if snapshot["missing_columns"]
+            else "PRESENT_REQUIRES_SCHEMA_VALIDATION"
+        )
     else:
         status = "PARTIAL_OR_INCOMPATIBLE"
 
@@ -1033,7 +1178,127 @@ def preview_deletion_ledger_schema() -> dict[str, Any]:
         "server_version": snapshot["server_version"],
         "innodb_support": snapshot["innodb_support"],
         "existing_tables": snapshot["existing_tables"],
+        "existing_columns": snapshot["existing_columns"],
+        "missing_columns": snapshot["missing_columns"],
         "fingerprint": fingerprint,
+    }
+
+
+def preview_logical_deletion_schema() -> dict[str, Any]:
+    """Inspect only required logical-deletion columns on MYSQL_CONFIG."""
+    contract = read_logical_deletion_schema_contract()
+    context = resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type != "MYSQL_CONFIG":
+        return {
+            "status": "DJANGO_MIGRATIONS",
+            "backend": context.backend_type,
+            "required_columns": (
+                "eliminada",
+                "eliminada_en",
+                "eliminada_por_id",
+                "eliminacion_operacion_id",
+                "motivo",
+            ),
+            "contract_statement_count": len(contract),
+        }
+    if context.mysql_connection is None or not context.database_name:
+        raise BaseTareasSchemaInstallError(
+            "BASE_TAREAS no tiene una conexión MYSQL_CONFIG válida."
+        )
+
+    task_table = apps.get_model("tareas", "Tarea")._meta.db_table
+    ledger_table = apps.get_model(
+        "tareas",
+        "TareaEliminacionOperacion",
+    )._meta.db_table
+    expected_columns = {
+        task_table: (
+            "eliminada",
+            "eliminada_en",
+            "eliminada_por_id",
+            "eliminacion_operacion_id",
+        ),
+        ledger_table: ("motivo",),
+    }
+    tables = tuple(expected_columns)
+    placeholders = ", ".join("%s" for _ in tables)
+    connection_config = context.mysql_connection
+    try:
+        with open_mysql_connection(
+            connection_config,
+            database_name=context.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SELECT DATABASE()")
+                selected_database = cursor.fetchone()
+                if (
+                    not selected_database
+                    or selected_database[0] != context.database_name
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "La conexión abierta no apunta a BASE_TAREAS."
+                    )
+                cursor.execute(
+                    "SELECT table_name, engine FROM information_schema.tables "
+                    f"WHERE table_schema = %s AND table_name IN ({placeholders})",
+                    (context.database_name, *tables),
+                )
+                existing_tables = {
+                    str(table): str(engine or "")
+                    for table, engine in cursor.fetchall()
+                }
+                cursor.execute(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    f"WHERE table_schema = %s AND table_name IN ({placeholders})",
+                    (context.database_name, *tables),
+                )
+                existing_columns: dict[str, set[str]] = {
+                    table: set() for table in tables
+                }
+                for table, column in cursor.fetchall():
+                    existing_columns.setdefault(str(table), set()).add(str(column))
+            finally:
+                cursor.close()
+    except MySQLConnectionOpenError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo abrir BASE_TAREAS para inspeccionar la evolución lógica."
+        ) from exc
+    except BaseTareasSchemaInstallError:
+        raise
+    except Exception as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo inspeccionar el esquema de eliminación lógica."
+        ) from exc
+
+    missing_tables = sorted(set(tables) - set(existing_tables))
+    missing_columns = sorted(
+        (table, column)
+        for table, columns in expected_columns.items()
+        for column in set(columns) - existing_columns.get(table, set())
+    )
+    incompatible_engines = sorted(
+        table
+        for table, engine in existing_tables.items()
+        if engine.casefold() != "innodb"
+    )
+    if missing_tables:
+        status = "TABLES_MISSING"
+    elif incompatible_engines:
+        status = "INCOMPATIBLE_ENGINE"
+    elif missing_columns:
+        status = "SCHEMA_UPDATE_REQUIRED"
+    else:
+        status = "CURRENT"
+    return {
+        "status": status,
+        "database_name": context.database_name,
+        "connection_id": int(connection_config.pk),
+        "connection_updated_at": connection_config.updated_at.isoformat(),
+        "missing_tables": missing_tables,
+        "missing_columns": missing_columns,
+        "incompatible_engines": incompatible_engines,
+        "contract_statement_count": len(contract),
     }
 
 

@@ -85,6 +85,54 @@ def task_audit_snapshot(task):
     return snapshot
 
 
+def log_permanent_deletion_operation(
+    *,
+    actor,
+    empresa_id,
+    task_id,
+    operation_id,
+    fingerprint,
+    backend_type,
+    dependency_summary,
+):
+    """Write the durable deletion event through the public central audit API."""
+    if not getattr(actor, "is_active", False):
+        raise ValueError("El actor de auditoría debe estar activo.")
+    if not isinstance(operation_id, str) or len(operation_id) != 32:
+        raise ValueError("operation_id no es válido.")
+    if not isinstance(fingerprint, str) or len(fingerprint) != 64:
+        raise ValueError("fingerprint no es válido.")
+    if backend_type not in {"DJANGO", "MYSQL_CONFIG"}:
+        raise ValueError("backend_type no es válido.")
+    if not isinstance(dependency_summary, dict):
+        raise ValueError("dependency_summary no es válido.")
+
+    return AuditoriaService.log_event(
+        app_label="tareas",
+        action="DELETE",
+        user=actor,
+        empresa_id=empresa_id,
+        object_type="Tarea",
+        object_id=str(task_id),
+        ip_address=None,
+        user_agent="",
+        method="INTERNAL",
+        path="internal/permanent-task-deletion",
+        querystring="",
+        status_code=None,
+        duration_ms=None,
+        vista_nombre="Tareas",
+        meta={
+            "operation": "permanent_delete_tree",
+            "operation_id": operation_id,
+            "root_task_id": task_id,
+            "fingerprint": fingerprint,
+            "backend_type": backend_type,
+            "dependency_summary": dependency_summary,
+        },
+    )
+
+
 def log_task_operation(
     request,
     *,

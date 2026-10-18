@@ -45,8 +45,12 @@ y usarán paginación cuando corresponda.
 
 **Constraints**: lógica nueva dentro de `tareas/` bajo APPLICATION BOUNDARY; `session['empresa_id']` es obligatorio,
 `Permiso.ver` controla solo visibilidad del sidebar y ICMEAS autorización funcional;
-`static/js/app.js` es inmutable; no se crean maestros legacy; no se elimina
-físicamente una tarea; cambios fuera de `tareas/` requieren una tarea separada con autorización y scope explícitos.
+`static/js/app.js` es inmutable; no se crean maestros legacy; las tareas y sus
+descendientes no se eliminan físicamente por el procedimiento administrativo. FR-R06…
+FR-R17 autorizan solo eliminación lógica definitiva sin restauración. L1 implementa
+metadatos, persistencia del motivo y preparación de esquema; L2 y el POST siguen
+pendientes. Cambios fuera de `tareas/` requieren una tarea separada con
+autorización y scope explícitos.
 
 **Registration status**: El alta inicial de `tareas` en `AppDocs/app_classification.py`,
 `AppDocs/settings.py` y `AppDocs/urls.py` ya fue autorizada, ejecutada, testeada y
@@ -70,7 +74,7 @@ solo su integración ERP requiere contrato P2.
 | VI. Cambios mínimos | Fases aditivas, sin refactor transversal ni migración monolítica. | PASS |
 | VII. Tests | Cada fase agrega pruebas focalizadas y regresión completa antes de cierre. | PASS |
 | VIII. Qué antes que cómo | La spec fija comportamiento; este plan fija límites, fases y diseño técnico. | PASS |
-| IX. Trazabilidad | FR-A01…FR-R06 se cubren en data model, contratos, fases y quickstart; `tasks.md` queda para la siguiente etapa. | PASS |
+| IX. Trazabilidad | FR-A01…FR-R17 se cubren en data model, contratos, fases y quickstart; `tasks.md` conserva el registro histórico de fases ya ejecutadas. | PASS |
 
 **Gate**: PASS. El registro inicial de la app está resuelto. Permanecen bloqueadas las
 dependencias legacy P1/P2 y cualquier modificación futura adicional de archivos protegidos.
@@ -274,6 +278,39 @@ en `tasks.md`; no reabre ni renumera fases históricas.
     inicial en primer pendiente. Sin filtros, búsqueda propia, threads, app o chat separados;
     respeta i18n y FR-T01…FR-T10.
 
+### Enmienda 2H.0.3 — eliminación lógica definitiva sin restauración
+
+La decisión de eliminación física de 2H.0.2 queda sustituida por FR-R06…FR-R17. El
+procedimiento futuro marcará lógicamente la raíz y todos sus descendientes en una única
+transacción, conservará filas/relaciones/archivos y los ocultará de las superficies
+operacionales. La anulación/reactivación y las eliminaciones individuales ordinarias de
+Hitos, MiniTareas y Comentarios permanecen sin cambios. No existe restauración de tareas
+eliminadas.
+
+El executor físico WIP de 2H.1 queda **OBSOLETO FUNCIONALMENTE Y NO AUTORIZADO PARA
+EJECUCIÓN**. Sus componentes solo podrán reutilizarse tras revisión específica; no se
+mantiene una segunda vía de borrado físico. No se modifica código, schema, ledger ni rutas
+durante esta enmienda documental.
+
+### Fases técnicas de eliminación lógica
+
+1. **L1 — Estado lógico y ledger (implementada)**: campos/migración aditivos en `Tarea`,
+   persistencia del motivo en ambos adaptadores, contrato SQL y preflight metadata-only
+   para MYSQL_CONFIG. No aplica DDL a BASE_TAREAS real ni habilita una operación.
+2. **L2 — Servicio transaccional (pendiente)**: marcar raíz/descendientes con locks existentes,
+   idempotencia y rollback todo-o-nada; sin DELETE de filas ni archivos.
+3. **L3 — Exclusión operacional (pendiente)**: filtrar eliminadas en ambos backends y bloquear todas
+   las mutaciones indirectas.
+4. **L4 — Consulta histórica (pendiente)**: pantalla separada de solo lectura con VICMEAS
+   `ingresar` (I) explícito en la vista independiente `Tareas eliminadas`.
+5. **L5 — Integración HTTP (pendiente)**: preview/confirmación y POST protegido, únicamente tras
+   cerrar autorización, aislamiento, auditoría y recuperación.
+6. **L6 — Pruebas integradas (pendiente)**: paridad ORM/MYSQL_CONFIG, rollback, carreras,
+   historial y aislamiento en entorno de integración aislado, sin eliminación física.
+
+Las eliminadas se excluyen de KPI operacionales y reportes históricos habituales; la
+consulta histórica autorizada es la única superficie para verlas.
+
 ## Migration Strategy
 
 No se crea una migración monolítica. Cada fase usa migración de esquema aditiva, backfill
@@ -306,6 +343,9 @@ ninguna migración de otra app.
     notifica y que adjuntos no duplican el evento de documento.
 - KPI/similitud: fixtures por empresa; ocho KPI por dimensión; 80% por defecto y cambios
     por empresa solo para evaluaciones nuevas.
+- Eliminación lógica futura: atomicidad de marcas/ledger, exclusión operativa en ambos
+    backends, retención de filas/archivos, ausencia de restauración y lectura histórica
+    de solo consulta. No se prueba ni habilita en la fase documental actual.
 - Cada fase ejecuta tests focalizados y luego `python manage.py test --settings=AppDocs.settings_test`.
 
 ## External Changes and Blocks

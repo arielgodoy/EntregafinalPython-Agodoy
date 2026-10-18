@@ -9,7 +9,7 @@ from datetime import datetime
 import hashlib
 import json
 import re
-from typing import Iterator, Mapping
+from typing import Generator, Mapping, Protocol, TypeGuard
 from uuid import UUID, uuid4
 
 from django.db import IntegrityError, connections, transaction
@@ -66,6 +66,7 @@ class DeletionOperationInput:
     fingerprint: str
     dependency_summary: Mapping[str, int]
     operation_id: UUID = field(default_factory=uuid4)
+    motivo: str = ""
 
 
 @dataclass(frozen=True, order=True)
@@ -103,6 +104,7 @@ class DeletionOperationRecord:
     created_at: datetime
     updated_at: datetime
     committed_at: datetime | None
+    motivo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,8 +147,67 @@ _OPERATION_COLUMNS = (
     "created_at",
     "updated_at",
     "committed_at",
+    "motivo",
 )
 _OPERATION_COLUMN_SQL = ", ".join(f"`{name}`" for name in _OPERATION_COLUMNS)
+
+
+class _DBAPICursor(Protocol):
+    rowcount: int
+
+    def execute(self, sql: str, params: object = ()) -> object: ...
+
+    def fetchone(self) -> tuple[object, ...] | None: ...
+
+    def fetchall(self) -> list[tuple[object, ...]]: ...
+
+    def close(self) -> None: ...
+
+
+class _CursorConnection(Protocol):
+    def cursor(self) -> _DBAPICursor: ...
+
+
+class _TransactionalMySQLConnection(_CursorConnection, Protocol):
+    def begin(self) -> None: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+
+def _is_dbapi_cursor(value: object) -> TypeGuard[_DBAPICursor]:
+    return all(
+        callable(getattr(value, method, None))
+        for method in ("execute", "fetchone", "fetchall", "close")
+    )
+
+
+def _is_cursor_connection(value: object) -> TypeGuard[_CursorConnection]:
+    return callable(getattr(value, "cursor", None))
+
+
+def _cursor_from_connection(value: object) -> _DBAPICursor:
+    cursor_factory = getattr(value, "cursor", None)
+    if not callable(cursor_factory):
+        raise DeletionLedgerBackendError(
+            "La conexión MySQL no ofrece un cursor."
+        )
+    cursor = cursor_factory()
+    if not _is_dbapi_cursor(cursor):
+        raise DeletionLedgerBackendError(
+            "El cursor MySQL no ofrece las operaciones requeridas."
+        )
+    return cursor
+
+
+def _is_transactional_mysql_connection(
+    value: object,
+) -> TypeGuard[_TransactionalMySQLConnection]:
+    return all(
+        callable(getattr(value, method, None))
+        for method in ("cursor", "begin", "commit", "rollback")
+    )
 
 
 def _positive_id(value: int, field_name: str) -> int:
@@ -190,6 +251,8 @@ def _normalize_operation(operation: DeletionOperationInput) -> DeletionOperation
         summary[key] = count
     if len(summary) > 64:
         raise ValueError("dependency_summary contiene demasiadas categorías.")
+    if not isinstance(operation.motivo, str):
+        raise ValueError("motivo debe ser texto.")
     return DeletionOperationInput(
         actor_id=operation.actor_id,
         empresa_id=operation.empresa_id,
@@ -198,6 +261,7 @@ def _normalize_operation(operation: DeletionOperationInput) -> DeletionOperation
         fingerprint=operation.fingerprint.lower(),
         dependency_summary=dict(sorted(summary.items())),
         operation_id=operation_id,
+        motivo=operation.motivo.strip(),
     )
 
 
@@ -308,12 +372,18 @@ def _operation_record_from_model(model) -> DeletionOperationRecord:
         created_at=model.created_at,
         updated_at=model.updated_at,
         committed_at=model.committed_at,
+        motivo=model.motivo,
     )
 
 
 def _operation_record_from_row(row) -> DeletionOperationRecord:
     values = dict(zip(_OPERATION_COLUMNS, row))
     operation_id = values["operation_id"]
+    motivo = values["motivo"]
+    if isinstance(motivo, bytes):
+        motivo = motivo.decode("utf-8")
+    if motivo is not None and not isinstance(motivo, str):
+        raise DeletionLedgerSchemaError("El motivo del ledger no es texto.")
     return DeletionOperationRecord(
         operation_id=operation_id
         if isinstance(operation_id, UUID)
@@ -338,6 +408,7 @@ def _operation_record_from_row(row) -> DeletionOperationRecord:
         created_at=values["created_at"],
         updated_at=values["updated_at"],
         committed_at=values["committed_at"],
+        motivo=motivo,
     )
 
 
@@ -372,10 +443,65 @@ def _mysql_identifier(value: str) -> str:
     return f"`{value}`"
 
 
-def _check_mysql_transactional_tables(connection, database_name: str) -> None:
+def _mysql_field_identifier(model, field_name: str) -> str:
+    column = model._meta.get_field(field_name).column
+    if column is None:
+        raise DeletionLedgerSchemaError(
+            "El contrato del ledger contiene una columna sin nombre físico."
+        )
+    return _mysql_identifier(column)
+
+
+def _mysql_primary_key_identifier(model) -> str:
+    column = model._meta.pk.column
+    if column is None:
+        raise DeletionLedgerSchemaError(
+            "El esquema del ledger contiene una PK sin nombre físico."
+        )
+    return _mysql_identifier(column)
+
+
+def _database_string(value: object, field_name: str) -> str:
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise DeletionLedgerSchemaError(
+                f"El campo {field_name} del ledger no es texto UTF-8."
+            ) from exc
+    if not isinstance(value, str):
+        raise DeletionLedgerSchemaError(
+            f"El campo {field_name} del ledger no es texto."
+        )
+    return value
+
+
+def _database_integer(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DeletionLedgerSchemaError(
+            f"El campo {field_name} del ledger no es entero."
+        )
+    return value
+
+
+def _database_datetime(
+    value: object,
+    field_name: str,
+) -> datetime | None:
+    if value is not None and not isinstance(value, datetime):
+        raise DeletionLedgerSchemaError(
+            f"El campo {field_name} del ledger no es una fecha válida."
+        )
+    return value
+
+
+def _check_mysql_transactional_tables(
+    connection: object,
+    database_name: str,
+) -> None:
     tables = tuple(dict.fromkeys(_required_tables()))
     placeholders = ", ".join("%s" for _ in tables)
-    cursor = connection.cursor()
+    cursor = _cursor_from_connection(connection)
     try:
         cursor.execute("SELECT DATABASE()")
         selected_database = cursor.fetchone()
@@ -410,8 +536,47 @@ def _check_mysql_transactional_tables(connection, database_name: str) -> None:
             raise DeletionLedgerBackendError(
                 "El servidor no ofrece transacciones InnoDB."
             )
+        required_columns = _required_logical_deletion_columns()
+        column_tables = tuple(required_columns)
+        column_placeholders = ", ".join("%s" for _ in column_tables)
+        cursor.execute(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            f"WHERE table_schema = %s AND table_name IN ({column_placeholders})",
+            (database_name, *column_tables),
+        )
+        existing_columns = {
+            (str(table_name), str(column_name))
+            for table_name, column_name in cursor.fetchall()
+        }
+        missing_columns = {
+            (table_name, column_name)
+            for table_name, columns in required_columns.items()
+            for column_name in columns
+            if (table_name, column_name) not in existing_columns
+        }
+        if missing_columns:
+            raise DeletionLedgerSchemaError(
+                "Faltan columnas requeridas para el ledger de eliminación lógica."
+            )
     finally:
         cursor.close()
+
+
+def _required_logical_deletion_columns() -> dict[str, tuple[str, ...]]:
+    return {
+        Tarea._meta.db_table: tuple(
+            Tarea._meta.get_field(field_name).column
+            for field_name in (
+                "eliminada",
+                "eliminada_en",
+                "eliminada_por",
+                "eliminacion_operacion_id",
+            )
+        ),
+        TareaEliminacionOperacion._meta.db_table: (
+            TareaEliminacionOperacion._meta.get_field("motivo").column,
+        ),
+    }
 
 
 def _check_django_schema(alias: str) -> None:
@@ -429,6 +594,30 @@ def _check_django_schema(alias: str) -> None:
     if set(_required_tables()) - existing:
         raise DeletionLedgerSchemaError(
             "Faltan tablas operacionales o del ledger en BASE_TAREAS."
+        )
+    required_columns = _required_logical_deletion_columns()
+    try:
+        with connection.cursor() as cursor:
+            missing_columns = {
+                (table_name, column_name)
+                for table_name, columns in required_columns.items()
+                for column_name in columns
+                if column_name
+                not in {
+                    column.name
+                    for column in connection.introspection.get_table_description(
+                        cursor,
+                        table_name,
+                    )
+                }
+            }
+    except Exception as exc:
+        raise DeletionLedgerSchemaError(
+            "No se pudo verificar el esquema del ledger de eliminación."
+        ) from exc
+    if missing_columns:
+        raise DeletionLedgerSchemaError(
+            "Faltan columnas requeridas para el ledger de eliminación lógica."
         )
     if connection.vendor == "mysql":
         _check_mysql_transactional_tables(
@@ -448,6 +637,7 @@ def _operation_values(operation, backend_type, backend_identity, config_version)
         "backend_config_version": config_version,
         "fingerprint": operation.fingerprint,
         "dependency_summary": _summary_json(operation.dependency_summary),
+        "motivo": operation.motivo,
     }
 
 
@@ -491,6 +681,20 @@ class DjangoDeletionLedgerUnitOfWork:
         )
         return _operation_record_from_model(model) if model is not None else None
 
+    def get_root_operation(
+        self,
+        empresa_id: int,
+        root_task_id: int,
+    ) -> DeletionOperationRecord | None:
+        model = (
+            TareaEliminacionOperacion.objects.using(self.alias)
+            .select_for_update()
+            .filter(empresa_id=empresa_id, root_task_id=root_task_id)
+            .order_by("created_at", "operation_id")
+            .first()
+        )
+        return _operation_record_from_model(model) if model is not None else None
+
     def create_pending(self, operation: DeletionOperationInput) -> DeletionOperationRecord:
         operation = _normalize_operation(operation)
         defaults = _operation_values(
@@ -530,12 +734,12 @@ class DjangoDeletionLedgerUnitOfWork:
             )
         try:
             with transaction.atomic(using=self.alias):
-                model, _created = (
+                model = (
                     TareaEliminacionOperacion.objects.using(self.alias)
                     .get_or_create(
                         operation_id=operation.operation_id.hex,
                         defaults=defaults,
-                    )
+                    )[0]
                 )
         except IntegrityError:
             model = self._operation(operation.operation_id)
@@ -645,6 +849,18 @@ class DjangoDeletionLedgerUnitOfWork:
                     "El inventario todavía contiene registros; no se confirmó el borrado."
                 )
 
+    def verify_committed_inventory(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        operation = self._operation(operation_id)
+        if operation.status != TareaEliminacionOperacion.Estado.COMMITTED:
+            raise DeletionLedgerStateError(
+                "La operación no está confirmada en el ledger."
+            )
+        self._ensure_inventory_removed(operation)
+        return _operation_record_from_model(operation)
+
     def mark_committed(self, operation_id: UUID) -> DeletionOperationRecord:
         operation = self._operation(operation_id)
         if operation.status == TareaEliminacionOperacion.Estado.COMMITTED:
@@ -685,6 +901,8 @@ class DjangoDeletionLedgerUnitOfWork:
         operation = self._operation(operation_id)
         self._require_committed(operation)
         if confirmed:
+            if event_id is None:
+                raise ValueError("event_id es obligatorio cuando la auditoría se confirma.")
             _positive_id(event_id, "event_id")
             if operation.audit_status == TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA:
                 if operation.audit_event_id != event_id:
@@ -703,8 +921,9 @@ class DjangoDeletionLedgerUnitOfWork:
                 "error_code",
             )
         operation.audit_attempts += 1
-        operation.audit_last_attempt_at = timezone.now()
-        operation.updated_at = operation.audit_last_attempt_at
+        now = timezone.now()
+        operation.audit_last_attempt_at = now
+        operation.updated_at = now
         operation.save(
             using=self.alias,
             update_fields=[
@@ -771,8 +990,9 @@ class DjangoDeletionLedgerUnitOfWork:
                 "error_code",
             )
         file_record.attempts += 1
-        file_record.last_attempt_at = timezone.now()
-        file_record.updated_at = file_record.last_attempt_at
+        now = timezone.now()
+        file_record.last_attempt_at = now
+        file_record.updated_at = now
         file_record.save(
             using=self.alias,
             update_fields=[
@@ -805,7 +1025,7 @@ class DjangoDeletionLedgerUnitOfWork:
             operation.file_cleanup_status = (
                 TareaEliminacionOperacion.EstadoArchivos.PENDIENTE
             )
-        operation.updated_at = timezone.now()
+        operation.updated_at = now
         operation.save(
             using=self.alias,
             update_fields=["file_cleanup_status", "updated_at"],
@@ -847,18 +1067,35 @@ class DjangoDeletionLedgerUnitOfWork:
                 ),
             )
             .order_by("created_at", "pk")[:limit]
+            .values_list(
+                "operacion_id",
+                "storage_key",
+                "file_name",
+                "status",
+                "attempts",
+                "last_attempt_at",
+                "error_code",
+            )
         )
         return tuple(
             DeletionFileRecord(
-                operation_id=UUID(str(record.operacion_id)),
-                storage_key=record.storage_key,
-                file_name=record.file_name,
-                status=record.status,
-                attempts=record.attempts,
-                last_attempt_at=record.last_attempt_at,
-                error_code=record.error_code,
+                operation_id=UUID(str(operation_id)),
+                storage_key=storage_key,
+                file_name=file_name,
+                status=status,
+                attempts=attempts,
+                last_attempt_at=last_attempt_at,
+                error_code=error_code,
             )
-            for record in records
+            for (
+                operation_id,
+                storage_key,
+                file_name,
+                status,
+                attempts,
+                last_attempt_at,
+                error_code,
+            ) in records
         )
 
     @staticmethod
@@ -880,7 +1117,7 @@ class DjangoDeletionLedgerStorage:
         self.config_version = config_version
 
     @contextmanager
-    def atomic(self) -> Iterator[DjangoDeletionLedgerUnitOfWork]:
+    def atomic(self) -> Generator[DjangoDeletionLedgerUnitOfWork, None, None]:
         _check_django_schema(self.alias)
         failure = None
         try:
@@ -922,12 +1159,17 @@ class DjangoDeletionLedgerStorage:
 
 
 class MySQLDeletionLedgerUnitOfWork:
-    def __init__(self, connection, backend_identity: str, config_version: str):
+    def __init__(
+        self,
+        connection: _CursorConnection,
+        backend_identity: str,
+        config_version: str,
+    ):
         self.connection = connection
         self.backend_identity = backend_identity
         self.config_version = config_version
 
-    def _execute(self, sql: str, params=()):
+    def _execute(self, sql: str, params=()) -> _DBAPICursor:
         cursor = self.connection.cursor()
         try:
             cursor.execute(sql, params)
@@ -953,6 +1195,24 @@ class MySQLDeletionLedgerUnitOfWork:
         row = self._operation_row(operation_id, lock=False)
         return _operation_record_from_row(row) if row is not None else None
 
+    def get_root_operation(
+        self,
+        empresa_id: int,
+        root_task_id: int,
+    ) -> DeletionOperationRecord | None:
+        cursor = self._execute(
+            f"SELECT {_OPERATION_COLUMN_SQL} "
+            "FROM `tareas_eliminacion_operacion` "
+            "WHERE `empresa_id` = %s AND `root_task_id` = %s "
+            "ORDER BY `created_at`, `operation_id` LIMIT 1 FOR UPDATE",
+            (empresa_id, root_task_id),
+        )
+        try:
+            row = cursor.fetchone()
+        finally:
+            cursor.close()
+        return _operation_record_from_row(row) if row is not None else None
+
     def create_pending(self, operation: DeletionOperationInput) -> DeletionOperationRecord:
         operation = _normalize_operation(operation)
         existing = self._operation_row(operation.operation_id)
@@ -975,11 +1235,9 @@ class MySQLDeletionLedgerUnitOfWork:
                 )
             return record
         task_table = _mysql_identifier(Tarea._meta.db_table)
-        task_id_column = _mysql_identifier(Tarea._meta.pk.column)
-        task_empresa_column = _mysql_identifier(Tarea._meta.get_field("empresa").column)
-        task_correlativo_column = _mysql_identifier(
-            Tarea._meta.get_field("correlativo").column
-        )
+        task_id_column = _mysql_primary_key_identifier(Tarea)
+        task_empresa_column = _mysql_field_identifier(Tarea, "empresa")
+        task_correlativo_column = _mysql_field_identifier(Tarea, "correlativo")
         cursor = self._execute(
             f"SELECT {task_id_column} FROM {task_table} "
             f"WHERE {task_id_column} = %s AND {task_empresa_column} = %s "
@@ -1007,12 +1265,13 @@ class MySQLDeletionLedgerUnitOfWork:
             "`backend_config_version`, `fingerprint`, `dependency_summary`, "
             "`status`, `result_code`, `audit_status`, `audit_attempts`, "
             "`audit_last_attempt_at`, `audit_event_id`, `audit_error_code`, "
-            "`file_cleanup_status`, `created_at`, `updated_at`, `committed_at`"
+            "`file_cleanup_status`, `created_at`, `updated_at`, `committed_at`, "
+            "`motivo`"
         )
         sql = (
             f"INSERT INTO {table} ({columns}) VALUES "
             "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-            "%s, %s, %s, %s, %s, %s, %s) "
+            "%s, %s, %s, %s, %s, %s, %s, %s) "
             "ON DUPLICATE KEY UPDATE `operation_id` = VALUES(`operation_id`)"
         )
         params = (
@@ -1037,6 +1296,7 @@ class MySQLDeletionLedgerUnitOfWork:
             now,
             now,
             None,
+            operation.motivo,
         )
         cursor = self._execute(sql, params)
         cursor.close()
@@ -1086,7 +1346,10 @@ class MySQLDeletionLedgerUnitOfWork:
         try:
             existing_items = tuple(
                 sorted(
-                    DeletionInventoryItem(model_label=kind, object_id=object_id)
+                    DeletionInventoryItem(
+                        model_label=_database_string(kind, "tipo"),
+                        object_id=_database_integer(object_id, "object_id"),
+                    )
                     for kind, object_id in cursor.fetchall()
                 )
             )
@@ -1113,7 +1376,10 @@ class MySQLDeletionLedgerUnitOfWork:
         try:
             existing_files = tuple(
                 sorted(
-                    DeletionFileReference(storage_key=storage_key, file_name=file_name)
+                    DeletionFileReference(
+                        storage_key=_database_string(storage_key, "storage_key"),
+                        file_name=_database_string(file_name, "file_name"),
+                    )
                     for storage_key, file_name in cursor.fetchall()
                 )
             )
@@ -1162,7 +1428,13 @@ class MySQLDeletionLedgerUnitOfWork:
             (operation_id.hex,),
         )
         try:
-            return tuple(cursor.fetchall())
+            return tuple(
+                (
+                    _database_string(model_label, "tipo"),
+                    _database_integer(object_id, "object_id"),
+                )
+                for model_label, object_id in cursor.fetchall()
+            )
         finally:
             cursor.close()
 
@@ -1185,7 +1457,7 @@ class MySQLDeletionLedgerUnitOfWork:
                 )
             grouped[model].add(object_id)
         for model, identifiers in grouped.items():
-            pk_column = _mysql_identifier(model._meta.pk.column)
+            pk_column = _mysql_primary_key_identifier(model)
             table = _mysql_identifier(model._meta.db_table)
             ids = tuple(identifiers)
             for offset in range(0, len(ids), 500):
@@ -1203,6 +1475,21 @@ class MySQLDeletionLedgerUnitOfWork:
                     raise DeletionLedgerStateError(
                         "El inventario todavía contiene registros; no se confirmó el borrado."
                     )
+
+    def verify_committed_inventory(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        row = self._operation_row(operation_id)
+        if row is None:
+            raise DeletionLedgerStateError("La operación no existe en el ledger.")
+        operation = _operation_record_from_row(row)
+        if operation.status != TareaEliminacionOperacion.Estado.COMMITTED:
+            raise DeletionLedgerStateError(
+                "La operación no está confirmada en el ledger."
+            )
+        self._ensure_inventory_removed(operation)
+        return operation
 
     def _update_operation(self, operation_id: UUID, values: Mapping[str, object]):
         assignments = ", ".join(f"`{key}` = %s" for key in values)
@@ -1259,6 +1546,8 @@ class MySQLDeletionLedgerUnitOfWork:
         operation = _operation_record_from_row(row)
         self._require_committed(operation)
         if confirmed:
+            if event_id is None:
+                raise ValueError("event_id es obligatorio cuando la auditoría se confirma.")
             _positive_id(event_id, "event_id")
             if operation.audit_status == TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA:
                 if operation.audit_event_id != event_id:
@@ -1310,11 +1599,20 @@ class MySQLDeletionLedgerUnitOfWork:
             file_row = cursor.fetchone()
         finally:
             cursor.close()
-        if file_row is None or file_row[1] != file_reference.file_name:
+        if file_row is None:
             raise DeletionLedgerStateError(
                 "El archivo no forma parte del manifiesto de la operación."
             )
-        file_id, _name, file_status, attempts, last_attempt, stored_error = file_row
+        file_id = _database_integer(file_row[0], "id")
+        file_name = _database_string(file_row[1], "file_name")
+        file_status = _database_string(file_row[2], "status")
+        attempts = _database_integer(file_row[3], "attempts")
+        last_attempt = _database_datetime(file_row[4], "last_attempt_at")
+        stored_error = _database_string(file_row[5], "error_code")
+        if file_name != file_reference.file_name:
+            raise DeletionLedgerStateError(
+                "El archivo no forma parte del manifiesto de la operación."
+            )
         if file_status == TareaEliminacionArchivo.Estado.COMPLETO:
             if completed:
                 return DeletionFileRecord(
@@ -1417,12 +1715,12 @@ class MySQLDeletionLedgerUnitOfWork:
                     operation_id=(
                         row[0] if isinstance(row[0], UUID) else UUID(str(row[0]))
                     ),
-                    storage_key=row[1],
-                    file_name=row[2],
-                    status=row[3],
-                    attempts=row[4],
-                    last_attempt_at=row[5],
-                    error_code=row[6],
+                    storage_key=_database_string(row[1], "storage_key"),
+                    file_name=_database_string(row[2], "file_name"),
+                    status=_database_string(row[3], "status"),
+                    attempts=_database_integer(row[4], "attempts"),
+                    last_attempt_at=_database_datetime(row[5], "last_attempt_at"),
+                    error_code=_database_string(row[6], "error_code"),
                 )
                 for row in cursor.fetchall()
             )
@@ -1451,12 +1749,17 @@ class MySQLDeletionLedgerStorage:
         self.config_version = connection_config.updated_at.isoformat()
 
     @contextmanager
-    def atomic(self) -> Iterator[MySQLDeletionLedgerUnitOfWork]:
+    def atomic(self) -> Generator[MySQLDeletionLedgerUnitOfWork, None, None]:
         try:
             with open_mysql_connection(
                 self.connection_config,
                 database_name=self.database_name,
-            ) as connection:
+            ) as raw_connection:
+                if not _is_cursor_connection(raw_connection):
+                    raise DeletionLedgerBackendError(
+                        "La conexión MySQL no ofrece un cursor operacional."
+                    )
+                connection = raw_connection
                 _check_mysql_transactional_tables(connection, self.database_name)
                 unit = MySQLDeletionLedgerUnitOfWork(
                     connection,
@@ -1483,6 +1786,10 @@ class MySQLDeletionLedgerStorage:
                             "consulte operation_id antes de reintentar."
                         ) from exc
                 else:
+                    if not _is_transactional_mysql_connection(connection):
+                        raise DeletionLedgerBackendError(
+                            "La conexión MySQL no ofrece una interfaz transaccional completa."
+                        )
                     try:
                         connection.begin()
                     except Exception as exc:
