@@ -505,7 +505,8 @@ class MySQLMiniTaskStorage(_Queries):
                     cursor = connection.cursor()
                     try:
                         cursor.execute(
-                            "SELECT empresa_id FROM tareas_tarea WHERE id=%s",
+                            "SELECT empresa_id FROM tareas_tarea "
+                            "WHERE id=%s AND eliminada=0",
                             (task_id,),
                         )
                         row = cursor.fetchone()
@@ -575,7 +576,8 @@ class _MySQLMutation:
     def task(self, task_id, empresa_id, *, lock=False):
         self.cursor.execute(
             "SELECT id, empresa_id, creada_por_id, responsable_id, estado, anulada, "
-            "prioridad, titulo FROM tareas_tarea WHERE id=%s AND empresa_id=%s"
+            "prioridad, titulo FROM tareas_tarea "
+            "WHERE id=%s AND empresa_id=%s AND eliminada=0"
             + (" FOR UPDATE" if lock else ""), (task_id, empresa_id),
         )
         row = self.cursor.fetchone()
@@ -678,7 +680,10 @@ def _assigned_django(alias, empresa_id, actor_id):
     if user is None:
         raise PermissionDenied
     rows = MiniTarea.objects.using(alias).filter(
-        persona_id=actor_id, tarea__empresa_id=empresa_id, tarea__anulada=False,
+        persona_id=actor_id,
+        tarea__empresa_id=empresa_id,
+        tarea__eliminada=False,
+        tarea__anulada=False,
         tarea__estado__in=["ACTIVA", "GESTION", "PENDIENTE_APROBACION_CIERRE", "CERRADA"],
     ).select_related("tarea").order_by("hecho", "tarea__prioridad", "tarea_id", "pk")
     data = [(row.pk, row.descripcion, row.hecho, row.tarea_id, row.tarea.correlativo,
@@ -696,7 +701,8 @@ def _assigned_mysql(storage, empresa_id, actor_id):
                 cursor.execute(
                     "SELECT m.id, m.descripcion, m.hecho, t.id, t.correlativo, t.titulo, t.responsable_id "
                     "FROM tareas_minitarea m JOIN tareas_tarea t ON t.id=m.tarea_id "
-                    "WHERE m.persona_id=%s AND t.empresa_id=%s AND t.anulada=0 "
+                    "WHERE m.persona_id=%s AND t.empresa_id=%s "
+                    "AND t.eliminada=0 AND t.anulada=0 "
                     "AND t.estado IN (%s,%s,%s,%s) ORDER BY m.hecho, t.prioridad, t.id, m.id",
                     (actor_id, empresa_id, "ACTIVA", "GESTION", "PENDIENTE_APROBACION_CIERRE", "CERRADA"),
                 )

@@ -237,7 +237,8 @@ class MySQLReprogrammingStorage:
                         try:
                             cursor.execute(
                                 "SELECT id, estado, anulada, fecha_tope, prioridad, responsable_id "
-                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s "
+                                "AND eliminada=0 FOR UPDATE",
                                 (command.task_id, command.empresa_id),
                             )
                             row = cursor.fetchone()
@@ -250,7 +251,9 @@ class MySQLReprogrammingStorage:
                                     "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
                                     "JOIN tareas_tarea p ON p.id=r.padre_id "
                                     "JOIN tareas_tarea c ON c.id=r.hija_id "
-                                    "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s "
+                                    "WHERE r.hija_id=%s AND p.empresa_id=%s "
+                                    "AND c.empresa_id=%s AND p.eliminada=0 "
+                                    "AND c.eliminada=0 "
                                     "FOR UPDATE",
                                     (current_id, command.empresa_id, command.empresa_id),
                                 )
@@ -272,14 +275,16 @@ class MySQLReprogrammingStorage:
                             cursor.execute(
                                 "SELECT p.usuario_id FROM tareas_tareaparticipante p "
                                 "JOIN tareas_tarea t ON t.id=p.tarea_id "
-                                "WHERE p.tarea_id=%s AND t.empresa_id=%s",
+                                "WHERE p.tarea_id=%s AND t.empresa_id=%s "
+                                "AND t.eliminada=0",
                                 (task_id, command.empresa_id),
                             )
                             recipient_ids = {item[0] for item in cursor.fetchall()}
                             recipient_ids.add(responsible_id)
                             now = timezone.now()
                             cursor.execute(
-                                "UPDATE tareas_tarea SET fecha_tope=%s WHERE id=%s AND empresa_id=%s",
+                                "UPDATE tareas_tarea SET fecha_tope=%s "
+                                "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                 (command.fecha_tope_nueva, task_id, command.empresa_id),
                             )
                             cursor.execute(
@@ -361,7 +366,8 @@ def mysql_reprogramming_detail(cursor, task_id, empresa_id):
         "SELECT r.id, r.fecha_tope_anterior, r.fecha_tope_nueva, r.justificacion, "
         "r.usuario_id, r.fecha_operacion FROM tareas_reprogramacion r "
         "JOIN tareas_tarea t ON t.id=r.tarea_id "
-        "WHERE r.tarea_id=%s AND t.empresa_id=%s ORDER BY r.fecha_operacion DESC, r.id DESC",
+        "WHERE r.tarea_id=%s AND t.empresa_id=%s AND t.eliminada=0 "
+        "ORDER BY r.fecha_operacion DESC, r.id DESC",
         (task_id, empresa_id),
     )
     rows = cursor.fetchall()
@@ -371,7 +377,8 @@ def mysql_reprogramming_detail(cursor, task_id, empresa_id):
         "JOIN tareas_causaatraso c ON c.id=rc.causaatraso_id "
         "JOIN tareas_reprogramacion r ON r.id=rc.reprogramacion_id "
         "JOIN tareas_tarea t ON t.id=r.tarea_id "
-        "WHERE r.tarea_id=%s AND t.empresa_id=%s ORDER BY c.codigo",
+        "WHERE r.tarea_id=%s AND t.empresa_id=%s AND t.eliminada=0 "
+        "ORDER BY c.codigo",
         (task_id, empresa_id),
     )
     by_history = {}

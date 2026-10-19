@@ -160,6 +160,7 @@ class DjangoSimilarityUnit:
         try:
             return (
                 EvaluacionSimilitud.objects.using(self.alias)
+                .filter(tarea__eliminada=False, tarea_candidata__eliminada=False)
                 .select_related("tarea", "tarea_candidata")
                 .get(pk=evaluation_id)
             )
@@ -184,7 +185,11 @@ class DjangoSimilarityUnit:
     def list_evaluations(self, task_id):
         return list(
             EvaluacionSimilitud.objects.using(self.alias)
-            .filter(tarea_id=task_id)
+            .filter(
+                tarea_id=task_id,
+                tarea__eliminada=False,
+                tarea_candidata__eliminada=False,
+            )
             .select_related("tarea_candidata")
             .order_by("-porcentaje", "tarea_candidata_id")
         )
@@ -287,7 +292,7 @@ class MySQLSimilarityUnit:
         sql = (
             "SELECT id,empresa_id,correlativo,titulo,descripcion,prioridad,estado,"
             "anulada,tipo_ambito,local_id,departamento_id,todo_origen_id,tarea_origen_id "
-            "FROM tareas_tarea WHERE id=%s"
+            "FROM tareas_tarea WHERE id=%s AND eliminada=0"
         )
         params = [task_id]
         if company_id is not None:
@@ -308,16 +313,18 @@ class MySQLSimilarityUnit:
             "SELECT id,empresa_id,correlativo,titulo,descripcion,prioridad,estado,"
             "anulada,tipo_ambito,local_id,departamento_id,todo_origen_id,tarea_origen_id "
             f"FROM tareas_tarea WHERE empresa_id=%s AND estado IN ({placeholders}) "
-            "AND anulada=0 AND id<>%s ORDER BY id",
+            "AND eliminada=0 AND anulada=0 AND id<>%s ORDER BY id",
             (task.empresa_id, *states, task.pk),
         )
         return [_task_instance(row) for row in self.cursor.fetchall()]
 
     def get_evaluation_for_pair(self, task_id, candidate_id, task, candidate):
         self.cursor.execute(
-            "SELECT id,tarea_id,tarea_candidata_id,porcentaje,umbral_aplicado,"
-            "supera_umbral,decision,confirmada_por_id,confirmada_at,created_at "
-            "FROM tareas_evaluacionsimilitud WHERE tarea_id=%s AND tarea_candidata_id=%s",
+            "SELECT e.id,e.tarea_id,e.tarea_candidata_id,e.porcentaje,"
+            "e.umbral_aplicado,e.supera_umbral,e.decision,e.confirmada_por_id,"
+            "e.confirmada_at,e.created_at "
+            "FROM tareas_evaluacionsimilitud e "
+            "WHERE e.tarea_id=%s AND e.tarea_candidata_id=%s",
             (task_id, candidate_id),
         )
         row = self.cursor.fetchone()
@@ -325,9 +332,13 @@ class MySQLSimilarityUnit:
 
     def get_evaluation(self, evaluation_id):
         self.cursor.execute(
-            "SELECT id,tarea_id,tarea_candidata_id,porcentaje,umbral_aplicado,"
-            "supera_umbral,decision,confirmada_por_id,confirmada_at,created_at "
-            "FROM tareas_evaluacionsimilitud WHERE id=%s",
+            "SELECT e.id,e.tarea_id,e.tarea_candidata_id,e.porcentaje,"
+            "e.umbral_aplicado,e.supera_umbral,e.decision,e.confirmada_por_id,"
+            "e.confirmada_at,e.created_at "
+            "FROM tareas_evaluacionsimilitud e "
+            "JOIN tareas_tarea task ON task.id=e.tarea_id "
+            "JOIN tareas_tarea candidate ON candidate.id=e.tarea_candidata_id "
+            "WHERE e.id=%s AND task.eliminada=0 AND candidate.eliminada=0",
             (evaluation_id,),
         )
         row = self.cursor.fetchone()
@@ -394,9 +405,13 @@ class MySQLSimilarityUnit:
 
     def list_evaluations(self, task_id):
         self.cursor.execute(
-            "SELECT id,tarea_id,tarea_candidata_id,porcentaje,umbral_aplicado,"
-            "supera_umbral,decision,confirmada_por_id,confirmada_at,created_at "
-            "FROM tareas_evaluacionsimilitud WHERE tarea_id=%s "
+            "SELECT e.id,e.tarea_id,e.tarea_candidata_id,e.porcentaje,"
+            "e.umbral_aplicado,e.supera_umbral,e.decision,e.confirmada_por_id,"
+            "e.confirmada_at,e.created_at "
+            "FROM tareas_evaluacionsimilitud e "
+            "JOIN tareas_tarea task ON task.id=e.tarea_id "
+            "JOIN tareas_tarea candidate ON candidate.id=e.tarea_candidata_id "
+            "WHERE e.tarea_id=%s AND task.eliminada=0 AND candidate.eliminada=0 "
             "ORDER BY porcentaje DESC,tarea_candidata_id",
             (task_id,),
         )
@@ -421,7 +436,8 @@ class MySQLSimilarityUnit:
 
     def save_task_origin(self, task, candidate):
         self.cursor.execute(
-            "UPDATE tareas_tarea SET tarea_origen_id=%s WHERE id=%s",
+            "UPDATE tareas_tarea SET tarea_origen_id=%s "
+            "WHERE id=%s AND eliminada=0",
             (candidate.pk, task.pk),
         )
         task.tarea_origen_id = candidate.pk

@@ -149,14 +149,17 @@ class DjangoQuotationStorage:
         if lock:
             queryset = queryset.select_for_update()
         try:
-            return queryset.get(pk=round_id)
+            return queryset.get(
+                pk=round_id,
+                tarea__eliminada=False,
+            )
         except RondaCotizacion.DoesNotExist as exc:
             raise QuotationNotFound("La ronda no existe en BASE_TAREAS.") from exc
 
     def round_data(self, round_id):
         row = (
             RondaCotizacion.objects.using(self.alias)
-            .filter(pk=round_id)
+            .filter(pk=round_id, tarea__eliminada=False)
             .values_list(
                 "pk", "tarea_id", "tarea__empresa_id", "numero",
                 "minimo_cotizaciones", "estado", "fecha_apertura", "fecha_cierre",
@@ -171,7 +174,10 @@ class DjangoQuotationStorage:
             filters["ronda_id"] = round_id
         row = (
             Cotizacion.objects.using(self.alias)
-            .filter(**filters)
+            .filter(
+                **filters,
+                ronda__tarea__eliminada=False,
+            )
             .values_list(
                 "pk", "ronda_id", "proveedor_id", "version", "monto",
                 "vigente", "estado", "fecha_cotizacion", "observaciones",
@@ -183,7 +189,10 @@ class DjangoQuotationStorage:
     def document_data(self, document_id):
         row = (
             DocumentoCotizacion.objects.using(self.alias)
-            .filter(pk=document_id)
+            .filter(
+                pk=document_id,
+                cotizacion__ronda__tarea__eliminada=False,
+            )
             .values_list(
                 "pk", "cotizacion_id", "formato_archivo", "archivo", "url",
                 "usuario_id", "fecha",
@@ -574,7 +583,7 @@ class MySQLQuotationStorage:
 
     @staticmethod
     def _task(cursor, task_id, company_id=None, *, lock=False):
-        sql = "SELECT id, empresa_id FROM tareas_tarea WHERE id=%s"
+        sql = "SELECT id, empresa_id FROM tareas_tarea WHERE id=%s AND eliminada=0"
         params = [task_id]
         if company_id is not None:
             sql += " AND empresa_id=%s"
@@ -593,7 +602,8 @@ class MySQLQuotationStorage:
             "SELECT r.id, r.tarea_id, t.empresa_id, r.numero, r.minimo_cotizaciones, "
             "r.estado, r.fecha_apertura, r.fecha_cierre "
             "FROM tareas_rondacotizacion r "
-            "JOIN tareas_tarea t ON t.id=r.tarea_id WHERE r.id=%s"
+            "JOIN tareas_tarea t ON t.id=r.tarea_id "
+            "WHERE r.id=%s AND t.eliminada=0"
         )
         if lock:
             sql += " FOR UPDATE"
@@ -604,12 +614,17 @@ class MySQLQuotationStorage:
     @staticmethod
     def _quotation(cursor, quotation_id, round_id=None, *, lock=False):
         sql = (
-            "SELECT id, ronda_id, proveedor_id, version, monto, vigente, estado, "
-            "fecha_cotizacion, observaciones FROM tareas_cotizacion WHERE id=%s"
+            "SELECT quotation.id, quotation.ronda_id, quotation.proveedor_id, "
+            "quotation.version, quotation.monto, quotation.vigente, quotation.estado, "
+            "quotation.fecha_cotizacion, quotation.observaciones "
+            "FROM tareas_cotizacion quotation "
+            "JOIN tareas_rondacotizacion round ON round.id=quotation.ronda_id "
+            "JOIN tareas_tarea task ON task.id=round.tarea_id "
+            "WHERE quotation.id=%s AND task.eliminada=0"
         )
         params = [quotation_id]
         if round_id is not None:
-            sql += " AND ronda_id=%s"
+            sql += " AND quotation.ronda_id=%s"
             params.append(round_id)
         if lock:
             sql += " FOR UPDATE"
@@ -620,8 +635,14 @@ class MySQLQuotationStorage:
     @staticmethod
     def _document(cursor, document_id):
         cursor.execute(
-            "SELECT id, cotizacion_id, formato_archivo, archivo, url, usuario_id, fecha "
-            "FROM tareas_documentocotizacion WHERE id=%s",
+            "SELECT document.id,document.cotizacion_id,document.formato_archivo,"
+            "document.archivo,document.url,document.usuario_id,document.fecha "
+            "FROM tareas_documentocotizacion document "
+            "JOIN tareas_cotizacion quotation "
+            "ON quotation.id=document.cotizacion_id "
+            "JOIN tareas_rondacotizacion round ON round.id=quotation.ronda_id "
+            "JOIN tareas_tarea task ON task.id=round.tarea_id "
+            "WHERE document.id=%s AND task.eliminada=0",
             (document_id,),
         )
         row = cursor.fetchone()

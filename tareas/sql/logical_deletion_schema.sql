@@ -9,4 +9,4 @@ ALTER TABLE `tareas_tarea` ADD CONSTRAINT `tareas_elim_metadata_consistent` CHEC
 CREATE INDEX `tareas_emp_elim_idx` ON `tareas_tarea` (`empresa_id`, `eliminada`);
 CREATE INDEX `tareas_delop_task_idx` ON `tareas_tarea` (`eliminacion_operacion_id`);
 ALTER TABLE `tareas_eliminacion_operacion` ADD COLUMN `motivo` longtext NULL;
-ALTER TABLE `tareas_eliminacion_operacion` ADD CONSTRAINT `tareas_delop_motivo_required` CHECK ((`result_code` <> 'LOGICALLY_DELETED' OR (`motivo` IS NOT NULL AND `motivo` <> ''));
+ALTER TABLE `tareas_eliminacion_operacion` ADD CONSTRAINT `tareas_delop_motivo_required` CHECK ((`result_code` <> 'LOGICALLY_DELETED' OR (`motivo` IS NOT NULL AND `motivo` <> '')));

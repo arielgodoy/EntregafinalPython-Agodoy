@@ -595,7 +595,9 @@ class _DjangoAdapter:
 
     def assigned_rows(self, empresa_id, actor_id):
         rows = self.query(Hito).filter(
-            tarea__empresa_id=empresa_id, tarea__estado__in=PUBLISHED_STATES,
+            tarea__empresa_id=empresa_id,
+            tarea__eliminada=False,
+            tarea__estado__in=PUBLISHED_STATES,
             responsable_id=actor_id, anulado=False,
         ).order_by("tarea__prioridad", "tarea_id", "fecha_creacion", "pk").values(
             "id", "nombre", "cumplimiento", "peso", "completado", "tarea_id",
@@ -679,7 +681,8 @@ class _MySQLAdapter:
     def task(self, task_id, empresa_id):
         rows = self.rows(
             "SELECT id, empresa_id, creada_por_id, responsable_id, estado, anulada "
-            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s" + self.suffix, (task_id, empresa_id),
+            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s AND eliminada=0"
+            + self.suffix, (task_id, empresa_id),
         )
         if not rows:
             raise MilestoneNotFound
@@ -701,7 +704,8 @@ class _MySQLAdapter:
             rows = self.rows(
                 "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
                 "JOIN tareas_tarea p ON p.id=r.padre_id JOIN tareas_tarea c ON c.id=r.hija_id "
-                "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s" + self.suffix,
+                "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s "
+                "AND p.eliminada=0 AND c.eliminada=0" + self.suffix,
                 (current_id, empresa_id, empresa_id),
             )
             if not rows:
@@ -787,7 +791,8 @@ class _MySQLAdapter:
             "SELECT h.id, h.nombre, h.cumplimiento, h.peso, h.completado, t.id AS task_id, "
             "t.anulada AS task_anulada, t.correlativo, t.titulo, t.prioridad, t.estado, t.responsable_id "
             "FROM tareas_hito h JOIN tareas_tarea t ON t.id=h.tarea_id "
-            "WHERE h.responsable_id=%s AND t.empresa_id=%s AND h.anulado=0 "
+            "WHERE h.responsable_id=%s AND t.empresa_id=%s AND t.eliminada=0 "
+            "AND h.anulado=0 "
             "AND t.estado IN (%s,%s,%s,%s) ORDER BY t.prioridad, t.id, h.fecha_creacion, h.id",
             (actor_id, empresa_id, *PUBLISHED_STATES),
         )

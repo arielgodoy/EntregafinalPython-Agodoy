@@ -455,3 +455,34 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 - US4: avance, hitos, documentos y evidencia.
 - US5: rondas/mínimos de cotización hasta el bloqueo de identidad P2.
 - US6: colaboración, similitud, enlaces y ocho KPI.
+
+## Phase 11: L2 — Logical deletion service (2H.0.3)
+
+**Scope**: servicio transaccional interno solamente. No crear UI, ruta HTTP ni POST; no ejecutar el executor de eliminación física.
+
+- [x] T135 Implementar `tareas/services/logical_deletion.py`: validar usuario activo, VICMEAS S explícito y Empresa Base 00; exigir motivo no vacío; recorrer y bloquear la raíz y todos sus descendientes; rechazar cruces/inconsistencias; marcar sin alterar lifecycle/anulación; conservar filas, relaciones y archivos.
+- [x] T136 Extender el ledger existente para `LOGICALLY_DELETED`, manifiesto de Tareas, `file_cleanup_status=NOT_REQUIRED`, auditoría central post-commit, rollback, idempotencia por UUID y resultados explícitos de conflicto/commit/auditoría pendientes. Mantener la reconciliación explícita idempotente, sin bucle de reintentos automático ni conexión HTTP; mantener el executor físico fuera de las superficies operacionales.
+- [x] T137 Probar ORM y MYSQL_CONFIG, rollback y concurrencia real; corregir el lock MySQL de coordinación para evitar deadlock al serializar upserts de la fila de Empresa; verificar el esquema de desarrollo `tareas` y aplicar únicamente las nueve adiciones SQL L1 autorizadas, sin migraciones.
+- [x] T138 [Auditoría CORE autorizada] Añadir en `auditoria` una clave UUID única y nullable para `AuditoriaTareasEvent`, hash canónico del payload y API pública de registro/replay/lookup idempotente; conservar `log_event` y consumidores actuales. Migración 0014 probada solo en DB aislada.
+- [x] T139 [L2 integración] Integrar `tareas` con `AuditoriaService.log_event_idempotent` y `get_event_by_idempotency_key`; reconciliar de forma segura auditoría pendiente o confirmada tras pérdida de acuse; cubrir persistencia previa, ausencia inicial, conflicto de payload y concurrencia.
+
+## Phase 12: L3 — Exclusión operacional de tareas eliminadas
+
+**Scope**: excluir tareas lógicamente eliminadas de superficies operacionales ORM y MYSQL_CONFIG. No crear consulta histórica, UI, ruta HTTP ni POST; no restaurar ni eliminar físicamente tareas.
+
+- [x] T140 Centralizar la lectura operativa en `Tarea.objects`, reservar `Tarea.all_objects` para integridad/ledger, impedir cambios de marca lógica fuera del servicio L2 y rechazar nuevas relaciones a tareas eliminadas.
+- [x] T141 Aplicar exclusión ORM y validaciones de mutación a listados, detalle, jerarquías, dashboards, hitos, mini-tareas, comentarios, documentos, reuniones, enlaces, cotizaciones, reprogramaciones, similitud y TO-DO; mantener las rutas y permisos VICMEAS/ICMEAS existentes.
+- [x] T142 Añadir predicados `eliminada=0` y locks operacionales a lecturas y escrituras SQL de MYSQL_CONFIG, incluidos joins jerárquicos y consultas de búsquedas, dashboards y relaciones.
+- [x] T143 Ampliar regresiones ORM/MYSQL_CONFIG; alinear los esquemas SQLite simulados con el campo L1 `eliminada`; investigar los fallos de la suite ampliada y validar la suite completa de `tareas` más reconciliación central.
+
+## Phase 13: Remediación final L2/L3 — auditoría 2026-10-18
+
+- [x] T144 Recuperar auditoría post-commit cuando falta el actor original: preservar `actor_id` en metadata, aceptar `user=None` únicamente para una nueva escritura sin actor y validar eventos existentes antes de confirmar el ledger.
+- [x] T145 Excluir raíces y descendientes eliminados de ambos adaptadores del preview operativo; cubrir rechazo de raíz, descendiente oculto, aislamiento de empresa y SQL MYSQL_CONFIG.
+- [x] T146 Proteger `update`, `bulk_update`, `bulk_create`, upsert masivo y `save(update_fields=...)` para los campos de eliminación; mantener el escritor transaccional L2 y probar el adaptador SQL MySQL mediante mocks.
+- [x] T147 Actualizar el estado documental y ejecutar pruebas focalizadas, suite completa de Tareas, auditoría idempotente, `manage.py check`, `makemigrations --check --dry-run` y `git diff --check`.
+
+**Limitación de certificación**: las tres pruebas opt-in de locking/concurrencia MariaDB
+requieren una instancia local aislada configurada. No se conectó a una base real ni se
+afirma certificación física MariaDB; la validación MySQL de esta fase es mediante SQL
+parametrizado y adaptadores simulados.

@@ -283,7 +283,7 @@ class MySQLDocumentStorage:
     def _task(self, cursor, task_id, empresa_id):
         cursor.execute(
             "SELECT id, empresa_id, requiere_evidencia_cierre FROM tareas_tarea "
-            "WHERE id=%s AND empresa_id=%s",
+            "WHERE id=%s AND empresa_id=%s AND eliminada=0",
             (task_id, empresa_id),
         )
         row = cursor.fetchone()
@@ -519,7 +519,7 @@ class MySQLDocumentStorage:
                             cursor.execute(
                                 "UPDATE tareas_tarea "
                                 "SET requiere_evidencia_cierre=%s "
-                                "WHERE id=%s AND empresa_id=%s",
+                                "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                 (bool(required), task_id, empresa_id),
                             )
                         finally:

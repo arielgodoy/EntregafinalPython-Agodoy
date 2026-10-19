@@ -363,14 +363,160 @@ Product Owner y no se repitió durante este cierre.
 
 ### Eliminación lógica administrativa — verificación futura
 
-L1 implementa los campos, ledger y preflight del esquema. Las verificaciones futuras de
-L2–L6 comprobarán en ambos backends que la eliminación marca atómicamente raíz y
-descendientes sin borrar filas, relaciones ni archivos; que el árbol desaparece de
-listados, dashboards y mutaciones operacionales; que una falla deja todo el árbol visible;
-y que la pantalla histórica, con permiso VICMEAS I explícito, muestra el estado original
-en modo solo lectura, sin restauración. Las tareas eliminadas se excluyen de KPI
-operacionales y reportes habituales. No ejecutar DDL sobre BASE_TAREAS productivo ni
-borrar archivos físicos.
+L1 implementa los campos, ledger y contrato de esquema. L2 implementa el servicio
+transaccional interno `tareas.services.logical_deletion.logically_delete_task_tree` para
+ORM y MYSQL_CONFIG. No hay ruta HTTP, POST ni UI nueva; el executor físico anterior no se
+invocó contra la base física `tareas`. La suite completa también ejecutó sus pruebas
+legacy sobre bases de test aisladas.
+
+**Fotografía anterior a la autorización L2/L3, reemplazada por el cierre actualizado al
+final de esta sección:** en ese momento el contrato de auditoría estaba GO, L2 pendiente y
+L3 no iniciada. `AuditoriaService.log_event` y sus consumidores no se modificaron durante
+esa ejecución; ya existía una API optativa `log_event_idempotent` con lookup público por
+UUID para eventos de Tareas.
+
+La validación previa de L2 quedó así:
+
+- `python manage.py test --settings=AppDocs.settings_test tareas.tests.test_task_mutation_locks tareas.tests.test_logical_deletion tareas.tests.test_deletion_ledger tareas.tests.test_logical_deletion_schema tareas.tests.test_base_tareas_schema tareas.tests.test_logical_deletion_metadata`: 95 pruebas PASS.
+- `python manage.py test --settings=AppDocs.settings_test tareas.tests`: 1.121 pruebas PASS, 3 omitidas.
+- `python manage.py check --settings=AppDocs.settings_test` y `python manage.py makemigrations --check --dry-run --settings=AppDocs.settings_test`: PASS.
+- En la base de desarrollo física `tareas` se verificó MariaDB 10.11.13, 43 tablas InnoDB y presencia inicial de `tabladeprueba`. Se aplicaron únicamente las nueve sentencias aditivas de `tareas/sql/logical_deletion_schema.sql`; no se ejecutaron migraciones.
+- Pruebas reales con fixtures identificables comprobaron rollback, confirmación lógica, concurrencia de misma raíz, carrera padre/hijo, timeout con reintento por el mismo UUID e inserción jerárquica concurrente. Los fixtures, relaciones y filas de ledger de esas pruebas se limpiaron delimitadamente.
+- El estado posterior conserva las seis Tareas preexistentes sin marca lógica; no quedan fixtures identificables ni filas de ledger de prueba. `tabladeprueba` no se modificó.
+- Una llamada de verificación inicial alcanzó el servicio central de auditoría por su API pública y dejó el evento `auditoria_tareas_event` id 22. Se conservó; no se editó ni eliminó directamente información de SYSTEM/CORE.
+- `log_event` conserva su contrato legacy. `log_event_idempotent` persiste la clave única y hash canónico; reintenta un máximo de dos veces adicionales solo ante bloqueos transitorios, siempre con la misma clave. Errores persistentes se devuelven explícitamente como almacenamiento ambiguo; una nueva llamada con la misma clave recupera el evento si ya se confirmó.
+
+La validación del contrato central se ejecutó solo en bases de test aisladas:
+
+- `python manage.py test --settings=AppDocs.settings_test auditoria.tests.test_idempotent_audit`: 8 pruebas PASS, incluida concurrencia en SQLite.
+- `python manage.py test --settings=AppDocs.settings_test auditoria.tests.test_idempotent_audit auditoria.tests.test_middleware auditoria.tests.test_tareas_audit_ui tareas.tests.test_audit_integration tareas.tests.test_logical_deletion`: 53 pruebas PASS.
+- `python manage.py test --settings=AppDocs.settings_test auditoria.tests tareas.tests.test_audit_integration tareas.tests.test_logical_deletion`: 142 pruebas; 3 fallos reproducibles en tests existentes de Biblioteca/Gestión DTE: `test_share_email_link_logs_event` (respuesta no JSON) y dos expectativas de enlace en `test_gestiondte_ui`. Esas superficies no se modificaron.
+- `makemigrations` generó `auditoria/migrations/0014_idempotent_tareas_audit.py`. La migración solo se aplicó a la base temporal del test runner; no se conectó a `DB_sistema` ni a producción.
+- El alias efectivo de auditoría bajo `AppDocs.settings_test` es `default` SQLite. No se demostró concurrencia sobre MySQL de producción; el índice único y la semántica del motor real requieren validación antes del despliegue.
+
+En esa fotografía, L2 permanecía pendiente de integración y L3 no se había iniciado.
+L4–L6 (consulta histórica, integración HTTP y activación de fases posteriores) permanecen
+fuera de alcance.
+
+### Cierre L2/L3 previo a la auditoría correctiva (histórico; reabierto)
+
+**Estado de esa validación previa: L2 GO; L3 GO.** La auditoría independiente posterior
+reabrió ambos gates por H-L2-001, H-L3-001 y H-L3-002. Esta fotografía se conserva como
+historial, pero no representa el gate vigente. No se añadieron rutas, POST, interfaz
+histórica, restauración ni eliminación física en ese cierre.
+
+L2 integra `tareas/services/audit.py` con `AuditoriaService.log_event_idempotent` y
+`get_event_by_idempotency_key`. La escritura central continúa después del commit de la
+operación de Tareas. `reconcile_logical_deletion_audit` consulta primero la clave estable,
+reconoce una confirmación previa, reintenta idempotentemente una ausencia y conserva como
+conflicto un payload distinto. La reconciliación es explícita; no se añadió un bucle de
+reintentos en background.
+
+L3 hace que `Tarea.objects` sea el gestor operativo (`eliminada=False`) y reserva
+`Tarea.all_objects` para ledger e integridad administrativa. `Tarea.save` rechaza cambios
+operativos sobre filas eliminadas y cambios directos de sus metadatos; `TareaRelacion.save`
+rechaza nuevas relaciones con endpoints eliminados. Los locks ORM y MYSQL_CONFIG excluyen
+eliminadas por defecto; L2 y los flujos administrativos preexistentes solicitan acceso
+explícito cuando lo requieren.
+
+| Superficie | Archivos y consultas | Tratamiento L3 |
+|---|---|---|
+| Modelos y mutaciones | `tareas/models.py`; `tareas/services/task_mutation_locks.py` | Gestor operativo, guardas de instancia/jerarquía y locks activos por defecto. |
+| Listas, detalle y búsqueda | `task_storage.py`, `dashboard_storage.py`, `detail_storage.py`, `kpi.py`, `movement_storage.py`, `similarity_storage.py` | ORM mediante gestor operativo; SQL MYSQL_CONFIG usa `eliminada=0` en filas y joins visibles. |
+| Ciclo de vida y jerarquía | `closure_storage.py`, `hierarchy_creation.py`, `hierarchy_lifecycle_storage.py`, `lifecycle.py`, `reprogramming_storage.py`, `todo_storage.py` | Entradas y ancestros/hijos operativos filtrados; locks de mutación rechazan IDs eliminados. |
+| Datos relacionados | `comment_storage.py`, `document_storage.py`, `meeting_storage.py`, `milestone_storage.py`, `minitask_storage.py`, `participant_storage.py`, `quotation_storage.py`, `shared_link_storage.py` | Validación del task raíz, filtros en relaciones y guardas en escrituras. Las reuniones/enlaces ligados a tareas eliminadas no se ofrecen como operativos. |
+| Creación y orígenes | `assignment_storage.py`, `origin_storage.py`, `hierarchy_creation.py`, `meeting_storage.py`, `task_storage.py` | Los INSERT crean tareas activas; el modelo no permite iniciar una fila como eliminada y los orígenes deben ser operativos. |
+| Ledger y excepciones | `logical_deletion.py`, `deletion_ledger.py`, `permanent_deletion.py` | Acceso histórico explícito y limitado a idempotencia, integridad y flujos administrativos preexistentes; no se expone una superficie nueva de eliminación física. |
+
+La matriz se validó con `tareas.tests.test_logical_deletion`, regresiones de paridad ORM/
+MYSQL_CONFIG y la suite completa. Se investigaron los fallos de la suite ampliada:
+fixtures SQLite simulando MYSQL_CONFIG carecían del campo L1 `eliminada` en pruebas de
+hitos, reuniones, cotizaciones, similitud y TO-DO; sus esquemas se alinearon con el
+contrato. También se corrigió la comparación de agenda de reuniones para distinguir la
+tarea planificada de los elementos de agenda, se actualizó la expectativa del lock SQL y
+el test de persistencia de metadatos para representar el `QuerySet` usado por L2.
+
+Pruebas de ese cierre previo bajo `AppDocs.settings_test`:
+
+- `tareas.tests` más `auditoria.tests.test_idempotent_audit`: 1.135 pruebas PASS, 3 omitidas.
+- Regresión focal de L2/modelos/reuniones/similitud/TO-DO/participantes y locks: 126 pruebas PASS.
+- `python manage.py check --settings=AppDocs.settings_test`: PASS.
+- `python manage.py makemigrations tareas --check --dry-run --settings=AppDocs.settings_test`: sin cambios detectados.
+
+Las pruebas MySQL de esta ejecución usan adaptadores/fixtures aislados; no se conectó a
+BASE_TAREAS productiva ni se hizo escritura en una base física.
+
+### Remediación final H-L2/H-L3 — 2026-10-18
+
+**Estado vigente: L2 GO; L3 GO para el código de `tareas`. L4–L6 siguen pendientes.**
+No se modificaron aplicaciones SYSTEM/CORE, permisos centrales, sidebar, requisitos
+funcionales ni rutas HTTP.
+
+**H-L2-001 — actor original ausente**:
+
+- El ledger conserva el `actor_id` escalar. Si el usuario ya no existe y no hay evento
+  central, la adaptación escribe mediante la API idempotente con `user=None` y conserva
+  el `actor_id` original en `meta`; no sustituye al actor ni crea usuarios ficticios.
+- El payload idempotente de `user=None` tiene un hash distinto al de una instancia User
+  con el mismo PK. Por eso, cuando ya existe el evento, la reconciliación lo consulta
+  primero y valida UUID, campos de negocio, metadata y `actor_id`; no vuelve a escribir
+  ni modifica el hash persistido. El FK `user` puede quedar `NULL` por `SET_NULL` sin
+  perder la identidad histórica numérica.
+- Se probaron actor eliminado antes de la primera escritura, actor eliminado después
+  de persistir el evento, actor inactivo/reubicado/sin permiso vigente, lookup temporal
+  de SYSTEM fallido y recuperado, replay, identidad, hash, conflicto y no duplicación.
+  La autorización de reconciliación se comprueba sobre el operador actual y Base 00;
+  no se reautoriza retroactivamente al actor original.
+- Dos reconciliadores concurrentes también se probaron con el actor original ausente;
+  ambos convergen en un solo UUID/evento y el ledger termina confirmado.
+
+**H-L3-001 — preview MYSQL_CONFIG**:
+
+- El adaptador Django y el SQL MySQL filtran `eliminada=0` para raíz y descendientes.
+  Una raíz eliminada no es accesible; una relación inconsistente con descendiente
+  eliminado, inexistente o fuera de empresa bloquea el preview con el mismo mensaje
+  genérico, sin devolver identificador/título ni distinguir la causa.
+- El preview continúa siendo GET de solo lectura del WIP físico anterior; no es la
+  pantalla histórica L4 ni habilita ejecución física.
+
+**H-L3-002 — escrituras masivas**:
+
+- `TareaQuerySet` protege `update`, `bulk_update`, `bulk_create` y los upserts masivos
+  sobre marca y metadata de eliminación; `save(update_fields=...)` conserva la guarda.
+  Los gestores `objects`, `all_objects` y el base manager ORM usan el QuerySet protegido.
+- El adaptador autorizado de L2 actualiza las marcas mediante SQL parametrizado dentro
+  de la transacción y después de autorización/locks. Esta protección no se presenta como
+  barrera contra SQL deliberado; no se encontraron otros escritores operacionales de
+  esos campos dentro de `tareas`.
+- La migración `0033` solo registra opciones/managers ORM; no agrega ni altera columnas
+  ni constraints. No fue aplicada a ninguna base operativa.
+
+**Validación final aislada**:
+
+- Pruebas focalizadas de ledger, reconciliación, locks, preview, gestores y API
+  idempotente: **85 PASS**.
+- `tareas.tests` más `auditoria.tests.test_idempotent_audit`: **1.149 PASS, 3 SKIP,
+  0 FAIL, 0 ERROR**.
+- `python manage.py check --settings=AppDocs.settings_test`: PASS.
+- `python manage.py makemigrations --check --dry-run --settings=AppDocs.settings_test`:
+  sin cambios detectados.
+- `git diff --check`: PASS.
+
+Las tres omitidas son `test_company_without_tasks_gets_a_transactional_sentinel`,
+`test_lock_timeout_is_reported_as_a_controlled_conflict` y
+`test_same_company_mutations_serialize_across_connections`; requieren variables
+`TAREAS_MARIADB_TEST_*` y una instancia local MariaDB aislada. No había configuración
+aislada disponible: el test runner usó `default` y `system_test` como SQLite `:memory:`.
+Los mocks validan SQL y resultados de adaptadores, pero no certifican locks ni
+concurrencia en un motor MariaDB físico. No hubo conexión ni escritura en bases reales.
+
+Los tres fallos históricos de `auditoria.tests.test_update_audit` y
+`auditoria.tests.test_gestiondte_ui` no se reejecutaron ni corrigieron en esta remediación;
+siguen fuera del alcance autorizado.
+
+**Gate L4 pendiente**: no se implementaron rutas históricas ni cambios de permisos o menú.
+El registro navegable de la Vista independiente requiere una autorización separada para
+la dependencia SYSTEM/CORE indicada en el contrato web.
 
 ## Verificación de cierre
 

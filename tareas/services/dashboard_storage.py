@@ -133,7 +133,8 @@ class MySQLDashboardStorage:
             "SELECT t.id,t.empresa_id,t.correlativo,t.titulo,t.descripcion,"
             "t.estado,t.prioridad,t.anulada,t.responsable_id,t.fecha_tope,"
             "t.fecha_publicacion,t.fecha_cumplimiento,t.tipo_ambito,t.local_id,"
-            "t.departamento_id FROM tareas_tarea t WHERE t.anulada = %s "
+            "t.departamento_id FROM tareas_tarea t WHERE t.eliminada = 0 "
+            "AND t.anulada = %s "
             "AND t.estado IN (%s,%s,%s,%s)"
         )
         params = [False, *PUBLISHED_STATES, *params]

@@ -115,7 +115,10 @@ class DjangoSharedLinkStorage:
     def resolve(self, token, usuario_id, empresa_id):
         initial = (
             EnlaceTarea.objects.using(self.alias)
-            .filter(token_hash=hash_link_token(token))
+            .filter(
+                token_hash=hash_link_token(token),
+                tarea__eliminada=False,
+            )
             .values("pk", "tarea_id", "tarea__empresa_id")
             .first()
         )
@@ -187,7 +190,11 @@ class DjangoSharedLinkStorage:
     def revoke(self, command):
         initial = (
             EnlaceTarea.objects.using(self.alias)
-            .filter(pk=command.link_id, tarea__empresa_id=command.empresa_id)
+            .filter(
+                pk=command.link_id,
+                tarea__empresa_id=command.empresa_id,
+                tarea__eliminada=False,
+            )
             .values("tarea_id", "tarea__empresa_id")
             .first()
         )
@@ -262,7 +269,7 @@ class MySQLSharedLinkStorage:
                     cursor.execute(
                         "SELECT id,titulo,descripcion,correlativo,estado,prioridad,"
                         "responsable_id,empresa_id FROM tareas_tarea "
-                        "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                        "WHERE id=%s AND empresa_id=%s AND eliminada=0 FOR UPDATE",
                         (command.task_id, command.empresa_id),
                     )
                     task_row = cursor.fetchone()
@@ -295,7 +302,7 @@ class MySQLSharedLinkStorage:
                                 "link.fecha_expiracion,link.revocado_at,task.empresa_id "
                                 "FROM tareas_enlacetarea AS link "
                                 "INNER JOIN tareas_tarea AS task ON task.id=link.tarea_id "
-                                "WHERE link.token_hash=%s",
+                                "WHERE link.token_hash=%s AND task.eliminada=0",
                                 (hash_link_token(token),),
                             )
                             initial = cursor.fetchone()
@@ -345,7 +352,7 @@ class MySQLSharedLinkStorage:
                                 cursor.execute(
                                     "SELECT titulo,descripcion,correlativo,estado,prioridad,"
                                     "responsable_id,empresa_id FROM tareas_tarea "
-                                    "WHERE id=%s AND empresa_id=%s",
+                                    "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                     (task_id, task_company),
                                 )
                                 task_values = cursor.fetchone()
@@ -400,7 +407,7 @@ class MySQLSharedLinkStorage:
                                 "SELECT link.revocado_at FROM tareas_enlacetarea AS link "
                                 "INNER JOIN tareas_tarea AS task ON task.id=link.tarea_id "
                                 "WHERE link.id=%s AND link.tarea_id=%s "
-                                "AND task.empresa_id=%s FOR UPDATE",
+                                "AND task.empresa_id=%s AND task.eliminada=0 FOR UPDATE",
                                 (command.link_id, task_id, command.empresa_id),
                             )
                             row = cursor.fetchone()

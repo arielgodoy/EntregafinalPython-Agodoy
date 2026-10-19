@@ -1,4 +1,4 @@
-from django.db import models
+from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime, date
 import hashlib
@@ -6,9 +6,13 @@ import json
 import logging
 import os
 import sqlite3
+import time
 from pathlib import Path
+from uuid import UUID
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import DatabaseError, models, router
 
 from .models import (
     AuditoriaBibliotecaEvent,
@@ -20,6 +24,115 @@ from .models import (
 from access_control.models import Vista
 
 logger = logging.getLogger(__name__)
+
+
+class AuditIdempotencyError(RuntimeError):
+    """Base error for idempotent audit writes and lookups."""
+
+
+class AuditIdempotencyInputError(AuditIdempotencyError):
+    pass
+
+
+class AuditIdempotencyConflict(AuditIdempotencyError):
+    pass
+
+
+class AuditIdempotencyStorageError(AuditIdempotencyError):
+    pass
+
+
+@dataclass(frozen=True)
+class IdempotentAuditResult:
+    event: AuditoriaTareasEvent
+    created: bool
+
+
+def _normalize_audit_idempotency_key(value):
+    if isinstance(value, UUID):
+        return value.hex
+    try:
+        return UUID(str(value)).hex
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise AuditIdempotencyInputError(
+            "La clave idempotente debe ser un UUID válido."
+        ) from exc
+
+
+def _canonical_audit_value(value):
+    if isinstance(value, models.Model):
+        if value.pk is None:
+            raise AuditIdempotencyInputError(
+                "El payload idempotente contiene un modelo sin persistir."
+            )
+        return {
+            "__model__": value._meta.label_lower,
+            "pk": str(value.pk),
+        }
+    if isinstance(value, dict):
+        canonical = {}
+        for key, item in value.items():
+            normalized_key = str(key)
+            if normalized_key in canonical:
+                raise AuditIdempotencyInputError(
+                    "El payload idempotente contiene claves JSON ambiguas."
+                )
+            canonical[normalized_key] = _canonical_audit_value(item)
+        return canonical
+    if isinstance(value, (list, tuple)):
+        return [_canonical_audit_value(item) for item in value]
+    if isinstance(value, set):
+        raise AuditIdempotencyInputError(
+            "El payload idempotente no admite conjuntos."
+        )
+    return value
+
+
+def _audit_payload_hash(app_label, event_data):
+    try:
+        canonical_payload = json.dumps(
+            {
+                "app_label": app_label,
+                "event_data": _canonical_audit_value(event_data),
+                "format_version": 1,
+            },
+            cls=DjangoJSONEncoder,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise AuditIdempotencyInputError(
+            "El payload idempotente no se puede normalizar."
+        ) from exc
+    return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+
+def _is_retryable_idempotency_lock_error(error):
+    seen = set()
+    current = error
+    retryable_codes = {5, 6, 1205, 1213, "40001", "40P01", "55P03"}
+    retryable_messages = (
+        "database is locked",
+        "database table is locked",
+        "database schema is locked",
+    )
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = (
+            getattr(current, "sqlstate", None)
+            or getattr(current, "pgcode", None)
+            or getattr(current, "errno", None)
+        )
+        args = getattr(current, "args", ())
+        if code in retryable_codes or (args and args[0] in retryable_codes):
+            return True
+        message = str(current).casefold()
+        if any(text in message for text in retryable_messages):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class _LegacyAuditArchiveService:
@@ -315,6 +428,76 @@ class AuditoriaService:
         except Exception:
             logger.exception("No se pudo persistir el evento de auditoría app=%s", app_label)
             return None
+
+    @classmethod
+    def log_event_idempotent(
+        cls,
+        app_label,
+        *,
+        idempotency_key,
+        **event_data,
+    ):
+        """Create or replay one Tareas audit event using a unique operation UUID."""
+        model_class = cls.APP_MODEL_MAP.get(app_label)
+        if app_label != "tareas" or model_class is not AuditoriaTareasEvent:
+            raise AuditIdempotencyInputError(
+                "La escritura idempotente solo está habilitada para auditoría de Tareas."
+            )
+        if {"idempotency_key", "idempotency_payload_hash"}.intersection(event_data):
+            raise AuditIdempotencyInputError(
+                "Los campos idempotentes son reservados por el servicio."
+            )
+
+        normalized_key = _normalize_audit_idempotency_key(idempotency_key)
+        sanitized_data = cls._sanitize_data(dict(event_data))
+        payload_hash = _audit_payload_hash(app_label, sanitized_data)
+        manager = model_class._default_manager.db_manager(
+            router.db_for_write(model_class)
+        )
+        for attempt in range(3):
+            try:
+                event, created = manager.get_or_create(
+                    idempotency_key=normalized_key,
+                    defaults={
+                        **sanitized_data,
+                        "idempotency_payload_hash": payload_hash,
+                    },
+                )
+                break
+            except DatabaseError as exc:
+                if attempt < 2 and _is_retryable_idempotency_lock_error(exc):
+                    time.sleep(0.02 * (attempt + 1))
+                    continue
+                raise AuditIdempotencyStorageError(
+                    "No se pudo confirmar la escritura idempotente; el resultado "
+                    "puede ser ambiguo. Reintente únicamente con la misma clave."
+                ) from exc
+
+        if event.idempotency_payload_hash != payload_hash:
+            raise AuditIdempotencyConflict(
+                "La clave idempotente ya está asociada a un payload diferente."
+            )
+        return IdempotentAuditResult(event=event, created=created)
+
+    @classmethod
+    def get_event_by_idempotency_key(cls, app_label, idempotency_key):
+        """Read one Tareas audit event by its stable UUID key from the write DB."""
+        model_class = cls.APP_MODEL_MAP.get(app_label)
+        if app_label != "tareas" or model_class is not AuditoriaTareasEvent:
+            raise AuditIdempotencyInputError(
+                "La consulta idempotente solo está habilitada para auditoría de Tareas."
+            )
+
+        normalized_key = _normalize_audit_idempotency_key(idempotency_key)
+        manager = model_class._default_manager.db_manager(
+            router.db_for_write(model_class)
+        )
+        try:
+            return manager.filter(idempotency_key=normalized_key).first()
+        except DatabaseError as exc:
+            raise AuditIdempotencyStorageError(
+                "No se pudo consultar la auditoría central por clave idempotente."
+            ) from exc
 
     @classmethod
     def _sanitize_data(cls, data):

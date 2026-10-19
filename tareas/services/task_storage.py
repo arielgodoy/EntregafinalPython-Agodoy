@@ -274,7 +274,7 @@ class DjangoTaskStorage:
         cursor.execute(
             "SELECT id, empresa_id, correlativo, anulada, estado, responsable_id, "
             "fecha_tope, fecha_publicacion, fecha_asignacion FROM tareas_tarea "
-            "WHERE id = %s AND empresa_id = %s FOR UPDATE",
+            "WHERE id = %s AND empresa_id = %s AND eliminada = 0 FOR UPDATE",
             (task_id, empresa_id),
         )
         return cursor.fetchone()
@@ -286,7 +286,8 @@ class DjangoTaskStorage:
                 try:
                     cursor.execute(
                         "SELECT id FROM tareas_tarea WHERE empresa_id = %s "
-                        "AND estado IN (%s, %s, %s, %s) AND anulada = %s AND id <> %s LIMIT 1",
+                        "AND eliminada = 0 AND estado IN (%s, %s, %s, %s) "
+                        "AND anulada = %s AND id <> %s LIMIT 1",
                         (empresa_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, Tarea.Estado.CERRADA, False, task_id),
                     )
                     if cursor.fetchone() is not None:
@@ -311,7 +312,7 @@ class DjangoTaskStorage:
                     now = timezone.now()
                     new_correlativo = f"A{correlativo[1:]}"
                     cursor.execute(
-                        "UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s",
+                        "UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s AND eliminada=0",
                         (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id),
                     )
                     cursor.execute(
@@ -347,7 +348,7 @@ class DjangoTaskStorage:
                     if annulled:
                         raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
                     now = timezone.now()
-                    cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.GESTION, task_id, empresa_id))
+                    cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s AND eliminada=0", (Tarea.Estado.GESTION, task_id, empresa_id))
                     cursor.execute(
                         "INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                         (task_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, "INICIAR_GESTION", actor_id, now, ""),
@@ -375,7 +376,7 @@ class DjangoTaskStorage:
             "SELECT id, empresa_id, titulo, descripcion, prioridad, correlativo, "
             "anulada, estado, responsable_id, fecha_tope, fecha_publicacion, "
             "fecha_asignacion FROM tareas_tarea "
-            "WHERE id = %s AND empresa_id = %s FOR UPDATE",
+            "WHERE id = %s AND empresa_id = %s AND eliminada = 0 FOR UPDATE",
             (task_id, empresa_id),
         )
         return cursor.fetchone()
@@ -397,7 +398,8 @@ class DjangoTaskStorage:
                 try:
                     cursor.execute(
                         "SELECT id FROM tareas_tarea WHERE empresa_id = %s "
-                        "AND estado IN (%s, %s, %s, %s) AND anulada = %s AND id <> %s LIMIT 1",
+                        "AND eliminada = 0 AND estado IN (%s, %s, %s, %s) "
+                        "AND anulada = %s AND id <> %s LIMIT 1",
                         (empresa_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, Tarea.Estado.PENDIENTE_APROBACION_CIERRE, Tarea.Estado.CERRADA, False, task_id),
                     )
                     if cursor.fetchone() is not None:
@@ -426,7 +428,7 @@ class DjangoTaskStorage:
                     cursor.execute(
                         "UPDATE tareas_tarea SET estado = %s, correlativo = %s, "
                         "fecha_publicacion = %s, fecha_asignacion = %s "
-                        "WHERE id = %s AND empresa_id = %s",
+                        "WHERE id = %s AND empresa_id = %s AND eliminada = 0",
                         (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id),
                     )
                     cursor.execute(
@@ -464,7 +466,7 @@ class DjangoTaskStorage:
                         raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
                     now = timezone.now()
                     cursor.execute(
-                        "UPDATE tareas_tarea SET estado = %s WHERE id = %s AND empresa_id = %s",
+                        "UPDATE tareas_tarea SET estado = %s WHERE id = %s AND empresa_id = %s AND eliminada = 0",
                         (Tarea.Estado.GESTION, task_id, empresa_id),
                     )
                     cursor.execute(
@@ -826,7 +828,7 @@ class MySQLTaskListStorage:
                 .filter(username__icontains=filters.search)
                 .values_list("pk", flat=True)
             )
-        where = ["empresa_id = %s"]
+        where = ["empresa_id = %s", "eliminada = 0"]
         params: list[object] = [empresa_id]
         if filters.search:
             search_parts = [
@@ -864,7 +866,7 @@ class MySQLTaskListStorage:
             "SUM(CASE WHEN estado = %s THEN 1 ELSE 0 END), "
             "SUM(CASE WHEN estado = %s THEN 1 ELSE 0 END), "
             "SUM(CASE WHEN estado = %s THEN 1 ELSE 0 END) "
-            "FROM tareas_tarea WHERE empresa_id = %s"
+            "FROM tareas_tarea WHERE empresa_id = %s AND eliminada = 0"
         )
         with open_mysql_connection(
             self.connection_config,
@@ -978,7 +980,8 @@ class MySQLTaskListStorage:
             "t.prioridad, t.estado, t.anulada, t.responsable_id, "
             "t.fecha_tope, t.fecha_publicacion, t.fecha_asignacion, "
             "t.fecha_cumplimiento, t.fecha_creacion "
-            "FROM tareas_tarea t WHERE t.empresa_id=%s AND t.anulada=0 "
+            "FROM tareas_tarea t WHERE t.empresa_id=%s AND t.eliminada=0 "
+            "AND t.anulada=0 "
             "AND t.estado IN (%s,%s,%s,%s) "
             "AND (t.responsable_id=%s OR EXISTS ("
             "SELECT 1 FROM tareas_tareaparticipante p "
@@ -1078,7 +1081,7 @@ class MySQLTaskStorage:
         cursor.execute(
             "SELECT id, empresa_id, correlativo, anulada, estado, responsable_id, "
             "fecha_tope, fecha_publicacion, fecha_asignacion FROM tareas_tarea "
-            "WHERE id = %s AND empresa_id = %s FOR UPDATE",
+            "WHERE id = %s AND empresa_id = %s AND eliminada = 0 FOR UPDATE",
             (task_id, empresa_id),
         )
         return cursor.fetchone()
@@ -1169,7 +1172,7 @@ class MySQLTaskStorage:
                     cursor.execute(
                         "SELECT id, empresa_id, titulo, descripcion, prioridad, "
                         "responsable_id, fecha_tope, estado FROM tareas_tarea "
-                        "WHERE id = %s AND empresa_id = %s",
+                        "WHERE id = %s AND empresa_id = %s AND eliminada = 0",
                         (task_id, empresa_id),
                     )
                     row = cursor.fetchone()
@@ -1203,7 +1206,7 @@ class MySQLTaskStorage:
                             cursor.execute(
                                 "UPDATE tareas_tarea SET titulo = %s, descripcion = %s, "
                                 "prioridad = %s, responsable_id = %s, fecha_tope = %s "
-                                "WHERE id = %s AND empresa_id = %s",
+                                "WHERE id = %s AND empresa_id = %s AND eliminada = 0",
                                 (
                                     command.titulo,
                                     command.descripcion,
@@ -1237,7 +1240,8 @@ def _mysql_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -
                         cursor.execute(
                             "SELECT id, empresa_id, correlativo, anulada, estado, "
                             "responsable_id, fecha_tope, fecha_asignacion "
-                            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s "
+                            "AND eliminada=0 FOR UPDATE",
                             (task_id, empresa_id),
                         )
                         row = cursor.fetchone()
@@ -1255,7 +1259,7 @@ def _mysql_publish_task(self, *, task_id: int, empresa_id: int, actor_id: int) -
                             raise ValidationError("No se puede publicar: la tarea requiere fecha tope y correlativo válido.")
                         now = timezone.now()
                         new_correlativo = f"A{correlativo[1:]}"
-                        cursor.execute("UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id))
+                        cursor.execute("UPDATE tareas_tarea SET estado=%s, correlativo=%s, fecha_publicacion=%s, fecha_asignacion=%s WHERE id=%s AND empresa_id=%s AND eliminada=0", (Tarea.Estado.ACTIVA, new_correlativo, now, assigned_at or now, task_id, empresa_id))
                         cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.BORRADOR, Tarea.Estado.ACTIVA, "PUBLICAR", actor_id, now, ""))
                         transition_id = cursor.lastrowid
                     finally:
@@ -1275,7 +1279,7 @@ def _mysql_enter_management(self, *, task_id: int, empresa_id: int, actor_id: in
                     lock_mysql_task_rows(connection, empresa_id)
                     cursor = connection.cursor()
                     try:
-                        cursor.execute("SELECT id, empresa_id, correlativo, anulada, estado FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE", (task_id, empresa_id))
+                        cursor.execute("SELECT id, empresa_id, correlativo, anulada, estado FROM tareas_tarea WHERE id=%s AND empresa_id=%s AND eliminada=0 FOR UPDATE", (task_id, empresa_id))
                         row = cursor.fetchone()
                         if row is None:
                             raise EditTaskNotFound
@@ -1285,7 +1289,7 @@ def _mysql_enter_management(self, *, task_id: int, empresa_id: int, actor_id: in
                         if annulled:
                             raise ValidationError("La tarea está anulada; no admite operaciones de ciclo.")
                         now = timezone.now()
-                        cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s", (Tarea.Estado.GESTION, task_id, empresa_id))
+                        cursor.execute("UPDATE tareas_tarea SET estado=%s WHERE id=%s AND empresa_id=%s AND eliminada=0", (Tarea.Estado.GESTION, task_id, empresa_id))
                         cursor.execute("INSERT INTO tareas_tareatransicion (tarea_id, estado_origen, estado_destino, accion_evento, usuario_id, timestamp, motivo) VALUES (%s,%s,%s,%s,%s,%s,%s)", (task_id, Tarea.Estado.ACTIVA, Tarea.Estado.GESTION, "INICIAR_GESTION", actor_id, now, ""))
                         transition_id = cursor.lastrowid
                     finally:

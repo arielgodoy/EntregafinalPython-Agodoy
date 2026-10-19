@@ -72,6 +72,7 @@ def lock_orm_task_rows(
     task_ids=None,
     *,
     require_row_locks: bool = False,
+    include_deleted: bool = False,
 ) -> tuple[Tarea, ...]:
     """Lock task rows in primary-key order inside the caller's transaction."""
     connection = connections[alias]
@@ -93,7 +94,9 @@ def lock_orm_task_rows(
     lock_orm_task_company(alias, empresa_id)
     if normalized_ids == ():
         return ()
-    queryset = Tarea.objects.using(alias).filter(empresa_id=empresa_id)
+    queryset = Tarea.all_objects.using(alias).filter(empresa_id=empresa_id)
+    if not include_deleted:
+        queryset = queryset.filter(eliminada=False)
     if normalized_ids is not None:
         queryset = queryset.filter(pk__in=normalized_ids)
     if supports_row_locks:
@@ -108,7 +111,13 @@ def lock_orm_task_rows(
     return rows
 
 
-def lock_mysql_task_rows(connection, empresa_id: int, task_ids=None) -> tuple[int, ...]:
+def lock_mysql_task_rows(
+    connection,
+    empresa_id: int,
+    task_ids=None,
+    *,
+    include_deleted: bool = False,
+) -> tuple[int, ...]:
     """Lock MySQL task rows in deterministic order on the supplied connection."""
     alias = getattr(connection, "alias", None)
     if isinstance(alias, str) and alias and not connections[alias].in_atomic_block:
@@ -127,6 +136,10 @@ def lock_mysql_task_rows(connection, empresa_id: int, task_ids=None) -> tuple[in
         f"WHERE {company_column} = %s"
     )
     params = [empresa_id]
+    if not include_deleted:
+        deleted_column = f"`{Tarea._meta.get_field('eliminada').column}`"
+        sql += f" AND {deleted_column} = %s"
+        params.append(False)
     if normalized_ids is not None:
         placeholders = ", ".join("%s" for _ in normalized_ids)
         sql += f" AND {id_column} IN ({placeholders})"
@@ -170,7 +183,7 @@ def lock_orm_task_company(alias: str, empresa_id: int) -> CorrelativoEmpresa:
 
 
 def lock_mysql_task_company(connection, empresa_id: int) -> None:
-    """Create-if-absent and lock the same company row used by task numbering."""
+    """Create-if-absent and exclusively lock the company's coordination row."""
     table = f"`{CorrelativoEmpresa._meta.db_table}`"
     company_column = (
         f"`{CorrelativoEmpresa._meta.get_field('empresa').column}`"
@@ -180,40 +193,14 @@ def lock_mysql_task_company(connection, empresa_id: int) -> None:
     )
     cursor = connection.cursor()
     try:
-        try:
-            cursor.execute(
-                f"INSERT INTO {table} ({company_column}, {sequence_column}) "
-                f"VALUES (%s, %s)",
-                (empresa_id, 1),
-            )
-        except Exception as exc:
-            if not _is_duplicate_key_error(exc):
-                raise
-            cursor.execute(
-                f"SELECT {company_column} FROM {table} "
-                f"WHERE {company_column} = %s FOR UPDATE",
-                (empresa_id,),
-            )
-            if cursor.fetchone() is None:
-                raise TaskMutationLockError(
-                    "No se pudo obtener el lock de coordinación de la empresa."
-                )
+        cursor.execute(
+            f"INSERT INTO {table} ({company_column}, {sequence_column}) "
+            f"VALUES (%s, %s) ON DUPLICATE KEY UPDATE "
+            f"{company_column} = VALUES({company_column})",
+            (empresa_id, 1),
+        )
     finally:
         cursor.close()
-
-
-def _is_duplicate_key_error(error: BaseException) -> bool:
-    seen = set()
-    current = error
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        if getattr(current, "errno", None) == 1062:
-            return True
-        args = getattr(current, "args", ())
-        if args and args[0] == 1062:
-            return True
-        current = current.__cause__ or current.__context__
-    return False
 
 
 def lock_orm_task_groups(
@@ -221,6 +208,7 @@ def lock_orm_task_groups(
     task_groups,
     *,
     require_row_locks: bool = False,
+    include_deleted: bool = False,
 ) -> tuple[Tarea, ...]:
     rows = []
     for empresa_id, task_ids in _normalize_task_groups(task_groups):
@@ -230,12 +218,18 @@ def lock_orm_task_groups(
                 empresa_id,
                 task_ids,
                 require_row_locks=require_row_locks,
+                include_deleted=include_deleted,
             )
         )
     return tuple(rows)
 
 
-def lock_mysql_task_groups(connection, task_groups) -> tuple[tuple[int, int], ...]:
+def lock_mysql_task_groups(
+    connection,
+    task_groups,
+    *,
+    include_deleted: bool = False,
+) -> tuple[tuple[int, int], ...]:
     locked = []
     for empresa_id, task_ids in _normalize_task_groups(task_groups):
         locked.extend(
@@ -244,6 +238,7 @@ def lock_mysql_task_groups(connection, task_groups) -> tuple[tuple[int, int], ..
                 connection,
                 empresa_id,
                 task_ids,
+                include_deleted=include_deleted,
             )
         )
     return tuple(locked)

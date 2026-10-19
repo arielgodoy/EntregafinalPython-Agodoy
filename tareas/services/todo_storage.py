@@ -9,6 +9,7 @@ from typing import Protocol, cast
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from settings.services.mysql_connections import open_mysql_connection
@@ -97,6 +98,16 @@ class DjangoTodoUnit:
                 "anulada",
                 "relaciones_padre__padre__anulada",
                 "relaciones_padre__padre__relaciones_padre__padre__anulada",
+            )
+            .filter(
+                Q(relaciones_padre__padre__isnull=True)
+                | Q(relaciones_padre__padre__eliminada=False),
+                Q(
+                    relaciones_padre__padre__relaciones_padre__padre__isnull=True
+                )
+                | Q(
+                    relaciones_padre__padre__relaciones_padre__padre__eliminada=False
+                ),
             )
             .first()
         )
@@ -232,7 +243,8 @@ class MySQLTodoUnit:
 
     def get_originated_tasks(self, todo_id):
         self.cursor.execute(
-            "SELECT id,estado FROM tareas_tarea WHERE todo_origen_id=%s",
+            "SELECT id,estado FROM tareas_tarea "
+            "WHERE todo_origen_id=%s AND eliminada=0",
             (todo_id,),
         )
         return [(row[0], row[1]) for row in self.cursor.fetchall()]
@@ -243,12 +255,14 @@ class MySQLTodoUnit:
             "FROM tareas_tarea AS task "
             "LEFT JOIN tareas_tarearelacion AS relation "
             "ON relation.hija_id=task.id "
-            "LEFT JOIN tareas_tarea AS parent ON parent.id=relation.padre_id "
+            "LEFT JOIN tareas_tarea AS parent "
+            "ON parent.id=relation.padre_id AND parent.eliminada=0 "
             "LEFT JOIN tareas_tarearelacion AS parent_relation "
             "ON parent_relation.hija_id=parent.id "
             "LEFT JOIN tareas_tarea AS grandparent "
             "ON grandparent.id=parent_relation.padre_id "
-            "WHERE task.id=%s",
+            "AND grandparent.eliminada=0 "
+            "WHERE task.id=%s AND task.eliminada=0",
             (task_id,),
         )
         row = self.cursor.fetchone()

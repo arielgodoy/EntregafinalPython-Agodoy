@@ -437,7 +437,12 @@ class DjangoTaskDetailStorage:
         )
         parent = (
             TareaRelacion.objects.using(self.alias)
-            .filter(hija_id=task.pk, hija__empresa_id=empresa_id)
+            .filter(
+                hija_id=task.pk,
+                hija__empresa_id=empresa_id,
+                hija__eliminada=False,
+                padre__eliminada=False,
+            )
             .select_related("padre")
             .first()
         )
@@ -470,7 +475,12 @@ class DjangoTaskDetailStorage:
             ancestor_annulled = ancestor_annulled or current_parent.anulada
             current_parent = (
                 TareaRelacion.objects.using(self.alias)
-                .filter(hija_id=current_parent.pk, hija__empresa_id=empresa_id)
+                .filter(
+                    hija_id=current_parent.pk,
+                    hija__empresa_id=empresa_id,
+                    hija__eliminada=False,
+                    padre__eliminada=False,
+                )
                 .select_related("padre")
                 .first()
             )
@@ -864,7 +874,8 @@ class MySQLTaskDetailStorage:
                     "fechas_pendientes_confirmacion, requiere_evidencia_cierre, estado, "
                     "responsable_id, empresa_id, creada_por_id, fecha_creacion, "
                     "fecha_publicacion, fecha_asignacion, fecha_tope, fecha_cumplimiento "
-                    "FROM tareas_tarea WHERE id = %s AND empresa_id = %s",
+                    "FROM tareas_tarea WHERE id = %s AND empresa_id = %s "
+                    "AND eliminada = 0",
                     (task_id, empresa_id),
                 )
                 if not task_rows:
@@ -880,14 +891,16 @@ class MySQLTaskDetailStorage:
                     cursor,
                     "SELECT p.id, p.correlativo, p.titulo, p.estado, p.anulada "
                     "FROM tareas_tarearelacion r JOIN tareas_tarea p ON p.id = r.padre_id "
-                    "WHERE r.hija_id = %s AND p.empresa_id = %s LIMIT 1",
+                    "WHERE r.hija_id = %s AND p.empresa_id = %s "
+                    "AND p.eliminada = 0 LIMIT 1",
                     (task_id, empresa_id),
                 )
                 child_rows = self._rows(
                     cursor,
                     "SELECT c.id, c.correlativo, c.titulo, c.estado, c.anulada "
                     "FROM tareas_tarearelacion r JOIN tareas_tarea c ON c.id = r.hija_id "
-                    "WHERE r.padre_id = %s AND c.empresa_id = %s ORDER BY c.id",
+                    "WHERE r.padre_id = %s AND c.empresa_id = %s "
+                    "AND c.eliminada = 0 ORDER BY c.id",
                     (task_id, empresa_id),
                 )
                 participant_rows = self._rows(
@@ -922,7 +935,8 @@ class MySQLTaskDetailStorage:
                         cursor,
                         "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
                         "JOIN tareas_tarea p ON p.id = r.padre_id "
-                        "WHERE r.hija_id = %s AND p.empresa_id = %s LIMIT 1",
+                        "WHERE r.hija_id = %s AND p.empresa_id = %s "
+                        "AND p.eliminada = 0 LIMIT 1",
                         (current_parent_id, empresa_id),
                     )
                     if not ancestor_rows:

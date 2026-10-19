@@ -6,9 +6,10 @@ Contrato de la interfaz web server-side rendered. No se inventa una API REST pú
 si una fase requiere integración, se documenta un adaptador dentro de `tareas/` y se
 mantiene bloqueado hasta autorización del contrato externo. La decisión 2H.0.3 sustituye
 la eliminación física administrativa por eliminación lógica definitiva del árbol, sin
-restauración, conforme a FR-R06…FR-R17. No existe executor lógico ni POST implementado o
-habilitado. La anulación/reactivación sigue siendo una acción distinta; T105 conserva su
-excepción individual de borrado físico para MiniTareas sin estado hecho ni historial.
+restauración, conforme a FR-R06…FR-R17. El servicio lógico interno L2 existe; no existe
+un endpoint ni POST lógico implementado o habilitado. La anulación/reactivación sigue
+siendo una acción distinta; T105 conserva su excepción individual de borrado físico para
+MiniTareas sin estado hecho ni historial.
 
 > **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
 > `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
@@ -212,7 +213,12 @@ La ruta existente
 es únicamente una previsualización GET de solo lectura del WIP físico anterior. No es un
 contrato ni una autorización para ejecutar la nueva eliminación lógica. Su respuesta y
 fingerprint deberán revisarse durante L5 antes de utilizarla como preview/confirmación.
-No existe POST lógico, endpoint de restauración ni executor conectado a HTTP.
+Desde la corrección L3, sus adaptadores Django y MYSQL_CONFIG excluyen una raíz eliminada
+y sus consultas jerárquicas no incluyen descendientes eliminados. Si una relación retenida
+deja el inventario inconsistente, la vista bloquea el preview con un mensaje genérico
+común para tareas no disponibles, eliminadas o fuera de empresa; no presenta identificador
+ni datos del descendiente. No existe POST lógico, endpoint de restauración ni executor
+conectado a HTTP.
 
 Contrato web futuro propuesto, no registrado ni implementado:
 
@@ -224,6 +230,8 @@ Contrato web futuro propuesto, no registrado ni implementado:
 El permiso I se asigna a la Vista independiente `Tareas eliminadas`; no se infiere del
 permiso S de eliminación ni de `Tareas`. La pantalla todavía no está implementada. Las
 tareas eliminadas quedan fuera de KPI operacionales y reportes habituales.
+Su registro de navegación/Vista depende de infraestructura SYSTEM/CORE y requiere una
+autorización separada; esta fase no modifica `access_control` ni el sidebar global.
 
 Cuando se autorice L5, preview y POST deberán comprobar usuario autenticado/activo,
 Empresa activa Base 00, CSRF en la mutación, permiso S explícito para eliminar,

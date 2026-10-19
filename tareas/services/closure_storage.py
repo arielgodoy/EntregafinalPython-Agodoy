@@ -107,7 +107,7 @@ class MySQLClosureStorage:
         errors = []
         cursor.execute(
             "SELECT COUNT(*) FROM tareas_minitarea m JOIN tareas_tarea t ON t.id=m.tarea_id "
-            "WHERE m.tarea_id=%s AND t.empresa_id=%s AND m.hecho=%s",
+            "WHERE m.tarea_id=%s AND t.empresa_id=%s AND t.eliminada=0 AND m.hecho=%s",
             (task_id, empresa_id, False),
         )
         if (cursor.fetchone() or (0,))[0]:
@@ -116,7 +116,7 @@ class MySQLClosureStorage:
         cursor.execute(
             "SELECT r.hija_id, c.estado, c.anulada FROM tareas_tarearelacion r "
             "JOIN tareas_tarea c ON c.id=r.hija_id "
-            "WHERE r.padre_id=%s AND c.empresa_id=%s ORDER BY c.id",
+            "WHERE r.padre_id=%s AND c.empresa_id=%s AND c.eliminada=0 ORDER BY c.id",
             (task_id, empresa_id),
         )
         children = cursor.fetchall()
@@ -126,7 +126,8 @@ class MySQLClosureStorage:
             marks = ",".join("%s" for _ in child_ids)
             cursor.execute(
                 f"SELECT r.hija_id, c.estado, c.anulada, r.padre_id FROM tareas_tarearelacion r "
-                f"JOIN tareas_tarea c ON c.id=r.hija_id WHERE r.padre_id IN ({marks}) AND c.empresa_id=%s ORDER BY c.id",
+                f"JOIN tareas_tarea c ON c.id=r.hija_id WHERE r.padre_id IN ({marks}) "
+                "AND c.empresa_id=%s AND c.eliminada=0 ORDER BY c.id",
                 tuple(child_ids) + (empresa_id,),
             )
             descendants.extend(cursor.fetchall())
@@ -165,7 +166,8 @@ class MySQLClosureStorage:
         cursor.execute(
             "SELECT id, empresa_id, estado, anulada, cierre_completado, "
             "fecha_cumplimiento, requiere_evidencia_cierre, responsable_id, creada_por_id "
-            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s FOR UPDATE",
+            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s "
+            "AND eliminada=0 FOR UPDATE",
             (command.task_id, command.empresa_id),
         )
         row = cursor.fetchone()
@@ -208,7 +210,7 @@ class MySQLClosureStorage:
                                 cursor.execute(
                                     "UPDATE tareas_tarea SET cierre_completado=%s, "
                                     "fecha_cumplimiento=%s, estado=%s "
-                                    "WHERE id=%s AND empresa_id=%s",
+                                    "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                     (
                                         True,
                                         now,
@@ -255,7 +257,7 @@ class MySQLClosureStorage:
                                 )
                                 cursor.execute(
                                     "UPDATE tareas_tarea SET estado=%s, cierre_completado=%s "
-                                    "WHERE id=%s AND empresa_id=%s",
+                                    "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                     (
                                         Tarea.Estado.CERRADA,
                                         True,
@@ -344,7 +346,8 @@ class MySQLClosureStorage:
                             now = timezone.now()
                             cursor.execute(
                                 "UPDATE tareas_tarea SET estado=%s, fecha_cumplimiento=%s, "
-                                "cierre_completado=%s WHERE id=%s AND empresa_id=%s",
+                                "cierre_completado=%s WHERE id=%s AND empresa_id=%s "
+                                "AND eliminada=0",
                                 (
                                     Tarea.Estado.GESTION,
                                     None,

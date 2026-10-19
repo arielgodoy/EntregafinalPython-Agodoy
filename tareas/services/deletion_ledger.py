@@ -21,6 +21,7 @@ from settings.services.mysql_connections import (
 )
 
 from ..models import (
+    LOGICAL_DELETION_RESULT_CODE,
     Tarea,
     TareaEliminacionArchivo,
     TareaEliminacionElemento,
@@ -681,6 +682,22 @@ class DjangoDeletionLedgerUnitOfWork:
         )
         return _operation_record_from_model(model) if model is not None else None
 
+    def get_manifest(
+        self,
+        operation_id: UUID,
+    ) -> tuple[DeletionInventoryItem, ...]:
+        self._operation(operation_id, lock=False)
+        return tuple(
+            sorted(
+                DeletionInventoryItem(model_label=kind, object_id=object_id)
+                for kind, object_id in (
+                    TareaEliminacionElemento.objects.using(self.alias)
+                    .filter(operacion_id=operation_id.hex)
+                    .values_list("tipo", "object_id")
+                )
+            )
+        )
+
     def get_root_operation(
         self,
         empresa_id: int,
@@ -719,7 +736,7 @@ class DjangoDeletionLedgerUnitOfWork:
             )
             return _operation_record_from_model(existing)
         root_exists = (
-            Tarea.objects.using(self.alias)
+            Tarea.all_objects.using(self.alias)
             .select_for_update()
             .filter(
                 pk=operation.root_task_id,
@@ -890,6 +907,67 @@ class DjangoDeletionLedgerUnitOfWork:
         )
         return _operation_record_from_model(operation)
 
+    def mark_logically_deleted(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        operation = self._operation(operation_id)
+        if operation.status == TareaEliminacionOperacion.Estado.COMMITTED:
+            if (
+                operation.result_code != LOGICAL_DELETION_RESULT_CODE
+                or operation.file_cleanup_status
+                != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+            ):
+                raise DeletionLedgerStateError(
+                    "El resultado persistido de la operación lógica no es válido."
+                )
+            return _operation_record_from_model(operation)
+        if operation.status != TareaEliminacionOperacion.Estado.PENDIENTE:
+            raise DeletionLedgerStateError("El estado de operación no es válido.")
+        if not operation.motivo or not operation.motivo.strip():
+            raise DeletionLedgerStateError(
+                "La operación lógica requiere un motivo no vacío."
+            )
+        elements = self.get_manifest(operation_id)
+        if not elements or (
+            "tareas.tarea",
+            operation.root_task_id,
+        ) not in {(item.model_label, item.object_id) for item in elements}:
+            raise DeletionLedgerStateError(
+                "No se puede confirmar una operación lógica sin su manifiesto."
+            )
+        if any(item.model_label != "tareas.tarea" for item in elements):
+            raise DeletionLedgerStateError(
+                "El manifiesto lógico contiene elementos no admitidos."
+            )
+        if TareaEliminacionArchivo.objects.using(self.alias).filter(
+            operacion_id=operation_id.hex
+        ).exists():
+            raise DeletionLedgerStateError(
+                "Una operación lógica no puede programar limpieza de archivos."
+            )
+        now = timezone.now()
+        operation.status = TareaEliminacionOperacion.Estado.COMMITTED
+        operation.result_code = LOGICAL_DELETION_RESULT_CODE
+        operation.audit_status = TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE
+        operation.file_cleanup_status = (
+            TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+        )
+        operation.committed_at = now
+        operation.updated_at = now
+        operation.save(
+            using=self.alias,
+            update_fields=[
+                "status",
+                "result_code",
+                "audit_status",
+                "file_cleanup_status",
+                "committed_at",
+                "updated_at",
+            ],
+        )
+        return _operation_record_from_model(operation)
+
     def record_audit_result(
         self,
         operation_id: UUID,
@@ -914,6 +992,11 @@ class DjangoDeletionLedgerUnitOfWork:
             operation.audit_event_id = event_id
             operation.audit_error_code = ""
         else:
+            if (
+                operation.audit_status
+                == TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA
+            ):
+                return _operation_record_from_model(operation)
             operation.audit_status = TareaEliminacionOperacion.EstadoAuditoria.ERROR
             operation.audit_event_id = None
             operation.audit_error_code = _validate_result_code(
@@ -1194,6 +1277,19 @@ class MySQLDeletionLedgerUnitOfWork:
     def get_operation(self, operation_id: UUID) -> DeletionOperationRecord | None:
         row = self._operation_row(operation_id, lock=False)
         return _operation_record_from_row(row) if row is not None else None
+
+    def get_manifest(
+        self,
+        operation_id: UUID,
+    ) -> tuple[DeletionInventoryItem, ...]:
+        if self._operation_row(operation_id, lock=False) is None:
+            raise DeletionLedgerStateError("La operación no existe en el ledger.")
+        return tuple(
+            sorted(
+                DeletionInventoryItem(model_label=kind, object_id=object_id)
+                for kind, object_id in self._inventory_rows(operation_id)
+            )
+        )
 
     def get_root_operation(
         self,
@@ -1532,6 +1628,74 @@ class MySQLDeletionLedgerUnitOfWork:
             )
         return _operation_record_from_row(updated)
 
+    def mark_logically_deleted(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        row = self._operation_row(operation_id)
+        if row is None:
+            raise DeletionLedgerStateError("La operación no existe en el ledger.")
+        operation = _operation_record_from_row(row)
+        if operation.status == TareaEliminacionOperacion.Estado.COMMITTED:
+            if (
+                operation.result_code != LOGICAL_DELETION_RESULT_CODE
+                or operation.file_cleanup_status
+                != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+            ):
+                raise DeletionLedgerStateError(
+                    "El resultado persistido de la operación lógica no es válido."
+                )
+            return operation
+        if operation.status != TareaEliminacionOperacion.Estado.PENDIENTE:
+            raise DeletionLedgerStateError("El estado de operación no es válido.")
+        if not operation.motivo or not operation.motivo.strip():
+            raise DeletionLedgerStateError(
+                "La operación lógica requiere un motivo no vacío."
+            )
+        elements = self.get_manifest(operation_id)
+        if not elements or (
+            "tareas.tarea",
+            operation.root_task_id,
+        ) not in {(item.model_label, item.object_id) for item in elements}:
+            raise DeletionLedgerStateError(
+                "No se puede confirmar una operación lógica sin su manifiesto."
+            )
+        if any(item.model_label != "tareas.tarea" for item in elements):
+            raise DeletionLedgerStateError(
+                "El manifiesto lógico contiene elementos no admitidos."
+            )
+        cursor = self._execute(
+            "SELECT 1 FROM `tareas_eliminacion_archivo` "
+            "WHERE `operacion_id` = %s LIMIT 1",
+            (operation_id.hex,),
+        )
+        try:
+            has_files = cursor.fetchone() is not None
+        finally:
+            cursor.close()
+        if has_files:
+            raise DeletionLedgerStateError(
+                "Una operación lógica no puede programar limpieza de archivos."
+            )
+        self._update_operation(
+            operation_id,
+            {
+                "status": TareaEliminacionOperacion.Estado.COMMITTED,
+                "result_code": LOGICAL_DELETION_RESULT_CODE,
+                "audit_status": TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+                "file_cleanup_status": (
+                    TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+                ),
+                "committed_at": timezone.now(),
+            },
+        )
+        updated = self._operation_row(operation_id)
+        if updated is None:
+            raise DeletionLedgerSchemaError(
+                "No se pudo recuperar la operación lógica confirmada."
+            )
+        return _operation_record_from_row(updated)
+
     def record_audit_result(
         self,
         operation_id: UUID,
@@ -1563,6 +1727,11 @@ class MySQLDeletionLedgerUnitOfWork:
                 "audit_last_attempt_at": timezone.now(),
             }
         else:
+            if (
+                operation.audit_status
+                == TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA
+            ):
+                return operation
             values = {
                 "audit_status": TareaEliminacionOperacion.EstadoAuditoria.ERROR,
                 "audit_event_id": None,

@@ -172,7 +172,16 @@ class MySQLDetailStorageTests(TestCase):
         self.assertEqual(result.core.correlativo, "B0000003")
         self.assertEqual(result.core.titulo, "MYSQL task")
         self.assertEqual(result.participants[0].username, self.user.username)
-        self.assertTrue(any("id = %s AND empresa_id = %s" in call.args[0] for call in cursor.execute.call_args_list))
+        task_query = next(
+            call.args[0]
+            for call in cursor.execute.call_args_list
+            if "FROM tareas_tarea WHERE id = %s" in call.args[0]
+        )
+        self.assertIn("empresa_id = %s AND eliminada = 0", task_query)
+        self.assertTrue(any(
+            "p.eliminada = 0" in call.args[0]
+            for call in cursor.execute.call_args_list
+        ))
         open_connection.assert_called_once_with(self.connection, database_name="tareas")
 
     @patch("tareas.services.detail_storage.open_mysql_connection")

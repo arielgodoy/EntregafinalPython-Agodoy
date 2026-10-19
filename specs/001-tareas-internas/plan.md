@@ -296,11 +296,30 @@ durante esta enmienda documental.
 
 1. **L1 — Estado lógico y ledger (implementada)**: campos/migración aditivos en `Tarea`,
    persistencia del motivo en ambos adaptadores, contrato SQL y preflight metadata-only
-   para MYSQL_CONFIG. No aplica DDL a BASE_TAREAS real ni habilita una operación.
-2. **L2 — Servicio transaccional (pendiente)**: marcar raíz/descendientes con locks existentes,
-   idempotencia y rollback todo-o-nada; sin DELETE de filas ni archivos.
-3. **L3 — Exclusión operacional (pendiente)**: filtrar eliminadas en ambos backends y bloquear todas
-   las mutaciones indirectas.
+   para MYSQL_CONFIG. Con autorización específica de desarrollo, las nueve adiciones
+   contractuales se aplicaron solo a la base física `tareas` después de verificar
+   `DATABASE()`. No se aplicaron migraciones Django ni DDL a producción.
+2. **L2 — Servicio transaccional (GO tras H-L2-001)**: el servicio interno `tareas/services/logical_deletion.py`
+   valida usuario/VICMEAS S y Base 00; bloquea y vuelve a comprobar el árbol recursivo;
+   exige motivo; persiste marcas, manifiesto y ledger en una transacción; conserva filas,
+   relaciones y archivos; registra auditoría central post-commit mediante
+   `AuditoriaService.log_event_idempotent`. La reconciliación explícita consulta la clave
+   idempotente antes de reintentar, valida el payload y confirma el ledger sin duplicar
+   eventos. Cuando falta el actor y no hay evento, la escritura usa el FK nullable
+   `user=None` y conserva el ID histórico en `meta`; si ya hay evento, valida el payload
+   persistido sin cambiar su hash. Replay, pérdida de acuse, actor ausente, error temporal,
+   conflicto y concurrencia quedan cubiertos en tests aislados. No se habilita POST ni
+   interfaz HTTP.
+3. **L3 — Exclusión operacional (GO tras H-L3-001/H-L3-002)**: `Tarea.objects` excluye
+   por defecto `eliminada`; los filtros de preview en Django y MYSQL_CONFIG excluyen raíces
+   y descendientes eliminados. Los gestores oficiales bloquean mutaciones masivas de los
+   campos protegidos; el servicio L2 escribe su marca mediante su adaptador transaccional.
+   Guardas y locks impiden mutaciones normales o nuevas relaciones sobre eliminadas.
+   Ambos backends filtran lecturas, joins y escrituras de superficies operacionales
+   (listados, detalle, jerarquía, búsquedas, dashboards y servicios de colaboración).
+   Los bloqueos por una hija inexistente, eliminada o fuera de empresa usan la misma
+   respuesta genérica, sin identificar la causa ni revelar sus datos.
+   El ledger e integridad conservan acceso explícito mediante `all_objects`/locks.
 4. **L4 — Consulta histórica (pendiente)**: pantalla separada de solo lectura con VICMEAS
    `ingresar` (I) explícito en la vista independiente `Tareas eliminadas`.
 5. **L5 — Integración HTTP (pendiente)**: preview/confirmación y POST protegido, únicamente tras
@@ -310,6 +329,16 @@ durante esta enmienda documental.
 
 Las eliminadas se excluyen de KPI operacionales y reportes históricos habituales; la
 consulta histórica autorizada es la única superficie para verlas.
+
+**Capacidad de auditoría para L2**: contrato público idempotente disponible en `auditoria`
+con UUID normalizado, unicidad persistida en `AuditoriaTareasEvent`, hash canónico del
+payload, replay validado y lookup por clave en la base de escritura; `tareas` lo consume
+después del commit y reconcilia los resultados inciertos.
+
+La validación correctiva no usó una base MariaDB física. Los tests del adaptador MySQL
+verifican SQL parametrizado y resultados simulados; las pruebas opt-in de concurrencia
+MariaDB requieren una instancia local aislada y permanecen como límite de certificación
+del motor, no como afirmación de que MySQL real quedó validado.
 
 ## Migration Strategy
 

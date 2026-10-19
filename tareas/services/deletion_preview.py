@@ -101,10 +101,14 @@ class _DjangoReader:
             "estado": task.estado,
         }
 
-    def children(self, task_id):
+    def children(self, task_id, empresa_id):
         return list(
             TareaRelacion.objects.using(self.alias)
-            .filter(padre_id=task_id)
+            .filter(
+                padre_id=task_id,
+                hija__empresa_id=empresa_id,
+                hija__eliminada=False,
+            )
             .order_by("hija_id")
             .values_list("hija_id", flat=True)
         )
@@ -312,8 +316,8 @@ class _MySQLReader:
         table = self._quote(Tarea._meta.db_table)
         self.cursor.execute(
             f"SELECT id, empresa_id, correlativo, titulo, estado FROM {table} "
-            "WHERE id = %s AND empresa_id = %s",
-            (task_id, empresa_id),
+            "WHERE id = %s AND empresa_id = %s AND eliminada = %s",
+            (task_id, empresa_id, False),
         )
         row = self.cursor.fetchone()
         if row is None:
@@ -326,11 +330,23 @@ class _MySQLReader:
             estado=row[4],
         )
 
-    def children(self, task_id):
+    def children(self, task_id, empresa_id):
         relation = self._quote(TareaRelacion._meta.db_table)
+        task_table = self._quote(Tarea._meta.db_table)
+        parent_column = self._quote(TareaRelacion._meta.get_field("padre").column)
+        child_column = self._quote(TareaRelacion._meta.get_field("hija").column)
+        task_id_column = self._quote(Tarea._meta.pk.column)
+        company_column = self._quote(Tarea._meta.get_field("empresa").column)
+        deleted_column = self._quote(Tarea._meta.get_field("eliminada").column)
         self.cursor.execute(
-            f"SELECT hija_id FROM {relation} WHERE padre_id = %s ORDER BY hija_id",
-            (task_id,),
+            f"SELECT rel.{child_column} FROM {relation} AS rel "
+            f"INNER JOIN {task_table} AS child_task "
+            f"ON child_task.{task_id_column} = rel.{child_column} "
+            f"WHERE rel.{parent_column} = %s "
+            f"AND child_task.{company_column} = %s "
+            f"AND child_task.{deleted_column} = %s "
+            f"ORDER BY rel.{child_column}",
+            (task_id, empresa_id, False),
         )
         return [row[0] for row in self.cursor.fetchall()]
 
@@ -596,7 +612,7 @@ def _collect_hierarchy(reader, root_id, empresa_id):
     parent_by_child = {}
     while queue:
         parent_id = queue.pop(0)
-        children = reader.children(parent_id)
+        children = reader.children(parent_id, empresa_id)
         if len(children) != len(set(children)):
             duplicate_edges.add(parent_id)
         adjacency[parent_id] = sorted(set(children))
@@ -610,10 +626,11 @@ def _collect_hierarchy(reader, root_id, empresa_id):
         companies = reader.companies(sorted(unknown))
         for child_id in sorted(unknown):
             child_company = companies.get(child_id)
-            if child_company is None:
-                blockers.append("La jerarquía contiene una tarea hija inexistente.")
-            elif child_company != empresa_id:
-                blockers.append("La jerarquía contiene una tarea de otra empresa.")
+            if child_company is None or child_company != empresa_id:
+                blockers.append(
+                    "La jerarquía contiene una tarea hija no disponible "
+                    "en el ámbito activo."
+                )
             else:
                 discovered.add(child_id)
                 queue.append(child_id)

@@ -845,7 +845,7 @@ class MySQLParticipantStorageTests(TestCase):
             if "FROM `tareas_tarea`" in call[0] and "FOR UPDATE" in call[0]
         )
         self.assertLess(fake.calls.index(company_lock), fake.calls.index(locked_task))
-        self.assertEqual(locked_task[1], (7,))
+        self.assertEqual(locked_task[1], (7, False))
         self.assertIn("FOR UPDATE", locked_task[0])
         self.assertTrue(fake.closed)
         self.assertFalse(fake.rolled_back)

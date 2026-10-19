@@ -82,6 +82,8 @@ def _create_django_child(
                 .filter(
                     padre__empresa_id=company_id,
                     hija__empresa_id=company_id,
+                    padre__eliminada=False,
+                    hija__eliminada=False,
                 )
                 .order_by("padre_id", "hija_id")
             )
@@ -144,7 +146,7 @@ def _create_mysql_child(
                     try:
                         cursor.execute(
                             "SELECT id, empresa_id, estado, anulada "
-                            "FROM tareas_tarea WHERE id=%s FOR UPDATE",
+                            "FROM tareas_tarea WHERE id=%s AND eliminada=0 FOR UPDATE",
                             (parent_id,),
                         )
                         row = cursor.fetchone()
@@ -165,6 +167,7 @@ def _create_mysql_child(
                             "JOIN tareas_tarea parent ON parent.id=relation.padre_id "
                             "JOIN tareas_tarea child ON child.id=relation.hija_id "
                             "WHERE parent.empresa_id=%s AND child.empresa_id=%s "
+                            "AND parent.eliminada=0 AND child.eliminada=0 "
                             "ORDER BY relation.padre_id, relation.hija_id FOR UPDATE",
                             (company_id, company_id),
                         )

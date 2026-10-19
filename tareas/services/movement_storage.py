@@ -81,7 +81,7 @@ class MySQLMovementStorage:
             "LEFT JOIN tareas_hitohistorial hh ON hh.hito_id=h.id "
             "LEFT JOIN tareas_documentotarea d ON d.tarea_id=t.id "
             "LEFT JOIN tareas_documentohistorial dh ON dh.documento_id=d.id "
-            f"WHERE t.empresa_id=%s AND t.id IN ({placeholders}) "
+            f"WHERE t.empresa_id=%s AND t.eliminada=0 AND t.id IN ({placeholders}) "
             "GROUP BY t.id, t.fecha_publicacion"
         )
         with open_mysql_connection(

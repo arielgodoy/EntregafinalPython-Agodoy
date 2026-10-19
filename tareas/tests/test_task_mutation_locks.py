@@ -33,10 +33,8 @@ class _MySQLCursor:
         if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
             self.row = (30,)
         elif "INSERT INTO `tareas_correlativoempresa`" in sql:
-            if params[1:] != (1,):
+            if params[1:] != (1,) or "ON DUPLICATE KEY UPDATE" not in sql:
                 raise AssertionError((sql, params))
-            if self.connection.duplicate_sequence_insert:
-                raise Exception(1062, "duplicate key")
             self.row = None
         elif "FROM `tareas_correlativoempresa`" in sql and "FOR UPDATE" in sql:
             self.row = (params[0],)
@@ -76,7 +74,6 @@ class _MySQLConnection:
     def __init__(self, tasks, relations=()):
         self.tasks = tasks
         self.relations = relations
-        self.duplicate_sequence_insert = False
         self.statements = []
         self.begin_count = 0
         self.commit_count = 0
@@ -251,7 +248,6 @@ class MySQLTaskMutationLockTests(TestCase):
         connection = _MySQLConnection(
             {8: 10, 2: 10, 4: 11},
         )
-        connection.duplicate_sequence_insert = True
         connection.begin()
         locked_ids = lock_mysql_task_rows(connection, 10)
 
@@ -262,33 +258,34 @@ class MySQLTaskMutationLockTests(TestCase):
             if "FROM `tareas_tarea`" in item[0] and "FOR UPDATE" in item[0]
         )
         self.assertIn("WHERE `empresa_id` = %s", sql)
+        self.assertIn("AND `eliminada` = %s", sql)
         self.assertIn("ORDER BY `id` FOR UPDATE", sql)
-        self.assertEqual(params, (10,))
+        self.assertEqual(params, (10, False))
         sequence_lock = next(
             call for call in connection.statements
             if "INSERT INTO `tareas_correlativoempresa`" in call[0]
         )
         self.assertIn("VALUES (%s, %s)", sequence_lock[0])
-        self.assertNotIn("UPDATE", sequence_lock[0])
+        self.assertIn(
+            "ON DUPLICATE KEY UPDATE `empresa_id` = VALUES(`empresa_id`)",
+            sequence_lock[0],
+        )
+        self.assertNotIn(
+            "siguiente_numero` =",
+            sequence_lock[0].split("ON DUPLICATE KEY UPDATE", 1)[1],
+        )
         self.assertEqual(sequence_lock[1], (10, 1))
         sequence_lock_index = next(
             index
             for index, (statement, _params) in enumerate(connection.statements)
             if "INSERT INTO `tareas_correlativoempresa`" in statement
         )
-        company_lock_index = next(
-            index
-            for index, (statement, _params) in enumerate(connection.statements)
-            if "FROM `tareas_correlativoempresa`" in statement
-            and "FOR UPDATE" in statement
-        )
         task_lock_index = next(
             index
             for index, (statement, _params) in enumerate(connection.statements)
             if "FROM `tareas_tarea`" in statement and "FOR UPDATE" in statement
         )
-        self.assertLess(sequence_lock_index, company_lock_index)
-        self.assertLess(company_lock_index, task_lock_index)
+        self.assertLess(sequence_lock_index, task_lock_index)
 
     @patch("tareas.services.hierarchy_lifecycle_storage.open_mysql_connection")
     def test_mysql_relation_uses_one_transaction_and_same_connection(
@@ -297,7 +294,6 @@ class MySQLTaskMutationLockTests(TestCase):
     ):
         company_id = 20
         connection = _MySQLConnection({1: company_id, 2: company_id})
-        connection.duplicate_sequence_insert = True
         open_connection.return_value = nullcontext(connection)
 
         relation = MySQLHierarchyLifecycleStorage(

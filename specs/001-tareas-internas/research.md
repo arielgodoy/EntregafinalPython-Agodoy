@@ -252,8 +252,9 @@ proveedores Django distintos vigentes sin sumar rondas.
   aditiva, persistencia del motivo en ORM/MYSQL_CONFIG, SQL contractual y preflight
   metadata-only. No autoriza aplicar DDL a BASE_TAREAS real, ejecutar el executor físico,
   implementar el servicio transaccional L2 ni habilitar POST.
-- **Estado**: L1 queda implementada; el servicio transaccional, exclusión operacional,
-  consulta histórica e integración HTTP permanecen en sus fases futuras.
+- **Estado de esta autorización inicial (fotografía 2026-10-16)**: L1 quedó
+  implementada; L2…L6 aún no habían comenzado. La autorización posterior de L2/L3 y
+  su gate correctivo del 2026-10-18 sustituyen esta fotografía para el estado actual.
 
 ## Unresolved by design
 
@@ -264,8 +265,32 @@ proveedores Django distintos vigentes sin sumar rondas.
   permanece sin autorización de ejecución y no se considera una vía de borrado vigente.
 - Fase L1: implementada según D25; cualquier evolución de esquema en BASE_TAREAS real
   requiere autorización y ejecución separadas.
-- Fases L2…L6: implementación futura no iniciada; el POST permanece bloqueado.
+- L2 y L3: implementadas y evaluadas mediante el gate correctivo del 2026-10-18;
+  el estado vigente y sus limitaciones se registran abajo.
+- L4…L6: fases futuras no iniciadas; el POST permanece bloqueado.
 - Habilitación de POST: gate futuro separado; permanece bloqueada y sin autorización.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
   ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
   autorización expresa.
+
+## Gate correctivo L2/L3 — 2026-10-18
+
+- **H-L2-001 — resuelto en `tareas`**: si falta el usuario original y aún no existe
+  evento central, la adaptación registra `user=None` y conserva el `actor_id` original
+  en `meta`. Si el evento ya existe, la reconciliación lo consulta primero y compara
+  sus campos de negocio, metadata y UUID; acepta que `user_id` haya quedado `NULL`
+  por `SET_NULL` sin reescribir ni recalcular el hash existente. No se sustituye al
+  actor ni se modifica la API central.
+- **H-L3-001 — resuelto en `tareas`**: los lectores Django y MYSQL_CONFIG excluyen
+  raíces y descendientes eliminados del preview operacional. Un árbol inconsistente
+  queda bloqueado con una respuesta genérica que no distingue descendientes eliminados,
+  inexistentes o fuera de empresa ni presenta sus datos.
+- **H-L3-002 — resuelto en `tareas`**: los QuerySets oficiales rechazan `update`,
+  `bulk_update` y `bulk_create` que alteren campos protegidos. La marca operativa
+  continúa escribiéndose únicamente desde el servicio L2; su adaptador SQL es una
+  excepción interna acotada, no una garantía contra SQL deliberado.
+- **Resultado de código**: L2 GO y L3 GO según pruebas aisladas; no se ejecutó ni se
+  certificó un backend MariaDB físico en esta remediación. Las tres pruebas opt-in de
+  MariaDB quedaron omitidas por falta de una instancia local aislada configurada.
+- L4 continúa pendiente y no forma parte de esta autorización. Su navegación requiere
+  una dependencia SYSTEM/CORE que debe autorizarse por separado.

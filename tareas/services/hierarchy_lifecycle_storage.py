@@ -72,12 +72,15 @@ class DjangoHierarchyLifecycleStorage:
     def get_parent(self, task_id, empresa_id=None):
         relation = TareaRelacion.objects.using(self.alias).filter(
             hija_id=task_id,
+            hija__eliminada=False,
+            padre__eliminada=False,
         ).select_related("padre").first()
         return relation.padre if relation else None
 
     def get_children(self, task_id, empresa_id=None):
         return Tarea.objects.using(self.alias).filter(
             relaciones_padre__padre_id=task_id,
+            relaciones_padre__padre__eliminada=False,
         ).order_by("id")
 
     def _relation_parent_map(self, empresa_id):
@@ -85,7 +88,9 @@ class DjangoHierarchyLifecycleStorage:
             TareaRelacion.objects.using(self.alias)
             .filter(
                 Q(padre__empresa_id=empresa_id)
-                | Q(hija__empresa_id=empresa_id)
+                | Q(hija__empresa_id=empresa_id),
+                padre__eliminada=False,
+                hija__eliminada=False,
             )
             .select_related("padre", "hija")
             .order_by("padre_id", "hija_id")
@@ -213,7 +218,7 @@ class MySQLHierarchyLifecycleStorage:
         try:
             cursor.execute(
                 "SELECT id, empresa_id, prioridad, creada_por_id, responsable_id "
-                "FROM tareas_tarea WHERE empresa_id=%s ORDER BY id",
+                "FROM tareas_tarea WHERE empresa_id=%s AND eliminada=0 ORDER BY id",
                 (company_id,),
             )
             rows = tuple(cursor.fetchall())
@@ -234,7 +239,7 @@ class MySQLHierarchyLifecycleStorage:
             cursor.execute(
                 "SELECT padre_id, hija_id FROM tareas_tarearelacion "
                 "WHERE padre_id IN ("
-                "SELECT id FROM tareas_tarea WHERE empresa_id=%s"
+                "SELECT id FROM tareas_tarea WHERE empresa_id=%s AND eliminada=0"
                 ") ORDER BY padre_id, hija_id",
                 (company_id,),
             )
@@ -338,7 +343,8 @@ class MySQLHierarchyLifecycleStorage:
                     "JOIN tareas_tarea child ON child.id=relation.hija_id "
                     "WHERE relation.hija_id=%s "
                     "AND (%s IS NULL OR child.empresa_id=%s) "
-                    "AND (%s IS NULL OR parent.empresa_id=%s)",
+                    "AND (%s IS NULL OR parent.empresa_id=%s) "
+                    "AND parent.eliminada=0 AND child.eliminada=0",
                     (task_id, empresa_id, empresa_id, empresa_id, empresa_id),
                 )
                 return self._task_data(cursor.fetchone())
@@ -357,6 +363,7 @@ class MySQLHierarchyLifecycleStorage:
                     "WHERE relation.padre_id=%s "
                     "AND (%s IS NULL OR parent.empresa_id=%s) "
                     "AND (%s IS NULL OR child.empresa_id=%s) "
+                    "AND parent.eliminada=0 AND child.eliminada=0 "
                     "ORDER BY child.id",
                     (task_id, empresa_id, empresa_id, empresa_id, empresa_id),
                 )
@@ -376,7 +383,8 @@ class MySQLHierarchyLifecycleStorage:
                 "ON parent.id = relation.padre_id "
                 "INNER JOIN tareas_tarea AS child "
                 "ON child.id = relation.hija_id "
-                "WHERE parent.empresa_id = %s OR child.empresa_id = %s "
+                "WHERE (parent.empresa_id = %s OR child.empresa_id = %s) "
+                "AND parent.eliminada=0 AND child.eliminada=0 "
                 "ORDER BY relation.padre_id, relation.hija_id FOR UPDATE",
                 (empresa_id, empresa_id),
             )
@@ -419,7 +427,8 @@ class MySQLHierarchyLifecycleStorage:
                                 cursor.execute(
                                     "SELECT id, empresa_id, estado, anulada "
                                     "FROM `tareas_tarea` "
-                                    "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                                    "WHERE id=%s AND empresa_id=%s "
+                                    "AND eliminada=0 FOR UPDATE",
                                     (task_id, company_id),
                                 )
                                 row = cursor.fetchone()
@@ -511,7 +520,8 @@ class MySQLHierarchyLifecycleStorage:
                             cursor.execute(
                                 "SELECT id, empresa_id, estado, anulada, "
                                 "creada_por_id, responsable_id "
-                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
+                                "FROM tareas_tarea WHERE id=%s AND empresa_id=%s "
+                                "AND eliminada=0",
                                 (command.task_id, command.empresa_id),
                             )
                             row = cursor.fetchone()
@@ -530,7 +540,7 @@ class MySQLHierarchyLifecycleStorage:
                                 )
                             cursor.execute(
                                 "UPDATE tareas_tarea SET anulada=%s "
-                                "WHERE id=%s AND empresa_id=%s",
+                                "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                                 (target, command.task_id, command.empresa_id),
                             )
                             cursor.execute(

@@ -102,6 +102,18 @@ class MySQLTaskListStorageTests(TestCase):
         self.assertEqual(result.summary["total"], 1)
         self.assertEqual(result.summary["gestion"], 1)
         self.assertTrue(any("empresa_id = %s" in call.args[0] for call in cursor.execute.call_args_list))
+        task_query = next(
+            call.args[0]
+            for call in cursor.execute.call_args_list
+            if "SELECT id, empresa_id" in call.args[0]
+        )
+        summary_query = next(
+            call.args[0]
+            for call in cursor.execute.call_args_list
+            if "SELECT COUNT(*)" in call.args[0]
+        )
+        self.assertIn("eliminada = 0", task_query)
+        self.assertIn("eliminada = 0", summary_query)
         open_connection.assert_called_once_with(self.connection, database_name="tareas")
 
     @patch("tareas.services.task_storage.open_mysql_connection")

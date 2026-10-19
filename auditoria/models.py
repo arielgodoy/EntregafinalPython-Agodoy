@@ -89,6 +89,18 @@ class AuditoriaGestionDTEEvent(AuditEventBase):
 class AuditoriaTareasEvent(AuditEventBase):
     """Eventos de auditoría específicos de la app tareas."""
 
+    idempotency_key = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        unique=True,
+    )
+    idempotency_payload_hash = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         db_table = 'auditoria_tareas_event'
         verbose_name = 'Evento de Auditoría Tareas'

@@ -200,7 +200,7 @@ class _SQLiteOperationalConnection:
             );
             CREATE TABLE tareas_tarea (
                 id INTEGER PRIMARY KEY, todo_origen_id INTEGER, estado TEXT,
-                anulada INTEGER
+                anulada INTEGER, eliminada INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE tareas_tarearelacion (
                 id INTEGER PRIMARY KEY, padre_id INTEGER, hija_id INTEGER
@@ -365,7 +365,8 @@ class TodoBackendParityTests(TestCase):
 
     def test_mysql_close_uses_operational_originated_tasks_and_fails_closed(self):
         self.connection.database.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?)",
+            "INSERT INTO tareas_tarea "
+            "(id,todo_origen_id,estado,anulada) VALUES (?,?,?,?)",
             (701, self.todo.pk, Tarea.Estado.ACTIVA, 0),
         )
         with self.configured_mysql():
@@ -396,11 +397,13 @@ class TodoBackendParityTests(TestCase):
 
     def test_mysql_close_ignores_tasks_annulled_through_their_parent(self):
         self.connection.database.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?)",
+            "INSERT INTO tareas_tarea "
+            "(id,todo_origen_id,estado,anulada) VALUES (?,?,?,?)",
             (700, None, Tarea.Estado.ACTIVA, 1),
         )
         self.connection.database.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?)",
+            "INSERT INTO tareas_tarea "
+            "(id,todo_origen_id,estado,anulada) VALUES (?,?,?,?)",
             (701, self.todo.pk, Tarea.Estado.ACTIVA, 0),
         )
         self.connection.database.execute(

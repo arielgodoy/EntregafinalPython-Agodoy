@@ -85,7 +85,7 @@ class DjangoMeetingStorage:
                 .select_related(
                     "empresa", "local", "departamento", "tarea_planificada", "creada_por"
                 )
-                .get(pk=meeting_id)
+                .get(pk=meeting_id, tarea_planificada__eliminada=False)
             )
         except ReunionRevision.DoesNotExist as exc:
             raise MeetingNotFound("La reunión no existe en BASE_TAREAS.") from exc
@@ -93,7 +93,10 @@ class DjangoMeetingStorage:
     def list_meetings(self, empresa_id):
         return list(
             ReunionRevision.objects.using(self.alias)
-            .filter(empresa_id=empresa_id)
+            .filter(
+                empresa_id=empresa_id,
+                tarea_planificada__eliminada=False,
+            )
             .select_related("empresa", "local", "departamento", "tarea_planificada", "creada_por")
         )
 
@@ -106,7 +109,10 @@ class DjangoMeetingStorage:
     def get_agenda(self, meeting_id):
         return list(
             ReunionTarea.objects.using(self.alias)
-            .filter(reunion_id=meeting_id)
+            .filter(
+                reunion_id=meeting_id,
+                tarea__eliminada=False,
+            )
             .select_related("reunion", "tarea")
             .order_by("orden", "pk")
         )
@@ -114,7 +120,10 @@ class DjangoMeetingStorage:
     def get_participants(self, meeting_id):
         return list(
             ReunionParticipante.objects.using(self.alias)
-            .filter(reunion_id=meeting_id)
+            .filter(
+                reunion_id=meeting_id,
+                reunion__tarea_planificada__eliminada=False,
+            )
             .select_related("reunion", "usuario")
         )
 
@@ -189,12 +198,16 @@ class DjangoMeetingStorage:
     def add_agenda_item(self, item):
         with transaction.atomic(using=self.alias):
             company_id = item.reunion.empresa_id
+            task_ids = (
+                item.tarea_id,
+                item.reunion.tarea_planificada_id,
+            )
             with bounded_django_lock_wait(self.alias):
                 try:
                     locked = lock_orm_task_rows(
                         self.alias,
                         company_id,
-                        (item.tarea_id,),
+                        task_ids,
                     )
                 except TaskMutationScopeError as exc:
                     raise MeetingNotFound(
@@ -208,12 +221,18 @@ class DjangoMeetingStorage:
                     meeting = (
                         ReunionRevision.objects.using(self.alias)
                         .select_for_update()
-                        .get(pk=item.reunion_id, empresa_id=company_id)
+                        .get(
+                            pk=item.reunion_id,
+                            empresa_id=company_id,
+                            tarea_planificada__eliminada=False,
+                        )
                     )
                 except ReunionRevision.DoesNotExist as exc:
                     raise MeetingNotFound from exc
                 item.reunion = meeting
-                item.tarea = locked[0]
+                item.tarea = next(
+                    task for task in locked if task.pk == item.tarea_id
+                )
                 existing = list(
                     ReunionTarea.objects.using(self.alias)
                     .filter(reunion_id=meeting.pk)
@@ -240,20 +259,24 @@ class DjangoMeetingStorage:
 
     def remove_agenda_item(self, meeting_id, task_id):
         with transaction.atomic(using=self.alias):
-            company_id = (
+            meeting_data = (
                 ReunionRevision.objects.using(self.alias)
-                .filter(pk=meeting_id)
-                .values_list("empresa_id", flat=True)
+                .filter(
+                    pk=meeting_id,
+                    tarea_planificada__eliminada=False,
+                )
+                .values("empresa_id", "tarea_planificada_id")
                 .first()
             )
-            if company_id is None:
+            if meeting_data is None:
                 raise MeetingNotFound
+            company_id = meeting_data["empresa_id"]
             with bounded_django_lock_wait(self.alias):
                 try:
                     lock_orm_task_rows(
                         self.alias,
                         company_id,
-                        (task_id,),
+                        (task_id, meeting_data["tarea_planificada_id"]),
                     )
                 except TaskMutationScopeError as exc:
                     raise MeetingNotFound(
@@ -262,7 +285,11 @@ class DjangoMeetingStorage:
                 meeting = (
                     ReunionRevision.objects.using(self.alias)
                     .select_for_update()
-                    .filter(pk=meeting_id, empresa_id=company_id)
+                    .filter(
+                        pk=meeting_id,
+                        empresa_id=company_id,
+                        tarea_planificada__eliminada=False,
+                    )
                     .first()
                 )
                 if meeting is None:
@@ -274,19 +301,89 @@ class DjangoMeetingStorage:
 
     def add_participant(self, participant):
         with transaction.atomic(using=self.alias):
+            meeting_data = (
+                ReunionRevision.objects.using(self.alias)
+                .filter(
+                    pk=participant.reunion_id,
+                    tarea_planificada__eliminada=False,
+                )
+                .values("empresa_id", "tarea_planificada_id")
+                .first()
+            )
+            if meeting_data is None:
+                raise MeetingNotFound
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        meeting_data["empresa_id"],
+                        (meeting_data["tarea_planificada_id"],),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound from exc
+                meeting = (
+                    ReunionRevision.objects.using(self.alias)
+                    .select_for_update()
+                    .filter(
+                        pk=participant.reunion_id,
+                        empresa_id=meeting_data["empresa_id"],
+                        tarea_planificada__eliminada=False,
+                    )
+                    .first()
+                )
+                if meeting is None:
+                    raise MeetingNotFound
+                participant.reunion = meeting
             participant.save(using=self.alias)
         return participant
 
     def remove_participant(self, meeting_id, user_id):
         with transaction.atomic(using=self.alias):
+            meeting_data = (
+                ReunionRevision.objects.using(self.alias)
+                .filter(
+                    pk=meeting_id,
+                    tarea_planificada__eliminada=False,
+                )
+                .values("empresa_id", "tarea_planificada_id")
+                .first()
+            )
+            if meeting_data is None:
+                raise MeetingNotFound
+            with bounded_django_lock_wait(self.alias):
+                try:
+                    lock_orm_task_rows(
+                        self.alias,
+                        meeting_data["empresa_id"],
+                        (meeting_data["tarea_planificada_id"],),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound from exc
+                meeting = (
+                    ReunionRevision.objects.using(self.alias)
+                    .select_for_update()
+                    .filter(
+                        pk=meeting_id,
+                        empresa_id=meeting_data["empresa_id"],
+                        tarea_planificada__eliminada=False,
+                    )
+                    .first()
+                )
+                if meeting is None:
+                    raise MeetingNotFound
             return ReunionParticipante.objects.using(self.alias).filter(
-                reunion_id=meeting_id, usuario_id=user_id
+                reunion=meeting,
+                usuario_id=user_id,
             ).delete()
 
     def complete_meeting(self, meeting, agenda_items):
         with transaction.atomic(using=self.alias):
             company_id = meeting.empresa_id
-            task_ids = tuple(item.tarea_id for item in agenda_items)
+            agenda_task_ids = tuple(item.tarea_id for item in agenda_items)
+            task_ids = (
+                meeting.tarea_planificada_id,
+                *agenda_task_ids,
+            )
             with bounded_django_lock_wait(self.alias):
                 try:
                     lock_orm_task_groups(
@@ -300,7 +397,11 @@ class DjangoMeetingStorage:
                 current_meeting = (
                     ReunionRevision.objects.using(self.alias)
                     .select_for_update()
-                    .filter(pk=meeting.pk, empresa_id=company_id)
+                    .filter(
+                        pk=meeting.pk,
+                        empresa_id=company_id,
+                        tarea_planificada__eliminada=False,
+                    )
                     .first()
                 )
                 if current_meeting is None:
@@ -313,7 +414,7 @@ class DjangoMeetingStorage:
                     .filter(reunion_id=current_meeting.pk)
                     .order_by("tarea_id", "pk")
                 )
-                if {item.tarea_id for item in current_items} != set(task_ids):
+                if {item.tarea_id for item in current_items} != set(agenda_task_ids):
                     raise ValidationError(
                         "La agenda cambió durante la operación; vuelva a intentarlo."
                     )
@@ -375,7 +476,7 @@ class MySQLMeetingStorage:
                     "SELECT id,titulo,descripcion,prioridad,correlativo,anulada,estado,"
                     "responsable_id,empresa_id,tipo_ambito,local_id,departamento_id,"
                     "creada_por_id,fecha_publicacion,fecha_asignacion,fecha_tope "
-                    "FROM tareas_tarea WHERE id=%s",
+                    "FROM tareas_tarea WHERE id=%s AND eliminada=0",
                     (task_id,),
                 )
                 row = cursor.fetchone()
@@ -487,7 +588,7 @@ class MySQLMeetingStorage:
                     cursor.execute(
                         "UPDATE tareas_tarea SET estado=%s,correlativo=%s,"
                         "fecha_publicacion=%s,fecha_asignacion=%s "
-                        "WHERE id=%s AND empresa_id=%s",
+                        "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                         (
                             Tarea.Estado.ACTIVA,
                             active_correlativo,
@@ -562,7 +663,9 @@ class MySQLMeetingStorage:
                     "SELECT id,empresa_id,titulo,descripcion,fecha_hora_programada,modalidad,"
                     "lugar_o_enlace,tipo_ambito,local_id,departamento_id,tarea_planificada_id,"
                     "creada_por_id,estado,convocada_at,created_at,updated_at "
-                    "FROM tareas_reunionrevision WHERE id=%s",
+                    "FROM tareas_reunionrevision "
+                    "WHERE id=%s AND tarea_planificada_id IN ("
+                    "SELECT id FROM tareas_tarea WHERE eliminada=0)",
                     (meeting_id,),
                 )
                 row = cursor.fetchone()
@@ -592,8 +695,10 @@ class MySQLMeetingStorage:
             cursor = connection.cursor()
             try:
                 cursor.execute(
-                    "SELECT id FROM tareas_reunionrevision "
-                    "WHERE empresa_id=%s ORDER BY id",
+                    "SELECT meeting.id FROM tareas_reunionrevision meeting "
+                    "JOIN tareas_tarea task ON task.id=meeting.tarea_planificada_id "
+                    "WHERE meeting.empresa_id=%s AND task.eliminada=0 "
+                    "ORDER BY meeting.id",
                     (empresa_id,),
                 )
                 meeting_ids = [row[0] for row in cursor.fetchall()]
@@ -606,8 +711,12 @@ class MySQLMeetingStorage:
             cursor = connection.cursor()
             try:
                 cursor.execute(
-                    "SELECT id,reunion_id,tarea_id,orden,comentario_revision,comentario_cierre,"
-                    "created_at FROM tareas_reuniontarea WHERE reunion_id=%s ORDER BY orden,id",
+                    "SELECT agenda.id,agenda.reunion_id,agenda.tarea_id,agenda.orden,"
+                    "agenda.comentario_revision,agenda.comentario_cierre,agenda.created_at "
+                    "FROM tareas_reuniontarea agenda "
+                    "JOIN tareas_tarea task ON task.id=agenda.tarea_id "
+                    "WHERE agenda.reunion_id=%s AND task.eliminada=0 "
+                    "ORDER BY agenda.orden,agenda.id",
                     (meeting_id,),
                 )
                 rows = cursor.fetchall()
@@ -670,7 +779,7 @@ class MySQLMeetingStorage:
                 cursor.execute(
                     "UPDATE tareas_tarea SET titulo=%s,descripcion=%s,fecha_tope=%s,"
                     "tipo_ambito=%s,local_id=%s,departamento_id=%s "
-                    "WHERE id=%s AND empresa_id=%s",
+                    "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                     (
                         task.titulo, task.descripcion, task.fecha_tope, task.tipo_ambito,
                         task.local_id, task.departamento_id, task.pk, task.empresa_id,
@@ -695,11 +804,15 @@ class MySQLMeetingStorage:
             with _mysql_mutation(
                 connection,
                 company_id=company_id,
-                task_ids=(item.tarea_id,),
+                task_ids=(
+                    item.tarea_id,
+                    item.reunion.tarea_planificada_id,
+                ),
             ) as cursor:
                 cursor.execute(
                     "SELECT id,empresa_id,estado FROM tareas_reunionrevision "
-                    "WHERE id=%s FOR UPDATE",
+                    "WHERE id=%s AND tarea_planificada_id IN ("
+                    "SELECT id FROM tareas_tarea WHERE eliminada=0) FOR UPDATE",
                     (item.reunion_id,),
                 )
                 meeting_row = cursor.fetchone()
@@ -707,7 +820,7 @@ class MySQLMeetingStorage:
                     raise MeetingNotFound
                 cursor.execute(
                     "SELECT id,prioridad,empresa_id FROM tareas_tarea "
-                    "WHERE id=%s AND empresa_id=%s",
+                    "WHERE id=%s AND empresa_id=%s AND eliminada=0",
                     (item.tarea_id, company_id),
                 )
                 task_row = cursor.fetchone()
@@ -721,7 +834,8 @@ class MySQLMeetingStorage:
                     "SELECT agenda.orden,task.prioridad,agenda.tarea_id,task.empresa_id "
                     "FROM tareas_reuniontarea AS agenda "
                     "INNER JOIN tareas_tarea AS task ON task.id=agenda.tarea_id "
-                    "WHERE agenda.reunion_id=%s ORDER BY agenda.orden,agenda.id",
+                    "WHERE agenda.reunion_id=%s AND task.eliminada=0 "
+                    "ORDER BY agenda.orden,agenda.id",
                     (item.reunion_id,),
                 )
                 existing_rows = cursor.fetchall()
@@ -768,7 +882,11 @@ class MySQLMeetingStorage:
                     cursor = connection.cursor()
                     try:
                         cursor.execute(
-                            "SELECT empresa_id FROM tareas_reunionrevision WHERE id=%s",
+                            "SELECT meeting.empresa_id,meeting.tarea_planificada_id "
+                            "FROM tareas_reunionrevision meeting "
+                            "JOIN tareas_tarea task "
+                            "ON task.id=meeting.tarea_planificada_id "
+                            "WHERE meeting.id=%s AND task.eliminada=0",
                             (meeting_id,),
                         )
                         meeting_row = cursor.fetchone()
@@ -779,7 +897,7 @@ class MySQLMeetingStorage:
                             lock_mysql_task_rows(
                                 connection,
                                 company_id,
-                                (task_id,),
+                                (task_id, meeting_row[1]),
                             )
                         except TaskMutationScopeError as exc:
                             raise MeetingNotFound(
@@ -787,8 +905,9 @@ class MySQLMeetingStorage:
                             ) from exc
                         cursor.execute(
                             "SELECT empresa_id FROM tareas_reunionrevision "
-                            "WHERE id=%s FOR UPDATE",
-                            (meeting_id,),
+                            "WHERE id=%s AND empresa_id=%s "
+                            "AND tarea_planificada_id=%s FOR UPDATE",
+                            (meeting_id, company_id, meeting_row[1]),
                         )
                         current_meeting = cursor.fetchone()
                         if current_meeting is None or current_meeting[0] != company_id:
@@ -807,12 +926,30 @@ class MySQLMeetingStorage:
         with self._connection() as connection:
             with _mysql_mutation(connection) as cursor:
                 cursor.execute(
-                    "SELECT empresa_id FROM tareas_reunionrevision "
-                    "WHERE id=%s FOR UPDATE",
+                    "SELECT meeting.empresa_id,meeting.tarea_planificada_id "
+                    "FROM tareas_reunionrevision meeting "
+                    "JOIN tareas_tarea task "
+                    "ON task.id=meeting.tarea_planificada_id "
+                    "WHERE meeting.id=%s AND task.eliminada=0",
                     (participant.reunion_id,),
                 )
                 meeting = cursor.fetchone()
                 if meeting is None or meeting[0] != participant.reunion.empresa_id:
+                    raise MeetingNotFound
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        meeting[0],
+                        (meeting[1],),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound from exc
+                cursor.execute(
+                    "SELECT id FROM tareas_reunionrevision "
+                    "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                    (participant.reunion_id, meeting[0]),
+                )
+                if cursor.fetchone() is None:
                     raise MeetingNotFound
                 participant.created_at = participant.created_at or timezone.now()
                 cursor.execute(
@@ -827,8 +964,28 @@ class MySQLMeetingStorage:
         with self._connection() as connection:
             with _mysql_mutation(connection) as cursor:
                 cursor.execute(
-                    "SELECT id FROM tareas_reunionrevision WHERE id=%s FOR UPDATE",
+                    "SELECT meeting.empresa_id,meeting.tarea_planificada_id "
+                    "FROM tareas_reunionrevision meeting "
+                    "JOIN tareas_tarea task "
+                    "ON task.id=meeting.tarea_planificada_id "
+                    "WHERE meeting.id=%s AND task.eliminada=0",
                     (meeting_id,),
+                )
+                meeting = cursor.fetchone()
+                if meeting is None:
+                    raise MeetingNotFound
+                try:
+                    lock_mysql_task_rows(
+                        connection,
+                        meeting[0],
+                        (meeting[1],),
+                    )
+                except TaskMutationScopeError as exc:
+                    raise MeetingNotFound from exc
+                cursor.execute(
+                    "SELECT id FROM tareas_reunionrevision "
+                    "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+                    (meeting_id, meeting[0]),
                 )
                 if cursor.fetchone() is None:
                     raise MeetingNotFound
@@ -841,7 +998,11 @@ class MySQLMeetingStorage:
 
     def complete_meeting(self, meeting, agenda_items):
         with self._connection() as connection:
-            task_ids = tuple(item.tarea_id for item in agenda_items)
+            agenda_task_ids = tuple(item.tarea_id for item in agenda_items)
+            task_ids = (
+                meeting.tarea_planificada_id,
+                *agenda_task_ids,
+            )
             with _mysql_mutation(
                 connection,
                 company_id=meeting.empresa_id,
@@ -866,7 +1027,7 @@ class MySQLMeetingStorage:
                     (meeting.pk,),
                 )
                 current_task_ids = tuple(row[0] for row in cursor.fetchall())
-                if set(current_task_ids) != set(task_ids):
+                if set(current_task_ids) != set(agenda_task_ids):
                     raise ValidationError(
                         "La agenda cambió durante la operación; vuelva a intentarlo."
                     )

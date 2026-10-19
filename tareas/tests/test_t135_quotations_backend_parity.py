@@ -35,7 +35,11 @@ class ControlledMySQL:
         self.commands = []
         self.db.executescript(
             """
-            CREATE TABLE tareas_tarea (id INTEGER PRIMARY KEY, empresa_id INTEGER);
+            CREATE TABLE tareas_tarea (
+                id INTEGER PRIMARY KEY,
+                empresa_id INTEGER,
+                eliminada INTEGER NOT NULL DEFAULT 0
+            );
             CREATE TABLE tareas_rondacotizacion (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, tarea_id INTEGER,
                 numero INTEGER, minimo_cotizaciones INTEGER, estado TEXT,
@@ -53,7 +57,7 @@ class ControlledMySQL:
             """
         )
         self.db.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?)",
+            "INSERT INTO tareas_tarea (id,empresa_id) VALUES (?,?)",
             (task.pk, task.empresa_id),
         )
         if round_row:

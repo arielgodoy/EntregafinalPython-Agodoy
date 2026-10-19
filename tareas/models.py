@@ -19,6 +19,83 @@ from settings.models import SettingsMySQLConnection
 LOGICAL_DELETION_RESULT_CODE = "LOGICALLY_DELETED"
 
 
+_LOGICAL_DELETION_FIELDS = frozenset(
+    {
+        "eliminada",
+        "eliminada_en",
+        "eliminada_por",
+        "eliminada_por_id",
+        "eliminacion_operacion_id",
+    }
+)
+
+
+class TareaQuerySet(models.QuerySet):
+    def _reject_logical_deletion_field_writes(self, fields):
+        protected_fields = _LOGICAL_DELETION_FIELDS.intersection(
+            str(field).split("__", 1)[0] for field in fields
+        )
+        if protected_fields:
+            names = ", ".join(sorted(protected_fields))
+            raise ValidationError(
+                "Los campos de eliminación lógica solo pueden modificarse "
+                f"mediante el servicio autorizado: {names}."
+            )
+
+    def update(self, **kwargs):
+        self._reject_logical_deletion_field_writes(kwargs)
+        return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        self._reject_logical_deletion_field_writes(fields)
+        return super().bulk_update(objs, fields, batch_size=batch_size)
+
+    def bulk_create(
+        self,
+        objs,
+        batch_size=None,
+        ignore_conflicts=False,
+        update_conflicts=False,
+        update_fields=None,
+        unique_fields=None,
+    ):
+        objects = list(objs)
+        if update_conflicts:
+            self._reject_logical_deletion_field_writes(update_fields or ())
+        if any(
+            getattr(obj, "eliminada", False)
+            or any(
+                getattr(obj, field, None) is not None
+                for field in (
+                    "eliminada_en",
+                    "eliminada_por_id",
+                    "eliminacion_operacion_id",
+                )
+            )
+            for obj in objects
+        ):
+            raise ValidationError(
+                "bulk_create no puede crear Tareas eliminadas ni sus metadatos."
+            )
+        return super().bulk_create(
+            objects,
+            batch_size=batch_size,
+            ignore_conflicts=ignore_conflicts,
+            update_conflicts=update_conflicts,
+            update_fields=update_fields,
+            unique_fields=unique_fields,
+        )
+
+
+class OperationalTareaManager(models.Manager.from_queryset(TareaQuerySet)):
+    def get_queryset(self):
+        return super().get_queryset().filter(eliminada=False)
+
+
+class AllTareaManager(models.Manager.from_queryset(TareaQuerySet)):
+    pass
+
+
 class FormatoArchivo(models.TextChoices):
     PDF = "PDF", "PDF"
     JPG = "JPG", "JPG"
@@ -249,8 +326,11 @@ class Tarea(models.Model):
         blank=True,
         related_name="tareas_derivadas",
     )
+    objects = OperationalTareaManager()
+    all_objects = AllTareaManager()
 
     class Meta:
+        base_manager_name = "all_objects"
         indexes = [
             models.Index(fields=["empresa", "estado"]),
             models.Index(fields=["empresa", "fecha_creacion"]),
@@ -339,6 +419,16 @@ class Tarea(models.Model):
             or "default"
         )
         kwargs["using"] = using
+        if self._state.adding and self.eliminada:
+            raise ValidationError(
+                "Una tarea nueva no puede iniciarse como eliminada."
+            )
+        if self.tarea_origen_id and not Tarea.objects.using(using).filter(
+            pk=self.tarea_origen_id,
+        ).exists():
+            raise ValidationError(
+                "El origen debe ser una tarea operativa."
+            )
         from .services.task_mutation_locks import (
             bounded_django_lock_wait,
             lock_orm_task_company,
@@ -355,14 +445,35 @@ class Tarea(models.Model):
                             f"B{reserve_next_number(self.empresa_id, using=using):07d}"
                         )
                 else:
-                    manager = type(self).objects.using(using)
-                    stored_company_id = (
-                        manager.filter(pk=self.pk)
-                        .values_list("empresa_id", flat=True)
-                        .first()
-                    )
-                    if stored_company_id is None:
+                    manager = type(self).all_objects.using(using)
+                    stored = manager.filter(pk=self.pk).values(
+                        "empresa_id",
+                        "eliminada",
+                        "eliminada_en",
+                        "eliminada_por_id",
+                        "eliminacion_operacion_id",
+                    ).first()
+                    if stored is None:
                         raise self.DoesNotExist
+                    if stored["eliminada"]:
+                        raise ValidationError(
+                            "Una tarea eliminada no admite modificaciones operativas."
+                        )
+                    if (
+                        self.eliminada,
+                        self.eliminada_en,
+                        self.eliminada_por_id,
+                        self.eliminacion_operacion_id,
+                    ) != (
+                        stored["eliminada"],
+                        stored["eliminada_en"],
+                        stored["eliminada_por_id"],
+                        stored["eliminacion_operacion_id"],
+                    ):
+                        raise ValidationError(
+                            "La eliminación lógica solo puede ejecutarse mediante el servicio autorizado."
+                        )
+                    stored_company_id = stored["empresa_id"]
                     for company_id in sorted(
                         {stored_company_id, self.empresa_id}
                     ):
@@ -1639,6 +1750,27 @@ class TareaRelacion(models.Model):
             models.Index(fields=["padre"]),
             models.Index(fields=["hija"]),
         ]
+
+    def save(self, *args, **kwargs):
+        from django.db import router
+
+        using = (
+            kwargs.get("using")
+            or self._state.db
+            or router.db_for_write(type(self), instance=self)
+            or "default"
+        )
+        task_ids = {self.padre_id, self.hija_id}
+        operational_ids = set(
+            Tarea.objects.using(using)
+            .filter(pk__in=task_ids)
+            .values_list("pk", flat=True)
+        )
+        if operational_ids != task_ids:
+            raise ValidationError(
+                "La jerarquía solo puede vincular tareas operativas."
+            )
+        return super().save(*args, **kwargs)
 
 
 class RondaCotizacion(models.Model):

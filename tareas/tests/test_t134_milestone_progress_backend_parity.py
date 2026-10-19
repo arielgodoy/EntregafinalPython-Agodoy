@@ -31,7 +31,7 @@ class ControlledMilestoneSQL:
             CREATE TABLE tareas_tarea (
                 id INTEGER PRIMARY KEY, empresa_id INTEGER, creada_por_id INTEGER,
                 responsable_id INTEGER, estado TEXT, anulada INTEGER, correlativo TEXT,
-                titulo TEXT, prioridad TEXT);
+                titulo TEXT, prioridad TEXT, eliminada INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE tareas_tarearelacion (padre_id INTEGER, hija_id INTEGER);
             CREATE TABLE tareas_tareaparticipante (
                 id INTEGER PRIMARY KEY, tarea_id INTEGER, usuario_id INTEGER, rol TEXT);
@@ -52,7 +52,9 @@ class ControlledMilestoneSQL:
                 modo TEXT, porcentaje NUMERIC, fecha_actualizacion TEXT);
         """)
         self.db.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tareas_tarea "
+            "(id,empresa_id,creada_por_id,responsable_id,estado,anulada,correlativo,titulo,prioridad) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (task.pk, task.empresa_id, task.creada_por_id, task.responsable_id,
              task.estado, task.anulada, task.correlativo, task.titulo, task.prioridad),
         )
@@ -513,7 +515,10 @@ class MilestoneProgressParityTests(TestCase):
         parent = Tarea.objects.create(empresa=self.company, creada_por=self.manager,
                                      titulo="Parent", correlativo="B8900001", anulada=True)
         TareaRelacion.objects.create(padre=parent, hija=self.task)
-        self.sql.db.execute("INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?)",
+        self.sql.db.execute(
+                            "INSERT INTO tareas_tarea "
+                            "(id,empresa_id,creada_por_id,responsable_id,estado,anulada,correlativo,titulo,prioridad) "
+                            "VALUES (?,?,?,?,?,?,?,?,?)",
                             (parent.pk, self.company.pk, self.manager.pk, self.manager.pk,
                              "ACTIVA", True, parent.correlativo, parent.titulo, parent.prioridad))
         self.sql.db.execute("INSERT INTO tareas_tarearelacion VALUES (?,?)", (parent.pk, self.task.pk))
@@ -563,7 +568,10 @@ class MilestoneProgressParityTests(TestCase):
             if "FROM `tareas_tarea`" in sql and "FOR UPDATE" in sql
         )
         self.assertLess(company_lock_index, task_lock_index)
-        self.assertTrue(any("WHERE id=%s AND empresa_id=%s FOR UPDATE" in sql for sql in sqls))
+        self.assertTrue(any(
+            "WHERE id=%s AND empresa_id=%s AND eliminada=0 FOR UPDATE" in sql
+            for sql in sqls
+        ))
         self.assertTrue(any("WHERE id=%s AND tarea_id=%s FOR UPDATE" in sql for sql in sqls))
         self.assertTrue(all("DELETE FROM tareas_tarea;" not in sql for sql in sqls))
         self.assertEqual(self.sql.commits, 2)

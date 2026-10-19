@@ -505,7 +505,7 @@ class _MySQLMutation:
         self.cursor.execute(
             "SELECT id, empresa_id, creada_por_id, responsable_id, estado, anulada, "
             "prioridad, fecha_tope FROM tareas_tarea "
-            "WHERE id=%s AND empresa_id=%s FOR UPDATE",
+            "WHERE id=%s AND empresa_id=%s AND eliminada=0 FOR UPDATE",
             (command.task_id, command.empresa_id),
         )
         row = self.cursor.fetchone()
@@ -524,7 +524,8 @@ class _MySQLMutation:
                 "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
                 "JOIN tareas_tarea p ON p.id=r.padre_id "
                 "JOIN tareas_tarea c ON c.id=r.hija_id "
-                "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s FOR UPDATE",
+                "WHERE r.hija_id=%s AND p.empresa_id=%s AND c.empresa_id=%s "
+                "AND p.eliminada=0 AND c.eliminada=0 FOR UPDATE",
                 (current_id, command.empresa_id, command.empresa_id),
             )
             row = self.cursor.fetchone()
@@ -538,7 +539,8 @@ class _MySQLMutation:
         # Column names originate exclusively from _mutate's fixed allowlist.
         setters = ", ".join(f"{name}=%s" for name in fields)
         self.cursor.execute(
-            f"UPDATE tareas_tarea SET {setters} WHERE id=%s AND empresa_id=%s",
+            f"UPDATE tareas_tarea SET {setters} "
+            "WHERE id=%s AND empresa_id=%s AND eliminada=0",
             (*fields.values(), task.pk, command.empresa_id),
         )
 

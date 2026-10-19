@@ -77,7 +77,8 @@ class _SQLiteConnection:
                 anulada INTEGER, tipo_ambito TEXT, local_id INTEGER,
                 departamento_id INTEGER, todo_origen_id INTEGER,
                 tarea_origen_id INTEGER, responsable_id INTEGER,
-                fecha_tope TEXT, fecha_asignacion TEXT, fecha_publicacion TEXT
+                fecha_tope TEXT, fecha_asignacion TEXT, fecha_publicacion TEXT,
+                eliminada INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE tareas_tareatransicion (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, tarea_id INTEGER,

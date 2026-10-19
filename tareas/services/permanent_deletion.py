@@ -471,7 +471,7 @@ def _incoming_origin_references(
 ) -> tuple[tuple[int, int], ...]:
     if isinstance(reader, _DjangoReader):
         return tuple(
-            Tarea.objects.using(reader.alias)
+            Tarea.all_objects.using(reader.alias)
             .filter(tarea_origen_id__in=task_ids)
             .exclude(pk__in=task_ids)
             .order_by("pk")

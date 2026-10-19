@@ -85,7 +85,8 @@ class _SQLiteConnection:
                 correlativo TEXT, anulada INTEGER, estado TEXT, responsable_id INTEGER,
                 empresa_id INTEGER, tipo_ambito TEXT, local_id INTEGER,
                 departamento_id INTEGER, creada_por_id INTEGER, fecha_tope TEXT,
-                fecha_publicacion TEXT, fecha_asignacion TEXT
+                fecha_publicacion TEXT, fecha_asignacion TEXT,
+                eliminada INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE tareas_reunionrevision (
                 id INTEGER PRIMARY KEY, empresa_id INTEGER, titulo TEXT, descripcion TEXT,
@@ -106,7 +107,7 @@ class _SQLiteConnection:
             """
         )
         self.database.execute(
-            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tareas_tarea VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 self.task_id, task.titulo, task.descripcion, task.prioridad, task.correlativo,
                 task.anulada, task.estado, task.responsable_id, task.empresa_id,
@@ -114,6 +115,7 @@ class _SQLiteConnection:
                 task.creada_por_id, task.fecha_tope.isoformat(),
                 task.fecha_publicacion.isoformat() if task.fecha_publicacion else None,
                 task.fecha_asignacion.isoformat() if task.fecha_asignacion else None,
+                False,
             ),
         )
         self.database.execute(

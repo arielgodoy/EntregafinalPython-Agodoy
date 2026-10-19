@@ -312,12 +312,17 @@ class DjangoCommentStorage:
 
     def get(self, comment_id, task_id, empresa_id):
         return Comentario.objects.using(self.alias).select_related("autor", "tarea").get(
-            pk=comment_id, tarea_id=task_id, tarea__empresa_id=empresa_id,
+            pk=comment_id,
+            tarea_id=task_id,
+            tarea__empresa_id=empresa_id,
+            tarea__eliminada=False,
         )
 
     def list(self, command):
         queryset = Comentario.objects.using(self.alias).filter(
-            tarea_id=command.task_id, tarea__empresa_id=command.empresa_id,
+            tarea_id=command.task_id,
+            tarea__empresa_id=command.empresa_id,
+            tarea__eliminada=False,
         )
         if command.updated_after is not None:
             queryset = queryset.filter(
@@ -432,6 +437,7 @@ class DjangoCommentStorage:
     def document_ids_for_comment(self, comment_id):
         return tuple(ComentarioAdjunto.objects.using(self.alias).filter(
             comentario_id=comment_id,
+            comentario__tarea__eliminada=False,
         ).values_list("documento_id", flat=True))
 
     def documents(self, task_id, document_ids, empresa_id):
@@ -681,7 +687,8 @@ class MySQLCommentStorage:
                 try:
                     cursor.execute(
                         "SELECT id, empresa_id, estado, prioridad, anulada, creada_por_id, responsable_id "
-                        "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
+                        "FROM tareas_tarea WHERE id=%s AND empresa_id=%s "
+                        "AND eliminada=0",
                         (task_id, empresa_id),
                     )
                     row = cursor.fetchone()
@@ -766,7 +773,7 @@ class MySQLCommentStorage:
     def _task(self, cursor, task_id, empresa_id):
         cursor.execute(
             "SELECT id, empresa_id, estado, prioridad, anulada, creada_por_id, responsable_id "
-            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s",
+            "FROM tareas_tarea WHERE id=%s AND empresa_id=%s AND eliminada=0",
             (task_id, empresa_id),
         )
         row = cursor.fetchone()
@@ -781,7 +788,12 @@ class MySQLCommentStorage:
     def document_ids_for_comment(self, comment_id):
         def operation(cursor):
             cursor.execute(
-                "SELECT documento_id FROM tareas_comentarioadjunto WHERE comentario_id=%s",
+                "SELECT attachment.documento_id "
+                "FROM tareas_comentarioadjunto attachment "
+                "JOIN tareas_comentario comment "
+                "ON comment.id=attachment.comentario_id "
+                "JOIN tareas_tarea task ON task.id=comment.tarea_id "
+                "WHERE attachment.comentario_id=%s AND task.eliminada=0",
                 (comment_id,),
             )
             return tuple(row[0] for row in cursor.fetchall())
@@ -789,6 +801,7 @@ class MySQLCommentStorage:
 
     def pending(self, command):
         def operation(cursor):
+            self._task(cursor, command.task_id, command.empresa_id)
             cursor.execute(
                 "SELECT comentario_leido_hasta_id FROM tareas_tarealectura "
                 "WHERE tarea_id=%s AND usuario_id=%s",
@@ -815,6 +828,7 @@ class MySQLCommentStorage:
 
     def page(self, command):
         def operation(cursor):
+            self._task(cursor, command.task_id, command.empresa_id)
             cursor.execute(
                 "SELECT id, tarea_id, autor_id, contenido, created_at, updated_at, oculto "
                 "FROM tareas_comentario WHERE tarea_id=%s ORDER BY created_at, id LIMIT %s",
@@ -902,7 +916,7 @@ class MySQLCommentStorage:
                 "SELECT DISTINCT task.empresa_id, reading.tarea_id "
                 "FROM tareas_tarealectura AS reading "
                 "INNER JOIN tareas_tarea AS task ON task.id=reading.tarea_id "
-                "WHERE reading.usuario_id=%s "
+                "WHERE reading.usuario_id=%s AND task.eliminada=0 "
                 "ORDER BY task.empresa_id, reading.tarea_id",
                 (user_id,),
             )
@@ -1240,7 +1254,8 @@ class MySQLCommentStorage:
             company_id = empresa_id
             if company_id is None:
                 cursor.execute(
-                    "SELECT empresa_id FROM tareas_tarea WHERE id=%s",
+                    "SELECT empresa_id FROM tareas_tarea "
+                    "WHERE id=%s AND eliminada=0",
                     (task_id,),
                 )
                 row = cursor.fetchone()
