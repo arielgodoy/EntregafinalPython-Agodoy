@@ -1215,7 +1215,7 @@ notificaciones y email existentes.
   descendientes solo se consultan desde una superficie histórica separada, estrictamente
   de lectura. No permite editar, publicar, cerrar, anular, reactivar, reasignar,
   reprogramar, comentar, adjuntar documentos, crear descendientes, cambiar participantes
-  ni restaurar. La vista independiente `Tareas eliminadas` requiere VICMEAS `ingresar` (I)
+  ni restaurar. La vista independiente `Tareas - Tareas eliminadas` requiere VICMEAS `ingresar` (I)
   explícito. El permiso S para eliminar no concede acceso de consulta histórica. Las
   Tareas eliminadas quedan excluidas de KPI operacionales y reportes históricos habituales;
   solo aparecen en la consulta histórica autorizada.
@@ -1223,6 +1223,25 @@ notificaciones y email existentes.
   vista funcional. Ningún endpoint, servicio, permiso ni interfaz permite restaurar o
   reactivar una Tarea eliminada. Reactivar una Tarea anulada conforme a E no restaura ni
   cambia la marca independiente de eliminación.
+
+### Contrato de consulta L4
+
+La lista historica representa cada manifiesto `tareas.tarea` una sola vez, unida a su
+operacion de ledger. Los filtros de empresa, codigo, titulo, motivo, fecha local de
+eliminacion, actor, estado operacional disponible y estado de auditoria pueden combinarse.
+La paginacion y el conteo se ejecutan en SQL con orden estable; la empresa siempre procede
+de la sesion y nunca de un parametro GET.
+
+La tarea y sus relaciones fisicas solo se muestran como conservadas si sus metadatos
+coinciden con la operacion, empresa, actor y marca logica. Si el objeto ya no existe, L4
+muestra un identificador del manifiesto y la metadata real del ledger; no inventa titulo,
+codigo ni estado. Una referencia que no sea `tareas.tarea` conserva su tipo propio y no se
+presenta como una tarea. Una incongruencia entre marca y ledger se identifica como tal.
+
+El ledger no es un snapshot completo. Las relaciones y datos relacionados solo se muestran
+cuando pueden leerse con evidencia suficiente desde las filas conservadas. Si no pueden
+reconstruirse, la seccion indica que la informacion historica no esta disponible. L4 no
+reconcilia auditoria ni cambia estado alguno durante una consulta.
 
 ---
 

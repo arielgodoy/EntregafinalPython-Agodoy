@@ -12,6 +12,7 @@ import copy
 from dataclasses import replace
 from types import SimpleNamespace
 from urllib.parse import urlparse
+from uuid import UUID, uuid4
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -24,7 +25,7 @@ from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView, View
@@ -47,6 +48,8 @@ _MENSAJE_EMPRESA_BASE_00 = (
     "Seleccione esa empresa para continuar."
 )
 _CLAVE_EMPRESA_BASE_00_REQUERIDA = "tareas.empresa_base00.requerida"
+_LOGICAL_DELETION_PREVIEW_SALT = "tareas.logical-deletion-preview"
+_LOGICAL_DELETION_PREVIEW_MAX_AGE = 900
 
 
 def _guard_empresa_base_00(request):
@@ -96,6 +99,22 @@ def _can_preview_permanent_deletion(request):
         empresa
         and user_has_permission_for_empresa(
             user=request.user,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="supervisor",
+        )
+    )
+
+
+def _can_logically_delete_task(user, empresa):
+    if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
+        return False
+    return bool(
+        get_valid_users_for_empresa(empresa, active_only=True)
+        .filter(pk=user.pk)
+        .exists()
+        and user_has_permission_for_empresa(
+            user=user,
             empresa=empresa,
             vista_nombre="Tareas",
             accion="supervisor",
@@ -172,6 +191,7 @@ from .models import (
     ReunionRevision,
     Tarea,
     TareaConnectionRole,
+    TareaEliminacionOperacion,
     TareaParticipante,
 )
 from .services.context import get_active_company_id
@@ -288,6 +308,32 @@ from .services.deletion_preview import (
     DeletionPreviewNotFound,
     DeletionPreviewSchemaIncomplete,
     build_deletion_preview,
+)
+from .services.logical_deletion import (
+    LogicalDeletionAuditConflict,
+    LogicalDeletionAuditPending,
+    LogicalDeletionAuthorizationError,
+    LogicalDeletionAuthorizationUnavailable,
+    LogicalDeletionBlocked,
+    LogicalDeletionCommitUncertain,
+    LogicalDeletionCompanyError,
+    LogicalDeletionConflict,
+    LogicalDeletionError,
+    LogicalDeletionHierarchyError,
+    LogicalDeletionInvalidRequest,
+    LogicalDeletionNotFound,
+    LogicalDeletionStorageError,
+    logically_delete_task_tree,
+)
+from .services.deleted_tasks_history import (
+    DeletedTaskHistoryError,
+    DeletedTaskHistoryFilters,
+    DeletedTaskHistoryInvalidFilter,
+    DeletedTaskHistoryNotFound,
+    DeletedTaskHistoryUnavailable,
+    get_deleted_task_history_detail,
+    get_deleted_task_history_operation,
+    list_deleted_task_history,
 )
 from .services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
@@ -821,6 +867,402 @@ class ListarTareasView(TareasLoginVerificarPermisoMixin, ListView):
         return render(request, self.template_name, context)
 
 
+class DeletedTasksHistoryAccessMixin(
+    TareasLoginRequiredMixin,
+    VerificarPermisoMixin,
+):
+    vista_nombre = "Tareas - Tareas eliminadas"
+    permiso_requerido = "ingresar"
+    crear_permiso_faltante = False
+    http_method_names = ["get", "head", "options"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.session.get("empresa_id"):
+            try:
+                empresa_id = int(request.session["empresa_id"])
+            except (TypeError, ValueError):
+                return VerificarPermisoMixin.handle_no_permission(
+                    self,
+                    request,
+                    "No se pudo validar la empresa activa.",
+                )
+            vista = Vista.objects.using("default").filter(
+                nombre=self.vista_nombre,
+            ).first()
+            if vista is None:
+                return VerificarPermisoMixin.handle_no_permission(
+                    self,
+                    request,
+                    "La vista histórica no está registrada en VICMEAS.",
+                )
+            has_explicit_ingresar = Permiso.objects.using("default").filter(
+                usuario_id=request.user.pk,
+                empresa_id=empresa_id,
+                vista_id=vista.pk,
+                ingresar=True,
+            ).exists()
+            if not has_explicit_ingresar:
+                return VerificarPermisoMixin.handle_no_permission(
+                    self,
+                    request,
+                    "Se requiere permiso Ingresar explícito para el historial.",
+                )
+        return super().dispatch(request, *args, **kwargs)
+
+
+def _history_positive_int(value, field_name, *, default=None):
+    if value in (None, ""):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise DeletedTaskHistoryInvalidFilter(
+            f"{field_name} debe ser un entero positivo."
+        ) from exc
+    if parsed < 1:
+        raise DeletedTaskHistoryInvalidFilter(
+            f"{field_name} debe ser un entero positivo."
+        )
+    return parsed
+
+
+def _deleted_history_filters(request):
+    query = request.GET
+    date_from_value = query.get("date_from", "").strip()
+    date_to_value = query.get("date_to", "").strip()
+    date_from = parse_date(date_from_value) if date_from_value else None
+    date_to = parse_date(date_to_value) if date_to_value else None
+    if date_from_value and date_from is None:
+        raise DeletedTaskHistoryInvalidFilter("date_from no es una fecha válida.")
+    if date_to_value and date_to is None:
+        raise DeletedTaskHistoryInvalidFilter("date_to no es una fecha válida.")
+    return DeletedTaskHistoryFilters(
+        search=query.get("search", "").strip(),
+        date_from=date_from,
+        date_to=date_to,
+        actor_id=_history_positive_int(query.get("actor_id"), "actor_id"),
+        motive=query.get("motive", "").strip(),
+        task_state=query.get("task_state", "").strip(),
+        audit_status=query.get("audit_status", "").strip(),
+        order_by=query.get("order_by", "deleted_desc").strip() or "deleted_desc",
+        page=_history_positive_int(query.get("page"), "page", default=1),
+        page_size=_history_positive_int(
+            query.get("page_size"),
+            "page_size",
+            default=25,
+        ),
+    )
+
+
+def _history_user_labels(user_ids):
+    ids = {int(user_id) for user_id in user_ids if user_id is not None}
+    if not ids:
+        return {}
+    users = User.objects.using("default").filter(pk__in=ids)
+    return {
+        user.pk: user.get_full_name() or user.get_username()
+        for user in users
+    }
+
+
+def _label_history_records(records, user_labels):
+    return tuple(
+        SimpleNamespace(
+            record=record,
+            actor_label=user_labels.get(record.actor_id),
+        )
+        for record in records
+    )
+
+
+def _history_empresa(request):
+    empresa_id = _get_empresa_id(request)
+    return Empresa.objects.using("default").filter(pk=empresa_id).first()
+
+
+def _history_can_read_tareas(request, empresa, accion):
+    return bool(
+        empresa
+        and user_has_permission_for_empresa(
+            user=request.user,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion=accion,
+        )
+    )
+
+
+class DeletedTasksHistoryListView(DeletedTasksHistoryAccessMixin, View):
+    template_name = "tareas/deleted_tasks_history_list.html"
+
+    def get(self, request):
+        empresa_id = _get_empresa_id(request)
+        try:
+            filters = _deleted_history_filters(request)
+            page = list_deleted_task_history(
+                empresa_id=empresa_id,
+                filters=filters,
+            )
+        except DeletedTaskHistoryInvalidFilter:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "filters": DeletedTaskHistoryFilters(),
+                    "invalid_filters": True,
+                    "page": None,
+                },
+                status=400,
+            )
+        except DeletedTaskHistoryUnavailable:
+            logger.error("Deleted tasks history list is unavailable")
+            return render(
+                request,
+                self.template_name,
+                {
+                    "filters": DeletedTaskHistoryFilters(),
+                    "history_unavailable": True,
+                    "page": None,
+                },
+                status=503,
+            )
+        except DeletedTaskHistoryError:
+            logger.error("Deleted tasks history list failed")
+            return render(
+                request,
+                self.template_name,
+                {
+                    "filters": DeletedTaskHistoryFilters(),
+                    "history_unavailable": True,
+                    "page": None,
+                },
+                status=503,
+            )
+
+        query = request.GET.copy()
+        query.pop("page", None)
+        user_ids = {item.actor_id for item in page.items}
+        actor_labels = _history_user_labels(user_ids)
+        return render(
+            request,
+            self.template_name,
+            {
+                "filters": filters,
+                "page": page,
+                "query_string": query.urlencode(),
+                "history_items": tuple(
+                    SimpleNamespace(
+                        item=item,
+                        actor_label=actor_labels.get(item.actor_id),
+                    )
+                    for item in page.items
+                ),
+                "page_numbers": range(
+                    max(1, page.page - 2),
+                    min(page.total_pages, page.page + 2) + 1,
+                ),
+                "actor_labels": actor_labels,
+                "task_states": Tarea.Estado.choices,
+                "audit_statuses": (
+                    "NOT_QUEUED",
+                    "PENDING",
+                    "CONFIRMED",
+                    "ERROR",
+                ),
+            },
+        )
+
+
+class DeletedTaskHistoryDetailView(DeletedTasksHistoryAccessMixin, View):
+    template_name = "tareas/deleted_task_history_detail.html"
+
+    def get(self, request, operation_id, task_id):
+        empresa_id = _get_empresa_id(request)
+        empresa = _history_empresa(request)
+        can_read_related = _history_can_read_tareas(
+            request,
+            empresa,
+            "ingresar",
+        )
+        can_read_hidden_comments = can_read_related and _history_can_read_tareas(
+            request,
+            empresa,
+            "supervisor",
+        )
+        try:
+            detail = get_deleted_task_history_detail(
+                empresa_id=empresa_id,
+                operation_id=operation_id,
+                task_id=task_id,
+                can_read_related=can_read_related,
+                can_read_comments=can_read_related,
+                can_read_hidden_comments=can_read_hidden_comments,
+            )
+        except DeletedTaskHistoryNotFound as exc:
+            raise Http404 from exc
+        except DeletedTaskHistoryUnavailable:
+            logger.error(
+                "Deleted task history detail is unavailable for operation=%s task=%s",
+                operation_id,
+                task_id,
+            )
+            return render(
+                request,
+                self.template_name,
+                {"history_unavailable": True},
+                status=503,
+            )
+        except DeletedTaskHistoryError:
+            logger.error(
+                "Deleted task history detail failed for operation=%s task=%s",
+                operation_id,
+                task_id,
+            )
+            return render(
+                request,
+                self.template_name,
+                {"history_unavailable": True},
+                status=503,
+            )
+
+        user_ids = {
+            detail.operation.actor_id,
+            detail.task.actor_id,
+            detail.creada_por_id,
+            detail.responsable_id,
+        }
+        for section_name in (
+            "participants",
+            "milestones",
+            "mini_tasks",
+            "documents",
+            "closure_evidence",
+            "transitions",
+            "closures",
+            "comments",
+        ):
+            user_ids.update(
+                record.actor_id
+                for record in getattr(detail.related, section_name)
+                if record.actor_id is not None
+            )
+        user_labels = _history_user_labels(user_ids)
+        return render(
+            request,
+            self.template_name,
+            {
+                "detail": detail,
+                "user_labels": user_labels,
+                "operation_actor_label": user_labels.get(detail.operation.actor_id),
+                "creator_label": user_labels.get(detail.creada_por_id),
+                "responsible_label": user_labels.get(detail.responsable_id),
+                "participants_rows": _label_history_records(
+                    detail.related.participants,
+                    user_labels,
+                ),
+                "milestone_rows": _label_history_records(
+                    detail.related.milestones,
+                    user_labels,
+                ),
+                "mini_task_rows": _label_history_records(
+                    detail.related.mini_tasks,
+                    user_labels,
+                ),
+                "document_rows": _label_history_records(
+                    detail.related.documents,
+                    user_labels,
+                ),
+                "closure_evidence_rows": _label_history_records(
+                    detail.related.closure_evidence,
+                    user_labels,
+                ),
+                "transition_rows": _label_history_records(
+                    detail.related.transitions,
+                    user_labels,
+                ),
+                "closure_rows": _label_history_records(
+                    detail.related.closures,
+                    user_labels,
+                ),
+                "comment_rows": _label_history_records(
+                    detail.related.comments,
+                    user_labels,
+                ),
+                "task_list_url": reverse("tareas:eliminadas_lista"),
+                "operation_url": reverse(
+                    "tareas:eliminacion_operacion_detalle",
+                    kwargs={"operation_id": detail.operation.operation_id},
+                ),
+            },
+        )
+
+
+class DeletedTaskHistoryOperationView(DeletedTasksHistoryAccessMixin, View):
+    template_name = "tareas/deleted_task_history_operation.html"
+
+    def get(self, request, operation_id):
+        empresa_id = _get_empresa_id(request)
+        try:
+            operation = get_deleted_task_history_operation(
+                empresa_id=empresa_id,
+                operation_id=operation_id,
+            )
+        except DeletedTaskHistoryNotFound as exc:
+            raise Http404 from exc
+        except DeletedTaskHistoryUnavailable:
+            logger.error(
+                "Deleted task history operation is unavailable for operation=%s",
+                operation_id,
+            )
+            return render(
+                request,
+                self.template_name,
+                {"history_unavailable": True},
+                status=503,
+            )
+        except DeletedTaskHistoryError:
+            logger.error(
+                "Deleted task history operation failed for operation=%s",
+                operation_id,
+            )
+            return render(
+                request,
+                self.template_name,
+                {"history_unavailable": True},
+                status=503,
+            )
+
+        user_ids = {operation.actor_id}
+        user_ids.update(
+            item.task.actor_id
+            for item in operation.items
+            if item.task is not None
+        )
+        user_labels = _history_user_labels(user_ids)
+        return render(
+            request,
+            self.template_name,
+            {
+                "operation": operation,
+                "user_labels": user_labels,
+                "actor_label": user_labels.get(operation.actor_id),
+                "operation_items": tuple(
+                    SimpleNamespace(
+                        item=item,
+                        actor_label=(
+                            user_labels.get(item.task.actor_id)
+                            if item.task is not None
+                            else None
+                        ),
+                    )
+                    for item in operation.items
+                ),
+                "task_list_url": reverse("tareas:eliminadas_lista"),
+                "task_item_label": "tareas.tarea",
+            },
+        )
+
+
 class PrevisualizarEliminacionDefinitivaView(
     LoginRequiredMixin,
     EmpresaBase00GuardMixin,
@@ -893,6 +1335,527 @@ class PrevisualizarEliminacionDefinitivaView(
                 "preview": result,
             },
             status=409 if has_blockers else 200,
+        )
+
+
+def _logical_deletion_preview_snapshot(preview):
+    return {
+        "task": dict(preview["task"]),
+        "task_ids": list(preview["task_ids"]),
+        "tasks": [dict(task) for task in preview["tasks"]],
+        "counts": dict(preview["counts"]),
+        "shared_references": [
+            dict(reference) for reference in preview["shared_references"]
+        ],
+        "warnings": list(preview["warnings"]),
+        "blockers": list(preview["blockers"]),
+        "backend": preview["backend"],
+        "logical_root_blocked": any(
+            reference.get("type") == "hierarchy_parent"
+            and reference.get("count", 0) > 0
+            for reference in preview["shared_references"]
+        ),
+    }
+
+
+def _has_explicit_deleted_history_ingresar(user, empresa):
+    vista = Vista.objects.using("default").filter(
+        nombre="Tareas - Tareas eliminadas",
+    ).first()
+    return bool(
+        vista
+        and Permiso.objects.using("default").filter(
+            usuario=user,
+            empresa=empresa,
+            vista=vista,
+            ingresar=True,
+        ).exists()
+    )
+
+
+class TareaEliminacionLogicaView(TareasLoginVerificarPermisoMixin, View):
+    template_name = "tareas/tarea_eliminacion_logica_preview.html"
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    http_method_names = ["get", "post", "head", "options"]
+
+    def _authorized_company(self, request):
+        empresa_id = _get_empresa_id(request)
+        empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
+        if empresa is None or not _can_logically_delete_task(request.user, empresa):
+            return None
+        return empresa
+
+    def _render_preview(
+        self,
+        request,
+        *,
+        task_id,
+        empresa,
+        preview,
+        operation_id,
+        motivo="",
+        error_key=None,
+        status=200,
+        force_blocked=False,
+        operation_reference=None,
+    ):
+        snapshot = _logical_deletion_preview_snapshot(preview)
+        preview_token = signing.dumps(
+            {
+                "actor_id": request.user.pk,
+                "empresa_id": empresa.pk,
+                "task_id": task_id,
+                "operation_id": str(operation_id),
+                "snapshot": snapshot,
+            },
+            salt=_LOGICAL_DELETION_PREVIEW_SALT,
+            compress=True,
+        )
+        has_blockers = bool(
+            preview["blockers"]
+            or snapshot["logical_root_blocked"]
+            or force_blocked
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "preview": preview,
+                "empresa": empresa,
+                "operation_id": str(operation_id),
+                "preview_token": preview_token,
+                "motivo": motivo,
+                "error_key": error_key,
+                "has_blockers": has_blockers,
+                "logical_root_blocked": snapshot["logical_root_blocked"],
+                "force_blocked": force_blocked,
+                "operation_reference": operation_reference,
+                "detail_url": reverse(
+                    "tareas:detalle_tarea",
+                    kwargs={"pk": task_id},
+                ),
+                "task_list_url": reverse("tareas:listar_tareas"),
+            },
+            status=status,
+        )
+
+    def _load_preview(self, request, task_id):
+        empresa_id = _get_empresa_id(request)
+        try:
+            empresa = Empresa.objects.using("default").get(pk=empresa_id)
+        except Empresa.DoesNotExist as exc:
+            raise Http404 from exc
+        try:
+            preview = build_deletion_preview(
+                task_id=task_id,
+                empresa_id=empresa_id,
+                purpose="logical",
+            )
+        except DeletionPreviewNotFound as exc:
+            raise Http404 from exc
+        return empresa, preview
+
+    def _preview_error_response(self, request, task_id, *, error_key, status):
+        empresa_id = _get_empresa_id(request)
+        empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
+        if empresa is None:
+            raise Http404
+        return render(
+            request,
+            self.template_name,
+            {
+                "preview": None,
+                "empresa": empresa,
+                "error_key": error_key,
+                "detail_url": reverse(
+                    "tareas:detalle_tarea",
+                    kwargs={"pk": task_id},
+                ),
+                "task_list_url": reverse("tareas:listar_tareas"),
+            },
+            status=status,
+        )
+
+    def get(self, request, pk):
+        if self._authorized_company(request) is None:
+            return VerificarPermisoMixin.handle_no_permission(
+                self,
+                request,
+                "Se requiere usuario activo y permiso Supervisor VICMEAS sobre Tareas.",
+            )
+        try:
+            empresa, preview = self._load_preview(request, pk)
+        except DeletionPreviewNotFound as exc:
+            raise Http404 from exc
+        except DeletionPreviewSchemaIncomplete:
+            return self._preview_error_response(
+                request,
+                pk,
+                error_key="tareas.logical_deletion.errors.schema_incomplete",
+                status=409,
+            )
+        except DeletionPreviewError:
+            logger.error("Logical task deletion preview failed for task=%s", pk)
+            return self._preview_error_response(
+                request,
+                pk,
+                error_key="tareas.logical_deletion.errors.preview_unavailable",
+                status=503,
+            )
+        return self._render_preview(
+            request,
+            task_id=pk,
+            empresa=empresa,
+            preview=preview,
+            operation_id=uuid4(),
+        )
+
+    def _invalid_confirmation(
+        self,
+        request,
+        *,
+        task_id,
+        motivo,
+        error_key,
+        status,
+    ):
+        try:
+            empresa, preview = self._load_preview(request, task_id)
+        except DeletionPreviewNotFound as exc:
+            raise Http404 from exc
+        except DeletionPreviewSchemaIncomplete:
+            return self._preview_error_response(
+                request,
+                task_id,
+                error_key="tareas.logical_deletion.errors.schema_incomplete",
+                status=409,
+            )
+        except DeletionPreviewError:
+            logger.error(
+                "Logical task deletion preview refresh failed for task=%s",
+                task_id,
+            )
+            return self._preview_error_response(
+                request,
+                task_id,
+                error_key="tareas.logical_deletion.errors.preview_unavailable",
+                status=503,
+            )
+        return self._render_preview(
+            request,
+            task_id=task_id,
+            empresa=empresa,
+            preview=preview,
+            operation_id=uuid4(),
+            motivo=motivo,
+            error_key=error_key,
+            status=status,
+        )
+
+    def _redirect_after_deletion(
+        self,
+        request,
+        *,
+        empresa,
+        operation_id,
+        message_key,
+        message_level,
+    ):
+        if message_level == "success":
+            messages.success(request, message_key)
+        elif message_level == "warning":
+            messages.warning(request, message_key)
+        else:
+            raise ValueError("Nivel de mensaje de eliminación no válido.")
+        if _has_explicit_deleted_history_ingresar(request.user, empresa):
+            return redirect(
+                "tareas:eliminacion_operacion_detalle",
+                operation_id=operation_id,
+            )
+        return redirect("tareas:listar_tareas")
+
+    def post(self, request, pk):
+        empresa_id = _get_empresa_id(request)
+        empresa = self._authorized_company(request)
+        if empresa is None:
+            return VerificarPermisoMixin.handle_no_permission(
+                self,
+                request,
+                "Se requiere usuario activo y permiso Supervisor VICMEAS sobre Tareas.",
+            )
+
+        token = request.POST.get("preview_token", "")
+        try:
+            payload = signing.loads(
+                token,
+                salt=_LOGICAL_DELETION_PREVIEW_SALT,
+                max_age=_LOGICAL_DELETION_PREVIEW_MAX_AGE,
+            )
+        except signing.BadSignature:
+            return self._invalid_confirmation(
+                request,
+                task_id=pk,
+                motivo=request.POST.get("motivo", ""),
+                error_key="tareas.logical_deletion.errors.preview_expired",
+                status=400,
+            )
+
+        if (
+            not isinstance(payload, dict)
+            or payload.get("actor_id") != request.user.pk
+            or payload.get("empresa_id") != empresa_id
+            or payload.get("task_id") != pk
+            or not isinstance(payload.get("operation_id"), str)
+            or not isinstance(payload.get("snapshot"), dict)
+        ):
+            return self._invalid_confirmation(
+                request,
+                task_id=pk,
+                motivo=request.POST.get("motivo", ""),
+                error_key="tareas.logical_deletion.errors.preview_invalid",
+                status=400,
+            )
+
+        try:
+            operation_id = UUID(payload["operation_id"])
+        except (TypeError, ValueError, AttributeError):
+            return self._invalid_confirmation(
+                request,
+                task_id=pk,
+                motivo=request.POST.get("motivo", ""),
+                error_key="tareas.logical_deletion.errors.preview_invalid",
+                status=400,
+            )
+
+        motivo = request.POST.get("motivo", "")
+        try:
+            empresa, preview = self._load_preview(request, pk)
+        except DeletionPreviewNotFound as exc:
+            raise Http404 from exc
+        except DeletionPreviewSchemaIncomplete:
+            return self._preview_error_response(
+                request,
+                pk,
+                error_key="tareas.logical_deletion.errors.schema_incomplete",
+                status=409,
+            )
+        except DeletionPreviewError:
+            logger.error("Logical task deletion preflight failed for task=%s", pk)
+            return self._preview_error_response(
+                request,
+                pk,
+                error_key="tareas.logical_deletion.errors.preview_unavailable",
+                status=503,
+            )
+
+        current_snapshot = _logical_deletion_preview_snapshot(preview)
+        if payload["snapshot"] != current_snapshot:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=uuid4(),
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.preview_stale",
+                status=409,
+            )
+
+        has_blockers = bool(
+            preview["blockers"]
+            or current_snapshot["logical_root_blocked"]
+        )
+        if has_blockers:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.blocked",
+                status=409,
+                force_blocked=True,
+            )
+        if not motivo.strip():
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.reason_required",
+                status=400,
+            )
+
+        try:
+            result = logically_delete_task_tree(
+                actor=request.user,
+                empresa_id=empresa_id,
+                root_task_id=pk,
+                motivo=motivo,
+                operation_id=operation_id,
+            )
+        except LogicalDeletionAuthorizationError:
+            return VerificarPermisoMixin.handle_no_permission(
+                self,
+                request,
+                "Se requiere permiso Supervisor VICMEAS para eliminar la tarea.",
+            )
+        except LogicalDeletionCompanyError:
+            return VerificarPermisoMixin.handle_no_permission(
+                self,
+                request,
+                "La empresa activa no permite esta operación.",
+            )
+        except LogicalDeletionNotFound as exc:
+            raise Http404 from exc
+        except LogicalDeletionInvalidRequest:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.reason_invalid",
+                status=400,
+            )
+        except LogicalDeletionHierarchyError:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.hierarchy",
+                status=409,
+                force_blocked=True,
+            )
+        except LogicalDeletionBlocked:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.blocked",
+                status=409,
+                force_blocked=True,
+            )
+        except LogicalDeletionConflict:
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.conflict",
+                status=409,
+                force_blocked=True,
+            )
+        except LogicalDeletionAuditPending as exc:
+            return self._redirect_after_deletion(
+                request,
+                empresa=empresa,
+                operation_id=exc.operation_id,
+                message_key="tareas.logical_deletion.audit_pending",
+                message_level="warning",
+            )
+        except LogicalDeletionAuditConflict:
+            logger.error(
+                "Logical task deletion audit conflict for operation=%s",
+                operation_id,
+            )
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.audit_conflict",
+                status=503,
+                force_blocked=True,
+                operation_reference=str(operation_id),
+            )
+        except LogicalDeletionCommitUncertain as exc:
+            logger.error(
+                "Logical task deletion commit is uncertain for operation=%s",
+                exc.operation_id,
+            )
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.commit_uncertain",
+                status=503,
+                force_blocked=True,
+                operation_reference=str(exc.operation_id),
+            )
+        except LogicalDeletionAuthorizationUnavailable:
+            logger.error(
+                "Logical task deletion authorization lookup failed for task=%s",
+                pk,
+            )
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.unavailable",
+                status=503,
+                force_blocked=True,
+            )
+        except LogicalDeletionStorageError:
+            logger.error("Logical task deletion storage failed for task=%s", pk)
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.unavailable",
+                status=503,
+                force_blocked=True,
+            )
+        except LogicalDeletionError:
+            logger.error("Logical task deletion failed for task=%s", pk)
+            return self._render_preview(
+                request,
+                task_id=pk,
+                empresa=empresa,
+                preview=preview,
+                operation_id=operation_id,
+                motivo=motivo,
+                error_key="tareas.logical_deletion.errors.unavailable",
+                status=503,
+                force_blocked=True,
+            )
+
+        if result.audit_status == TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA:
+            message_key = "tareas.logical_deletion.success"
+            message_level = "success"
+        else:
+            message_key = "tareas.logical_deletion.audit_pending"
+            message_level = "warning"
+        return self._redirect_after_deletion(
+            request,
+            empresa=empresa,
+            operation_id=result.operation_id,
+            message_key=message_key,
+            message_level=message_level,
         )
 
 
@@ -1492,6 +2455,13 @@ class DetalleTareaView(TareasLoginVerificarPermisoMixin, DetailView):
             self.detail_result,
             self.request.user,
             self.detail_empresa,
+        )
+        context["puede_eliminar_logicamente"] = (
+            hierarchy.parent is None
+            and _can_logically_delete_task(
+                self.request.user,
+                self.detail_empresa,
+            )
         )
         context["puede_configurar_evidencia"] = user_has_permission_for_empresa(
             user=self.request.user,

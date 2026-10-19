@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from django.db.models import Q
 
@@ -100,6 +101,18 @@ class _DjangoReader:
             "titulo": task.titulo,
             "estado": task.estado,
         }
+
+    def tasks(self, task_ids, empresa_id):
+        return list(
+            Tarea.objects.using(self.alias)
+            .filter(
+                pk__in=task_ids,
+                empresa_id=empresa_id,
+                eliminada=False,
+            )
+            .order_by("pk")
+            .values("id", "correlativo", "titulo", "estado")
+        )
 
     def children(self, task_id, empresa_id):
         return list(
@@ -329,6 +342,37 @@ class _MySQLReader:
             titulo=row[3],
             estado=row[4],
         )
+
+    def tasks(self, task_ids, empresa_id):
+        if not task_ids:
+            return []
+        table = self._quote(Tarea._meta.db_table)
+        id_column = self._quote(Tarea._meta.pk.column)
+        company_column = self._quote(Tarea._meta.get_field("empresa").column)
+        deleted_column = self._quote(Tarea._meta.get_field("eliminada").column)
+        correlativo_column = self._quote(Tarea._meta.get_field("correlativo").column)
+        title_column = self._quote(Tarea._meta.get_field("titulo").column)
+        state_column = self._quote(Tarea._meta.get_field("estado").column)
+        records = []
+        for batch in _batches(task_ids):
+            placeholders = ", ".join("%s" for _ in batch)
+            self.cursor.execute(
+                f"SELECT {id_column}, {correlativo_column}, {title_column}, "
+                f"{state_column} FROM {table} WHERE {company_column} = %s "
+                f"AND {deleted_column} = %s AND {id_column} IN ({placeholders}) "
+                f"ORDER BY {id_column}",
+                (empresa_id, False, *batch),
+            )
+            records.extend(
+                dict(
+                    id=row[0],
+                    correlativo=row[1],
+                    titulo=row[2],
+                    estado=row[3],
+                )
+                for row in self.cursor.fetchall()
+            )
+        return records
 
     def children(self, task_id, empresa_id):
         relation = self._quote(TareaRelacion._meta.db_table)
@@ -679,7 +723,12 @@ def _collect_hierarchy(reader, root_id, empresa_id):
     return ordered, blockers
 
 
-def _inventory_dependencies(reader, inventory):
+def _inventory_dependencies(
+    reader,
+    inventory,
+    *,
+    purpose: Literal["physical", "logical"],
+):
     task_ids = inventory.task_ids
     counts = inventory.counts
 
@@ -885,24 +934,43 @@ def _inventory_dependencies(reader, inventory):
             {
                 "type": "files",
                 "count": shared_file_refs,
-                "classification": "BLOQUEANTE",
-                "message": "Hay archivos con referencias adicionales en tablas de Tareas.",
+                "classification": (
+                    "BLOQUEANTE" if purpose == "physical" else "PRESERVAR"
+                ),
+                "message": (
+                    "Hay archivos con referencias adicionales en tablas de Tareas."
+                    if purpose == "physical"
+                    else "La operación lógica conservará las referencias de archivos compartidas."
+                ),
             }
         )
-        inventory.blockers.append(
-            "Hay archivos referenciados por otros registros de Tareas."
-        )
+        if purpose == "physical":
+            inventory.blockers.append(
+                "Hay archivos referenciados por otros registros de Tareas."
+            )
     if any((hito_files, document_files, closure_files, quote_files)):
-        inventory.warnings.append(
-            "No se verificaron referencias de archivos fuera de las tablas de Tareas."
-        )
-        inventory.blockers.append(
-            "La exclusividad de archivos físicos frente a otros módulos no está verificada."
-        )
+        if purpose == "physical":
+            inventory.warnings.append(
+                "No se verificaron referencias de archivos fuera de las tablas de Tareas."
+            )
+            inventory.blockers.append(
+                "La exclusividad de archivos físicos frente a otros módulos no está verificada."
+            )
+        else:
+            inventory.warnings.append(
+                "La eliminación lógica conservará los documentos y archivos; no se ejecutará limpieza física."
+            )
 
 
-def build_deletion_preview(*, task_id, empresa_id):
-    """Build a read-only, backend-specific inventory for the selected task."""
+def build_deletion_preview(
+    *,
+    task_id,
+    empresa_id,
+    purpose: Literal["physical", "logical"] = "physical",
+):
+    """Build a read-only inventory; file-exclusivity blockers depend on purpose."""
+    if purpose not in {"physical", "logical"}:
+        raise DeletionPreviewError("El propósito de previsualización no es válido.")
     try:
         context = resolve_operational_backend("BASE_TAREAS")
         if context.backend_type == "DJANGO":
@@ -925,8 +993,22 @@ def build_deletion_preview(*, task_id, empresa_id):
                     inventory = _Inventory(task_ids)
                     inventory.blockers.extend(hierarchy_blockers)
                     inventory.counts["Tareas descendientes"] = max(0, len(task_ids) - 1)
-                    _inventory_dependencies(reader, inventory)
-                    return _serialize_preview(task, inventory, backend)
+                    _inventory_dependencies(
+                        reader,
+                        inventory,
+                        purpose=purpose,
+                    )
+                    tasks = reader.tasks(task_ids, empresa_id)
+                    if {task["id"] for task in tasks} != set(task_ids):
+                        inventory.blockers.append(
+                            "El árbol cambió durante la generación de la previsualización."
+                        )
+                    return _serialize_preview(
+                        task,
+                        inventory,
+                        backend,
+                        tasks,
+                    )
                 finally:
                     reader.close()
         else:
@@ -945,16 +1027,36 @@ def build_deletion_preview(*, task_id, empresa_id):
     inventory = _Inventory(task_ids)
     inventory.blockers.extend(hierarchy_blockers)
     inventory.counts["Tareas descendientes"] = max(0, len(task_ids) - 1)
-    _inventory_dependencies(reader, inventory)
-    return _serialize_preview(task, inventory, backend)
+    _inventory_dependencies(
+        reader,
+        inventory,
+        purpose=purpose,
+    )
+    tasks = reader.tasks(task_ids, empresa_id)
+    if {task["id"] for task in tasks} != set(task_ids):
+        inventory.blockers.append(
+            "El árbol cambió durante la generación de la previsualización."
+        )
+    return _serialize_preview(
+        task,
+        inventory,
+        backend,
+        tasks,
+    )
 
 
-def _serialize_preview(task, inventory, backend):
+def _serialize_preview(task, inventory, backend, tasks):
+    tasks_by_id = {item["id"]: item for item in tasks}
     return {
         "task": task,
         "task_count": len(inventory.task_ids),
         "descendant_count": max(0, len(inventory.task_ids) - 1),
         "task_ids": inventory.task_ids,
+        "tasks": [
+            tasks_by_id[task_id]
+            for task_id in inventory.task_ids
+            if task_id in tasks_by_id
+        ],
         "counts": inventory.counts,
         "shared_references": inventory.shared_references,
         "warnings": sorted(set(inventory.warnings)),

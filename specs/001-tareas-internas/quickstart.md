@@ -448,9 +448,10 @@ BASE_TAREAS productiva ni se hizo escritura en una base física.
 
 ### Remediación final H-L2/H-L3 — 2026-10-18
 
-**Estado vigente: L2 GO; L3 GO para el código de `tareas`. L4–L6 siguen pendientes.**
-No se modificaron aplicaciones SYSTEM/CORE, permisos centrales, sidebar, requisitos
-funcionales ni rutas HTTP.
+**Estado vigente al 2026-10-19: L2 GO; L3 GO; L4 implementada para revisión funcional.
+L5–L6 siguen pendientes.** La integracion L4 en `access_control`, el submenu Tareas y los
+catalogos ES/EN se limito a los cambios aditivos expresamente autorizados; no se cambiaron
+permisos de usuarios, semantica general ICMEAS, requisitos ni rutas de otras aplicaciones.
 
 **H-L2-001 — actor original ausente**:
 
@@ -514,9 +515,51 @@ Los tres fallos históricos de `auditoria.tests.test_update_audit` y
 `auditoria.tests.test_gestiondte_ui` no se reejecutaron ni corrigieron en esta remediación;
 siguen fuera del alcance autorizado.
 
-**Gate L4 pendiente**: no se implementaron rutas históricas ni cambios de permisos o menú.
-El registro navegable de la Vista independiente requiere una autorización separada para
-la dependencia SYSTEM/CORE indicada en el contrato web.
+### E15. Consulta historica L4 (implementada)
+
+- Abrir `/tareas/eliminadas/` con la empresa activa y permiso explicito `ingresar` para
+  `Tareas - Tareas eliminadas`; combinar filtros y navegar las paginas.
+- Abrir el detalle de una Tarea y el detalle de operacion. Confirmar que los datos de
+  ledger/auditoria se muestran sin mutaciones ni acciones de restauracion.
+- Con permiso adicional `Tareas` + `ingresar`, comprobar las secciones relacionadas; sin
+  ese permiso deben aparecer restringidas. Los comentarios ocultos requieren ademas
+  `supervisor`; documentos y evidencias no exponen bytes ni URL.
+- Intentar POST en las rutas historicas y confirmar `405`. Enviar `empresa_id` por GET
+  no cambia el alcance de la empresa activa.
+- Verificar que una Vista ausente falla cerrado y no crea Vista ni permisos durante la
+  solicitud. Ejecutar `ensure_view_catalog --app tareas --dry-run` para previsualizar el
+  registro declarativo, y `--apply` solo cuando corresponda al bootstrap autorizado.
+
+Evidencia de desarrollo 2026-10-19: 85 tests focalizados de servicio, proyeccion relacionada,
+vistas, permisos, aislamiento, registry/sidebar e i18n PASS. La lectura MySQL real previa fue solo
+SELECT y comprobo `DATABASE() == tareas`; la lista de Base 00 devolvio cuatro items. La
+tarea 2 estaba conservada y consistente; la consulta detallada ejecuto las secciones
+relacionadas con estado `AVAILABLE` y cero filas relacionadas. Los items 84, 85 y 86
+estaban ausentes y se presentaban solo como referencias del manifiesto. No se escribieron
+datos operacionales ni de auditoria.
+
+### E16. Eliminacion logica desde el detalle (L2 web)
+
+- Entrar con usuario activo y permiso VICMEAS `supervisor=True` sobre `Tareas` en Base 00.
+  El permiso `eliminar` por si solo no habilita el boton ni el endpoint.
+- Desde el detalle de una tarea raiz elegible, abrir `eliminacion_logica`. Revisar codigo,
+  titulo, empresa, estado, descendientes, conteos, referencias, advertencias y bloqueos.
+- Si el preview esta limpio, ingresar el motivo obligatorio y confirmar con POST CSRF. Un
+  cambio de inventario invalida el token y exige revisar un preview nuevo; un bloqueo desactiva
+  la confirmacion.
+- Verificar ledger/auditoria, desaparicion del detalle operacional y exclusion del listado.
+  Con permiso adicional explicito `ingresar` para `Tareas - Tareas eliminadas`, el resultado
+  navega al detalle L4 de operacion; sin ese permiso, vuelve al listado normal sin concederlo.
+- No usar el anterior `/eliminacion-definitiva/previsualizar/` como ejecutor: esa ruta sigue
+  siendo preview GET del WIP fisico y no ejecuta ninguna eliminacion.
+- Para `MYSQL_CONFIG`, la operacion solo inicia si la base configurada es exactamente
+  `tareas` y el ledger comprueba `SELECT DATABASE() == 'tareas'` antes de iniciar la
+  transaccion operacional.
+- Una referencia a archivo no bloquea L2: se informa que documentos y archivos se
+  conservan. El preview físico legado mantiene el bloqueo de exclusividad de archivos.
+- La validacion automatizada ejecuta la confirmacion unicamente contra SQLite temporal de
+  tests. No ejecutar confirmacion real de demostracion en MySQL; esa prueba manual la realiza
+  el propietario desde el navegador despues de revisar el preview.
 
 ## Verificación de cierre
 

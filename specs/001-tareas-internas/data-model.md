@@ -778,6 +778,31 @@ completo en su visibilidad anterior. No se limpian archivos antes ni después de
 permanecen físicamente y con sus relaciones. La auditoría central ocurre después del
 commit y no se declara atómica con BASE_TAREAS.
 
+### Proyeccion historica L4 (sin persistencia nueva)
+
+L4 no agrega modelos, columnas, indices ni migraciones. La lista de tareas se proyecta
+desde los items `tareas.tarea` de operaciones `COMMITTED` con resultado
+`LOGICALLY_DELETED`, bajo el `empresa_id` activo. `tareas_tarea` aporta campos descriptivos
+solo cuando la fila sigue fisica y sus metadatos de eliminacion coinciden con el UUID,
+actor y empresa de la operacion. `TareaEliminacionOperacion` aporta raiz, correlativo raiz,
+motivo, timestamps y estados; `TareaEliminacionElemento` aporta tipo e ID de cada elemento;
+`TareaEliminacionArchivo` aporta referencias de archivo, no sus bytes.
+
+La proyeccion clasifica una Tarea como conservada, fisicamente ausente o inconsistente.
+Si falta la fila operacional, el manifiesto permite mostrar solo su tipo e ID y, para la
+raiz, el correlativo raiz persistido. No permite reconstruir titulo, estado, participantes,
+documentos ni una topologia padre/hija cuya relacion fisica ya no exista. La auditoria
+central se consulta por la clave idempotente existente y nunca se reconcilia durante L4.
+
+Cuando la fila de Tarea y sus metadatos coinciden, el detalle lee participantes, hitos,
+MiniTareas, documentos y su historial fisico, evidencias, transiciones, cierres y comentarios
+desde las tablas existentes. Estas filas se presentan como informacion conservada, no como
+snapshots inmutables. Las secciones relacionadas requieren `Tareas` + `ingresar`; el contenido
+de comentarios ocultos requiere ademas `supervisor` y, en caso contrario, solo se muestra un
+marcador neutro. Los documentos y evidencias se muestran como metadatos sin bytes ni URL.
+Si el registro fisico no esta disponible o falta el permiso operacional, la seccion se marca
+como no disponible/restringida; no se inventan datos ni se crean tablas de historial.
+
 ## Límites y fuera de alcance
 
 - Ninguna Tarea o descendiente se elimina físicamente mediante la operación administrativa.

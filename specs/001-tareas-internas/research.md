@@ -256,6 +256,22 @@ proveedores Django distintos vigentes sin sumar rondas.
   implementada; L2…L6 aún no habían comenzado. La autorización posterior de L2/L3 y
   su gate correctivo del 2026-10-18 sustituyen esta fotografía para el estado actual.
 
+### D26. Proyeccion de consulta historica L4 (2026-10-19)
+
+- **Decision**: construir la lectura desde `BASE_TAREAS` y el ledger existente, con
+  LEFT JOIN de la fila de Tarea y comprobacion de empresa/UUID/actor antes de exponer
+  campos operacionales. La lista se deduplica por item del manifiesto y pagina en SQL.
+- **Rationale**: el ledger conserva identidad, motivo, resultado y elementos, pero no es
+  un snapshot completo. Las filas 84-86 de la operacion de prueba no existen fisicamente;
+  solo puede mostrarse su referencia de manifiesto. La tarea 2 se conserva y permite
+  comprobar la proyeccion completa.
+- **Alternatives rejected**: recrear nombres/estados a partir de IDs, usar ORM/default
+  como fallback, reconciliar auditoria al leer o crear tablas/snapshots para L4.
+- **Boundary**: la proyeccion no necesita schema. Con autorizacion expresa del propietario,
+  la integracion se limito a la Vista declarativa `Tareas - Tareas eliminadas`, el item VICMEAS
+  `tasks_deleted` dentro del grupo Tareas y las claves L4 ES/EN. No se cambiaron permisos
+  existentes, semantica general ICMEAS, middleware, routers ni otras aplicaciones.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
@@ -267,7 +283,8 @@ proveedores Django distintos vigentes sin sumar rondas.
   requiere autorización y ejecución separadas.
 - L2 y L3: implementadas y evaluadas mediante el gate correctivo del 2026-10-18;
   el estado vigente y sus limitaciones se registran abajo.
-- L4…L6: fases futuras no iniciadas; el POST permanece bloqueado.
+- L4: consulta historica implementada en solo lectura; L5 y L6 siguen pendientes y el POST
+  permanece bloqueado.
 - Habilitación de POST: gate futuro separado; permanece bloqueada y sin autorización.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
   ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
@@ -292,5 +309,6 @@ proveedores Django distintos vigentes sin sumar rondas.
 - **Resultado de código**: L2 GO y L3 GO según pruebas aisladas; no se ejecutó ni se
   certificó un backend MariaDB físico en esta remediación. Las tres pruebas opt-in de
   MariaDB quedaron omitidas por falta de una instancia local aislada configurada.
-- L4 continúa pendiente y no forma parte de esta autorización. Su navegación requiere
-  una dependencia SYSTEM/CORE que debe autorizarse por separado.
+- L4 se completo dentro de la autorizacion especifica del 2026-10-19. La integracion
+  SYSTEM/CORE queda limitada a la Vista, el enlace `tasks_deleted` y las claves de idioma
+  descritas en D26; no se concedieron permisos a usuarios.

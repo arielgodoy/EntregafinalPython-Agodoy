@@ -81,6 +81,12 @@ Each protected view must define:
 vista_nombre
 permiso_requerido
 
+New VICMEAS Vistas must use the administrative naming format
+`Nombre de la App - Nombre de la Vista` in `Vista.nombre` and `vista_nombre`
+(for example, `Tareas - Tareas eliminadas`). This naming rule does not change
+visible page titles or menu labels. Do not rename existing Vistas in bulk; migrate
+a legacy name only when explicitly requested.
+
 Available permission flags include:
 
 ingresar

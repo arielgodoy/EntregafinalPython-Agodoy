@@ -1179,6 +1179,7 @@
 "database_manager.dashboard.open_preflight": "Abrir preflight",
     "menu.tareas": "Tareas",
     "menu.tareas.list": "Lista de Tareas",
+    "menu.tareas.deleted": "Tareas eliminadas",
     "menu.tareas.create": "Crear Tarea",
     "menu.tareas.dashboard": "Mis Hitos y Tareas",
     "tareas.minitareas.status": "Estado",
@@ -1215,6 +1216,164 @@
     "tareas.connection_roles.status.invalid": "CONFIGURACIÓN INVÁLIDA",
     "tareas.connection_roles.status.missing": "NO CONFIGURADO",
     "tareas.list.title": "Tareas",
+    "tareas.deleted_history.title": "Tareas eliminadas",
+    "tareas.deleted_history.description": "Consulta histórica de solo lectura",
+    "tareas.deleted_history.filters.title": "Filtros",
+    "tareas.deleted_history.filter.search": "Búsqueda",
+    "tareas.deleted_history.filter.date_from": "Eliminada desde",
+    "tareas.deleted_history.filter.date_to": "Eliminada hasta",
+    "tareas.deleted_history.filter.actor": "ID de usuario",
+    "tareas.deleted_history.filter.motive": "Motivo",
+    "tareas.deleted_history.filter.task_state": "Estado operacional",
+    "tareas.deleted_history.filter.audit_status": "Estado de auditoría",
+    "tareas.deleted_history.filter.order": "Orden",
+    "tareas.deleted_history.filter.page_size": "Por página",
+    "tareas.deleted_history.filter.all": "Todos",
+    "tareas.deleted_history.filter.apply": "Aplicar filtros",
+    "tareas.deleted_history.filter.clear": "Limpiar",
+    "tareas.deleted_history.order.deleted_desc": "Más recientes",
+    "tareas.deleted_history.order.deleted_asc": "Más antiguas",
+    "tareas.deleted_history.order.correlativo": "Código",
+    "tareas.deleted_history.order.title": "Título",
+    "tareas.deleted_history.column.reference": "Referencia",
+    "tareas.deleted_history.column.title": "Título",
+    "tareas.deleted_history.column.state": "Estado",
+    "tareas.deleted_history.column.deleted_at": "Eliminada",
+    "tareas.deleted_history.column.actor": "Usuario",
+    "tareas.deleted_history.column.audit": "Auditoría",
+    "tareas.deleted_history.column.physical": "Conservación",
+    "tareas.deleted_history.column.actions": "Acciones",
+    "tareas.deleted_history.action.view_task": "Ver tarea",
+    "tareas.deleted_history.action.view_operation": "Operación",
+    "tareas.deleted_history.action.back": "Volver al historial",
+    "tareas.deleted_history.error.invalid_filters": "Los filtros no son válidos.",
+    "tareas.deleted_history.error.unavailable": "El historial no está disponible en este momento.",
+    "tareas.deleted_history.empty": "No se encontraron registros históricos.",
+    "tareas.deleted_history.total": "Registros",
+    "tareas.deleted_history.page.previous": "Anterior",
+    "tareas.deleted_history.page.next": "Siguiente",
+    "tareas.deleted_history.not_available": "No disponible",
+    "tareas.deleted_history.physical.physically_retained": "Conservada físicamente",
+    "tareas.deleted_history.physical.physically_absent": "Ausente físicamente",
+    "tareas.deleted_history.physical.inconsistent": "Inconsistente",
+    "tareas.deleted_history.physical.not_verified": "No verificada",
+    "tareas.deleted_history.audit.not_queued": "No encolada",
+    "tareas.deleted_history.audit.pending": "Pendiente",
+    "tareas.deleted_history.audit.confirmed": "Confirmada",
+    "tareas.deleted_history.audit.error": "Error",
+    "tareas.deleted_history.audit.unknown": "Desconocida",
+    "tareas.deleted_history.status.committed": "Confirmada",
+    "tareas.deleted_history.status.pending": "Pendiente",
+    "tareas.deleted_history.result.logically_deleted": "Eliminación lógica confirmada",
+    "tareas.deleted_history.file_status.not_required": "No requerida",
+    "tareas.deleted_history.file_status.not_queued": "No encolada",
+    "tareas.deleted_history.file_status.pending": "Pendiente",
+    "tareas.deleted_history.file_status.complete": "Completa",
+    "tareas.deleted_history.file_status.error": "Error",
+    "tareas.deleted_history.audit_consistency.event_unavailable": "Evento no disponible",
+    "tareas.deleted_history.audit_consistency.central_audit_unavailable": "Auditoría central no disponible",
+    "tareas.deleted_history.audit_consistency.consistent": "Consistente",
+    "tareas.deleted_history.audit_consistency.inconsistent": "Inconsistente",
+    "tareas.deleted_history.audit_consistency.audit_missing": "Evento de auditoría faltante",
+    "tareas.deleted_history.audit_consistency.not_confirmed": "Auditoría no confirmada",
+    "tareas.deleted_history.hierarchy.complete": "Completa",
+    "tareas.deleted_history.hierarchy.available": "Disponible",
+    "tareas.deleted_history.hierarchy.unavailable": "No disponible",
+    "tareas.deleted_history.hierarchy.incomplete": "Incompleta",
+    "tareas.deleted_history.hierarchy.not_applicable": "No aplica",
+    "tareas.deleted_history.hierarchy.historical_relations_unavailable": "Relaciones históricas no disponibles",
+    "tareas.deleted_history.operation.title": "Detalle de operación",
+    "tareas.deleted_history.operation.summary": "Operación de eliminación",
+    "tareas.deleted_history.operation.id": "Identificador",
+    "tareas.deleted_history.operation.root_task": "Tarea raíz",
+    "tareas.deleted_history.operation.actor": "Usuario",
+    "tareas.deleted_history.operation.reason": "Motivo",
+    "tareas.deleted_history.operation.deleted_at": "Eliminada",
+    "tareas.deleted_history.operation.physical": "Conservación física",
+    "tareas.deleted_history.operation.created_at": "Iniciada",
+    "tareas.deleted_history.operation.committed_at": "Confirmada",
+    "tareas.deleted_history.operation.status": "Estado",
+    "tareas.deleted_history.operation.result": "Resultado",
+    "tareas.deleted_history.operation.audit": "Estado de auditoría",
+    "tareas.deleted_history.operation.audit_consistency": "Consistencia de auditoría",
+    "tareas.deleted_history.operation.audit_event": "Evento de auditoría",
+    "tareas.deleted_history.operation.file_status": "Limpieza de archivos",
+    "tareas.deleted_history.operation.hierarchy": "Estado de jerarquía",
+    "tareas.deleted_history.operation.audit_action": "Acción auditada",
+    "tareas.deleted_history.operation.audit_date": "Fecha del evento",
+    "tareas.deleted_history.operation.audit_unavailable": "El evento central de auditoría no está disponible.",
+    "tareas.deleted_history.operation.items": "Elementos del manifiesto",
+    "tareas.deleted_history.operation.item_type": "Tipo",
+    "tareas.deleted_history.operation.object_id": "ID",
+    "tareas.deleted_history.operation.generic_item": "Elemento tipado; no se interpreta como tarea.",
+    "tareas.deleted_history.operation.files": "Referencias de archivos",
+    "tareas.deleted_history.operation.attempts": "Intentos",
+    "tareas.deleted_history.operation.no_files": "La operación no registra referencias de archivos.",
+    "tareas.deleted_history.detail.heading": "Detalle histórico",
+    "tareas.deleted_history.detail.task_data": "Datos conservados",
+    "tareas.deleted_history.detail.reference": "Referencia",
+    "tareas.deleted_history.detail.title": "Título",
+    "tareas.deleted_history.detail.description": "Descripción",
+    "tareas.deleted_history.detail.state": "Estado operacional",
+    "tareas.deleted_history.detail.priority": "Prioridad",
+    "tareas.deleted_history.detail.created_at": "Creada",
+    "tareas.deleted_history.detail.published_at": "Publicada",
+    "tareas.deleted_history.detail.assigned_at": "Asignada",
+    "tareas.deleted_history.detail.due_date": "Fecha límite",
+    "tareas.deleted_history.detail.completed_at": "Cumplida",
+    "tareas.deleted_history.detail.creator": "Creador",
+    "tareas.deleted_history.detail.responsible": "Responsable",
+    "tareas.deleted_history.detail.local": "Local",
+    "tareas.deleted_history.detail.department": "Departamento",
+    "tareas.deleted_history.detail.core_unavailable": "La fila operacional ya no está disponible; se conserva únicamente la referencia del ledger.",
+    "tareas.deleted_history.related.hierarchy": "Jerarquía de la operación",
+    "tareas.deleted_history.related.parent": "Padre",
+    "tareas.deleted_history.related.child": "Hija",
+    "tareas.deleted_history.related.hierarchy_unavailable": "La topología de relaciones no está disponible en el manifiesto o en las filas conservadas.",
+    "tareas.deleted_history.related.participants": "Participantes",
+    "tareas.deleted_history.related.milestones": "Hitos e historial",
+    "tareas.deleted_history.related.mini_tasks": "MiniTareas e historial",
+    "tareas.deleted_history.related.documents": "Documentos e historial",
+    "tareas.deleted_history.related.documents_notice": "Se muestra solo metadatos; los archivos y URL no se exponen desde el historial.",
+    "tareas.deleted_history.related.evidence": "Evidencia de cierre e hitos",
+    "tareas.deleted_history.related.transitions": "Transiciones y cierres",
+    "tareas.deleted_history.related.comments": "Comentarios",
+    "tareas.deleted_history.related.empty": "No hay datos conservados.",
+    "tareas.deleted_history.related.access_restricted": "Los datos relacionados no están disponibles con los permisos actuales.",
+    "tareas.deleted_history.related.unavailable": "Los datos relacionados no están disponibles en las filas conservadas.",
+    "tareas.deleted_history.related.hidden_comment": "Comentario oculto; el contenido y los datos personales no están disponibles.",
+    "tareas.deleted_history.related.kind.participant": "Participante",
+    "tareas.deleted_history.related.kind.milestone": "Hito",
+    "tareas.deleted_history.related.kind.milestone_history": "Historial de hito",
+    "tareas.deleted_history.related.kind.mini_task": "MiniTarea",
+    "tareas.deleted_history.related.kind.mini_task_event": "Evento de MiniTarea",
+    "tareas.deleted_history.related.kind.document": "Documento",
+    "tareas.deleted_history.related.kind.document_history": "Historial de documento",
+    "tareas.deleted_history.related.kind.milestone_evidence": "Evidencia de hito",
+    "tareas.deleted_history.related.kind.closure_evidence": "Evidencia de cierre",
+    "tareas.deleted_history.related.kind.transition": "Transición",
+    "tareas.deleted_history.related.kind.closure": "Cierre",
+    "tareas.deleted_history.related.kind.comment": "Comentario",
+    "tareas.deleted_history.related.kind.comment_tombstone": "Comentario oculto",
+    "tareas.deleted_history.related.role": "Rol",
+    "tareas.deleted_history.related.state": "Estado",
+    "tareas.deleted_history.related.actor": "Usuario",
+    "tareas.deleted_history.related.date": "Fecha",
+    "tareas.deleted_history.related.external_link": "Enlace externo",
+    "tareas.deleted_history.related.role.creador": "Creador",
+    "tareas.deleted_history.related.role.responsable_lider": "Responsable líder",
+    "tareas.deleted_history.related.role.supervisor": "Supervisor",
+    "tareas.deleted_history.related.role.autorizador": "Autorizador",
+    "tareas.deleted_history.related.role.participante": "Participante",
+    "tareas.deleted_history.related.role.invitado_observador": "Invitado observador",
+    "tareas.deleted_history.related.state.voided": "Anulado",
+    "tareas.deleted_history.related.state.completed": "Completado",
+    "tareas.deleted_history.related.state.pending": "Pendiente",
+    "tareas.deleted_history.related.state.cierre": "Cierre",
+    "tareas.deleted_history.related.state.reapertura": "Reapertura",
+    "tareas.deleted_history.related.state.aprobado": "Aprobado",
+    "tareas.deleted_history.related.state.rechazado": "Rechazado",
+    "tareas.deleted_history.operation.audit_action_value.delete": "Eliminación",
     "tareas.list.acciones": "Acciones",
     "tareas.list.all_tasks": "Todas las tareas",
     "tareas.list.summary.total": "Total tareas",
@@ -1631,4 +1790,58 @@
     ,"tareas.deletion_preview.unavailable": "No se pudo generar la previsualización."
     ,"tareas.deletion_preview.warning_detail": "Detalle de la advertencia"
     ,"tareas.deletion_preview.warnings": "Advertencias"
+    ,"tareas.logical_deletion.action": "Eliminar tarea"
+    ,"tareas.logical_deletion.audit_pending": "La eliminación lógica fue confirmada; la auditoría central está pendiente."
+    ,"tareas.logical_deletion.errors.audit_conflict": "La tarea pudo quedar eliminada, pero la auditoría requiere revisión. No reintentes con una operación nueva."
+    ,"tareas.logical_deletion.errors.blocked": "La previsualización o las reglas de eliminación detectaron un bloqueo."
+    ,"tareas.logical_deletion.errors.commit_uncertain": "No se pudo confirmar el resultado de la transacción. Conserva el identificador de operación y solicita revisión antes de reintentar."
+    ,"tareas.logical_deletion.errors.conflict": "El árbol cambió o la operación ya fue registrada. Actualiza la previsualización antes de continuar."
+    ,"tareas.logical_deletion.errors.hierarchy": "La jerarquía no permite eliminar la tarea seleccionada."
+    ,"tareas.logical_deletion.errors.preview_expired": "La previsualización venció o no es válida. Revisa el alcance actualizado antes de confirmar."
+    ,"tareas.logical_deletion.errors.preview_invalid": "No se pudo validar la previsualización. Revisa nuevamente el alcance."
+    ,"tareas.logical_deletion.errors.preview_stale": "El alcance cambió desde la previsualización. Revisa los datos actualizados antes de confirmar."
+    ,"tareas.logical_deletion.errors.preview_unavailable": "No se pudo generar la previsualización."
+    ,"tareas.logical_deletion.errors.reason_invalid": "El motivo de eliminación no es válido."
+    ,"tareas.logical_deletion.errors.reason_required": "El motivo de eliminación es obligatorio."
+    ,"tareas.logical_deletion.errors.schema_incomplete": "El esquema operacional de Tareas está incompleto; no se puede confirmar la eliminación."
+    ,"tareas.logical_deletion.errors.unavailable": "No se pudo completar la eliminación lógica. No se confirmó una operación exitosa."
+    ,"tareas.logical_deletion.preview.affected_elements": "Elementos relacionados afectados"
+    ,"tareas.logical_deletion.preview.back": "Volver a la tarea"
+    ,"tareas.logical_deletion.preview.blocked": "La confirmación está bloqueada. Revisa las condiciones indicadas abajo."
+    ,"tareas.logical_deletion.preview.blocker_prefix": "Bloqueo"
+    ,"tareas.logical_deletion.preview.blockers": "Bloqueos"
+    ,"tareas.logical_deletion.preview.cancel": "Cancelar"
+    ,"tareas.logical_deletion.preview.classification.bloqueante": "Bloqueante"
+    ,"tareas.logical_deletion.preview.classification.eliminable": "Fuera del alcance de descendientes"
+    ,"tareas.logical_deletion.preview.classification.no_verificada": "No verificada"
+    ,"tareas.logical_deletion.preview.classification.preservar": "Se conservará"
+    ,"tareas.logical_deletion.preview.code": "Código"
+    ,"tareas.logical_deletion.preview.company": "Empresa"
+    ,"tareas.logical_deletion.preview.confirm": "Confirmar eliminación lógica"
+    ,"tareas.logical_deletion.preview.confirm_disabled": "Confirmación no disponible"
+    ,"tareas.logical_deletion.preview.confirmation_disabled": "La operación no puede confirmarse. Vuelve a abrir la previsualización antes de intentarlo de nuevo."
+    ,"tareas.logical_deletion.preview.descendant_count": "Descendientes"
+    ,"tareas.logical_deletion.preview.description": "Revisa el alcance antes de confirmar. Esta acción conserva los registros para consulta histórica."
+    ,"tareas.logical_deletion.preview.hierarchy": "Tareas incluidas en la jerarquía"
+    ,"tareas.logical_deletion.preview.logical_only": "La eliminación lógica marca las tareas del alcance y conserva sus registros; no elimina físicamente documentos ni permite restaurarlos."
+    ,"tareas.logical_deletion.preview.no_blockers": "No se detectaron bloqueos en la previsualización."
+    ,"tareas.logical_deletion.preview.no_elements": "No hay elementos relacionados."
+    ,"tareas.logical_deletion.preview.no_shared_references": "No se detectaron referencias compartidas."
+    ,"tareas.logical_deletion.preview.no_tasks": "No hay tareas disponibles en el inventario."
+    ,"tareas.logical_deletion.preview.no_warnings": "No hay advertencias."
+    ,"tareas.logical_deletion.preview.operation_reference": "Identificador de operación"
+    ,"tareas.logical_deletion.preview.reason": "Motivo de eliminación"
+    ,"tareas.logical_deletion.preview.reason_help": "El motivo quedará guardado en el ledger y en la auditoría."
+    ,"tareas.logical_deletion.preview.root": "Raíz"
+    ,"tareas.logical_deletion.preview.root_required": "Solo se puede iniciar la operación desde una tarea raíz."
+    ,"tareas.logical_deletion.preview.shared_references": "Referencias compartidas y límites"
+    ,"tareas.logical_deletion.preview.state": "Estado actual"
+    ,"tareas.logical_deletion.preview.task_count": "Tareas afectadas"
+    ,"tareas.logical_deletion.preview.task_details": "Tarea seleccionada"
+    ,"tareas.logical_deletion.preview.task_id": "Tarea ID"
+    ,"tareas.logical_deletion.preview.task_title": "Título"
+    ,"tareas.logical_deletion.preview.title": "Previsualización de eliminación lógica"
+    ,"tareas.logical_deletion.preview.warning_prefix": "Advertencia"
+    ,"tareas.logical_deletion.preview.warnings": "Advertencias"
+    ,"tareas.logical_deletion.success": "Eliminación lógica completada."
 }

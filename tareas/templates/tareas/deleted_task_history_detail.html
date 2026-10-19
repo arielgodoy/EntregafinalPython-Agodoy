@@ -1,0 +1,230 @@
+{% extends "partials/base.html" %}
+{% load tz %}
+
+{% block title %}Detalle histórico de tarea eliminada{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tareas eliminadas" pagetitle="Tareas" title_key="tareas.deleted_history.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            {% if history_unavailable %}
+            <div class="alert alert-danger" role="alert">
+                <span data-key="tareas.deleted_history.error.unavailable">El historial no está disponible en este momento.</span>
+            </div>
+            {% else %}
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                <div>
+                    <h4 class="fw-semibold mb-1"><span data-key="tareas.deleted_history.detail.heading">Detalle histórico</span></h4>
+                    <p class="text-muted mb-0">{{ detail.task.historical_reference }}{% if detail.task.titulo %} — {{ detail.task.titulo }}{% endif %}</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-outline-secondary" href="{{ task_list_url }}"><span data-key="tareas.deleted_history.action.back">Volver al historial</span></a>
+                    <a class="btn btn-outline-primary" href="{{ operation_url }}"><span data-key="tareas.deleted_history.action.view_operation">Ver operación</span></a>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.detail.task_data">Datos conservados</span></h5></div>
+                        <div class="card-body">
+                            {% if detail.core_information_available %}
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.reference">Referencia</dt><dd class="col-sm-8">{{ detail.task.historical_reference }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.title">Título</dt><dd class="col-sm-8">{{ detail.task.titulo|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.description">Descripción</dt><dd class="col-sm-8">{{ detail.description|default:"—"|linebreaksbr }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.state">Estado operacional</dt><dd class="col-sm-8">{% include "tareas/_state_label.html" with value=detail.task.estado %}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.priority">Prioridad</dt><dd class="col-sm-8">{% if detail.prioridad %}{% include "tareas/_priority_label.html" with value=detail.prioridad %}{% else %}—{% endif %}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.created_at">Creada</dt><dd class="col-sm-8">{{ detail.fecha_creacion|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.published_at">Publicada</dt><dd class="col-sm-8">{{ detail.fecha_publicacion|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.assigned_at">Asignada</dt><dd class="col-sm-8">{{ detail.fecha_asignacion|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.due_date">Fecha límite</dt><dd class="col-sm-8">{{ detail.fecha_tope|date:"Y-m-d"|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.completed_at">Cumplida</dt><dd class="col-sm-8">{{ detail.fecha_cumplimiento|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.creator">Creador</dt><dd class="col-sm-8">{{ creator_label|default:detail.creada_por_id|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.responsible">Responsable</dt><dd class="col-sm-8">{{ responsible_label|default:detail.responsable_id|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.local">Local</dt><dd class="col-sm-8">{{ detail.local_id|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.deleted_history.detail.department">Departamento</dt><dd class="col-sm-8">{{ detail.departamento_id|default:"—" }}</dd>
+                            </dl>
+                            {% else %}
+                            <div class="alert alert-warning mb-0" role="status">
+                                <span data-key="tareas.deleted_history.detail.core_unavailable">La fila operacional ya no está disponible; se conserva únicamente la referencia del ledger.</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-5">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.operation.summary">Operación de eliminación</span></h5></div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.id">Operación</dt><dd class="col-sm-7 text-break">{{ detail.operation.operation_id }}</dd>
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.actor">Usuario</dt><dd class="col-sm-7">{{ operation_actor_label|default:detail.operation.actor_id }}</dd>
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.deleted_at">Eliminada</dt><dd class="col-sm-7">{{ detail.task.deleted_at|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.reason">Motivo</dt><dd class="col-sm-7">{{ detail.operation.motivo|default:"—"|linebreaksbr }}</dd>
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.physical">Conservación física</dt>
+                                <dd class="col-sm-7"><span data-key="tareas.deleted_history.physical.{{ detail.task.physical_status|lower }}">{{ detail.task.physical_status }}</span></dd>
+                                <dt class="col-sm-5" data-key="tareas.deleted_history.operation.audit">Auditoría</dt>
+                                <dd class="col-sm-7"><span data-key="tareas.deleted_history.audit.{{ detail.operation.audit_status|lower }}">{{ detail.operation.audit_status }}</span></dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.hierarchy">Jerarquía de la operación</span></h5></div>
+                <div class="card-body">
+                    {% if detail.operation.relations %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th data-key="tareas.deleted_history.related.parent">Padre</th><th data-key="tareas.deleted_history.related.child">Hija</th></tr></thead>
+                            <tbody>
+                                {% for relation in detail.operation.relations %}
+                                <tr>
+                                    <td>
+                                        {% if relation.parent_in_manifest %}
+                                        <a href="{% url 'tareas:eliminada_detalle' operation_id=detail.operation.operation_id task_id=relation.parent_id %}">{{ relation.parent_id }}</a>
+                                        {% else %}{{ relation.parent_id }}{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if relation.child_in_manifest %}
+                                        <a href="{% url 'tareas:eliminada_detalle' operation_id=detail.operation.operation_id task_id=relation.child_id %}">{{ relation.child_id }}</a>
+                                        {% else %}{{ relation.child_id }}{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0" data-key="tareas.deleted_history.related.hierarchy_unavailable">La topología de relaciones no está disponible en el manifiesto o en las filas conservadas.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if detail.related.related_status == "AVAILABLE" %}
+            <div class="row g-3">
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.participants">Participantes</span></h5></div>
+                        <div class="card-body">
+                            {% for row in participants_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium"><span data-key="tareas.deleted_history.related.role.{{ row.record.state|lower }}">{{ row.record.state }}</span></div>
+                                <small class="text-muted">{{ row.actor_label|default:row.record.actor_id }} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}</small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.milestones">Hitos e historial</span></h5></div>
+                        <div class="card-body">
+                            {% for row in milestone_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{{ row.record.label }}</div>
+                                <small class="text-muted"><span data-key="tareas.deleted_history.related.kind.{{ row.record.kind }}">{{ row.record.kind }}</span>{% if row.record.state %} · <span data-key="tareas.deleted_history.related.state.{{ row.record.state|lower }}">{{ row.record.state }}</span>{% endif %}{% if row.actor_label %} · {{ row.actor_label }}{% endif %}{% if row.record.occurred_at %} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}{% endif %}</small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.mini_tasks">MiniTareas e historial</span></h5></div>
+                        <div class="card-body">
+                            {% for row in mini_task_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{{ row.record.label }}</div>
+                                <small class="text-muted"><span data-key="tareas.deleted_history.related.kind.{{ row.record.kind }}">{{ row.record.kind }}</span>{% if row.record.state %} · <span data-key="tareas.deleted_history.related.state.{{ row.record.state|lower }}">{{ row.record.state }}</span>{% endif %}{% if row.actor_label %} · {{ row.actor_label }}{% endif %}{% if row.record.occurred_at %} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}{% endif %}</small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.documents">Documentos e historial</span></h5></div>
+                        <div class="card-body">
+                            <p class="small text-muted" data-key="tareas.deleted_history.related.documents_notice">Se muestra solo metadatos; los archivos y URL no se exponen desde el historial.</p>
+                            {% for row in document_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{% if row.record.label == "EXTERNAL_LINK" %}<span data-key="tareas.deleted_history.related.external_link">Enlace externo</span>{% else %}{{ row.record.label|default:"—" }}{% endif %}</div>
+                                <small class="text-muted"><span data-key="tareas.deleted_history.related.kind.{{ row.record.kind }}">{{ row.record.kind }}</span>{% if row.actor_label %} · {{ row.actor_label }}{% endif %}{% if row.record.occurred_at %} · {{ row.record.occurred_at|date:"Y-m-d" }}{% endif %}</small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.evidence">Evidencia de cierre e hitos</span></h5></div>
+                        <div class="card-body">
+                            {% for row in closure_evidence_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{% if row.record.label == "EXTERNAL_LINK" %}<span data-key="tareas.deleted_history.related.external_link">Enlace externo</span>{% else %}{{ row.record.label|default:"—" }}{% endif %}</div>
+                                <small class="text-muted"><span data-key="tareas.deleted_history.related.kind.{{ row.record.kind }}">{{ row.record.kind }}</span>{% if row.actor_label %} · {{ row.actor_label }}{% endif %}{% if row.record.occurred_at %} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}{% endif %}</small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.transitions">Transiciones y cierres</span></h5></div>
+                        <div class="card-body">
+                            {% for row in transition_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{{ row.record.label }}</div>
+                                {% if row.record.details %}<p class="small mb-0">{{ row.record.details.0.1 }}</p>{% endif %}
+                                <small class="text-muted">{{ row.actor_label|default:row.record.actor_id }} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}</small>
+                            </div>
+                            {% endfor %}
+                            {% for row in closure_rows %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{% if row.record.label %}{{ row.record.label }}{% else %}<span data-key="tareas.deleted_history.related.state.{{ row.record.state|lower }}">{{ row.record.state }}</span>{% endif %}</div>
+                                <small class="text-muted">{{ row.actor_label|default:row.record.actor_id }} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}</small>
+                            </div>
+                            {% endfor %}
+                            {% if not transition_rows and not closure_rows %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.comments">Comentarios</span></h5></div>
+                        <div class="card-body">
+                            {% if detail.related.comments_status == "AVAILABLE" %}
+                                {% for row in comment_rows %}
+                                    {% if row.record.kind == "comment_tombstone" %}
+                                    <div class="alert alert-secondary py-2"><span data-key="tareas.deleted_history.related.hidden_comment">Comentario oculto; el contenido y los datos personales no están disponibles.</span></div>
+                                    {% else %}
+                                    <article class="border-bottom py-2">
+                                        <div>{{ row.record.label|linebreaksbr }}</div>
+                                        <small class="text-muted">{{ row.actor_label|default:row.record.actor_id }} · {{ row.record.occurred_at|localtime|date:"Y-m-d H:i" }}</small>
+                                    </article>
+                                    {% endif %}
+                                {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.related.empty">No hay datos conservados.</p>{% endfor %}
+                            {% else %}
+                            <p class="text-muted mb-0" data-key="tareas.deleted_history.related.access_restricted">Los comentarios no están disponibles con los permisos actuales.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% elif detail.related.related_status == "ACCESS_RESTRICTED" %}
+            <div class="alert alert-info" role="status"><span data-key="tareas.deleted_history.related.access_restricted">Los datos relacionados no están disponibles con los permisos actuales.</span></div>
+            {% else %}
+            <div class="alert alert-warning" role="status"><span data-key="tareas.deleted_history.related.unavailable">Los datos relacionados no están disponibles en las filas conservadas.</span></div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}

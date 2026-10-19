@@ -49,6 +49,7 @@ Detalle de tarea
                                 </div>
                                 <div class="task-detail__task-actions d-flex flex-wrap justify-content-end align-items-center gap-2">
                                     {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}
+                                    {% if puede_eliminar_logicamente %}<a href="{% url 'tareas:eliminacion_logica' tarea.pk %}" class="btn btn-outline-danger"><i class="ri-delete-bin-line" aria-hidden="true"></i><span data-key="tareas.logical_deletion.action">Eliminar tarea</span></a>{% endif %}
                                     {% if puede_reprogramar %}<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reprogramar-tarea-modal"><i class="ri-calendar-event-line" aria-hidden="true"></i><span data-key="tareas.reprogramming.action">Reprogramar</span></button>{% endif %}
                                     {% if tarea.estado == "BORRADOR" %}
                                     <form method="post" action="{% url 'tareas:publicar_tarea' tarea.pk %}" class="d-inline">

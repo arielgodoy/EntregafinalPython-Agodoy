@@ -1,0 +1,175 @@
+{% extends "partials/base.html" %}
+{% load tz %}
+
+{% block title %}Tareas eliminadas{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tareas eliminadas" pagetitle="Tareas" title_key="tareas.deleted_history.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <div>
+                    <h4 class="fw-semibold mb-1"><span data-key="tareas.deleted_history.title">Tareas eliminadas</span></h4>
+                    <p class="text-muted mb-0"><span data-key="tareas.deleted_history.description">Consulta histórica de solo lectura</span></p>
+                </div>
+            </div>
+
+            {% if invalid_filters %}
+            <div class="alert alert-warning" role="alert">
+                <span data-key="tareas.deleted_history.error.invalid_filters">Los filtros no son válidos.</span>
+            </div>
+            {% endif %}
+            {% if history_unavailable %}
+            <div class="alert alert-danger" role="alert">
+                <span data-key="tareas.deleted_history.error.unavailable">El historial no está disponible en este momento.</span>
+            </div>
+            {% endif %}
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><span data-key="tareas.deleted_history.filters.title">Filtros</span></h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3 align-items-end">
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label" for="history-search"><span data-key="tareas.deleted_history.filter.search">Búsqueda</span></label>
+                            <input class="form-control" id="history-search" name="search" type="search" value="{{ filters.search }}">
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label" for="history-date-from"><span data-key="tareas.deleted_history.filter.date_from">Eliminada desde</span></label>
+                            <input class="form-control" id="history-date-from" name="date_from" type="date" value="{{ filters.date_from|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label" for="history-date-to"><span data-key="tareas.deleted_history.filter.date_to">Eliminada hasta</span></label>
+                            <input class="form-control" id="history-date-to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label" for="history-actor"><span data-key="tareas.deleted_history.filter.actor">ID de usuario</span></label>
+                            <input class="form-control" id="history-actor" name="actor_id" type="number" min="1" value="{{ filters.actor_id|default:'' }}">
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <label class="form-label" for="history-motive"><span data-key="tareas.deleted_history.filter.motive">Motivo</span></label>
+                            <input class="form-control" id="history-motive" name="motive" type="search" value="{{ filters.motive }}">
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <label class="form-label" for="history-state"><span data-key="tareas.deleted_history.filter.task_state">Estado operacional</span></label>
+                            <select class="form-select" id="history-state" name="task_state">
+                                <option value="" data-key="tareas.deleted_history.filter.all">Todos</option>
+                                {% for value, label in task_states %}
+                                <option value="{{ value }}" data-key="tareas.state.{{ value|lower }}"{% if filters.task_state == value %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <label class="form-label" for="history-audit"><span data-key="tareas.deleted_history.filter.audit_status">Estado de auditoría</span></label>
+                            <select class="form-select" id="history-audit" name="audit_status">
+                                <option value="" data-key="tareas.deleted_history.filter.all">Todos</option>
+                                {% for value in audit_statuses %}
+                                <option value="{{ value }}" data-key="tareas.deleted_history.audit.{{ value|lower }}"{% if filters.audit_status == value %} selected{% endif %}>{{ value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <label class="form-label" for="history-order"><span data-key="tareas.deleted_history.filter.order">Orden</span></label>
+                            <select class="form-select" id="history-order" name="order_by">
+                                <option value="deleted_desc" data-key="tareas.deleted_history.order.deleted_desc"{% if filters.order_by == "deleted_desc" %} selected{% endif %}>Más recientes</option>
+                                <option value="deleted_asc" data-key="tareas.deleted_history.order.deleted_asc"{% if filters.order_by == "deleted_asc" %} selected{% endif %}>Más antiguas</option>
+                                <option value="correlativo" data-key="tareas.deleted_history.order.correlativo"{% if filters.order_by == "correlativo" %} selected{% endif %}>Código</option>
+                                <option value="titulo" data-key="tareas.deleted_history.order.title"{% if filters.order_by == "titulo" %} selected{% endif %}>Título</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-lg-1">
+                            <label class="form-label" for="history-page-size"><span data-key="tareas.deleted_history.filter.page_size">Por página</span></label>
+                            <select class="form-select" id="history-page-size" name="page_size">
+                                <option value="10"{% if filters.page_size == 10 %} selected{% endif %}>10</option>
+                                <option value="25"{% if filters.page_size == 25 %} selected{% endif %}>25</option>
+                                <option value="50"{% if filters.page_size == 50 %} selected{% endif %}>50</option>
+                                <option value="100"{% if filters.page_size == 100 %} selected{% endif %}>100</option>
+                            </select>
+                        </div>
+                        <div class="col-12 d-flex flex-wrap gap-2">
+                            <button class="btn btn-primary" type="submit"><span data-key="tareas.deleted_history.filter.apply">Aplicar filtros</span></button>
+                            <a class="btn btn-outline-secondary" href="{% url 'tareas:eliminadas_lista' %}"><span data-key="tareas.deleted_history.filter.clear">Limpiar</span></a>
+                        </div>
+                    </form>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col" data-key="tareas.deleted_history.column.reference">Referencia</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.title">Título</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.state">Estado</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.deleted_at">Eliminada</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.actor">Usuario</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.audit">Auditoría</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.physical">Conservación</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.actions">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in history_items %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'tareas:eliminada_detalle' operation_id=row.item.operation_id task_id=row.item.task_id %}" class="fw-medium">
+                                        {{ row.item.historical_reference }}
+                                    </a>
+                                </td>
+                                <td>{{ row.item.titulo|default:"—" }}</td>
+                                <td>
+                                    {% if row.item.estado %}
+                                        {% include "tareas/_state_label.html" with value=row.item.estado %}
+                                    {% else %}
+                                        <span data-key="tareas.deleted_history.not_available">No disponible</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.item.deleted_at|localtime|date:"Y-m-d H:i" }}</td>
+                                <td>{{ row.actor_label|default:row.item.actor_id }}</td>
+                                <td><span data-key="tareas.deleted_history.audit.{{ row.item.audit_status|lower }}">{{ row.item.audit_status }}</span></td>
+                                <td><span data-key="tareas.deleted_history.physical.{{ row.item.physical_status|lower }}">{{ row.item.physical_status }}</span></td>
+                                <td class="text-nowrap">
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'tareas:eliminada_detalle' operation_id=row.item.operation_id task_id=row.item.task_id %}" data-key="tareas.deleted_history.action.view_task">Ver tarea</a>
+                                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'tareas:eliminacion_operacion_detalle' operation_id=row.item.operation_id %}" data-key="tareas.deleted_history.action.view_operation">Operación</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">
+                                    <span data-key="tareas.deleted_history.empty">No se encontraron tareas eliminadas.</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if page and page.total_pages > 1 %}
+                <div class="card-footer">
+                    <nav aria-label="Paginación del historial">
+                        <ul class="pagination pagination-sm mb-0 justify-content-end">
+                            {% if page.page > 1 %}
+                            <li class="page-item"><a class="page-link" href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page.page|add:'-1' }}" data-key="tareas.deleted_history.page.previous">Anterior</a></li>
+                            {% endif %}
+                            {% for number in page_numbers %}
+                            <li class="page-item{% if number == page.page %} active{% endif %}">
+                                <a class="page-link" href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ number }}">{{ number }}</a>
+                            </li>
+                            {% endfor %}
+                            {% if page.page < page.total_pages %}
+                            <li class="page-item"><a class="page-link" href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page.page|add:'1' }}" data-key="tareas.deleted_history.page.next">Siguiente</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    <small class="text-muted">
+                        <span data-key="tareas.deleted_history.total">Registros</span>: {{ page.total }}
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

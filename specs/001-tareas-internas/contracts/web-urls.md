@@ -65,6 +65,9 @@ identifica una ruta que no debe inventarse en esta feature.
 | Estado | Método | Ruta actual | Nombre |
 |---|---|---|---|
 | ACTIVE | GET | `/tareas/` | `listar_tareas` |
+| ACTIVE | GET | `/tareas/eliminadas/` | `eliminadas_lista` |
+| ACTIVE | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/tarea/<int:task_id>/` | `eliminada_detalle` |
+| ACTIVE | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/` | `eliminacion_operacion_detalle` |
 | ACTIVE | GET | `/tareas/mis-tareas/` | `mis_tareas` |
 | ACTIVE | GET | `/tareas/dashboard/general/` | `dashboard_general` |
 | ACTIVE | GET | `/tareas/dashboard/general/empresa/<empresa_id>/` | `dashboard_general_empresa` |
@@ -200,7 +203,7 @@ autorizan crear endpoints ausentes.
 - **Errores**: los `ValidationError` se devuelven como respuesta controlada y
   se muestran en la UI.
 
-### Eliminación lógica administrativa definitiva — contrato futuro, sin ruta de ejecución
+### Eliminación lógica administrativa definitiva — L2 habilitada
 
 FR-R06…FR-R17 autorizan una eliminación lógica administrativa: raíz y descendientes
 dejan de operar, pero se conservan filas, relaciones, historiales, documentos y archivos.
@@ -210,35 +213,73 @@ Hitos, MiniTareas o Comentarios.
 
 La ruta existente
 `GET /tareas/<pk>/eliminacion-definitiva/previsualizar/` (`previsualizar_eliminacion_definitiva`)
-es únicamente una previsualización GET de solo lectura del WIP físico anterior. No es un
-contrato ni una autorización para ejecutar la nueva eliminación lógica. Su respuesta y
-fingerprint deberán revisarse durante L5 antes de utilizarla como preview/confirmación.
+continúa siendo únicamente una previsualización GET de solo lectura del WIP físico anterior;
+no ejecuta ni autoriza eliminación física. La interfaz para eliminación lógica usa el
+servicio `build_deletion_preview` y la ruta independiente descrita a continuación.
 Desde la corrección L3, sus adaptadores Django y MYSQL_CONFIG excluyen una raíz eliminada
 y sus consultas jerárquicas no incluyen descendientes eliminados. Si una relación retenida
 deja el inventario inconsistente, la vista bloquea el preview con un mensaje genérico
 común para tareas no disponibles, eliminadas o fuera de empresa; no presenta identificador
-ni datos del descendiente. No existe POST lógico, endpoint de restauración ni executor
-conectado a HTTP.
+ni datos del descendiente. No existe endpoint de restauración ni eliminación física.
 
-Contrato web futuro propuesto, no registrado ni implementado:
+| Método | Ruta | Nombre (`tareas:`) | Vista ICMEAS | Permiso |
+|---|---|---|---|---|
+| GET | `/tareas/<pk>/eliminacion-logica/` | `eliminacion_logica` | `Tareas` | `supervisor` (S) |
+| POST | `/tareas/<pk>/eliminacion-logica/` | `eliminacion_logica` | `Tareas` | `supervisor` (S) |
+
+El enlace se muestra desde el detalle operacional solo para usuarios activos con S
+explícito en `Tareas` para la empresa activa y una tarea raíz no eliminada. El backend
+valida S al despachar GET/POST y el servicio L2 vuelve a validarlo antes de escribir.
+`eliminar` (E) no concede esta operación. La empresa Base 00, la pertenencia, la raíz y
+la elegibilidad se validan antes y durante la ejecución.
+
+El GET muestra una previsualización de solo lectura generada por
+`tareas.services.deletion_preview.build_deletion_preview`, incluyendo código/título/estado,
+empresa, lista de raíz y descendientes, conteos de elementos relacionados, referencias,
+advertencias y bloqueos. La confirmación solo se habilita si no hay bloqueos y el registro
+es raíz; exige motivo no vacío y un POST CSRF-protegido. Un token firmado vincula usuario,
+empresa, tarea raíz, UUID de operación y el inventario mostrado; el POST vuelve a generar
+el preview y rechaza una diferencia de alcance antes de invocar
+`logically_delete_task_tree`. GET nunca elimina.
+
+El preview recibe el propósito `logical`: la presencia de archivos o la imposibilidad de
+verificar su exclusividad física no bloquea esta operación, porque L2 conserva documentos
+y archivos y no ejecuta limpieza física. Se presenta como advertencia informativa. El
+preview físico legado conserva esos mismos bloqueos.
+
+El servicio L2 conserva la transacción, las marcas lógicas, el ledger y la entrega
+idempotente de auditoría. Para `MYSQL_CONFIG`, el servicio rechaza cualquier catálogo
+operacional cuyo nombre no sea `tareas`; el almacenamiento ejecuta `SELECT DATABASE()` y
+verifica que la sesión esté seleccionada en `tareas` antes de iniciar la transacción. No se
+ejecutan eliminaciones físicas ni cambios de esquema.
+
+Tras el commit, la respuesta muestra el mensaje de resultado y navega al detalle L4 de la
+operación únicamente si el usuario tiene permiso `ingresar` explícito sobre
+`Tareas - Tareas eliminadas`; de lo contrario vuelve al listado normal y no crea ni concede
+permisos L4. El detalle operacional de una raíz eliminada responde 404; sus descendientes
+también quedan excluidos de lecturas normales.
+
+Contrato web L4 implementado:
 
 | Fase | Operación | Método | Ruta/nombre sugerido | Regla |
 |---|---|---|---|---|
-| L4 | Listado histórico | GET | `/tareas/eliminadas/` (`tareas:eliminadas_lista`) | Solo lectura; VICMEAS `ingresar` (I) explícito para `Tareas eliminadas` |
-| L4 | Detalle histórico | GET | `/tareas/eliminadas/<uuid:operation_id>/` (`tareas:eliminadas_detalle`) | Solo lectura del árbol y relaciones retenidas; mismo permiso I |
+| L4 | Listado historico | GET | `/tareas/eliminadas/` (`tareas:eliminadas_lista`) | Solo lectura; VICMEAS `ingresar` (I) explicito para `Tareas - Tareas eliminadas` |
+| L4 | Detalle historico de Tarea | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/tarea/<int:task_id>/` (`tareas:eliminada_detalle`) | Tarea debe estar en el manifiesto de esa operacion/empresa; mismo permiso I |
+| L4 | Detalle de operacion | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/` (`tareas:eliminacion_operacion_detalle`) | Operacion de la empresa activa y manifiesto tipado; mismo permiso I |
 
-El permiso I se asigna a la Vista independiente `Tareas eliminadas`; no se infiere del
-permiso S de eliminación ni de `Tareas`. La pantalla todavía no está implementada. Las
-tareas eliminadas quedan fuera de KPI operacionales y reportes habituales.
-Su registro de navegación/Vista depende de infraestructura SYSTEM/CORE y requiere una
-autorización separada; esta fase no modifica `access_control` ni el sidebar global.
+Las rutas estan registradas en `tareas/urls.py` y comparten la Vista independiente
+`Tareas - Tareas eliminadas`, con permiso ICMEAS `ingresar` explicito. El permiso S de eliminacion,
+el permiso de `Tareas` y `Permiso.ver` no sustituyen esa autorizacion. El catalogo VICMEAS,
+el item `tasks_deleted` del submenu y las claves ES/EN se integraron aditivamente bajo
+autorizacion expresa, sin conceder permisos a usuarios.
 
-Cuando se autorice L5, preview y POST deberán comprobar usuario autenticado/activo,
-Empresa activa Base 00, CSRF en la mutación, permiso S explícito para eliminar,
-pertenencia y autorización antes de consultar inventario sensible. La confirmación se
-vinculará a usuario, empresa, raíz, backend/configuración y fingerprint, tendrá caducidad
-y se revalidará bajo locks. La transacción persiste las marcas lógicas y ledger juntas;
-auditoría central posterior no promete atomicidad distribuida. No se eliminan archivos.
+La capa de lectura no acepta `empresa_id` desde GET. Solo admite GET/HEAD/OPTIONS; POST, PUT,
+PATCH y DELETE no forman parte de L4. El acceso se protege en backend incluso cuando el
+enlace de navegacion no se muestre.
+
+La auditoría central se entrega tras el commit y no promete atomicidad distribuida. Un
+resultado de auditoría pendiente o un commit incierto se informa explícitamente; no se
+presenta como éxito confirmado ni se inicia automáticamente una segunda operación.
 
 ## Rutas adicionales por fase
 

@@ -184,6 +184,9 @@
                             {% if "tasks_list" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:listar_tareas' %}" class="nav-link" data-key="menu.tareas.list">Lista de Tareas</a>
                             </li>{% endif %}
+                            {% if "tasks_deleted" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'tareas:eliminadas_lista' %}" class="nav-link" data-key="menu.tareas.deleted">Tareas eliminadas</a>
+                            </li>{% endif %}
                             {% if "tasks_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:crear_tarea' %}" class="nav-link" data-key="menu.tareas.create">Crear Tarea</a>
                             </li>{% endif %}

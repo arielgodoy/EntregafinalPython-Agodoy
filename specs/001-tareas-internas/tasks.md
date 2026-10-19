@@ -486,3 +486,34 @@ una referencia no significa que el criterio ya esté ejecutado o aprobado.
 requieren una instancia local aislada configurada. No se conectó a una base real ni se
 afirma certificación física MariaDB; la validación MySQL de esta fase es mediante SQL
 parametrizado y adaptadores simulados.
+
+## Phase 14: L4 — Historial de tareas eliminadas
+
+**Goal**: Proyectar en solo lectura las tareas y operaciones logicas eliminadas desde
+BASE_TAREAS, sin schema nuevo, escrituras, restauracion ni eliminacion fisica.
+
+- [x] T148 Confirmar las fuentes reales del historial: Tarea conservada, ledger tipado y
+  auditoria central; definir filas conservadas, ausentes e inconsistentes sin snapshots
+  inventados.
+- [x] T149 Implementar `tareas/services/deleted_tasks_history.py` con filtros combinables,
+  paginacion SQL, orden estable, alcance por empresa y proyecciones read-only de tarea/
+  operacion; preservar el tipo de elementos no-Tarea.
+- [x] T150 Añadir tests focalizados de filtros/limites, SQL parametrizado, ausencia fisica,
+  consistencia del ledger y auditoria. Validar una lectura real MySQL confirmando `DATABASE()`
+  y sin ejecutar escrituras.
+- [x] T151 Completar las secciones historicas de participantes, hitos, documentos y otros
+  datos relacionados cuando exista evidencia fisica o historica suficiente; proteger los
+  enlaces/documentos con sus permisos actuales.
+- [x] T152 Implementar vistas GET, rutas y templates server-side de listado, detalle de
+  tarea y operacion, con `VerificarPermisoMixin`, `Tareas - Tareas eliminadas` + `ingresar`,
+  fail-closed si la Vista no esta registrada y sin endpoints mutables.
+- [x] T153 Registrar la Vista independiente y su acceso de sidebar mediante el registry y
+  catalogo VICMEAS existentes; la autorizacion expresa limita el cambio a `tasks_deleted`
+  y no materializa permisos de usuarios.
+- [x] T154 Incorporar las claves ES/EN necesarias para L4 en los catalogos globales
+  autorizados, sin reorganizar las claves preexistentes.
+- [x] T155 Actualizar spec, plan, modelo, contrato web, quickstart y esta trazabilidad.
+
+**Estado de fase**: L4 implementada para revision funcional; rutas historicas solo GET,
+permisos `ingresar` explicitos, empresa desde sesion y datos relacionados sujetos a los
+permisos operacionales existentes. No se agrego schema ni se escribio en MySQL.

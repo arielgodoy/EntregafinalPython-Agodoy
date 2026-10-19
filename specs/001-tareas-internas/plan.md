@@ -320,8 +320,13 @@ durante esta enmienda documental.
    Los bloqueos por una hija inexistente, eliminada o fuera de empresa usan la misma
    respuesta genérica, sin identificar la causa ni revelar sus datos.
    El ledger e integridad conservan acceso explícito mediante `all_objects`/locks.
-4. **L4 — Consulta histórica (pendiente)**: pantalla separada de solo lectura con VICMEAS
-   `ingresar` (I) explícito en la vista independiente `Tareas eliminadas`.
+4. **L4 — Consulta histórica**: proyeccion de lectura en `tareas/services/` sobre
+   `BASE_TAREAS`, ledger y auditoria central, sin schema ni escrituras. El servicio
+   verifica empresa, pagina en SQL y distingue filas conservadas, ausentes e inconsistentes.
+   Las tres vistas GET y sus templates estan implementados; la Vista independiente
+   requiere `ingresar` explicito (I), separado del permiso S de borrado. La lectura de
+   participantes, hitos, documentos, transiciones, cierres y comentarios se limita por
+   empresa y por los permisos existentes de `Tareas`; no se exponen bytes ni URL de documentos.
 5. **L5 — Integración HTTP (pendiente)**: preview/confirmación y POST protegido, únicamente tras
    cerrar autorización, aislamiento, auditoría y recuperación.
 6. **L6 — Pruebas integradas (pendiente)**: paridad ORM/MYSQL_CONFIG, rollback, carreras,
@@ -329,6 +334,16 @@ durante esta enmienda documental.
 
 Las eliminadas se excluyen de KPI operacionales y reportes históricos habituales; la
 consulta histórica autorizada es la única superficie para verlas.
+
+La primera implementacion L4 mantiene la frontera de lectura en Tareas: `MYSQL_CONFIG`
+se consulta con SQL parametrizado a traves de `open_mysql_connection()`, y cualquier alias
+Django futuro debe ser explicito. No se usa `DB_sistema`, ORM implicito, `migrate`, DDL,
+reconciliacion de auditoria ni escrituras. Los objetos que faltan fisicamente se representan
+con el tipo/ID del manifiesto y no se reconstruyen desde datos ficticios. La integracion
+navegable usa el registry/catalogo VICMEAS existente y el menu jerarquico existente. La
+autorizacion expresa del propietario cubrio unicamente el registro `Tareas - Tareas eliminadas`,
+el item `tasks_deleted` y sus claves ES/EN; no se modifico la semantica general de permisos,
+bootstrap, middleware, router ni otras aplicaciones.
 
 **Capacidad de auditoría para L2**: contrato público idempotente disponible en `auditoria`
 con UUID normalizado, unicidad persistida en `AuditoriaTareasEvent`, hash canónico del

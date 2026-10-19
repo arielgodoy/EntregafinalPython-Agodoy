@@ -1,0 +1,150 @@
+{% extends "partials/base.html" %}
+{% load tz %}
+
+{% block title %}Detalle de operación de eliminación{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Tareas eliminadas" pagetitle="Tareas" title_key="tareas.deleted_history.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+        {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {% include "tareas/_i18n_message.html" with message=message %}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        {% endif %}
+        {% if history_unavailable %}
+            <div class="alert alert-danger" role="alert">
+                <span data-key="tareas.deleted_history.error.unavailable">El historial no está disponible en este momento.</span>
+            </div>
+            {% else %}
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                <div>
+                    <h4 class="fw-semibold mb-1"><span data-key="tareas.deleted_history.operation.title">Detalle de operación</span></h4>
+                    <p class="text-muted mb-0 text-break">{{ operation.operation_id }}</p>
+                </div>
+                <a class="btn btn-outline-secondary" href="{{ task_list_url }}"><span data-key="tareas.deleted_history.action.back">Volver al historial</span></a>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.operation.summary">Resumen de la operación</span></h5></div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.id">Identificador</dt><dd class="col-sm-9 text-break">{{ operation.operation_id }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.root_task">Tarea raíz</dt><dd class="col-sm-9">{{ operation.root_correlativo|default:operation.root_task_id }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.actor">Usuario</dt><dd class="col-sm-9">{{ actor_label|default:operation.actor_id }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.reason">Motivo</dt><dd class="col-sm-9">{{ operation.motivo|default:"—"|linebreaksbr }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.created_at">Iniciada</dt><dd class="col-sm-9">{{ operation.created_at|localtime|date:"Y-m-d H:i" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.committed_at">Confirmada</dt><dd class="col-sm-9">{{ operation.committed_at|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.status">Estado</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.status.{{ operation.status|lower }}">{{ operation.status }}</span></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.result">Resultado</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.result.{{ operation.result_code|lower }}">{{ operation.result_code }}</span></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.audit">Estado de auditoría</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.audit.{{ operation.audit_status|lower }}">{{ operation.audit_status }}</span></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.audit_consistency">Consistencia de auditoría</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.audit_consistency.{{ operation.audit_consistency|lower }}">{{ operation.audit_consistency }}</span></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.audit_event">Evento de auditoría</dt><dd class="col-sm-9">{{ operation.audit_event_id|default:"—" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.file_status">Limpieza de archivos</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.file_status.{{ operation.file_cleanup_status|lower }}">{{ operation.file_cleanup_status }}</span></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.hierarchy">Estado de jerarquía</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.hierarchy.{{ operation.hierarchy_status|lower }}">{{ operation.hierarchy_status }}</span></dd>
+                    </dl>
+                    {% if operation.audit %}
+                    <hr>
+                    <p class="mb-1"><strong data-key="tareas.deleted_history.operation.audit_action">Acción auditada</strong>: <span data-key="tareas.deleted_history.operation.audit_action_value.{{ operation.audit.action|lower }}">{{ operation.audit.action }}</span></p>
+                    <p class="mb-0"><strong data-key="tareas.deleted_history.operation.audit_date">Fecha del evento</strong>: {{ operation.audit.created_at|localtime|date:"Y-m-d H:i" }}</p>
+                    {% else %}
+                    <div class="alert alert-warning mt-3 mb-0"><span data-key="tareas.deleted_history.operation.audit_unavailable">El evento central de auditoría no está disponible.</span></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.operation.items">Elementos del manifiesto</span></h5></div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead><tr>
+                            <th scope="col" data-key="tareas.deleted_history.operation.item_type">Tipo</th>
+                            <th scope="col" data-key="tareas.deleted_history.operation.object_id">ID</th>
+                            <th scope="col" data-key="tareas.deleted_history.column.reference">Referencia</th>
+                            <th scope="col" data-key="tareas.deleted_history.column.title">Título</th>
+                            <th scope="col" data-key="tareas.deleted_history.column.physical">Conservación</th>
+                            <th scope="col" data-key="tareas.deleted_history.column.actions">Acciones</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for row in operation_items %}
+                            <tr>
+                                <td><code>{{ row.item.item_type }}</code></td>
+                                <td>{{ row.item.object_id }}</td>
+                                <td>
+                                    {% if row.item.task %}
+                                    {{ row.item.task.historical_reference }}
+                                    {% else %}
+                                    <span data-key="tareas.deleted_history.not_available">No disponible</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.item.task.titulo|default:"—" }}</td>
+                                <td><span data-key="tareas.deleted_history.physical.{{ row.item.physical_status|lower }}">{{ row.item.physical_status }}</span></td>
+                                <td>
+                                    {% if row.item.item_type == task_item_label %}
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'tareas:eliminada_detalle' operation_id=operation.operation_id task_id=row.item.object_id %}" data-key="tareas.deleted_history.action.view_task">Ver tarea</a>
+                                    {% else %}
+                                    <span class="text-muted" data-key="tareas.deleted_history.operation.generic_item">Elemento tipado; no se interpreta como tarea.</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center text-muted py-4"><span data-key="tareas.deleted_history.empty">No hay elementos en el manifiesto.</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.related.hierarchy">Jerarquía</span></h5></div>
+                        <div class="card-body">
+                            {% if operation.relations %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead><tr><th data-key="tareas.deleted_history.related.parent">Padre</th><th data-key="tareas.deleted_history.related.child">Hija</th></tr></thead>
+                                    <tbody>{% for relation in operation.relations %}
+                                        <tr>
+                                            <td>{% if relation.parent_in_manifest %}<a href="{% url 'tareas:eliminada_detalle' operation_id=operation.operation_id task_id=relation.parent_id %}">{{ relation.parent_id }}</a>{% else %}{{ relation.parent_id }}{% endif %}</td>
+                                            <td>{% if relation.child_in_manifest %}<a href="{% url 'tareas:eliminada_detalle' operation_id=operation.operation_id task_id=relation.child_id %}">{{ relation.child_id }}</a>{% else %}{{ relation.child_id }}{% endif %}</td>
+                                        </tr>
+                                    {% endfor %}</tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0" data-key="tareas.deleted_history.related.hierarchy_unavailable">La topología no está disponible.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-5">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.operation.files">Referencias de archivos</span></h5></div>
+                        <div class="card-body">
+                            {% for file in operation.files %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">{{ file.file_name }}</div>
+                                <small class="text-muted">
+                                    <span data-key="tareas.deleted_history.file_status.{{ file.status|lower }}">{{ file.status }}</span>
+                                    · <span data-key="tareas.deleted_history.operation.attempts">Intentos</span>: {{ file.attempts }}
+                                    {% if file.last_attempt_at %} · {{ file.last_attempt_at|localtime|date:"Y-m-d H:i" }}{% endif %}
+                                </small>
+                            </div>
+                            {% empty %}<p class="text-muted mb-0" data-key="tareas.deleted_history.operation.no_files">La operación no registra referencias de archivos.</p>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}

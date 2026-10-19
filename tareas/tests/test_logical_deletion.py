@@ -26,6 +26,7 @@ from tareas.services.deletion_ledger import (
     DeletionLedgerStateError,
     DjangoDeletionLedgerStorage,
     DjangoDeletionLedgerUnitOfWork,
+    MySQLDeletionLedgerStorage,
 )
 from tareas.services.logical_deletion import (
     LogicalDeletionAuditPending,
@@ -38,6 +39,7 @@ from tareas.services.logical_deletion import (
     LogicalDeletionHierarchyError,
     LogicalDeletionInvalidRequest,
     LogicalDeletionResult,
+    LogicalDeletionStorageError,
     _MySQLTaskAdapter,
     logically_delete_task_tree,
     reconcile_logical_deletion_audit,
@@ -365,6 +367,26 @@ class LogicalDeletionServiceTests(TestCase):
         with self.assertRaises(LogicalDeletionCompanyError):
             self._execute(empresa_id=self.other_company.pk)
         self.assertFalse(Tarea.all_objects.filter(eliminada=True).exists())
+
+    def test_mysql_logical_deletion_is_restricted_to_authorized_tareas_database(self):
+        storage = MySQLDeletionLedgerStorage(
+            SimpleNamespace(pk=9001, updated_at=timezone.now()),
+            "another_database",
+        )
+
+        with (
+            patch(
+                "tareas.services.logical_deletion.resolve_deletion_ledger_storage",
+                return_value=storage,
+            ),
+            patch("tareas.services.deletion_ledger.open_mysql_connection") as opener,
+        ):
+            with self.assertRaises(LogicalDeletionStorageError):
+                self._execute()
+
+        opener.assert_not_called()
+        self.assertFalse(Tarea.all_objects.filter(eliminada=True).exists())
+        self.assertFalse(TareaEliminacionOperacion.objects.exists())
 
     def test_descendant_from_another_company_blocks_the_operation(self):
         foreign_task = create_tarea(

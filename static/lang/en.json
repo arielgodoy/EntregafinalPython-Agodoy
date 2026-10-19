@@ -1217,6 +1217,7 @@
 "database_manager.dashboard.open_preflight": "Open preflight",
     "menu.tareas": "Tasks",
     "menu.tareas.list": "Task List",
+    "menu.tareas.deleted": "Deleted Tasks",
     "menu.tareas.create": "Create Task",
     "menu.tareas.dashboard": "My Milestones and Tasks",
     "tareas.minitareas.status": "Status",
@@ -1253,6 +1254,164 @@
     "tareas.connection_roles.status.invalid": "INVALID CONFIGURATION",
     "tareas.connection_roles.status.missing": "NOT CONFIGURED",
     "tareas.list.title": "Tasks",
+    "tareas.deleted_history.title": "Deleted Tasks",
+    "tareas.deleted_history.description": "Read-only historical view",
+    "tareas.deleted_history.filters.title": "Filters",
+    "tareas.deleted_history.filter.search": "Search",
+    "tareas.deleted_history.filter.date_from": "Deleted from",
+    "tareas.deleted_history.filter.date_to": "Deleted through",
+    "tareas.deleted_history.filter.actor": "User ID",
+    "tareas.deleted_history.filter.motive": "Reason",
+    "tareas.deleted_history.filter.task_state": "Operational state",
+    "tareas.deleted_history.filter.audit_status": "Audit status",
+    "tareas.deleted_history.filter.order": "Sort",
+    "tareas.deleted_history.filter.page_size": "Per page",
+    "tareas.deleted_history.filter.all": "All",
+    "tareas.deleted_history.filter.apply": "Apply filters",
+    "tareas.deleted_history.filter.clear": "Clear",
+    "tareas.deleted_history.order.deleted_desc": "Newest first",
+    "tareas.deleted_history.order.deleted_asc": "Oldest first",
+    "tareas.deleted_history.order.correlativo": "Code",
+    "tareas.deleted_history.order.title": "Title",
+    "tareas.deleted_history.column.reference": "Reference",
+    "tareas.deleted_history.column.title": "Title",
+    "tareas.deleted_history.column.state": "State",
+    "tareas.deleted_history.column.deleted_at": "Deleted",
+    "tareas.deleted_history.column.actor": "User",
+    "tareas.deleted_history.column.audit": "Audit",
+    "tareas.deleted_history.column.physical": "Retention",
+    "tareas.deleted_history.column.actions": "Actions",
+    "tareas.deleted_history.action.view_task": "View task",
+    "tareas.deleted_history.action.view_operation": "Operation",
+    "tareas.deleted_history.action.back": "Back to history",
+    "tareas.deleted_history.error.invalid_filters": "The filters are invalid.",
+    "tareas.deleted_history.error.unavailable": "History is currently unavailable.",
+    "tareas.deleted_history.empty": "No historical records were found.",
+    "tareas.deleted_history.total": "Records",
+    "tareas.deleted_history.page.previous": "Previous",
+    "tareas.deleted_history.page.next": "Next",
+    "tareas.deleted_history.not_available": "Not available",
+    "tareas.deleted_history.physical.physically_retained": "Physically retained",
+    "tareas.deleted_history.physical.physically_absent": "Physically absent",
+    "tareas.deleted_history.physical.inconsistent": "Inconsistent",
+    "tareas.deleted_history.physical.not_verified": "Not verified",
+    "tareas.deleted_history.audit.not_queued": "Not queued",
+    "tareas.deleted_history.audit.pending": "Pending",
+    "tareas.deleted_history.audit.confirmed": "Confirmed",
+    "tareas.deleted_history.audit.error": "Error",
+    "tareas.deleted_history.audit.unknown": "Unknown",
+    "tareas.deleted_history.status.committed": "Committed",
+    "tareas.deleted_history.status.pending": "Pending",
+    "tareas.deleted_history.result.logically_deleted": "Logical deletion committed",
+    "tareas.deleted_history.file_status.not_required": "Not required",
+    "tareas.deleted_history.file_status.not_queued": "Not queued",
+    "tareas.deleted_history.file_status.pending": "Pending",
+    "tareas.deleted_history.file_status.complete": "Complete",
+    "tareas.deleted_history.file_status.error": "Error",
+    "tareas.deleted_history.audit_consistency.event_unavailable": "Event unavailable",
+    "tareas.deleted_history.audit_consistency.central_audit_unavailable": "Central audit unavailable",
+    "tareas.deleted_history.audit_consistency.consistent": "Consistent",
+    "tareas.deleted_history.audit_consistency.inconsistent": "Inconsistent",
+    "tareas.deleted_history.audit_consistency.audit_missing": "Audit event missing",
+    "tareas.deleted_history.audit_consistency.not_confirmed": "Audit not confirmed",
+    "tareas.deleted_history.hierarchy.complete": "Complete",
+    "tareas.deleted_history.hierarchy.available": "Available",
+    "tareas.deleted_history.hierarchy.unavailable": "Unavailable",
+    "tareas.deleted_history.hierarchy.incomplete": "Incomplete",
+    "tareas.deleted_history.hierarchy.not_applicable": "Not applicable",
+    "tareas.deleted_history.hierarchy.historical_relations_unavailable": "Historical relations unavailable",
+    "tareas.deleted_history.operation.title": "Operation details",
+    "tareas.deleted_history.operation.summary": "Deletion operation",
+    "tareas.deleted_history.operation.id": "Identifier",
+    "tareas.deleted_history.operation.root_task": "Root task",
+    "tareas.deleted_history.operation.actor": "User",
+    "tareas.deleted_history.operation.reason": "Reason",
+    "tareas.deleted_history.operation.deleted_at": "Deleted",
+    "tareas.deleted_history.operation.physical": "Physical retention",
+    "tareas.deleted_history.operation.created_at": "Started",
+    "tareas.deleted_history.operation.committed_at": "Committed",
+    "tareas.deleted_history.operation.status": "Status",
+    "tareas.deleted_history.operation.result": "Result",
+    "tareas.deleted_history.operation.audit": "Audit status",
+    "tareas.deleted_history.operation.audit_consistency": "Audit consistency",
+    "tareas.deleted_history.operation.audit_event": "Audit event",
+    "tareas.deleted_history.operation.file_status": "File cleanup",
+    "tareas.deleted_history.operation.hierarchy": "Hierarchy status",
+    "tareas.deleted_history.operation.audit_action": "Audited action",
+    "tareas.deleted_history.operation.audit_date": "Event date",
+    "tareas.deleted_history.operation.audit_unavailable": "The central audit event is unavailable.",
+    "tareas.deleted_history.operation.items": "Manifest items",
+    "tareas.deleted_history.operation.item_type": "Type",
+    "tareas.deleted_history.operation.object_id": "ID",
+    "tareas.deleted_history.operation.generic_item": "Typed item; it is not interpreted as a task.",
+    "tareas.deleted_history.operation.files": "File references",
+    "tareas.deleted_history.operation.attempts": "Attempts",
+    "tareas.deleted_history.operation.no_files": "The operation has no file references.",
+    "tareas.deleted_history.detail.heading": "Historical details",
+    "tareas.deleted_history.detail.task_data": "Retained data",
+    "tareas.deleted_history.detail.reference": "Reference",
+    "tareas.deleted_history.detail.title": "Title",
+    "tareas.deleted_history.detail.description": "Description",
+    "tareas.deleted_history.detail.state": "Operational state",
+    "tareas.deleted_history.detail.priority": "Priority",
+    "tareas.deleted_history.detail.created_at": "Created",
+    "tareas.deleted_history.detail.published_at": "Published",
+    "tareas.deleted_history.detail.assigned_at": "Assigned",
+    "tareas.deleted_history.detail.due_date": "Due date",
+    "tareas.deleted_history.detail.completed_at": "Completed",
+    "tareas.deleted_history.detail.creator": "Creator",
+    "tareas.deleted_history.detail.responsible": "Responsible",
+    "tareas.deleted_history.detail.local": "Location",
+    "tareas.deleted_history.detail.department": "Department",
+    "tareas.deleted_history.detail.core_unavailable": "The operational row is no longer available; only the ledger reference is retained.",
+    "tareas.deleted_history.related.hierarchy": "Operation hierarchy",
+    "tareas.deleted_history.related.parent": "Parent",
+    "tareas.deleted_history.related.child": "Child",
+    "tareas.deleted_history.related.hierarchy_unavailable": "Relationship topology is unavailable in the manifest or retained rows.",
+    "tareas.deleted_history.related.participants": "Participants",
+    "tareas.deleted_history.related.milestones": "Milestones and history",
+    "tareas.deleted_history.related.mini_tasks": "Mini-tasks and history",
+    "tareas.deleted_history.related.documents": "Documents and history",
+    "tareas.deleted_history.related.documents_notice": "Only metadata is shown; files and URLs are not exposed in history.",
+    "tareas.deleted_history.related.evidence": "Closure and milestone evidence",
+    "tareas.deleted_history.related.transitions": "Transitions and closures",
+    "tareas.deleted_history.related.comments": "Comments",
+    "tareas.deleted_history.related.empty": "No data is retained.",
+    "tareas.deleted_history.related.access_restricted": "Related data is unavailable with the current permissions.",
+    "tareas.deleted_history.related.unavailable": "Related data is unavailable in the retained rows.",
+    "tareas.deleted_history.related.hidden_comment": "Hidden comment; content and personal data are unavailable.",
+    "tareas.deleted_history.related.kind.participant": "Participant",
+    "tareas.deleted_history.related.kind.milestone": "Milestone",
+    "tareas.deleted_history.related.kind.milestone_history": "Milestone history",
+    "tareas.deleted_history.related.kind.mini_task": "Mini-task",
+    "tareas.deleted_history.related.kind.mini_task_event": "Mini-task event",
+    "tareas.deleted_history.related.kind.document": "Document",
+    "tareas.deleted_history.related.kind.document_history": "Document history",
+    "tareas.deleted_history.related.kind.milestone_evidence": "Milestone evidence",
+    "tareas.deleted_history.related.kind.closure_evidence": "Closure evidence",
+    "tareas.deleted_history.related.kind.transition": "Transition",
+    "tareas.deleted_history.related.kind.closure": "Closure",
+    "tareas.deleted_history.related.kind.comment": "Comment",
+    "tareas.deleted_history.related.kind.comment_tombstone": "Hidden comment",
+    "tareas.deleted_history.related.role": "Role",
+    "tareas.deleted_history.related.state": "State",
+    "tareas.deleted_history.related.actor": "User",
+    "tareas.deleted_history.related.date": "Date",
+    "tareas.deleted_history.related.external_link": "External link",
+    "tareas.deleted_history.related.role.creador": "Creator",
+    "tareas.deleted_history.related.role.responsable_lider": "Lead responsible",
+    "tareas.deleted_history.related.role.supervisor": "Supervisor",
+    "tareas.deleted_history.related.role.autorizador": "Approver",
+    "tareas.deleted_history.related.role.participante": "Participant",
+    "tareas.deleted_history.related.role.invitado_observador": "Observer guest",
+    "tareas.deleted_history.related.state.voided": "Voided",
+    "tareas.deleted_history.related.state.completed": "Completed",
+    "tareas.deleted_history.related.state.pending": "Pending",
+    "tareas.deleted_history.related.state.cierre": "Closure",
+    "tareas.deleted_history.related.state.reapertura": "Reopening",
+    "tareas.deleted_history.related.state.aprobado": "Approved",
+    "tareas.deleted_history.related.state.rechazado": "Rejected",
+    "tareas.deleted_history.operation.audit_action_value.delete": "Deletion",
     "tareas.list.acciones": "Actions",
     "tareas.list.all_tasks": "All tasks",
     "tareas.list.summary.total": "Total tasks",
@@ -1669,4 +1828,58 @@
     ,"tareas.deletion_preview.unavailable": "The preview could not be generated."
     ,"tareas.deletion_preview.warning_detail": "Warning details"
     ,"tareas.deletion_preview.warnings": "Warnings"
+    ,"tareas.logical_deletion.action": "Delete task"
+    ,"tareas.logical_deletion.audit_pending": "The logical deletion was committed; central audit is pending."
+    ,"tareas.logical_deletion.errors.audit_conflict": "The task may have been deleted, but the audit needs review. Do not retry with a new operation."
+    ,"tareas.logical_deletion.errors.blocked": "The preview or deletion rules found a blocker."
+    ,"tareas.logical_deletion.errors.commit_uncertain": "The transaction result could not be confirmed. Keep the operation ID and request review before retrying."
+    ,"tareas.logical_deletion.errors.conflict": "The tree changed or the operation was already recorded. Refresh the preview before continuing."
+    ,"tareas.logical_deletion.errors.hierarchy": "The selected task hierarchy does not allow this deletion."
+    ,"tareas.logical_deletion.errors.preview_expired": "The preview expired or is invalid. Review the current scope before confirming."
+    ,"tareas.logical_deletion.errors.preview_invalid": "The preview could not be validated. Review the scope again."
+    ,"tareas.logical_deletion.errors.preview_stale": "The scope changed after the preview. Review the updated data before confirming."
+    ,"tareas.logical_deletion.errors.preview_unavailable": "The preview could not be generated."
+    ,"tareas.logical_deletion.errors.reason_invalid": "The deletion reason is invalid."
+    ,"tareas.logical_deletion.errors.reason_required": "A deletion reason is required."
+    ,"tareas.logical_deletion.errors.schema_incomplete": "The operational task schema is incomplete; deletion cannot be confirmed."
+    ,"tareas.logical_deletion.errors.unavailable": "The logical deletion could not be completed. No successful operation was confirmed."
+    ,"tareas.logical_deletion.preview.affected_elements": "Related affected items"
+    ,"tareas.logical_deletion.preview.back": "Back to task"
+    ,"tareas.logical_deletion.preview.blocked": "Confirmation is blocked. Review the conditions below."
+    ,"tareas.logical_deletion.preview.blocker_prefix": "Blocker"
+    ,"tareas.logical_deletion.preview.blockers": "Blockers"
+    ,"tareas.logical_deletion.preview.cancel": "Cancel"
+    ,"tareas.logical_deletion.preview.classification.bloqueante": "Blocking"
+    ,"tareas.logical_deletion.preview.classification.eliminable": "Outside descendant scope"
+    ,"tareas.logical_deletion.preview.classification.no_verificada": "Unverified"
+    ,"tareas.logical_deletion.preview.classification.preservar": "Will be preserved"
+    ,"tareas.logical_deletion.preview.code": "Code"
+    ,"tareas.logical_deletion.preview.company": "Company"
+    ,"tareas.logical_deletion.preview.confirm": "Confirm logical deletion"
+    ,"tareas.logical_deletion.preview.confirm_disabled": "Confirmation unavailable"
+    ,"tareas.logical_deletion.preview.confirmation_disabled": "The operation cannot be confirmed. Reopen the preview before trying again."
+    ,"tareas.logical_deletion.preview.descendant_count": "Descendants"
+    ,"tareas.logical_deletion.preview.description": "Review the scope before confirming. Records are retained for historical consultation."
+    ,"tareas.logical_deletion.preview.hierarchy": "Tasks included in the hierarchy"
+    ,"tareas.logical_deletion.preview.logical_only": "Logical deletion marks the tasks in scope and retains their records; it does not physically delete documents or allow restoration."
+    ,"tareas.logical_deletion.preview.no_blockers": "The preview found no blockers."
+    ,"tareas.logical_deletion.preview.no_elements": "There are no related items."
+    ,"tareas.logical_deletion.preview.no_shared_references": "No shared references were found."
+    ,"tareas.logical_deletion.preview.no_tasks": "No tasks are available in the inventory."
+    ,"tareas.logical_deletion.preview.no_warnings": "There are no warnings."
+    ,"tareas.logical_deletion.preview.operation_reference": "Operation identifier"
+    ,"tareas.logical_deletion.preview.reason": "Deletion reason"
+    ,"tareas.logical_deletion.preview.reason_help": "The reason is stored in the ledger and audit."
+    ,"tareas.logical_deletion.preview.root": "Root"
+    ,"tareas.logical_deletion.preview.root_required": "The operation can only start from a root task."
+    ,"tareas.logical_deletion.preview.shared_references": "Shared references and boundaries"
+    ,"tareas.logical_deletion.preview.state": "Current state"
+    ,"tareas.logical_deletion.preview.task_count": "Tasks affected"
+    ,"tareas.logical_deletion.preview.task_details": "Selected task"
+    ,"tareas.logical_deletion.preview.task_id": "Task ID"
+    ,"tareas.logical_deletion.preview.task_title": "Title"
+    ,"tareas.logical_deletion.preview.title": "Logical deletion preview"
+    ,"tareas.logical_deletion.preview.warning_prefix": "Warning"
+    ,"tareas.logical_deletion.preview.warnings": "Warnings"
+    ,"tareas.logical_deletion.success": "Logical deletion completed."
 }

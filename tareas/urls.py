@@ -9,9 +9,29 @@ app_name = 'tareas'
 urlpatterns = [
     path('', views.ListarTareasView.as_view(), name='listar_tareas'),
     path(
+        'eliminadas/',
+        views.DeletedTasksHistoryListView.as_view(),
+        name='eliminadas_lista',
+    ),
+    path(
+        'eliminadas/operacion/<uuid:operation_id>/tarea/<int:task_id>/',
+        views.DeletedTaskHistoryDetailView.as_view(),
+        name='eliminada_detalle',
+    ),
+    path(
+        'eliminadas/operacion/<uuid:operation_id>/',
+        views.DeletedTaskHistoryOperationView.as_view(),
+        name='eliminacion_operacion_detalle',
+    ),
+    path(
         '<int:pk>/eliminacion-definitiva/previsualizar/',
         views.PrevisualizarEliminacionDefinitivaView.as_view(),
         name='previsualizar_eliminacion_definitiva',
+    ),
+    path(
+        '<int:pk>/eliminacion-logica/',
+        views.TareaEliminacionLogicaView.as_view(),
+        name='eliminacion_logica',
     ),
     path('configuracion/conexiones/', views.TareaConnectionRoleView.as_view(), name='conexiones_sql'),
     path(

@@ -17,6 +17,7 @@ from tareas.services.deletion_preview import (
     build_deletion_preview,
 )
 from tareas.models import (
+    DocumentoTarea,
     EvaluacionSimilitud,
     Tarea,
     TareaConnectionRole,
@@ -367,6 +368,26 @@ class PermanentDeletionPreviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 405)
+
+    def test_physical_preview_still_blocks_unverified_file_exclusivity(self):
+        self._grant(supervisor=True)
+        task = self._task()
+        DocumentoTarea.objects.create(
+            tarea=task,
+            tipo=DocumentoTarea.Tipo.INFORME,
+            formato_archivo="PDF",
+            archivo="tareas/documentos/physical-preview/file.pdf",
+            usuario=self.user,
+        )
+        self._activate()
+
+        response = self._preview(task)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(
+            "La exclusividad de archivos físicos frente a otros módulos no está verificada.",
+            response.json()["preview"]["blockers"],
+        )
 
 
 class MySQLDeletionPreviewAdapterTests(SimpleTestCase):

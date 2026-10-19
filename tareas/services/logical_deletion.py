@@ -59,6 +59,7 @@ from .task_mutation_locks import (
 
 
 _BASE_COMPANY_CODE = "00"
+_BASE_TAREAS_MYSQL_DATABASE = "tareas"
 _TASK_ITEM_LABEL = "tareas.tarea"
 _MYSQL_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -1115,6 +1116,13 @@ def reconcile_logical_deletion_audit(
         raise LogicalDeletionStorageError(
             "No se pudo resolver el backend operacional de Tareas."
         ) from exc
+    if (
+        isinstance(storage, MySQLDeletionLedgerStorage)
+        and storage.database_name != _BASE_TAREAS_MYSQL_DATABASE
+    ):
+        raise LogicalDeletionStorageError(
+            "La eliminación lógica solo está habilitada sobre la base operacional autorizada."
+        )
 
     try:
         with storage.atomic() as unit:
@@ -1275,6 +1283,13 @@ def logically_delete_task_tree(
         raise LogicalDeletionStorageError(
             "No se pudo resolver el backend operacional de Tareas."
         ) from exc
+    if (
+        isinstance(storage, MySQLDeletionLedgerStorage)
+        and storage.database_name != _BASE_TAREAS_MYSQL_DATABASE
+    ):
+        raise LogicalDeletionStorageError(
+            "La eliminación lógica solo está habilitada sobre la base operacional autorizada."
+        )
 
     try:
         with storage.atomic() as unit:

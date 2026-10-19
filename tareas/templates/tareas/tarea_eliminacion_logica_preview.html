@@ -1,0 +1,182 @@
+{% extends "partials/base.html" %}
+{% load tz %}
+
+{% block title %}Previsualización de eliminación lógica{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Eliminar tarea" pagetitle="Tareas" title_key="tareas.logical_deletion.preview.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                <div>
+                    <h4 class="fw-semibold mb-1"><span data-key="tareas.logical_deletion.preview.title">Previsualización de eliminación lógica</span></h4>
+                    <p class="text-muted mb-0"><span data-key="tareas.logical_deletion.preview.description">Revisa el alcance antes de confirmar. Esta acción conserva los registros para consulta histórica.</span></p>
+                </div>
+                <a class="btn btn-outline-secondary" href="{{ detail_url }}"><span data-key="tareas.logical_deletion.preview.back">Volver a la tarea</span></a>
+            </div>
+
+            {% if error_key and preview %}
+            <div class="alert alert-danger" role="alert">
+                <span data-key="{{ error_key }}">No fue posible completar la solicitud.</span>
+                {% if operation_reference %}
+                <div class="small mt-2"><span data-key="tareas.logical_deletion.preview.operation_reference">Identificador de operación</span>: {{ operation_reference }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if preview %}
+            {% if has_blockers %}
+            <div class="alert alert-warning" role="alert">
+                <span data-key="tareas.logical_deletion.preview.blocked">La confirmación está bloqueada. Revisa las condiciones indicadas abajo.</span>
+            </div>
+            {% endif %}
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.task_details">Tarea seleccionada</span></h5></div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.code">Código</dt>
+                                <dd class="col-sm-8">{{ preview.task.correlativo }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.task_title">Título</dt>
+                                <dd class="col-sm-8">{{ preview.task.titulo }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.company">Empresa</dt>
+                                <dd class="col-sm-8">{{ empresa.codigo }} — {{ empresa.descripcion|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.state">Estado actual</dt>
+                                <dd class="col-sm-8">{% include "tareas/_state_label.html" with value=preview.task.estado %}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.task_count">Tareas afectadas</dt>
+                                <dd class="col-sm-8">{{ preview.task_count }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_deletion.preview.descendant_count">Descendientes</dt>
+                                <dd class="col-sm-8">{{ preview.descendant_count }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-5">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.hierarchy">Tareas incluidas en la jerarquía</span></h5></div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                {% for affected_task in preview.tasks %}
+                                <li class="list-group-item px-0">
+                                    <span data-key="tareas.logical_deletion.preview.task_id">Tarea ID</span> {{ affected_task.id }}
+                                    <span class="fw-medium ms-1">{{ affected_task.correlativo }} — {{ affected_task.titulo }}</span>
+                                    <span class="badge bg-secondary-subtle text-secondary ms-1">{% include "tareas/_state_label.html" with value=affected_task.estado %}</span>
+                                    {% if affected_task.id == preview.task.id %}<span class="badge bg-primary-subtle text-primary ms-2" data-key="tareas.logical_deletion.preview.root">Raíz</span>{% endif %}
+                                </li>
+                                {% empty %}
+                                <li class="list-group-item px-0 text-muted" data-key="tareas.logical_deletion.preview.no_tasks">No hay tareas disponibles en el inventario.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.affected_elements">Elementos relacionados afectados</span></h5></div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                {% for label, count in preview.counts.items %}
+                                <li class="list-group-item px-0 d-flex justify-content-between gap-3">
+                                    <span>{{ label }}</span><strong>{{ count }}</strong>
+                                </li>
+                                {% empty %}
+                                <li class="list-group-item px-0 text-muted" data-key="tareas.logical_deletion.preview.no_elements">No hay elementos relacionados.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.shared_references">Referencias compartidas y límites</span></h5></div>
+                        <div class="card-body">
+                            {% for reference in preview.shared_references %}
+                            <div class="border-bottom py-2">
+                                <span class="badge bg-secondary-subtle text-secondary" data-key="tareas.logical_deletion.preview.classification.{{ reference.classification|lower }}">{{ reference.classification }}</span>
+                                {% if reference.count %}<span class="ms-1">{{ reference.count }}</span>{% endif %}
+                                <p class="small mb-0 mt-1">{{ reference.message }}</p>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_deletion.preview.no_shared_references">No se detectaron referencias compartidas.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.warnings">Advertencias</span></h5></div>
+                        <div class="card-body">
+                            {% for warning in preview.warnings %}
+                            <p class="mb-2"><span data-key="tareas.logical_deletion.preview.warning_prefix">Advertencia</span>: {{ warning }}</p>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_deletion.preview.no_warnings">No hay advertencias.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_deletion.preview.blockers">Bloqueos</span></h5></div>
+                        <div class="card-body">
+                            {% for blocker in preview.blockers %}
+                            <p class="mb-2"><span data-key="tareas.logical_deletion.preview.blocker_prefix">Bloqueo</span>: {{ blocker }}</p>
+                            {% endfor %}
+                            {% if logical_root_blocked %}
+                            <p class="mb-2" data-key="tareas.logical_deletion.preview.root_required">Solo se puede iniciar la operación desde una tarea raíz.</p>
+                            {% endif %}
+                            {% if force_blocked and not preview.blockers and not logical_root_blocked %}
+                            <p class="mb-2" data-key="tareas.logical_deletion.preview.confirmation_disabled">La operación no puede confirmarse. Vuelve a abrir la previsualización antes de intentarlo de nuevo.</p>
+                            {% endif %}
+                            {% if not preview.blockers and not logical_root_blocked and not force_blocked %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_deletion.preview.no_blockers">No se detectaron bloqueos en la previsualización.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info" role="note">
+                <span data-key="tareas.logical_deletion.preview.logical_only">La eliminación lógica marca las tareas del alcance y conserva sus registros; no elimina físicamente documentos ni permite restaurarlos.</span>
+            </div>
+
+            {% if has_blockers %}
+            <div class="d-flex justify-content-end gap-2">
+                <a class="btn btn-light" href="{{ detail_url }}"><span data-key="tareas.logical_deletion.preview.cancel">Cancelar</span></a>
+                <button type="button" class="btn btn-danger" disabled aria-disabled="true" data-key="tareas.logical_deletion.preview.confirm_disabled">Confirmar eliminación lógica</button>
+            </div>
+            {% else %}
+            <form method="post" action="{% url 'tareas:eliminacion_logica' preview.task.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="preview_token" value="{{ preview_token }}">
+                <div class="card mb-4">
+                    <div class="card-header"><h5 class="card-title mb-0"><label for="logical-deletion-reason" data-key="tareas.logical_deletion.preview.reason">Motivo de eliminación</label></h5></div>
+                    <div class="card-body">
+                        <textarea class="form-control" id="logical-deletion-reason" name="motivo" rows="3" required aria-required="true">{{ motivo }}</textarea>
+                        <small class="form-text text-muted" data-key="tareas.logical_deletion.preview.reason_help">El motivo quedará guardado en el ledger y en la auditoría.</small>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <a class="btn btn-light" href="{{ detail_url }}"><span data-key="tareas.logical_deletion.preview.cancel">Cancelar</span></a>
+                    <button type="submit" class="btn btn-danger"><span data-key="tareas.logical_deletion.preview.confirm">Confirmar eliminación lógica</span></button>
+                </div>
+            </form>
+            {% endif %}
+            {% else %}
+            <div class="alert alert-warning" role="alert">
+                <span data-key="{{ error_key|default:'tareas.logical_deletion.errors.preview_unavailable' }}">No se pudo generar la previsualización.</span>
+            </div>
+            <a class="btn btn-light" href="{{ detail_url }}"><span data-key="tareas.logical_deletion.preview.back">Volver a la tarea</span></a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}

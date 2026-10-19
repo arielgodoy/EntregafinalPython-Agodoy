@@ -102,7 +102,16 @@ class ViewRegistryTests(TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(first, tuple(sorted(first)))
-        self.assertEqual(SIDEBAR_GROUPS["tasks"], ("tasks_list", "tasks_create", "tasks_dashboard"))
+        self.assertEqual(
+            SIDEBAR_GROUPS["tasks"],
+            (
+                "tasks_list",
+                "tasks_create",
+                "tasks_dashboard",
+                "tasks_connections",
+                "tasks_deleted",
+            ),
+        )
 
     def test_new_definition_does_not_require_sidebar_group_edit(self):
         registry = ViewRegistry()
