@@ -22,6 +22,7 @@ from settings.services.mysql_connections import (
 
 from ..models import (
     LOGICAL_DELETION_RESULT_CODE,
+    LOGICAL_RESTORATION_RESULT_CODE,
     Tarea,
     TareaEliminacionArchivo,
     TareaEliminacionElemento,
@@ -70,6 +71,17 @@ class DeletionOperationInput:
     motivo: str = ""
 
 
+@dataclass(frozen=True)
+class RestorationOperationInput:
+    actor_id: int
+    empresa_id: int
+    reverses_operation_id: UUID
+    fingerprint: str
+    manifest: tuple["DeletionInventoryItem", ...]
+    operation_id: UUID = field(default_factory=uuid4)
+    motivo: str = ""
+
+
 @dataclass(frozen=True, order=True)
 class DeletionInventoryItem:
     model_label: str
@@ -106,6 +118,7 @@ class DeletionOperationRecord:
     updated_at: datetime
     committed_at: datetime | None
     motivo: str | None = None
+    reverses_operation_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +164,10 @@ _OPERATION_COLUMNS = (
     "motivo",
 )
 _OPERATION_COLUMN_SQL = ", ".join(f"`{name}`" for name in _OPERATION_COLUMNS)
+_RESTORATION_OPERATION_COLUMNS = (*_OPERATION_COLUMNS, "reverses_operation_id")
+_RESTORATION_OPERATION_COLUMN_SQL = ", ".join(
+    f"`{name}`" for name in _RESTORATION_OPERATION_COLUMNS
+)
 
 
 class _DBAPICursor(Protocol):
@@ -266,6 +283,47 @@ def _normalize_operation(operation: DeletionOperationInput) -> DeletionOperation
     )
 
 
+def _normalize_restoration_operation(
+    operation: RestorationOperationInput,
+) -> RestorationOperationInput:
+    if not isinstance(operation, RestorationOperationInput):
+        raise TypeError("operation debe ser RestorationOperationInput.")
+    try:
+        operation_id = (
+            operation.operation_id
+            if isinstance(operation.operation_id, UUID)
+            else UUID(str(operation.operation_id))
+        )
+        reverses_operation_id = (
+            operation.reverses_operation_id
+            if isinstance(operation.reverses_operation_id, UUID)
+            else UUID(str(operation.reverses_operation_id))
+        )
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Los UUID de restauración no son válidos.") from exc
+    if operation_id == reverses_operation_id:
+        raise ValueError("Una restauración no puede reutilizar el UUID de eliminación.")
+    _positive_id(operation.actor_id, "actor_id")
+    _positive_id(operation.empresa_id, "empresa_id")
+    if not isinstance(operation.fingerprint, str) or not _FINGERPRINT.fullmatch(
+        operation.fingerprint
+    ):
+        raise ValueError("fingerprint debe ser SHA-256 hexadecimal.")
+    if not isinstance(operation.motivo, str) or not operation.motivo.strip():
+        raise ValueError("El motivo de restauración es obligatorio.")
+    if not isinstance(operation.manifest, (tuple, list)):
+        raise ValueError("manifest debe ser una secuencia de elementos.")
+    return RestorationOperationInput(
+        actor_id=operation.actor_id,
+        empresa_id=operation.empresa_id,
+        reverses_operation_id=reverses_operation_id,
+        fingerprint=operation.fingerprint.lower(),
+        manifest=tuple(operation.manifest),
+        operation_id=operation_id,
+        motivo=operation.motivo.strip(),
+    )
+
+
 def _normalize_manifest(
     items: tuple[DeletionInventoryItem, ...] | list[DeletionInventoryItem],
     files: tuple[DeletionFileReference, ...] | list[DeletionFileReference],
@@ -313,6 +371,40 @@ def _normalize_manifest(
     return tuple(sorted(normalized_items)), tuple(sorted(normalized_files))
 
 
+def _normalize_restoration_manifest(
+    items: tuple[DeletionInventoryItem, ...] | list[DeletionInventoryItem],
+    *,
+    root_task_id: int,
+    source_manifest: tuple[DeletionInventoryItem, ...],
+) -> tuple[DeletionInventoryItem, ...]:
+    normalized_items, normalized_files = _normalize_manifest(
+        items,
+        (),
+        root_task_id,
+    )
+    if normalized_files or any(
+        item.model_label != "tareas.tarea" for item in normalized_items
+    ):
+        raise DeletionLedgerStateError(
+            "El manifiesto de restauración solo admite tareas."
+        )
+    if not source_manifest or any(
+        item.model_label != "tareas.tarea" for item in source_manifest
+    ):
+        raise DeletionLedgerSchemaError(
+            "El manifiesto de eliminación no contiene solo tareas."
+        )
+    if (
+        DeletionInventoryItem("tareas.tarea", root_task_id)
+        not in source_manifest
+        or normalized_items != tuple(sorted(source_manifest))
+    ):
+        raise DeletionLedgerConflict(
+            "El manifiesto de restauración debe coincidir exactamente con la eliminación."
+        )
+    return normalized_items
+
+
 def _reference_hash(file_reference: DeletionFileReference) -> str:
     value = f"{file_reference.storage_key}\0{file_reference.file_name}".encode(
         "utf-8"
@@ -347,6 +439,7 @@ def _summary_from_json(value) -> dict[str, int]:
 
 
 def _operation_record_from_model(model) -> DeletionOperationRecord:
+    reverses_operation_id = getattr(model, "reverses_operation_id", None)
     return DeletionOperationRecord(
         operation_id=(
             model.operation_id
@@ -374,13 +467,23 @@ def _operation_record_from_model(model) -> DeletionOperationRecord:
         updated_at=model.updated_at,
         committed_at=model.committed_at,
         motivo=model.motivo,
+        reverses_operation_id=(
+            UUID(str(reverses_operation_id))
+            if reverses_operation_id is not None
+            else None
+        ),
     )
 
 
-def _operation_record_from_row(row) -> DeletionOperationRecord:
-    values = dict(zip(_OPERATION_COLUMNS, row))
+def _operation_record_from_row(
+    row,
+    *,
+    columns: tuple[str, ...] = _OPERATION_COLUMNS,
+) -> DeletionOperationRecord:
+    values = dict(zip(columns, row))
     operation_id = values["operation_id"]
     motivo = values["motivo"]
+    reverses_operation_id = values.get("reverses_operation_id")
     if isinstance(motivo, bytes):
         motivo = motivo.decode("utf-8")
     if motivo is not None and not isinstance(motivo, str):
@@ -410,6 +513,11 @@ def _operation_record_from_row(row) -> DeletionOperationRecord:
         updated_at=values["updated_at"],
         committed_at=values["committed_at"],
         motivo=motivo,
+        reverses_operation_id=(
+            UUID(str(reverses_operation_id))
+            if reverses_operation_id is not None
+            else None
+        ),
     )
 
 
@@ -563,6 +671,101 @@ def _check_mysql_transactional_tables(
         cursor.close()
 
 
+def _check_mysql_restoration_schema(
+    connection: object,
+    database_name: str,
+) -> None:
+    if database_name != "tareas":
+        raise DeletionLedgerBackendError(
+            "El ledger de restauración solo está habilitado sobre la base tareas."
+        )
+    table = TareaEliminacionOperacion._meta.db_table
+    column = TareaEliminacionOperacion._meta.get_field(
+        "reverses_operation"
+    ).column
+    cursor = _cursor_from_connection(connection)
+    try:
+        cursor.execute("SELECT DATABASE()")
+        selected_database = cursor.fetchone()
+        if not selected_database or selected_database[0] != database_name:
+            raise DeletionLedgerBackendError(
+                "La conexión no está seleccionada sobre la base autorizada tareas."
+            )
+        cursor.execute(
+            "SELECT engine FROM information_schema.tables "
+            "WHERE table_schema = %s AND table_name = %s",
+            (database_name, table),
+        )
+        table_row = cursor.fetchone()
+        if not table_row or str(table_row[0]).casefold() != "innodb":
+            raise DeletionLedgerSchemaError(
+                "La tabla de operaciones no está disponible en InnoDB."
+            )
+        cursor.execute(
+            "SELECT data_type, character_maximum_length, is_nullable "
+            "FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s AND column_name = %s",
+            (database_name, table, column),
+        )
+        column_row = cursor.fetchone()
+        if (
+            not column_row
+            or str(column_row[0]).casefold() not in {"char", "varchar"}
+            or int(column_row[1] or 0) != 32
+            or str(column_row[2]).upper() != "YES"
+        ):
+            raise DeletionLedgerSchemaError(
+                "La referencia de restauración no tiene el tipo o nullabilidad esperados."
+            )
+        cursor.execute(
+            "SELECT index_name, non_unique, column_name "
+            "FROM information_schema.statistics "
+            "WHERE table_schema = %s AND table_name = %s "
+            "ORDER BY index_name, seq_in_index",
+            (database_name, table),
+        )
+        unique_rows = cursor.fetchall()
+        indexes: dict[str, tuple[int, list[str]]] = {}
+        for index_name, non_unique, column_name in unique_rows:
+            key = str(index_name)
+            if key not in indexes:
+                indexes[key] = (int(non_unique), [])
+            indexes[key][1].append(str(column_name))
+        if not any(
+            non_unique == 0 and columns == [column]
+            for non_unique, columns in indexes.values()
+        ):
+            raise DeletionLedgerSchemaError(
+                "La referencia de restauración no está protegida por unicidad."
+            )
+        cursor.execute(
+            "SELECT kcu.referenced_table_name, kcu.referenced_column_name, "
+            "rc.delete_rule, rc.update_rule "
+            "FROM information_schema.key_column_usage AS kcu "
+            "JOIN information_schema.referential_constraints AS rc "
+            "ON rc.constraint_schema = kcu.constraint_schema "
+            "AND rc.table_name = kcu.table_name "
+            "AND rc.constraint_name = kcu.constraint_name "
+            "WHERE kcu.table_schema = %s AND kcu.table_name = %s "
+            "AND kcu.column_name = %s AND kcu.referenced_table_name IS NOT NULL",
+            (database_name, table, column),
+        )
+        foreign_key_rows = cursor.fetchall()
+        if not any(
+            str(row[0]) == table
+            and str(row[1])
+            == TareaEliminacionOperacion._meta.pk.column
+            and str(row[2]).upper() in {"RESTRICT", "NO ACTION"}
+            and str(row[3]).upper() in {"RESTRICT", "NO ACTION"}
+            for row in foreign_key_rows
+        ):
+            raise DeletionLedgerSchemaError(
+                "La referencia de restauración debe proteger el ledger de origen."
+            )
+    finally:
+        cursor.close()
+
+
 def _required_logical_deletion_columns() -> dict[str, tuple[str, ...]]:
     return {
         Tarea._meta.db_table: tuple(
@@ -642,6 +845,43 @@ def _operation_values(operation, backend_type, backend_identity, config_version)
     }
 
 
+def _restoration_operation_values(
+    operation: RestorationOperationInput,
+    *,
+    source: DeletionOperationRecord,
+    manifest: tuple[DeletionInventoryItem, ...],
+    backend_type: str,
+    backend_identity: str,
+    config_version: str,
+):
+    return _operation_values(
+        DeletionOperationInput(
+            actor_id=operation.actor_id,
+            empresa_id=operation.empresa_id,
+            root_task_id=source.root_task_id,
+            root_correlativo=source.root_correlativo,
+            fingerprint=operation.fingerprint,
+            dependency_summary={"tareas.tarea": len(manifest)},
+            operation_id=operation.operation_id,
+            motivo=operation.motivo,
+        ),
+        backend_type,
+        backend_identity,
+        config_version,
+    ) | {
+        "reverses_operation_id": source.operation_id.hex,
+        "status": TareaEliminacionOperacion.Estado.PENDIENTE,
+        "result_code": "",
+        "audit_status": TareaEliminacionOperacion.EstadoAuditoria.NO_ENCOLADA,
+        "audit_attempts": 0,
+        "audit_last_attempt_at": None,
+        "audit_event_id": None,
+        "audit_error_code": "",
+        "file_cleanup_status": TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA,
+        "committed_at": None,
+    }
+
+
 def _assert_operation_matches(model, operation, backend_type, backend_identity, config_version):
     expected = _operation_values(
         operation,
@@ -656,6 +896,229 @@ def _assert_operation_matches(model, operation, backend_type, backend_identity, 
     if actual != expected:
         raise DeletionLedgerConflict(
             "operation_id ya existe con datos diferentes."
+        )
+
+
+def _assert_restoration_source(
+    operation: RestorationOperationInput,
+    source: DeletionOperationRecord | None,
+    *,
+    backend_type: str,
+    backend_identity: str,
+    config_version: str,
+) -> DeletionOperationRecord:
+    if source is None:
+        raise DeletionLedgerStateError(
+            "La operación de eliminación que se intenta revertir no existe."
+        )
+    if source.operation_id == operation.operation_id:
+        raise DeletionLedgerConflict(
+            "Una restauración debe usar un UUID nuevo."
+        )
+    if source.empresa_id != operation.empresa_id:
+        raise DeletionLedgerConflict(
+            "La operación de eliminación pertenece a otra empresa."
+        )
+    if (
+        source.status != TareaEliminacionOperacion.Estado.COMMITTED
+        or source.result_code != LOGICAL_DELETION_RESULT_CODE
+        or source.file_cleanup_status
+        != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+        or not source.motivo
+        or not source.motivo.strip()
+        or source.backend_type != backend_type
+        or source.backend_identity != backend_identity
+        or source.backend_config_version != config_version
+    ):
+        raise DeletionLedgerStateError(
+            "La operación de origen no es una eliminación lógica vigente en BASE_TAREAS."
+        )
+    return source
+
+
+def _assert_restoration_operation_matches(
+    model,
+    operation: RestorationOperationInput,
+    *,
+    source: DeletionOperationRecord,
+    manifest: tuple[DeletionInventoryItem, ...],
+    backend_type: str,
+    backend_identity: str,
+    config_version: str,
+) -> DeletionOperationRecord:
+    expected = _restoration_operation_values(
+        operation,
+        source=source,
+        manifest=manifest,
+        backend_type=backend_type,
+        backend_identity=backend_identity,
+        config_version=config_version,
+    )
+    payload_fields = (
+        "actor_id",
+        "empresa_id",
+        "root_task_id",
+        "root_correlativo",
+        "backend_type",
+        "backend_identity",
+        "backend_config_version",
+        "fingerprint",
+        "dependency_summary",
+        "motivo",
+        "reverses_operation_id",
+    )
+    expected_payload = {key: expected[key] for key in payload_fields}
+    actual = {key: getattr(model, key) for key in payload_fields}
+    if isinstance(model, DeletionOperationRecord):
+        expected_payload["dependency_summary"] = _summary_from_json(
+            expected_payload["dependency_summary"]
+        )
+        actual["reverses_operation_id"] = (
+            model.reverses_operation_id.hex
+            if model.reverses_operation_id is not None
+            else None
+        )
+    if (
+        UUID(str(model.operation_id)) != operation.operation_id
+        or actual != expected_payload
+    ):
+        raise DeletionLedgerConflict(
+            "operation_id ya existe con datos diferentes."
+        )
+    pending_audit_states = {
+        TareaEliminacionOperacion.EstadoAuditoria.NO_ENCOLADA,
+    }
+    committed_audit_states = {
+        TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+        TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA,
+        TareaEliminacionOperacion.EstadoAuditoria.ERROR,
+    }
+    if (
+        model.status
+        not in {
+            TareaEliminacionOperacion.Estado.PENDIENTE,
+            TareaEliminacionOperacion.Estado.COMMITTED,
+        }
+        or (
+            model.status == TareaEliminacionOperacion.Estado.PENDIENTE
+            and model.result_code != ""
+        )
+        or (
+            model.status == TareaEliminacionOperacion.Estado.COMMITTED
+            and model.result_code != LOGICAL_RESTORATION_RESULT_CODE
+        )
+        or model.file_cleanup_status
+        != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+        or model.audit_status
+        not in (
+            pending_audit_states
+            if model.status == TareaEliminacionOperacion.Estado.PENDIENTE
+            else committed_audit_states
+        )
+    ):
+        raise DeletionLedgerStateError(
+            "El estado persistido de la restauración no es válido."
+        )
+    return (
+        model
+        if isinstance(model, DeletionOperationRecord)
+        else _operation_record_from_model(model)
+    )
+
+
+def _validate_restoration_record_state(
+    record: DeletionOperationRecord,
+) -> DeletionOperationRecord:
+    pending = (
+        record.status == TareaEliminacionOperacion.Estado.PENDIENTE
+        and record.result_code == ""
+    )
+    committed = (
+        record.status == TareaEliminacionOperacion.Estado.COMMITTED
+        and record.result_code == LOGICAL_RESTORATION_RESULT_CODE
+    )
+    if (
+        record.reverses_operation_id is None
+        or not (pending or committed)
+        or record.file_cleanup_status
+        != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+    ):
+        raise DeletionLedgerStateError(
+            "El estado persistido de la operación de restauración no es válido."
+        )
+    return record
+
+
+def _validate_source_manifest(
+    source: DeletionOperationRecord,
+    manifest: tuple[DeletionInventoryItem, ...],
+) -> tuple[DeletionInventoryItem, ...]:
+    expected_root = DeletionInventoryItem("tareas.tarea", source.root_task_id)
+    if (
+        not manifest
+        or any(item.model_label != "tareas.tarea" for item in manifest)
+        or expected_root not in manifest
+        or source.dependency_summary.get("tareas.tarea") != len(manifest)
+    ):
+        raise DeletionLedgerSchemaError(
+            "El manifiesto de eliminación no es íntegro para una restauración."
+        )
+    return tuple(sorted(manifest))
+
+
+def _check_django_restoration_schema(alias: str) -> None:
+    connection = connections[alias]
+    if not connection.features.supports_transactions:
+        raise DeletionLedgerBackendError(
+            "BASE_TAREAS no admite transacciones para el ledger de restauración."
+        )
+    operation_table = TareaEliminacionOperacion._meta.db_table
+    reverse_column = TareaEliminacionOperacion._meta.get_field(
+        "reverses_operation"
+    ).column
+    try:
+        existing_tables = set(connection.introspection.table_names())
+        if operation_table not in existing_tables:
+            raise DeletionLedgerSchemaError(
+                "Falta la tabla de operaciones para el ledger de restauración."
+            )
+        with connection.cursor() as cursor:
+            columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor,
+                    operation_table,
+                )
+            }
+            constraints = connection.introspection.get_constraints(
+                cursor,
+                operation_table,
+            )
+    except DeletionLedgerError:
+        raise
+    except Exception as exc:
+        raise DeletionLedgerSchemaError(
+            "No se pudo verificar el esquema del ledger de restauración."
+        ) from exc
+
+    has_unique_source = any(
+        item.get("unique") and item.get("columns") == [reverse_column]
+        for item in constraints.values()
+    )
+    source_table = TareaEliminacionOperacion._meta.db_table
+    source_column = TareaEliminacionOperacion._meta.pk.column
+    has_source_foreign_key = any(
+        item.get("foreign_key") == (source_table, source_column)
+        and item.get("columns") == [reverse_column]
+        for item in constraints.values()
+    )
+    if (
+        reverse_column not in columns
+        or not has_unique_source
+        or not has_source_foreign_key
+    ):
+        raise DeletionLedgerSchemaError(
+            "Falta la referencia única al origen requerida por el ledger de restauración."
         )
 
 
@@ -681,6 +1144,22 @@ class DjangoDeletionLedgerUnitOfWork:
             .first()
         )
         return _operation_record_from_model(model) if model is not None else None
+
+    def get_restoration_operation(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord | None:
+        _check_django_restoration_schema(self.alias)
+        model = (
+            TareaEliminacionOperacion.objects.using(self.alias)
+            .filter(operation_id=operation_id.hex)
+            .first()
+        )
+        if model is None or model.reverses_operation_id is None:
+            return None
+        return _validate_restoration_record_state(
+            _operation_record_from_model(model)
+        )
 
     def get_manifest(
         self,
@@ -767,6 +1246,140 @@ class DjangoDeletionLedgerUnitOfWork:
             self.backend_identity,
             self.config_version,
         )
+        return _operation_record_from_model(model)
+
+    def create_restoration_pending(
+        self,
+        operation: RestorationOperationInput,
+    ) -> DeletionOperationRecord:
+        operation = _normalize_restoration_operation(operation)
+        _check_django_restoration_schema(self.alias)
+        try:
+            source_model = (
+                TareaEliminacionOperacion.objects.using(self.alias)
+                .select_for_update()
+                .get(operation_id=operation.reverses_operation_id.hex)
+            )
+        except TareaEliminacionOperacion.DoesNotExist as exc:
+            raise DeletionLedgerStateError(
+                "La operación de eliminación que se intenta revertir no existe."
+            ) from exc
+        source = _operation_record_from_model(source_model)
+        _assert_restoration_source(
+            operation,
+            source,
+            backend_type="DJANGO",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        if TareaEliminacionArchivo.objects.using(self.alias).filter(
+            operacion_id=source.operation_id.hex
+        ).exists():
+            raise DeletionLedgerStateError(
+                "Una restauración lógica no puede vincular archivos de eliminación física."
+            )
+        source_manifest = _validate_source_manifest(
+            source,
+            self.get_manifest(source.operation_id),
+        )
+        manifest = _normalize_restoration_manifest(
+            operation.manifest,
+            root_task_id=source.root_task_id,
+            source_manifest=source_manifest,
+        )
+
+        existing = (
+            TareaEliminacionOperacion.objects.using(self.alias)
+            .select_for_update()
+            .filter(reverses_operation_id=source.operation_id.hex)
+            .first()
+        )
+        if existing is not None:
+            record = _assert_restoration_operation_matches(
+                existing,
+                operation,
+                source=source,
+                manifest=manifest,
+                backend_type="DJANGO",
+                backend_identity=self.backend_identity,
+                config_version=self.config_version,
+            )
+            if self.get_manifest(record.operation_id) != manifest:
+                raise DeletionLedgerConflict(
+                    "El manifiesto persistido de restauración no coincide."
+                )
+            return record
+
+        existing_id = (
+            TareaEliminacionOperacion.objects.using(self.alias)
+            .select_for_update()
+            .filter(operation_id=operation.operation_id.hex)
+            .first()
+        )
+        if existing_id is not None:
+            record = _assert_restoration_operation_matches(
+                existing_id,
+                operation,
+                source=source,
+                manifest=manifest,
+                backend_type="DJANGO",
+                backend_identity=self.backend_identity,
+                config_version=self.config_version,
+            )
+            if self.get_manifest(record.operation_id) != manifest:
+                raise DeletionLedgerConflict(
+                    "El manifiesto persistido de restauración no coincide."
+                )
+            return record
+
+        defaults = _restoration_operation_values(
+            operation,
+            source=source,
+            manifest=manifest,
+            backend_type="DJANGO",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        try:
+            with transaction.atomic(using=self.alias):
+                model = TareaEliminacionOperacion.objects.using(self.alias).create(
+                    operation_id=operation.operation_id.hex,
+                    **defaults,
+                )
+        except IntegrityError as exc:
+            existing_id = (
+                TareaEliminacionOperacion.objects.using(self.alias)
+                .select_for_update()
+                .filter(operation_id=operation.operation_id.hex)
+                .first()
+            )
+            existing = (
+                TareaEliminacionOperacion.objects.using(self.alias)
+                .select_for_update()
+                .filter(reverses_operation_id=source.operation_id.hex)
+                .first()
+            )
+            collision = existing_id or existing
+            if collision is None:
+                raise DeletionLedgerSchemaError(
+                    "No se pudo registrar la operación de restauración."
+                ) from exc
+            record = _assert_restoration_operation_matches(
+                collision,
+                operation,
+                source=source,
+                manifest=manifest,
+                backend_type="DJANGO",
+                backend_identity=self.backend_identity,
+                config_version=self.config_version,
+            )
+            if self.get_manifest(record.operation_id) != manifest:
+                raise DeletionLedgerConflict(
+                    "El manifiesto persistido de restauración no coincide."
+                ) from exc
+            return record
+
+        self.save_manifest(operation.operation_id, manifest)
         return _operation_record_from_model(model)
 
     def save_manifest(
@@ -1232,6 +1845,13 @@ class DjangoDeletionLedgerStorage:
         with self.atomic() as unit:
             return unit.get_operation(operation_id)
 
+    def get_restoration_operation(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord | None:
+        with self.atomic() as unit:
+            return unit.get_restoration_operation(operation_id)
+
     def pending_audits(self, limit: int = 100) -> tuple[DeletionOperationRecord, ...]:
         with self.atomic() as unit:
             return unit.pending_audits(limit)
@@ -1247,10 +1867,12 @@ class MySQLDeletionLedgerUnitOfWork:
         connection: _CursorConnection,
         backend_identity: str,
         config_version: str,
+        database_name: str | None = None,
     ):
         self.connection = connection
         self.backend_identity = backend_identity
         self.config_version = config_version
+        self.database_name = database_name
 
     def _execute(self, sql: str, params=()) -> _DBAPICursor:
         cursor = self.connection.cursor()
@@ -1274,9 +1896,65 @@ class MySQLDeletionLedgerUnitOfWork:
         finally:
             cursor.close()
 
+    def _restoration_operation_row(
+        self,
+        operation_id: UUID,
+        *,
+        lock: bool = True,
+    ):
+        sql = (
+            f"SELECT {_RESTORATION_OPERATION_COLUMN_SQL} "
+            "FROM `tareas_eliminacion_operacion` WHERE `operation_id` = %s"
+        )
+        if lock:
+            sql += " FOR UPDATE"
+        cursor = self._execute(sql, (operation_id.hex,))
+        try:
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+
+    def _restoration_by_source(self, source_operation_id: UUID, *, lock: bool = True):
+        column = _mysql_field_identifier(
+            TareaEliminacionOperacion,
+            "reverses_operation",
+        )
+        sql = (
+            f"SELECT {_RESTORATION_OPERATION_COLUMN_SQL} "
+            "FROM `tareas_eliminacion_operacion` "
+            f"WHERE {column} = %s ORDER BY `operation_id` LIMIT 1"
+        )
+        if lock:
+            sql += " FOR UPDATE"
+        cursor = self._execute(sql, (source_operation_id.hex,))
+        try:
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+
     def get_operation(self, operation_id: UUID) -> DeletionOperationRecord | None:
         row = self._operation_row(operation_id, lock=False)
         return _operation_record_from_row(row) if row is not None else None
+
+    def get_restoration_operation(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord | None:
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        row = self._restoration_operation_row(operation_id, lock=False)
+        if row is None:
+            return None
+        record = _operation_record_from_row(
+            row,
+            columns=_RESTORATION_OPERATION_COLUMNS,
+        )
+        if record.reverses_operation_id is None:
+            return None
+        return _validate_restoration_record_state(record)
 
     def get_manifest(
         self,
@@ -1417,6 +2095,153 @@ class MySQLDeletionLedgerUnitOfWork:
             raise DeletionLedgerConflict(
                 "operation_id ya existe con datos diferentes."
             )
+        return record
+
+    def create_restoration_pending(
+        self,
+        operation: RestorationOperationInput,
+    ) -> DeletionOperationRecord:
+        operation = _normalize_restoration_operation(operation)
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        source_row = self._operation_row(operation.reverses_operation_id)
+        source = _operation_record_from_row(source_row) if source_row else None
+        source = _assert_restoration_source(
+            operation,
+            source,
+            backend_type="MYSQL_CONFIG",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        file_table = _mysql_identifier(TareaEliminacionArchivo._meta.db_table)
+        cursor = self._execute(
+            f"SELECT 1 FROM {file_table} WHERE `operacion_id` = %s LIMIT 1",
+            (source.operation_id.hex,),
+        )
+        try:
+            has_files = cursor.fetchone() is not None
+        finally:
+            cursor.close()
+        if has_files:
+            raise DeletionLedgerStateError(
+                "Una restauración lógica no puede vincular archivos de eliminación física."
+            )
+
+        source_manifest = _validate_source_manifest(
+            source,
+            self.get_manifest(source.operation_id),
+        )
+        manifest = _normalize_restoration_manifest(
+            operation.manifest,
+            root_task_id=source.root_task_id,
+            source_manifest=source_manifest,
+        )
+
+        existing = self._restoration_by_source(source.operation_id)
+        if existing is not None:
+            record = _operation_record_from_row(
+                existing,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+            record = _assert_restoration_operation_matches(
+                record,
+                operation,
+                source=source,
+                manifest=manifest,
+                backend_type="MYSQL_CONFIG",
+                backend_identity=self.backend_identity,
+                config_version=self.config_version,
+            )
+            if self.get_manifest(record.operation_id) != manifest:
+                raise DeletionLedgerConflict(
+                    "El manifiesto persistido de restauración no coincide."
+                )
+            return record
+
+        existing_id = self._restoration_operation_row(operation.operation_id)
+        if existing_id is not None:
+            record = _operation_record_from_row(
+                existing_id,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+            record = _assert_restoration_operation_matches(
+                record,
+                operation,
+                source=source,
+                manifest=manifest,
+                backend_type="MYSQL_CONFIG",
+                backend_identity=self.backend_identity,
+                config_version=self.config_version,
+            )
+            if self.get_manifest(record.operation_id) != manifest:
+                raise DeletionLedgerConflict(
+                    "El manifiesto persistido de restauración no coincide."
+                )
+            return record
+
+        legacy_existing = self._operation_row(operation.operation_id)
+        if legacy_existing is not None:
+            raise DeletionLedgerConflict(
+                "operation_id ya pertenece a otra operación del ledger."
+            )
+
+        values = _restoration_operation_values(
+            operation,
+            source=source,
+            manifest=manifest,
+            backend_type="MYSQL_CONFIG",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        now = timezone.now()
+        values.update(
+            {
+                "operation_id": operation.operation_id.hex,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        columns = ", ".join(
+            f"`{column}`" for column in _RESTORATION_OPERATION_COLUMNS
+        )
+        placeholders = ", ".join("%s" for _ in _RESTORATION_OPERATION_COLUMNS)
+        cursor = self._execute(
+            f"INSERT INTO `tareas_eliminacion_operacion` ({columns}) "
+            f"VALUES ({placeholders}) "
+            "ON DUPLICATE KEY UPDATE `operation_id` = `operation_id`",
+            tuple(values[column] for column in _RESTORATION_OPERATION_COLUMNS),
+        )
+        cursor.close()
+
+        row = self._restoration_operation_row(operation.operation_id)
+        if row is None:
+            existing = self._restoration_by_source(source.operation_id)
+            if existing is None:
+                raise DeletionLedgerConflict(
+                    "La eliminación ya tiene una operación de restauración."
+                )
+            record = _operation_record_from_row(
+                existing,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+        else:
+            record = _operation_record_from_row(
+                row,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+        record = _assert_restoration_operation_matches(
+            record,
+            operation,
+            source=source,
+            manifest=manifest,
+            backend_type="MYSQL_CONFIG",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        self.save_manifest(operation.operation_id, manifest)
         return record
 
     def save_manifest(
@@ -1934,6 +2759,7 @@ class MySQLDeletionLedgerStorage:
                     connection,
                     self.backend_identity,
                     self.config_version,
+                    self.database_name,
                 )
                 alias = getattr(connection, "alias", None)
                 if alias:
@@ -2002,6 +2828,13 @@ class MySQLDeletionLedgerStorage:
     def get_operation(self, operation_id: UUID) -> DeletionOperationRecord | None:
         with self.atomic() as unit:
             return unit.get_operation(operation_id)
+
+    def get_restoration_operation(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord | None:
+        with self.atomic() as unit:
+            return unit.get_restoration_operation(operation_id)
 
     def pending_audits(self, limit: int = 100) -> tuple[DeletionOperationRecord, ...]:
         with self.atomic() as unit:

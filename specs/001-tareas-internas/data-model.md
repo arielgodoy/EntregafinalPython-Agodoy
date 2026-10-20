@@ -803,14 +803,74 @@ marcador neutro. Los documentos y evidencias se muestran como metadatos sin byte
 Si el registro fisico no esta disponible o falta el permiso operacional, la seccion se marca
 como no disponible/restringida; no se inventan datos ni se crean tablas de historial.
 
+## Operación de restauración lógica L5 (Etapa 1 implementada; restauración no implementada)
+
+El contrato de servicio/estados se detalla en
+[contracts/logical-restoration.md](contracts/logical-restoration.md).
+
+La infraestructura de persistencia reutiliza la operación y manifiesto del ledger,
+sin modificar la operación de eliminación original ni crear tablas paralelas:
+
+- Cada restauración preparada es una nueva fila de `TareaEliminacionOperacion`, con UUID
+  distinto, estado `PENDING`, resultado vacío, actor, empresa, raíz, correlativo, motivo,
+  fingerprint, backend/configuración y estados de auditoría existentes.
+- `TareaEliminacionOperacion.reverses_operation` es una FK self-referential nullable,
+  `PROTECT` y única; su columna física es `reverses_operation_id`. Solo se asigna a una
+  restauración y apunta a la eliminación original. Una restricción de coherencia permite
+  `PENDING` + resultado vacío o `COMMITTED` + `LOGICALLY_RESTORED`, ambos con referencia.
+  Otro ciclo requiere una eliminación nueva y otro UUID; el PK común mantiene unicidad de
+  UUID entre operaciones de eliminación y restauración.
+- `TareaEliminacionElemento` conserva también el manifiesto de la nueva operación de
+  restauración: exactamente los IDs `tareas.tarea` del manifiesto original, con unicidad
+  por operación/tipo/ID. Antes del commit se comparan ambos conjuntos; no se descubren ni
+  agregan descendientes consultando solo la jerarquía actual.
+- La constraint L1 `tareas_delop_motivo_required` sigue intacta. Constraints L5
+  independientes exigen motivo y vínculo para una restauración. `LOGICALLY_RESTORED` solo
+  se escribe al confirmar; en Etapa 1 el ledger registra exclusivamente una operación
+  pendiente. No se crea evento de auditoría ni se cambia su estado durante esta etapa.
+
+Etapa 1 añade el campo/model constraints, la migración Django `0034_logical_restoration_ledger.py`,
+el contrato MySQL existente `tareas/sql/deletion_ledger_schema.sql` para bases nuevas y
+`tareas/sql/logical_restoration_schema.sql` para la evolución aditiva de una base existente.
+`preview_logical_restoration_schema()` valida en modo lectura la base autorizada, columna,
+unicidad y FK. Ninguna migración ni sentencia DDL se aplicó a una base real.
+
+En la futura etapa del servicio transaccional, dentro de una única transacción del backend
+resuelto de `BASE_TAREAS`, se bloquearán y
+validan la operación original, su manifiesto y todas las filas de `Tarea`; se exige que
+cada fila exista físicamente, pertenezca a la empresa activa y continúe marcada por el
+UUID de eliminación referenciado. La nueva operación y su manifiesto se escriben en esa
+misma transacción y solo entonces se limpian `eliminada`, `eliminada_en`, `eliminada_por`
+y `eliminacion_operacion_id`. Todos los demás campos y relaciones permanecen intactos.
+Una inconsistencia o fila faltante revierte el conjunto completo. El commit incierto se
+resuelve consultando el UUID nuevo, nunca reutilizándolo para otra operación.
+
+El manifiesto actual registra los IDs, no los bordes padre/hijo. Las relaciones se
+conservan físicamente y los escritores oficiales L3 bloquean mutaciones sobre tareas
+eliminadas; L5 valida la jerarquía retenida y no la reconstruye. No puede probarse el
+parentesco original si se alteró directamente fuera de esos escritores. La necesidad de
+una captura histórica de bordes queda pendiente y no se cubre inventando una topología.
+
+L4 debe unir cada eliminación lógica con la operación de restauración que la referencia
+para presentar el resultado `RESTORED`, mantener consultable el hecho de eliminación y
+mostrar la nueva operación. Si la Tarea no existe físicamente, el manifiesto histórico
+permanece y la restauración completa se rechaza; no se recrean filas ni datos. La
+proyección L4 no debe tratar una marca ya limpiada como una eliminación vigente ni
+presentar campos actuales como un snapshot de la fecha de eliminación.
+
+El servicio que limpiará las marcas, la transición a `COMMITTED`/`LOGICALLY_RESTORED`,
+la conciliación de auditoría y la proyección L4 siguen pendientes. La Etapa 1 solo prepara
+el ledger y no ejecuta ni completa una restauración.
+
 ## Límites y fuera de alcance
 
 - Ninguna Tarea o descendiente se elimina físicamente mediante la operación administrativa.
   La eliminación lógica definitiva queda autorizada en FR-R06…FR-R17, pero sus marcas,
   filtros y pantalla histórica están en fases separadas; L1 implementa únicamente
   metadatos, ledger y preparación de esquema.
-- No existe restauración de tareas eliminadas. Reactivar una tarea anulada no elimina ni
-  cambia la marca conceptual de eliminación.
+- La restauración L5 está especificada pero no implementada; hasta que se apruebe y ejecute
+  esa fase, no existe endpoint ni servicio que la realice. Reactivar una tarea anulada no
+  elimina ni cambia la marca conceptual de eliminación.
 - No hay usuarios externos ni enlaces públicos.
 - No hay plantilla de hitos ni vencimiento automático de documentos.
 - Local permanece `LEGACY API PENDIENTE`; no se modelan tabla, ID o elegibilidad cerrada.

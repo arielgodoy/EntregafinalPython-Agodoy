@@ -517,3 +517,50 @@ BASE_TAREAS, sin schema nuevo, escrituras, restauracion ni eliminacion fisica.
 **Estado de fase**: L4 implementada para revision funcional; rutas historicas solo GET,
 permisos `ingresar` explicitos, empresa desde sesion y datos relacionados sujetos a los
 permisos operacionales existentes. No se agrego schema ni se escribio en MySQL.
+
+## Phase 15: L5 — Restauración lógica (Etapa 1 ledger completada; L5 pendiente)
+
+**Scope**: restaurar atómicamente el manifiesto exacto de una operación L2 confirmada,
+conservar intacta la eliminación histórica, auditar post-commit y proyectar el resultado
+en L4. L4 requiere I; la acción L5 requiere S sobre `Tareas`; el flujo iniciado desde L4
+comprueba ambos de forma independiente. No eliminar físicamente ni tocar archivos.
+
+- [x] T156 Extender aditivamente el ledger de `BASE_TAREAS` con `reverses_operation_id`
+  nullable, FK protegida y unicidad; reservar `LOGICALLY_RESTORED` para el commit futuro y
+  reutilizar `TareaEliminacionElemento` para el manifiesto exacto. Agregar la migración
+  Django, contrato SQL/preflight MYSQL_CONFIG y primitivas internas de registro/lectura
+  pendientes. Ninguna marca de Tarea cambia; no se crea evento ni se aplica schema real.
+- [ ] T157 Implementar `tareas/services/logical_restoration.py` para previsualizar la
+  operación por su UUID, leer solo el manifiesto original, validar empresa/permisos y
+  presentar filas ausentes, estados actuales, relaciones, archivos referenciados y
+  bloqueos sin mutar datos ni reconstruir la jerarquía. Depende de T156.
+- [ ] T158 Implementar el servicio transaccional de restauración en
+  `tareas/services/logical_restoration.py`: revalidar bajo locks toda la operación y
+  manifiesto, rechazar cualquier fila ausente/inconsistente, limpiar únicamente las marcas
+  lógicas y confirmar la nueva operación/manifiesto en una transacción de `BASE_TAREAS`.
+  Cambiar el guard L2 de raíz para permitir ciclos solo cuando la eliminación vigente fue
+  restaurada; no reutilizar UUIDs anteriores. Depende de T156–T157.
+- [ ] T159 Integrar la auditoría post-commit mediante la API idempotente pública ya
+  disponible; registrar resultado/error en el ledger y agregar reconciliación por UUID
+  para respuesta ambigua o evento pendiente, sin duplicar eventos ni modificar `auditoria`.
+  Depende de T158.
+- [ ] T160 Integrar preview y confirmación HTTP desde L4 usando POST/CSRF, motivo y token
+  ligado a actor, empresa, eliminación, manifiesto y fingerprint. Revalidar `ingresar` en
+  `Tareas - Tareas eliminadas` y `supervisor` en `Tareas` en backend/servicio; `eliminar`,
+  `is_staff` e `is_superuser` no sustituyen S. Mantener L4 GET-only. Depende de T157 y T159.
+- [ ] T161 Extender el servicio y las vistas L4 para mantener consultables las operaciones
+  de eliminación anteriores, distinguir `CURRENTLY_DELETED`/`RESTORED`/`INCONSISTENT` y
+  mostrar la nueva operación de restauración sin presentar campos actuales como snapshots.
+  Depende de T156 y T158.
+- [ ] T162 Añadir pruebas unitarias del preview, manifiesto, validaciones de estado,
+  restauración todo-o-nada, idempotencia, rollback y conservación de datos para los casos
+  focales de `spec.md`/`quickstart.md`. Depende de T156–T158.
+- [ ] T163 Añadir pruebas de integración de vistas/permisos/CSRF/L4, auditoría post-commit,
+  aislamiento de empresa y paridad ORM/MYSQL_CONFIG, incluyendo rollback, ciclos, filas
+  físicamente ausentes y `SELECT DATABASE()`. Depende de T157–T162.
+- [ ] T164 Documentar y ejecutar, solo tras autorización separada, la prueba manual E17
+  sobre una instancia aislada cuyo nombre efectivo de base sea `tareas`; no apuntar a
+  producción ni aplicar DDL/migraciones operativas durante tests. Depende de T163.
+
+**Estado de L5**: T156 completa; T157–T164 pendientes. No se implementó ni ejecutó una
+restauración y L5 no queda cerrada.

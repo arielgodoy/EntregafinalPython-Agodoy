@@ -350,10 +350,10 @@ Product Owner y no se repitió durante este cierre.
 
 ## Límites y bloqueos
 
-- La anulación ordinaria de Tareas sigue siendo reactiva según su contrato. La eliminación
-  administrativa definida en FR-R06…FR-R17 es una marca lógica definitiva independiente,
-  sin restauración y con consulta histórica de solo lectura. Sus campos, filtros, pantalla
-  y rutas aún no están implementados; no asumir que existe un POST.
+- La anulación ordinaria sigue siendo distinta. L2/L3 mantienen la marca lógica y la
+  exclusión operacional; L4 es consulta histórica GET-only. El contrato L5 permite una
+  restauración explícita y la Etapa 1 ya prepara el ledger; el servicio que cambia marcas
+  y la ruta de restauración todavía no están implementados.
 - P1 Local: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN; permanece `LEGACY API PENDIENTE`.
 - P2 Proveedor: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN para integración,
   validación y conciliación con ERP legacy; el maestro Django local no queda bloqueado.
@@ -395,8 +395,8 @@ La validación del contrato central se ejecutó solo en bases de test aisladas:
 - El alias efectivo de auditoría bajo `AppDocs.settings_test` es `default` SQLite. No se demostró concurrencia sobre MySQL de producción; el índice único y la semántica del motor real requieren validación antes del despliegue.
 
 En esa fotografía, L2 permanecía pendiente de integración y L3 no se había iniciado.
-L4–L6 (consulta histórica, integración HTTP y activación de fases posteriores) permanecen
-fuera de alcance.
+L4 está implementada como consulta histórica GET-only. L5 Etapa 1 prepara el ledger, pero
+no implementa servicio/ruta de restauración; L6 permanece pendiente.
 
 ### Cierre L2/L3 previo a la auditoría correctiva (histórico; reabierto)
 
@@ -519,8 +519,9 @@ siguen fuera del alcance autorizado.
 
 - Abrir `/tareas/eliminadas/` con la empresa activa y permiso explicito `ingresar` para
   `Tareas - Tareas eliminadas`; combinar filtros y navegar las paginas.
-- Abrir el detalle de una Tarea y el detalle de operacion. Confirmar que los datos de
-  ledger/auditoria se muestran sin mutaciones ni acciones de restauracion.
+- Abrir el detalle de una Tarea y el detalle de operacion. Confirmar que ledger/auditoria
+  se muestran sin mutaciones por GET. Cuando L5 se implemente, el acceso a su preview desde
+  L4 requerirá además S explícito en `Tareas`; I por sí solo no mostrará acción de restore.
 - Con permiso adicional `Tareas` + `ingresar`, comprobar las secciones relacionadas; sin
   ese permiso deben aparecer restringidas. Los comentarios ocultos requieren ademas
   `supervisor`; documentos y evidencias no exponen bytes ni URL.
@@ -560,6 +561,61 @@ datos operacionales ni de auditoria.
 - La validacion automatizada ejecuta la confirmacion unicamente contra SQLite temporal de
   tests. No ejecutar confirmacion real de demostracion en MySQL; esa prueba manual la realiza
   el propietario desde el navegador despues de revisar el preview.
+
+### E17. Restauración lógica L5 (procedimiento futuro; no ejecutar en esta fase)
+
+**Precondiciones**: implementación L5 aprobada y desplegada en entorno aislado; operación
+de eliminación `COMMITTED` con resultado `LOGICALLY_DELETED`; usuario activo con I en
+`Tareas - Tareas eliminadas` y S en `Tareas`, en la empresa activa de la operación. Para
+MYSQL_CONFIG se usará un servidor de pruebas aislado, con base efectiva llamada exactamente
+`tareas`; no apuntar a desarrollo compartido, producción ni credenciales reales. Esta guía
+documenta pruebas futuras y no autoriza una restauración ni escritura ahora.
+
+1. Crear una tarea individual y una jerarquía padre/hijo/nieto identificables en fixtures.
+2. Eliminar lógicamente la tarea individual y restaurarla; verificar mismo PK y correlativo.
+3. Eliminar y restaurar un árbol; comprobar que se recuperan exactamente los IDs del
+   manifiesto y la jerarquía retenida, sin consultar el árbol para agregar elementos.
+4. Incluir un descendiente marcado por otra operación anterior y comprobar que no se
+   incorpora ni se restaura.
+5. Alterar el manifiesto/token para omitir un elemento; el POST debe rechazarse sin cambios.
+6. Usar una operación de otra empresa; responder sin revelar sus datos ni modificar filas.
+7. Usar I sin S; L4 se puede leer, pero no aparece acción de restore y el POST recibe 403.
+8. Usar E sin S y después `is_staff`/`is_superuser` sin S; ambos intentos reciben 403.
+9. Enviar POST sin CSRF con el cliente de pruebas que fuerza comprobación CSRF; rechazarlo.
+10. Cambiar el alcance después del preview; invalidar fingerprint/token y exigir una nueva
+    revisión.
+11. Verificar que PK, correlativo, estado de negocio, fechas, porcentaje y responsables no
+    cambien durante restore.
+12. Verificar que documentos, asociaciones y archivos conservan IDs/referencias y que no
+    se llama a mover, copiar, recrear ni borrar archivos.
+13. Confirmar una operación y comprobar nueva fila/manifiesto de ledger, relación con la
+    eliminación original y evento idempotente; simular auditoría post-commit pendiente y
+    reconciliarla sin duplicar el evento.
+14. Repetir el mismo POST/UUID; obtener replay idempotente sin segunda mutación. Intentar
+    una restauración nueva contra la misma eliminación; rechazarla.
+15. Volver a eliminar la tarea restaurada usando UUID nuevo; verificar nuevo manifiesto y
+    nueva operación, no reutilizar los IDs históricos.
+16. Ejecutar varios ciclos eliminación/restauración con UUIDs distintos y verificar que no
+    existe límite artificial ni se sobrescribe el historial anterior.
+17. Forzar un error antes del commit; comprobar rollback de todas las marcas, operación y
+    manifiesto. Simular commit incierto y reconciliar por el UUID nuevo.
+18. Consultar L4: las operaciones antiguas siguen visibles como restauradas, la tarea no
+    aparece como actualmente eliminada y la operación de restauración se ve en trazabilidad.
+19. Quitar físicamente una fila solo en una fixture de test; restaurar debe fallar todo-o-nada
+    y L4 conservar el ID de manifiesto sin inventar título/estado. No reconstruirla.
+20. En MYSQL_CONFIG, comprobar `SELECT DATABASE() == 'tareas'` y tablas transaccionales
+    InnoDB antes de escribir; nombre distinto debe fallar cerrado. Repetir la matriz
+    funcional con backend Django aislado.
+
+### L5 Etapa 1. Persistencia y ledger (validación ejecutada; sin restaurar tareas)
+
+- Pruebas focalizadas combinadas de ledger/schema L5 y regresiones L2/L3/L4 en
+  `AppDocs.settings_test`: **163 PASS, 0 FAIL, 0 SKIP**.
+- El test de concurrencia usa SQLite de pruebas aislada y dos registros simultáneos; se confirmó un único vínculo. No certifica concurrencia MariaDB.
+- Las pruebas MYSQL_CONFIG usan conexión/cursor simulados y verifican `SELECT DATABASE()`/DDL de forma no ejecutable. No se conectó ni escribió en MySQL real.
+- `python manage.py check --settings=AppDocs.settings_test`: sin problemas.
+- `python manage.py makemigrations --check --dry-run --settings=AppDocs.settings_test`: no se detectaron cambios adicionales.
+- La migración `0034` solo se aplicó por el test runner a su base temporal. No se ejecutaron migraciones, SQL DDL/DML ni restauraciones en bases reales.
 
 ## Verificación de cierre
 

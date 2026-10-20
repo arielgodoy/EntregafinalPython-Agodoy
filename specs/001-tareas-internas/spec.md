@@ -89,6 +89,31 @@ reabierta con historial, desaparición de la fuente de participación y rechazo 
 manipulación directa en backend. La regresión debe confirmar cierre, reapertura, comentario
 automático, adjuntos e historial de T104 sin cambios.
 
+### Session 2026-10-19 — L5 restauración lógica
+
+- El propietario aprueba diseñar la restauración lógica completa de tareas eliminadas
+  como L5, usando el manifiesto durable de la operación de eliminación y sin crear tareas
+  nuevas. Esta decisión supersede únicamente la prohibición de restauración de 2H.0.3;
+  conserva L2/L3, el historial L4, la retención de datos y la prohibición de eliminación
+  física.
+- La restauración es una operación histórica propia, autorizada con VICMEAS `supervisor`
+  en `Tareas`. La consulta L4 continúa exigiendo `ingresar` en `Tareas - Tareas eliminadas`;
+  ninguno de esos permisos sustituye al otro.
+- La autorización anterior cubrió solo la ejecución documental de ese momento; la
+  autorización vigente de Etapa 1 se registra a continuación.
+
+### Session 2026-10-19 — L5 Etapa 1: persistencia y ledger
+
+- El propietario autoriza cambios aditivos en `tareas`, sus pruebas y documentación L5
+  para preparar la persistencia/ledger de restauración. No autoriza restaurar tareas,
+  cambiar sus marcas, implementar servicio transaccional, auditoría de restauración,
+  preview funcional, vistas/rutas/templates, permisos ni modificar el guard L2.
+- Se pueden crear migraciones y contratos SQL, pero no aplicarlos ni ejecutar DDL/DML
+  contra bases reales. Las pruebas de escritura deben usar exclusivamente bases temporales
+  aisladas.
+- Se preservan los cambios locales preexistentes protegidos en `.vscode/settings.json` y
+  `tareas/services/permanent_deletion.py`; no se autoriza commit ni push.
+
 ### Session 2026-09-07
 
 - Q: ¿Publicar con responsable desactivado/eliminado? → A: Bloquear la publicación e informar; el usuario debe asignar un responsable válido antes de publicar.
@@ -108,7 +133,7 @@ automático, adjuntos e historial de T104 sin cambios.
 - Las reglas ordinarias de eliminación individual de Hitos, MiniTareas y Comentarios,
   así como la anulación/reactivación lógica de Tareas, no cambiaron con esa decisión.
 
-### Session 2026-10-16 — Enmienda 2H.0.3: eliminación lógica definitiva
+### Session 2026-10-16 — Enmienda 2H.0.3: eliminación lógica definitiva (histórica; no-restauración supersedida por L5)
 
 - El propietario sustituye la autorización 2H.0.2 por la **eliminación lógica definitiva
   de la raíz y todos sus descendientes, sin restauración y con consulta histórica de solo
@@ -1160,9 +1185,10 @@ notificaciones y email existentes.
 - **FR-R05**: Integración real con legacy de LOCALES queda fuera de alcance por P1; la integración ERP de PROVEEDORES queda fuera de alcance por P2, sin bloquear el maestro local.
 - **FR-R06 — Anulación y eliminación son distintas**: La anulación ordinaria continúa
   cambiando únicamente `Tarea.anulada` conforme a E y conserva su reactivación vigente.
-  La eliminación lógica administrativa es una marca independiente, definitiva
-  funcionalmente y sin restauración. No modifica los estados de ciclo de vida y no es
-  una anulación.
+  La eliminación lógica administrativa es una marca independiente que excluye la Tarea
+  de la operación normal mientras esté activa. No modifica los estados de ciclo de vida
+  y no es una anulación. Su restauración solo puede ocurrir mediante la operación L5
+  definida abajo; reactivar una Tarea anulada no restaura una Tarea eliminada.
 - **FR-R07 — Alcance lógico del árbol**: Al eliminar administrativamente una raíz, la
   raíz y todos sus descendientes recursivos MUST quedar eliminados lógicamente en una
   sola operación todo-o-nada. La pertenencia se determina por la jerarquía vigente y se
@@ -1214,15 +1240,16 @@ notificaciones y email existentes.
 - **FR-R16 — Consulta histórica de solo lectura**: Las Tareas eliminadas y sus
   descendientes solo se consultan desde una superficie histórica separada, estrictamente
   de lectura. No permite editar, publicar, cerrar, anular, reactivar, reasignar,
-  reprogramar, comentar, adjuntar documentos, crear descendientes, cambiar participantes
-  ni restaurar. La vista independiente `Tareas - Tareas eliminadas` requiere VICMEAS `ingresar` (I)
-  explícito. El permiso S para eliminar no concede acceso de consulta histórica. Las
-  Tareas eliminadas quedan excluidas de KPI operacionales y reportes históricos habituales;
-  solo aparecen en la consulta histórica autorizada.
-- **FR-R17 — Sin restauración**: La eliminación lógica es definitiva desde el punto de
-  vista funcional. Ningún endpoint, servicio, permiso ni interfaz permite restaurar o
-  reactivar una Tarea eliminada. Reactivar una Tarea anulada conforme a E no restaura ni
-  cambia la marca independiente de eliminación.
+  reprogramar, comentar, adjuntar documentos, crear descendientes ni cambiar participantes.
+  Cualquier acción de L5 se ejecuta mediante una superficie separada, con POST y
+  autorización propia; ninguna ruta GET de L4 muta datos. La vista independiente
+  `Tareas - Tareas eliminadas` requiere VICMEAS `ingresar` (I) explícito. El permiso S
+  para restaurar no concede acceso de consulta histórica. Las Tareas actualmente
+  eliminadas quedan excluidas de KPI operacionales y reportes históricos habituales.
+- **FR-R17 — Restauración exclusiva L5**: Una eliminación lógica solo puede revertirse
+  mediante la restauración L5 y las reglas L5-R01…L5-R12. No se restaura por anulación,
+  reactivación, cambio directo de estado ni otra operación. Hasta que L5 se implemente,
+  no existe endpoint ni servicio de restauración disponible.
 
 ### Contrato de consulta L4
 
@@ -1243,6 +1270,82 @@ cuando pueden leerse con evidencia suficiente desde las filas conservadas. Si no
 reconstruirse, la seccion indica que la informacion historica no esta disponible. L4 no
 reconcilia auditoria ni cambia estado alguno durante una consulta.
 
+### L5 — Restauración lógica
+
+Contrato de servicio, estados, errores y rutas: [contracts/logical-restoration.md](contracts/logical-restoration.md).
+
+**Escenario principal**: Un supervisor con acceso I a L4 y permiso S explícito en `Tareas`
+abre una eliminación confirmada, revisa la operación y el manifiesto completo, ingresa el
+motivo de restauración y confirma por POST. El sistema restaura exactamente esas filas y
+conserva la operación original; si cualquier fila, permiso, empresa o fingerprint no
+coincide, rechaza el conjunto sin cambios parciales.
+
+**Escenarios alternativos**: Un usuario con I pero sin S puede seguir consultando L4, pero
+no obtiene la acción L5; un usuario con S pero sin I no obtiene acceso a L4. Una fila
+físicamente ausente bloquea la restauración completa y permanece como referencia
+histórica, sin reconstrucción.
+
+- **L5-R01 — Restauración lógica**: La restauración recupera las mismas filas, PK y
+  correlativos originales, elimina únicamente la marca y metadata de eliminación lógica y
+  vuelve a incluir las tareas en superficies operacionales autorizadas. Conserva el estado
+  de negocio, fechas, avance, responsables, documentos, relaciones e historial; no crea
+  tareas nuevas ni recupera datos físicamente ausentes.
+- **L5-R02 — Manifiesto completo**: La restauración afecta exactamente todas las tareas
+  `tareas.tarea` del manifiesto de la operación de eliminación referenciada. Es todo-o-nada:
+  no se aceptan selecciones parciales, descendientes agregados ni tareas pertenecientes a
+  otra operación. No se calcula el alcance reabriendo arbitrariamente el árbol actual.
+- **L5-R03 — Autorización independiente**: Ejecutar restauración requiere VICMEAS
+  `supervisor` (S) sobre `Tareas` en la empresa activa, validado tanto en backend como en
+  servicio. Leer L4 sigue requiriendo VICMEAS `ingresar` (I) sobre
+  `Tareas - Tareas eliminadas`. I no autoriza la escritura; S no concede acceso a L4;
+  `eliminar` (E), `is_staff` e `is_superuser` no sustituyen a S. En el flujo iniciado
+  desde L4, ambos permisos se comprueban por separado.
+- **L5-R04 — Previsualización y confirmación**: Antes de restaurar, el supervisor ve raíz,
+  correlativo, empresa, operación original, fecha/actor/motivo de eliminación, conteo,
+  jerarquía del manifiesto, documentos/relaciones conservados y bloqueos/advertencias
+  comprobables. La confirmación usa POST con CSRF y motivo obligatorio de restauración.
+  Un cambio de manifiesto o de su fingerprint entre preview y POST invalida la confirmación
+  y exige una revisión nueva. GET nunca muta datos.
+- **L5-R05 — Ciclos ilimitados**: Una tarea restaurada puede eliminarse y restaurarse de
+  nuevo sin límite artificial de ciclos. Cada eliminación y restauración tiene un UUID
+  nuevo y propio; nunca se reutilizan claves de operaciones anteriores.
+- **L5-R06 — Historial inmutable**: La operación de eliminación original y su manifiesto
+  no se sobrescriben ni eliminan. Cada restauración confirmada registra una operación nueva con
+  identidad, empresa, raíz, manifiesto restaurado, actor, timestamp, motivo, operación de
+  eliminación revertida, resultado transaccional y estado de auditoría. La relación
+  histórica se expresa desde la nueva operación de restauración.
+- **L5-R07 — Consistencia y atomicidad**: Antes de escribir se valida empresa activa,
+  pertenencia, operación original confirmada, manifiesto íntegro, existencia física de
+  todas las filas, marcas actuales vinculadas a esa operación, integridad jerárquica,
+  referencias relevantes y ausencia de otra operación posterior incompatible. Una falla
+  no deja restauraciones parciales. Las filas faltantes bloquean el conjunto completo y
+  no se reconstruyen.
+- **L5-R08 — Conservación documental**: La restauración no mueve, copia, recrea ni elimina
+  archivos. Registros y referencias documentales conservados vuelven a estar disponibles
+  mediante las interfaces autorizadas existentes. Si un archivo externo se comprueba
+  ausente, se informa como no disponible sin inventar ni reconstruir contenido; la
+  restauración no exige demostrar exclusividad física.
+- **L5-R09 — Historial L4**: Las tareas restauradas dejan de mostrarse como actualmente
+  eliminadas. Las operaciones de eliminación anteriores siguen consultables y se
+  identifican como restauradas; la operación nueva de restauración aparece en la
+  trazabilidad. La proyección distingue estado actual de la tarea de los hechos inmutables
+  del ledger, sin presentar campos actuales como un snapshot de eliminación.
+- **L5-R10 — Estado y fechas**: Restaurar no reactiva, publica, cierra, cancela ni
+  reprograma. Conserva estado de negocio, fechas, porcentaje de avance y responsables.
+  No recalcula fechas. Una regla vigente que requiera un ajuste temporal debe identificarse
+  explícitamente y quedar pendiente de decisión; no se inventa una política.
+- **L5-R11 — Auditoría e idempotencia**: Cada restauración confirmada genera un evento
+  mediante la infraestructura existente. Se distinguen replay de la misma solicitud,
+  operación ya restaurada, nueva restauración posterior a una nueva eliminación, error
+  transaccional y fallo de auditoría post-commit. El ledger operativo confirma la
+  restauración solo tras commit; auditoría pendiente se concilia por la nueva clave
+  idempotente sin duplicar eventos ni presentar auditoría pendiente como confirmada.
+- **L5-R12 — Seguridad de conexión operacional**: La operación usa `BASE_TAREAS` y los
+  adaptadores vigentes. Con `MYSQL_CONFIG`, antes de escribir se ejecuta `SELECT DATABASE()`
+  y se exige el nombre autorizado `tareas`. Se respeta la separación entre `default`,
+  `BASE_TAREAS` y auditoría central; no se introduce ORM implícito para sustituir SQL
+  operacional ni se modifica un router global.
+
 ---
 
 ## Requisitos previos integrados (iteración inicial, vigentes)
@@ -1257,7 +1360,7 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 - Edición por formulario sin estado → **FR-C03** (estado no editable por formulario).
 - Listar borrador/publicada → **FR-C01**.
 - VICMEAS: `Permiso.ver` para menú y los flags funcionales para autorización y 403 → **FR-P02**.
-- Anulación/reactivación ordinaria y eliminación lógica administrativa definitiva → **FR-R06…FR-R17**.
+- Anulación/reactivación ordinaria, eliminación lógica y restauración L5 → **FR-R06…FR-R17** y **L5-R01…L5-R12**.
 
 ## Success Criteria
 
@@ -1284,13 +1387,27 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
   nuevas mutaciones ni generan actividad operacional.
 - **SC-016**: La pantalla histórica permite consulta de solo lectura de raíz, descendientes,
   estado original y registros relacionados con permiso VICMEAS I explícito; no expone
-  acciones de escritura o restauración.
-- **SC-017**: Una Tarea eliminada no puede restaurarse ni reactivarse; anulación y
+  escrituras en rutas GET. El acceso a la acción L5 de restauración requiere además S
+  independiente sobre `Tareas`.
+- **SC-017**: Una Tarea eliminada solo puede restaurarse mediante L5; anulación y
   reactivación ordinarias y eliminaciones individuales vigentes conservan su semántica.
 - **SC-018**: Las solicitudes concurrentes no producen marcas parciales ni resultados
   contradictorios; el mismo UUID no repite la operación.
 - **SC-019**: Django ORM y MYSQL_CONFIG mantienen equivalencia de aislamiento, visibilidad
   operacional, consulta histórica y ledger.
+- **SC-020**: 100% de restauraciones confirmadas afectan el manifiesto completo de la
+  eliminación referenciada o no modifican ninguna tarea.
+- **SC-021**: 100% de intentos sin S explícito sobre `Tareas`, con empresa ajena, E sin S,
+  `is_staff` o `is_superuser` sin S, o preview obsoleto son rechazados sin cambios.
+- **SC-022**: Restaurar conserva PK, correlativo, estado, fechas, avance, responsables,
+  relaciones y archivos; no ejecuta operaciones de filesystem.
+- **SC-023**: Cada restauración genera una operación histórica distinta y auditoría
+  idempotente; ninguna eliminación previa se sobrescribe y los ciclos sucesivos usan UUID
+  nuevos.
+- **SC-024**: L4 mantiene consultables las eliminaciones anteriores y distingue tareas
+  actualmente eliminadas de las restauradas, incluyendo la operación de restauración.
+- **SC-025**: MYSQL_CONFIG rechaza escrituras si `SELECT DATABASE()` no devuelve
+  exactamente `tareas`; ninguna prueba manual apunta a una base productiva.
 
 ## Assumptions
 
@@ -1342,6 +1459,6 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 | O | Equipos / Máquinas | FR-O01…O04 | P2 | Definido (sin legacy) |
 | P | Seguridad, Multiempresa y Enlaces | FR-P01…P05 | P1 | Definido (Fase 1 implementada) |
 | Q | Reglas de Cierre | FR-Q01…Q06 | P2 | Definido |
-| R | Exclusiones Actuales | FR-R01…R06 | — | Definido |
+| R | Exclusiones, eliminación lógica y restauración | FR-R01…R17; L5-R01…L5-R12 | — | Definido; L5 pendiente de implementación |
 | S | TO-DO y Origen Canónico | FR-S01…S12 | P2 | Definido (implementación futura) |
 | T | Comentarios de Tarea | FR-T01…T10 | — | Contrato definido; implementación pendiente en Phase 8 |

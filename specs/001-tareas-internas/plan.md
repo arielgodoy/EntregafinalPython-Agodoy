@@ -47,9 +47,9 @@ y usarán paginación cuando corresponda.
 `Permiso.ver` controla solo visibilidad del sidebar y ICMEAS autorización funcional;
 `static/js/app.js` es inmutable; no se crean maestros legacy; las tareas y sus
 descendientes no se eliminan físicamente por el procedimiento administrativo. FR-R06…
-FR-R17 autorizan solo eliminación lógica definitiva sin restauración. L1 implementa
-metadatos, persistencia del motivo y preparación de esquema; L2 y el POST siguen
-pendientes. Cambios fuera de `tareas/` requieren una tarea separada con
+FR-R17 definen eliminación lógica y L5-R01…L5-R12 la restauración controlada. L1-L4
+están implementadas y L5 Etapa 1 prepara el ledger; el servicio de restauración, POST y
+ruta siguen pendientes. Cambios fuera de `tareas/` requieren una tarea separada con
 autorización y scope explícitos.
 
 **Registration status**: El alta inicial de `tareas` en `AppDocs/app_classification.py`,
@@ -74,7 +74,7 @@ solo su integración ERP requiere contrato P2.
 | VI. Cambios mínimos | Fases aditivas, sin refactor transversal ni migración monolítica. | PASS |
 | VII. Tests | Cada fase agrega pruebas focalizadas y regresión completa antes de cierre. | PASS |
 | VIII. Qué antes que cómo | La spec fija comportamiento; este plan fija límites, fases y diseño técnico. | PASS |
-| IX. Trazabilidad | FR-A01…FR-R17 se cubren en data model, contratos, fases y quickstart; `tasks.md` conserva el registro histórico de fases ya ejecutadas. | PASS |
+| IX. Trazabilidad | FR-A01…FR-R17 y L5-R01…L5-R12 se cubren en data model, contratos, fases, tareas y quickstart; `tasks.md` conserva las fases ejecutadas y agrega L5 pendiente. | PASS |
 
 **Gate**: PASS. El registro inicial de la app está resuelto. Permanecen bloqueadas las
 dependencias legacy P1/P2 y cualquier modificación futura adicional de archivos protegidos.
@@ -280,6 +280,10 @@ en `tasks.md`; no reabre ni renumera fases históricas.
 
 ### Enmienda 2H.0.3 — eliminación lógica definitiva sin restauración
 
+**Registro histórico**: la prohibición de restauración de esta decisión queda
+**supersedida por el contrato L5 del 2026-10-19**. Permanecen vigentes la eliminación
+lógica, retención de datos, exclusión operacional, auditoría y consulta histórica L4.
+
 La decisión de eliminación física de 2H.0.2 queda sustituida por FR-R06…FR-R17. El
 procedimiento futuro marcará lógicamente la raíz y todos sus descendientes en una única
 transacción, conservará filas/relaciones/archivos y los ocultará de las superficies
@@ -327,10 +331,14 @@ durante esta enmienda documental.
    requiere `ingresar` explicito (I), separado del permiso S de borrado. La lectura de
    participantes, hitos, documentos, transiciones, cierres y comentarios se limita por
    empresa y por los permisos existentes de `Tareas`; no se exponen bytes ni URL de documentos.
-5. **L5 — Integración HTTP (pendiente)**: preview/confirmación y POST protegido, únicamente tras
-   cerrar autorización, aislamiento, auditoría y recuperación.
-6. **L6 — Pruebas integradas (pendiente)**: paridad ORM/MYSQL_CONFIG, rollback, carreras,
-   historial y aislamiento en entorno de integración aislado, sin eliminación física.
+5. **L5 — Restauración lógica (Etapa 1: persistencia/ledger implementada)**: la nueva
+   referencia/validación del ledger y los esquemas Django/MYSQL_CONFIG están preparados.
+   El preview de operación, el servicio que altera marcas, la confirmación HTTP,
+   auditoría post-commit y proyección L4 siguen pendientes. No se restauró ninguna tarea.
+   Contrato: [contracts/logical-restoration.md](contracts/logical-restoration.md).
+6. **L6 — Certificación integrada (pendiente)**: paridad ORM/MYSQL_CONFIG, rollback,
+   concurrencia/ciclos, auditoría, historial y aislamiento en entorno de integración
+   aislado. No autoriza ejecución contra producción ni eliminación física.
 
 Las eliminadas se excluyen de KPI operacionales y reportes históricos habituales; la
 consulta histórica autorizada es la única superficie para verlas.
@@ -354,6 +362,42 @@ La validación correctiva no usó una base MariaDB física. Los tests del adapta
 verifican SQL parametrizado y resultados simulados; las pruebas opt-in de concurrencia
 MariaDB requieren una instancia local aislada y permanecen como límite de certificación
 del motor, no como afirmación de que MySQL real quedó validado.
+
+### Diseño L5 — restauración lógica (2026-10-19; solo especificación)
+
+El ledger durable contiene el conjunto exacto de IDs `tareas.tarea` de cada eliminación,
+pero no guarda una copia de los bordes padre/hijo. Las relaciones permanecen físicamente
+en `BASE_TAREAS`; los escritores oficiales L3 impiden alterarlas mientras las tareas están
+eliminadas. L5 no vuelve a recorrer el árbol para ampliar el alcance: lee el manifiesto,
+valida que todas sus tareas sigan marcadas por la operación indicada y comprueba que la
+jerarquía retenida sea íntegra. No crea ni modifica relaciones.
+
+**Persistencia implementada en Etapa 1**: se reutilizan `TareaEliminacionOperacion` y
+`TareaEliminacionElemento`. El campo `reverses_operation` genera la referencia nullable,
+única y protegida `reverses_operation_id`; el ledger acepta una operación nueva en estado
+`PENDING`, con resultado vacío, motivo y manifiesto idéntico. El resultado
+`LOGICALLY_RESTORED` queda reservado para la confirmación futura, después de actualizar
+las tareas dentro de la misma transacción. La operación de eliminación original no se
+modifica y su manifiesto permanece intacto. La unicidad y el PK común evitan dos
+restauraciones por eliminación y la reutilización de UUID dentro de la tabla común.
+
+La migración aditiva `0034_logical_restoration_ledger.py` y el contrato de actualización
+MYSQL_CONFIG están creados, con preflight metadata-only. La migración solo se aplicó a la
+base temporal del test runner; no se ejecutó en ninguna base real. El SQL contractual no
+se ejecutó. La transacción futura confirmará el ledger junto con la limpieza de marcas.
+La auditoría central se entrega post-commit con la API idempotente existente; un fallo
+queda pendiente de conciliación. `MYSQL_CONFIG` debe validar
+`SELECT DATABASE() == 'tareas'` y las tablas transaccionales antes de escribir. No se
+cambia `auditoria`, `settings`, routers, permisos ni guard L2.
+
+**Pendiente de aprobación/precisión**: el manifiesto no permite demostrar una topología
+padre/hijo histórica si un escritor fuera de L3 alteró relaciones directamente; decidir si
+se exige capturar bordes para operaciones futuras o si basta la invariancia de las filas
+retenidas. También deben cerrarse la política exacta ante referencias externas detectadas
+en restore, el reporte de archivos externos cuya disponibilidad no pueda verificarse, la
+respuesta de replay de una eliminación antigua ya restaurada y la necesidad de nuevas
+claves de traducción globales. Los archivos de traducción están fuera del APPLICATION
+BOUNDARY y requieren autorización separada si la UI L5 los necesita.
 
 ## Migration Strategy
 
@@ -387,9 +431,12 @@ ninguna migración de otra app.
     notifica y que adjuntos no duplican el evento de documento.
 - KPI/similitud: fixtures por empresa; ocho KPI por dimensión; 80% por defecto y cambios
     por empresa solo para evaluaciones nuevas.
-- Eliminación lógica futura: atomicidad de marcas/ledger, exclusión operativa en ambos
-    backends, retención de filas/archivos, ausencia de restauración y lectura histórica
-    de solo consulta. No se prueba ni habilita en la fase documental actual.
+- L2-L4: atomicidad de marcas/ledger, exclusión operacional en ambos backends, retención
+    de filas/archivos y consulta histórica read-only.
+- L5: manifiesto completo, permisos I/S independientes, CSRF, preview obsoleto, rollback,
+    commit incierto, replay/idempotencia, auditoría pendiente, ciclos sucesivos, L4
+    restaurado y aislamiento ORM/MYSQL_CONFIG. No se implementa ni ejecuta en esta fase
+    documental.
 - Cada fase ejecuta tests focalizados y luego `python manage.py test --settings=AppDocs.settings_test`.
 
 ## External Changes and Blocks

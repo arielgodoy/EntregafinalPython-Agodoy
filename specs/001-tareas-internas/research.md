@@ -272,6 +272,150 @@ proveedores Django distintos vigentes sin sumar rondas.
   `tasks_deleted` dentro del grupo Tareas y las claves L4 ES/EN. No se cambiaron permisos
   existentes, semantica general ICMEAS, middleware, routers ni otras aplicaciones.
 
+### D27. Restauración lógica L5 (2026-10-19; contrato documental)
+
+#### Hallazgos verificados en el código actual
+
+- `TareaEliminacionElemento` persiste IDs `tareas.tarea` por operación y una restricción
+  única por operación/tipo/ID. El manifiesto L2 contiene el conjunto de tareas, no una
+  copia de los bordes padre/hijo.
+- `TareaEliminacionOperacion` ya guarda UUID, actor, empresa, raíz, backend/configuración,
+  fingerprint, motivo, resultado, timestamps y estados/errores de auditoría. Su índice por
+  empresa/raíz/fecha no es único. `get_root_operation()` devuelve la operación histórica
+  más antigua; el servicio L2 rechaza la raíz si encuentra cualquier operación previa.
+  Por tanto, los ciclos ilimitados requieren cambiar ese guard de servicio, no agregar una
+  unicidad histórica por raíz.
+- `Tarea` conserva únicamente la operación de eliminación actualmente aplicada en
+  `eliminacion_operacion_id`. No existe fila ni campo de restauración, vínculo de reversión
+  ni estado L4 `RESTORED`. El lector L4 actual clasifica una marca que ya no coincide con
+  la operación como inconsistente.
+- La operación L2 cambia las marcas y el ledger dentro de la transacción de `BASE_TAREAS`;
+  la auditoría central se entrega post-commit mediante la API idempotente existente. No
+  existe atomicidad distribuida ni se modifican los eventos de auditoría al leer L4.
+- El resolver de ledger comprueba `SELECT DATABASE()`, el nombre configurado y tablas
+  transaccionales InnoDB antes de abrir la transacción MySQL. L2 restringe su empresa a
+  Base 00; L5 debe mantener la empresa de la operación de origen y exigir que coincida con
+  la empresa activa de sesión.
+
+#### Respuestas al análisis del ledger
+
+1. **¿Conserva el manifiesto exacto?** Sí para el conjunto de IDs de tarea de cada
+   operación L2 confirmada; los manifiestos lógicos deben contener solo `tareas.tarea`.
+2. **¿Distingue eliminaciones sucesivas de una misma tarea?** Cada operación tiene UUID,
+   pero hoy L2 prohíbe una segunda operación para la raíz. No hay todavía vínculo entre
+   una eliminación y una restauración.
+3. **¿Los IDs bastan para la jerarquía?** Bastan para fijar el conjunto completo; las
+   relaciones siguen físicamente presentes. No bastan para reconstruir ni demostrar una
+   topología histórica si se alteró directamente fuera de los escritores L3.
+4. **¿Cómo detectar una ya restaurada?** No existe esa señal hoy. La propuesta usa una
+   operación `LOGICALLY_RESTORED` que referencia de forma única la eliminación original,
+   y verifica que todas las marcas actuales sigan apuntando a esa eliminación.
+5. **¿Esquema mínimo?** Reutilizar las filas de operación y manifiesto actuales; añadir
+   `result_code=LOGICALLY_RESTORED` y un self-FK nullable/único `reverses_operation_id`
+   en la nueva fila. Extender la constraint de motivo a ambos resultados. No tocar la
+   fila original ni crear tablas paralelas.
+6. **¿Atomicidad?** Bloquear y confirmar operación, manifiesto, filas de tarea y nueva
+   operación/manifiesto en una sola transacción del backend `BASE_TAREAS`; limpiar las
+   marcas solo dentro de esa transacción. El fallo revierte todo.
+7. **¿Auditoría post-commit fallida?** La restauración queda operacionalmente confirmada
+   con auditoría `PENDING`/`ERROR`; se muestra como auditoría pendiente, no como auditoría
+   confirmada, y se reconcilia por el UUID nuevo con la API idempotente.
+8. **¿Cómo impedir parcialidad?** Manifiesto completo comparado dentro del lock,
+   validación de empresa/operación/filas/marcas/relaciones y una referencia única de
+   restauración por eliminación. Cualquier diferencia aborta el conjunto.
+9. **¿Filas históricas ausentes?** Permanecen en el manifiesto y L4 como referencias
+   físicamente ausentes. Como los IDs 84–86 documentados en D26, no se recrean ni se
+   consideran restaurados; su presencia bloquea la restauración completa.
+
+#### Clasificación de requisitos
+
+| Requisito | Clasificación | Nota |
+|---|---|---|
+| L5-R01 | DEFINIDO | Restaurar la misma fila y conservar su identidad/estado |
+| L5-R02 | DEFINIDO | Recuperar exactamente el manifiesto completo |
+| L5-R03 | DEFINIDO | S para escribir e I independiente para leer L4 |
+| L5-R04 | DEFINIDO | Preview, POST/CSRF, motivo y rechazo de preview obsoleto |
+| L5-R05 | DEFINIDO | Ciclos sin límite con UUID nuevos |
+| L5-R06 | DEFINIDO | Registro nuevo e inmutabilidad del ledger original |
+| L5-R07 | DEFINIDO | Validación estricta y atomicidad todo-o-nada |
+| L5-R08 | DEFINIDO | Sin operaciones físicas sobre documentos/archivos |
+| L5-R09 | DEFINIDO | Historial L4 distingue eliminado actual y restaurado |
+| L5-R10 | DEFINIDO | Estado y fechas se conservan sin transición implícita |
+| L5-R11 | DEFINIDO | Idempotencia, conciliación y estados de auditoría diferenciados |
+| L5-R12 | DEFINIDO | BASE_TAREAS y validación de la base MySQL antes de escribir |
+
+#### Decisiones técnicas derivadas
+
+- Reutilizar operación/manifiesto, estados y metadatos de auditoría de
+  `TareaEliminacionOperacion`; registrar la restauración en una fila nueva y referenciar
+  la eliminación revertida desde esa fila. Esto conserva el evento original y minimiza
+  persistencia adicional.
+- En el flujo iniciado desde L4, mostrar la acción solo si el actor tiene tanto I en la
+  vista histórica como S en `Tareas`; el preview/POST revalidan ambos por separado. I
+  conserva su sentido de lectura y S es la autorización de escritura.
+- La restauración limpia solo las cuatro marcas lógicas y conserva las relaciones/filas
+  existentes. No llama `save()` operativo ni altera lifecycle, fechas o archivos.
+- La vista L4 proyecta `RESTORED` desde la relación de operaciones, mantiene visible el
+  hecho de eliminación y etiqueta los campos de la tarea como actuales, no como snapshot.
+
+#### Pendiente de decisión o precisión
+
+- Si se requiere probar la topología exacta frente a SQL externo/directo, el manifiesto
+  actual carece de edges; decidir si operaciones futuras deben capturarlos. Los escritores
+  oficiales L3 mantienen las relaciones retenidas sin cambios.
+- Política final ante referencias externas o jerarquía inconsistente detectada en el
+  momento de restaurar: el diseño falla cerrado, pero no modifica/desvincula referencias.
+- Si además de la operación confirmada debe persistirse cada intento de restore fallido
+  como historial durable. El diseño actual no deja una fila `LOGICALLY_RESTORED` al hacer
+  rollback; el resultado se informa como error controlado sin falsear el commit.
+- Método autoritativo para detectar un archivo externo físicamente ausente; hasta entonces
+  solo se informa la metadata/referencia conservada y no se inspeccionan ni reconstruyen bytes.
+- Respuesta observable al replay de un UUID de eliminación cuyo resultado histórico ya fue
+  restaurado: nunca reejecutar la eliminación; definir si se responde conflicto o estado
+  histórico restaurado.
+- Los nombres exactos de las rutas L5 son una propuesta documental. La interfaz requiere
+  nuevas claves ES/EN en recursos globales fuera del APPLICATION BOUNDARY; cualquier
+  edición futura requiere autorización separada.
+- No se aprobó política de corrección automática para fechas vencidas ni estados
+  temporalmente inconsistentes; se conservan y se reportan para decisión si aparecen.
+
+### D28. Resultado de Etapa 1 L5 — persistencia/ledger (2026-10-19)
+
+- Se añadió `reverses_operation` a `TareaEliminacionOperacion` como FK self-referential
+  nullable/PROTECT con unicidad y columna `reverses_operation_id`. El ID nuevo permanece
+  en la PK común del ledger; el estado PENDING se registra con resultado vacío y solo el
+  commit futuro podrá escribir `LOGICALLY_RESTORED`.
+- `TareaEliminacionElemento` sigue siendo el manifiesto común. Las primitivas
+  `create_restoration_pending` y `get_restoration_operation` validan el origen confirmado,
+  empresa, backend, motivo, unicidad y conjunto exacto de IDs. Crear el registro no toca
+  marcas lógicas, archivos, auditoría ni el guard de L2.
+- El cambio de Django está en `tareas/migrations/0034_logical_restoration_ledger.py`.
+  MYSQL_CONFIG tiene un contrato aditivo separado y preview de solo lectura. El DDL fue
+  validado por tests; no se ejecutó. La migración solo se aplicó al test database aislado.
+- La consulta genérica MySQL de L2 mantiene su lista de columnas anterior para no exigir
+  el nuevo campo a la ruta SQL-direct antes de la evolución L5. Django requiere que la
+  migración corresponda al alias `BASE_TAREAS` antes de usar el campo.
+- L2/L3/L4 mantienen sus resultados y guards; el rechazo L2 de cualquier operación
+  histórica por raíz sigue intacto. La habilitación de ciclos, confirmación
+  `COMMITTED/LOGICALLY_RESTORED`, limpieza de marcas, auditoría y ajustes L4 no se
+  implementaron.
+
+**Validación aislada**:
+
+- Pruebas focalizadas combinadas de persistencia/schema L5 y regresiones L2/L3/L4:
+  **163 PASS, 0 FAIL, 0 SKIP**.
+- `python manage.py check --settings=AppDocs.settings_test`: sin problemas.
+- `python manage.py makemigrations --check --dry-run --settings=AppDocs.settings_test`:
+  no se detectaron cambios adicionales.
+- El test de carrera en SQLite aislada obtuvo un solo vínculo de restauración para dos
+  registros concurrentes. Es prueba de concurrencia SQLite, no certifica MariaDB.
+- La capa MYSQL_CONFIG se probó con conexiones/cursors simulados; no hubo conexión,
+  escritura ni DDL en MySQL real. La instalación operativa y la concurrencia MariaDB
+  siguen pendientes.
+- El preflight informa la versión configurada, pero esta ejecución no certificó una
+  versión física soportada ni la aplicación de `CHECK`; las validaciones de aplicación
+  siguen siendo la autoridad.
+
 ## Unresolved by design
 
 - P1: contrato y elegibilidad de Local, `LEGACY API PENDIENTE`.
@@ -283,9 +427,11 @@ proveedores Django distintos vigentes sin sumar rondas.
   requiere autorización y ejecución separadas.
 - L2 y L3: implementadas y evaluadas mediante el gate correctivo del 2026-10-18;
   el estado vigente y sus limitaciones se registran abajo.
-- L4: consulta historica implementada en solo lectura; L5 y L6 siguen pendientes y el POST
-  permanece bloqueado.
-- Habilitación de POST: gate futuro separado; permanece bloqueada y sin autorización.
+- L4: consulta historica implementada en solo lectura. El ledger de la Etapa 1 L5 está
+  implementado y probado; el servicio de restauración, HTTP, auditoría post-commit y
+  proyección L4 siguen pendientes. No hay ruta de restauración. L6 permanece pendiente.
+- Habilitación del POST de restauración y de las nuevas claves globales: requiere aprobación
+  del contrato L5 y autorización de implementación separada.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,
   ejecutado, testeado y versionado. Cualquier modificación futura adicional requiere
   autorización expresa.

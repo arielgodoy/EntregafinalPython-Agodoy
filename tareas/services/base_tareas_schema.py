@@ -62,6 +62,9 @@ DELETION_LEDGER_SCHEMA_PATH = (
 LOGICAL_DELETION_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "sql" / "logical_deletion_schema.sql"
 )
+LOGICAL_RESTORATION_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "sql" / "logical_restoration_schema.sql"
+)
 
 
 EXPECTED_OPERATIONAL_MODELS = (
@@ -349,6 +352,127 @@ def _validate_logical_deletion_statements(statements: list[str]) -> None:
         )
 
 
+def _validate_logical_restoration_statements(statements: list[str]) -> None:
+    operation_table = apps.get_model(
+        "tareas",
+        "TareaEliminacionOperacion",
+    )._meta.db_table
+    expected_column = "reverses_operation_id"
+    expected_constraints = {
+        (operation_table, "tareas_eliminacion_o_reverses_operation_i_1b35b931_fk_tareas_el"),
+        (operation_table, "tareas_delop_restore_link"),
+        (operation_table, "tareas_delop_restore_motive"),
+    }
+    expected_indexes = {(operation_table, "tareas_delop_reverses_uniq")}
+    actual_columns: set[tuple[str, str]] = set()
+    actual_constraints: set[tuple[str, str]] = set()
+    actual_indexes: set[tuple[str, str]] = set()
+    seen_statements: set[str] = set()
+
+    for raw_statement in statements:
+        statement = _normalize_statement(raw_statement).rstrip(";")
+        if statement in seen_statements:
+            raise BaseTareasSchemaInstallError(
+                "El contrato de restauración contiene sentencias duplicadas."
+            )
+        seen_statements.add(statement)
+        alter_match = re.match(
+            r"^ALTER\s+TABLE\s+`?(?P<table>[A-Za-z0-9_]+)`?\s+"
+            r"ADD\s+(?P<kind>COLUMN|CONSTRAINT)\s+`?(?P<name>[A-Za-z0-9_]+)`?",
+            statement,
+            re.IGNORECASE,
+        )
+        if alter_match:
+            table = alter_match.group("table")
+            kind = alter_match.group("kind").upper()
+            name = alter_match.group("name")
+            if kind == "COLUMN":
+                if table != operation_table or name != expected_column or not re.search(
+                    r"\bVARCHAR\s*\(\s*32\s*\)\s+NULL\b",
+                    statement,
+                    re.IGNORECASE,
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "El contrato de restauración incluye una columna no autorizada."
+                    )
+                actual_columns.add((table, name))
+            else:
+                if (table, name) not in expected_constraints:
+                    raise BaseTareasSchemaInstallError(
+                        "El contrato de restauración incluye una restricción no autorizada."
+                    )
+                if name.endswith("_fk_tareas_el") and (
+                    not re.search(
+                        r"FOREIGN\s+KEY\s*\(\s*`?reverses_operation_id`?\s*\)",
+                        statement,
+                        re.IGNORECASE,
+                    )
+                    or not re.search(
+                        r"REFERENCES\s+`?tareas_eliminacion_operacion`?"
+                        r"\s*\(\s*`?operation_id`?\s*\)",
+                        statement,
+                        re.IGNORECASE,
+                    )
+                    or re.search(r"\bON\s+(?:DELETE|UPDATE)\b", statement, re.IGNORECASE)
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "La referencia de restauración debe apuntar al ledger de operaciones."
+                    )
+                if name == "tareas_delop_restore_link" and (
+                    "LOGICALLY_RESTORED" not in statement
+                    or "reverses_operation_id" not in statement
+                    or "PENDING" not in statement
+                    or "COMMITTED" not in statement
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "La restricción de enlace de restauración está incompleta."
+                    )
+                if name == "tareas_delop_restore_motive" and (
+                    "LOGICALLY_RESTORED" not in statement
+                    or "reverses_operation_id" not in statement
+                    or "motivo" not in statement
+                ):
+                    raise BaseTareasSchemaInstallError(
+                        "La restricción de motivo de restauración está incompleta."
+                    )
+                actual_constraints.add((table, name))
+            continue
+
+        index_match = _CREATE_OBJECT.match(statement)
+        if index_match:
+            table = index_match.group("table")
+            name = index_match.group("name")
+            columns_match = re.search(r"\((?P<columns>.*)\)\s*$", statement)
+            columns = (
+                _split_sql_items(columns_match.group("columns"))
+                if columns_match
+                else []
+            )
+            if (
+                not index_match.group("unique")
+                or (table, name) not in expected_indexes
+                or columns != ["`reverses_operation_id`"]
+            ):
+                raise BaseTareasSchemaInstallError(
+                    "El contrato de restauración incluye un índice no autorizado."
+                )
+            actual_indexes.add((table, name))
+            continue
+
+        raise BaseTareasSchemaInstallError(
+            "El contrato de restauración solo admite adiciones declaradas."
+        )
+
+    if (
+        actual_columns != {(operation_table, expected_column)}
+        or actual_constraints != expected_constraints
+        or actual_indexes != expected_indexes
+    ):
+        raise BaseTareasSchemaInstallError(
+            "El contrato de restauración está incompleto o duplicado."
+        )
+
+
 def read_logical_deletion_schema_contract() -> tuple[str, ...]:
     """Read and validate additive SQL without executing it."""
     try:
@@ -366,6 +490,26 @@ def read_logical_deletion_schema_contract() -> tuple[str, ...]:
             "El contrato aditivo de eliminación lógica está vacío."
         )
     _validate_logical_deletion_statements(list(statements))
+    return statements
+
+
+def read_logical_restoration_schema_contract() -> tuple[str, ...]:
+    """Read and validate additive restoration-ledger SQL without executing it."""
+    try:
+        content = LOGICAL_RESTORATION_SCHEMA_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo leer el contrato aditivo del ledger de restauración."
+        ) from exc
+    content = "\n".join(
+        line for line in content.splitlines() if not line.lstrip().startswith("--")
+    )
+    statements = tuple(item.strip() for item in content.split(";") if item.strip())
+    if not statements:
+        raise BaseTareasSchemaInstallError(
+            "El contrato aditivo del ledger de restauración está vacío."
+        )
+    _validate_logical_restoration_statements(list(statements))
     return statements
 
 
@@ -1298,6 +1442,149 @@ def preview_logical_deletion_schema() -> dict[str, Any]:
         "missing_tables": missing_tables,
         "missing_columns": missing_columns,
         "incompatible_engines": incompatible_engines,
+        "contract_statement_count": len(contract),
+    }
+
+
+def preview_logical_restoration_schema() -> dict[str, Any]:
+    """Inspect the L5 ledger extension without executing DDL."""
+    contract = read_logical_restoration_schema_contract()
+    context = resolve_operational_backend("BASE_TAREAS")
+    if context.backend_type == "DJANGO":
+        return {
+            "status": "DJANGO_MIGRATIONS",
+            "backend": context.backend_type,
+            "required_column": "reverses_operation_id",
+            "contract_statement_count": len(contract),
+        }
+    if (
+        context.backend_type != "MYSQL_CONFIG"
+        or context.mysql_connection is None
+        or not context.database_name
+    ):
+        raise BaseTareasSchemaInstallError(
+            "BASE_TAREAS no tiene un backend compatible con el ledger de restauración."
+        )
+    if context.database_name != "tareas":
+        raise BaseTareasSchemaInstallError(
+            "El ledger de restauración solo está autorizado sobre la base tareas."
+        )
+
+    operation_table = apps.get_model(
+        "tareas",
+        "TareaEliminacionOperacion",
+    )._meta.db_table
+    column = apps.get_model(
+        "tareas",
+        "TareaEliminacionOperacion",
+    )._meta.get_field("reverses_operation").column
+    connection_config = context.mysql_connection
+    try:
+        with open_mysql_connection(
+            connection_config,
+            database_name=context.database_name,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SELECT DATABASE()")
+                selected_database = cursor.fetchone()
+                if not selected_database or selected_database[0] != "tareas":
+                    raise BaseTareasSchemaInstallError(
+                        "La conexión no está seleccionada sobre la base autorizada tareas."
+                    )
+                cursor.execute("SELECT VERSION()")
+                version_row = cursor.fetchone()
+                cursor.execute(
+                    "SELECT engine FROM information_schema.tables "
+                    "WHERE table_schema = %s AND table_name = %s",
+                    (context.database_name, operation_table),
+                )
+                table_row = cursor.fetchone()
+                if not table_row:
+                    raise BaseTareasSchemaInstallError(
+                        "Falta la tabla del ledger de eliminación en BASE_TAREAS."
+                    )
+                if str(table_row[0] or "").casefold() != "innodb":
+                    raise BaseTareasSchemaInstallError(
+                        "La tabla del ledger debe utilizar InnoDB."
+                    )
+                cursor.execute(
+                    "SELECT data_type, character_maximum_length, is_nullable "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = %s AND table_name = %s AND column_name = %s",
+                    (context.database_name, operation_table, column),
+                )
+                column_row = cursor.fetchone()
+                cursor.execute(
+                    "SELECT index_name, non_unique, column_name "
+                    "FROM information_schema.statistics "
+                    "WHERE table_schema = %s AND table_name = %s "
+                    "ORDER BY index_name, seq_in_index",
+                    (context.database_name, operation_table),
+                )
+                index_rows = cursor.fetchall()
+                cursor.execute(
+                    "SELECT kcu.referenced_table_name, kcu.referenced_column_name, "
+                    "rc.delete_rule, rc.update_rule "
+                    "FROM information_schema.key_column_usage AS kcu "
+                    "JOIN information_schema.referential_constraints AS rc "
+                    "ON rc.constraint_schema = kcu.constraint_schema "
+                    "AND rc.table_name = kcu.table_name "
+                    "AND rc.constraint_name = kcu.constraint_name "
+                    "WHERE kcu.table_schema = %s AND kcu.table_name = %s "
+                    "AND kcu.column_name = %s "
+                    "AND kcu.referenced_table_name IS NOT NULL",
+                    (context.database_name, operation_table, column),
+                )
+                foreign_key_rows = cursor.fetchall()
+            finally:
+                cursor.close()
+    except MySQLConnectionOpenError as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo abrir BASE_TAREAS para inspeccionar el ledger de restauración."
+        ) from exc
+    except BaseTareasSchemaInstallError:
+        raise
+    except Exception as exc:
+        raise BaseTareasSchemaInstallError(
+            "No se pudo inspeccionar el schema del ledger de restauración."
+        ) from exc
+
+    missing = []
+    if (
+        not column_row
+        or str(column_row[0]).casefold() not in {"char", "varchar"}
+        or int(column_row[1] or 0) != 32
+        or str(column_row[2]).upper() != "YES"
+    ):
+        missing.append("column:reverses_operation_id")
+    indexes: dict[str, tuple[int, list[str]]] = {}
+    for index_name, non_unique, column_name in index_rows:
+        key = str(index_name)
+        if key not in indexes:
+            indexes[key] = (int(non_unique), [])
+        indexes[key][1].append(str(column_name))
+    if not any(
+        non_unique == 0 and columns == [column]
+        for non_unique, columns in indexes.values()
+    ):
+        missing.append("unique:reverses_operation_id")
+    if not any(
+        str(row[0]) == operation_table
+        and str(row[1]) == "operation_id"
+        and str(row[2]).upper() in {"RESTRICT", "NO ACTION"}
+        and str(row[3]).upper() in {"RESTRICT", "NO ACTION"}
+        for row in foreign_key_rows
+    ):
+        missing.append("foreign_key:reverses_operation_id")
+    return {
+        "status": "SCHEMA_UPDATE_REQUIRED" if missing else "CURRENT",
+        "database_name": context.database_name,
+        "connection_id": int(connection_config.pk),
+        "connection_updated_at": connection_config.updated_at.isoformat(),
+        "server_version": str(version_row[0]) if version_row else "",
+        "table": operation_table,
+        "missing": tuple(missing),
         "contract_statement_count": len(contract),
     }
 

@@ -218,6 +218,18 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
         )
         self.assertIn("`motivo` longtext NULL", operation_create)
         self.assertIn("`tareas_delop_motivo_required`", operation_create)
+        self.assertIn("`reverses_operation_id` varchar(32) NULL", operation_create)
+        self.assertIn("`tareas_delop_reverses_uniq`", operation_create)
+        self.assertIn("`tareas_delop_restore_link`", operation_create)
+        self.assertIn("`tareas_delop_restore_motive`", operation_create)
+        self.assertTrue(
+            any(
+                "FOREIGN KEY (`reverses_operation_id`)" in statement
+                and "REFERENCES `tareas_eliminacion_operacion` (`operation_id`)"
+                in statement
+                for statement in ledger
+            )
+        )
 
     def test_mysql_preview_shape_matches_frozen_sql(self):
         preview = build_base_tareas_schema_statements(

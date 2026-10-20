@@ -6,10 +6,11 @@ Contrato de la interfaz web server-side rendered. No se inventa una API REST pú
 si una fase requiere integración, se documenta un adaptador dentro de `tareas/` y se
 mantiene bloqueado hasta autorización del contrato externo. La decisión 2H.0.3 sustituye
 la eliminación física administrativa por eliminación lógica definitiva del árbol, sin
-restauración, conforme a FR-R06…FR-R17. El servicio lógico interno L2 existe; no existe
-un endpoint ni POST lógico implementado o habilitado. La anulación/reactivación sigue
-siendo una acción distinta; T105 conserva su excepción individual de borrado físico para
-MiniTareas sin estado hecho ni historial.
+restauración en esa decisión histórica, conforme a FR-R06…FR-R17. La decisión L5 del
+2026-10-19 agrega el contrato de restauración lógica y supersede esa prohibición, pero no
+implementa ni registra todavía una ruta L5. El servicio lógico interno L2 existe. La
+anulación/reactivación sigue siendo una acción distinta; T105 conserva su excepción
+individual de borrado físico para MiniTareas sin estado hecho ni historial.
 
 > **REGISTRO INICIAL RESUELTO**: la app ya está registrada en `AppDocs/urls.py`,
 > `AppDocs/settings.py` y `AppDocs/app_classification.py`. Cualquier modificación futura
@@ -207,9 +208,9 @@ autorizan crear endpoints ausentes.
 
 FR-R06…FR-R17 autorizan una eliminación lógica administrativa: raíz y descendientes
 dejan de operar, pero se conservan filas, relaciones, historiales, documentos y archivos.
-Es definitiva funcionalmente y no existe restauración. La anulación/reactivación
-ordinarias siguen siendo acciones distintas y no cambian las reglas individuales de
-Hitos, MiniTareas o Comentarios.
+L5 define la única restauración permitida, pero aún no está implementada. La
+anulación/reactivación ordinarias siguen siendo acciones distintas y no cambian las reglas
+individuales de Hitos, MiniTareas o Comentarios.
 
 La ruta existente
 `GET /tareas/<pk>/eliminacion-definitiva/previsualizar/` (`previsualizar_eliminacion_definitiva`)
@@ -220,7 +221,8 @@ Desde la corrección L3, sus adaptadores Django y MYSQL_CONFIG excluyen una raí
 y sus consultas jerárquicas no incluyen descendientes eliminados. Si una relación retenida
 deja el inventario inconsistente, la vista bloquea el preview con un mensaje genérico
 común para tareas no disponibles, eliminadas o fuera de empresa; no presenta identificador
-ni datos del descendiente. No existe endpoint de restauración ni eliminación física.
+ni datos del descendiente. No existe actualmente endpoint de restauración ni eliminación
+física; la ruta L5 descrita abajo es solo un contrato diferido.
 
 | Método | Ruta | Nombre (`tareas:`) | Vista ICMEAS | Permiso |
 |---|---|---|---|---|
@@ -280,6 +282,35 @@ enlace de navegacion no se muestre.
 La auditoría central se entrega tras el commit y no promete atomicidad distribuida. Un
 resultado de auditoría pendiente o un commit incierto se informa explícitamente; no se
 presenta como éxito confirmado ni se inicia automáticamente una segunda operación.
+
+### L5 — Restauración lógica (contrato diferido; no implementado)
+
+Contrato completo de servicio, estados y errores:
+[logical-restoration.md](logical-restoration.md).
+
+La acción se inicia desde el detalle L4, pero no convierte las rutas históricas en
+mutables. El listado y detalles L4 permanecen GET-only y requieren I en
+`Tareas - Tareas eliminadas`. El enlace a la previsualización L5 solo aparece con S
+explícito sobre `Tareas`; la previsualización y confirmación revalidan I y S por separado.
+I no autoriza la escritura y S no concede acceso a L4. `eliminar` (E), `is_staff` e
+`is_superuser` no sustituyen S.
+
+| Estado | Método | Ruta propuesta | Nombre sugerido | Vista/permiso |
+|---|---|---|---|---|
+| DEFERRED | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S) y validación explícita I de L4; solo preview |
+| DEFERRED | POST | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S), validación I de contexto L4, CSRF y motivo obligatorio |
+
+El GET no escribe. Presenta la operación original, raíz/correlativo, empresa, actor/fecha/
+motivo, manifiesto completo, información retenida y bloqueos; el POST requiere confirmación
+explícita y un token ligado al actor, empresa, eliminación, UUID nuevo de restauración,
+manifiesto y fingerprint. Cualquier cambio del alcance exige nuevo preview. La ruta
+permanece fuera de `tareas/urls.py` hasta la implementación aprobada.
+
+El servicio valida de nuevo S, pertenencia y empresa activa, carga el manifiesto durable
+sin ampliarlo desde la jerarquía actual y confirma marcas, nueva operación y manifiesto en
+una sola transacción de `BASE_TAREAS`. La auditoría central se registra post-commit con
+idempotencia. L4 continúa siendo solo lectura y proyecta las operaciones anteriores como
+historia restaurada, sin tratarlas como tareas actualmente eliminadas.
 
 ## Rutas adicionales por fase
 

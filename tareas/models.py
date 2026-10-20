@@ -17,6 +17,7 @@ from settings.models import SettingsMySQLConnection
 
 
 LOGICAL_DELETION_RESULT_CODE = "LOGICALLY_DELETED"
+LOGICAL_RESTORATION_RESULT_CODE = "LOGICALLY_RESTORED"
 
 
 _LOGICAL_DELETION_FIELDS = frozenset(
@@ -1943,6 +1944,14 @@ class TareaEliminacionOperacion(models.Model):
         editable=False,
         max_length=32,
     )
+    reverses_operation = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="restorations",
+        db_index=False,
+    )
     actor_id = models.PositiveBigIntegerField()
     empresa_id = models.PositiveBigIntegerField()
     root_task_id = models.PositiveBigIntegerField()
@@ -2008,15 +2017,89 @@ class TareaEliminacionOperacion(models.Model):
                 ),
                 name="tareas_delop_motivo_required",
             ),
+            models.UniqueConstraint(
+                fields=["reverses_operation"],
+                name="tareas_delop_reverses_uniq",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (
+                        models.Q(reverses_operation__isnull=True)
+                        & ~models.Q(result_code=LOGICAL_RESTORATION_RESULT_CODE)
+                    )
+                    | models.Q(
+                        reverses_operation__isnull=False,
+                        status="PENDING",
+                        result_code="",
+                    )
+                    | models.Q(
+                        reverses_operation__isnull=False,
+                        status="COMMITTED",
+                        result_code=LOGICAL_RESTORATION_RESULT_CODE,
+                    )
+                ),
+                name="tareas_delop_restore_link",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (
+                        ~models.Q(reverses_operation__isnull=False)
+                        & ~models.Q(result_code=LOGICAL_RESTORATION_RESULT_CODE)
+                    )
+                    | (
+                        models.Q(motivo__isnull=False)
+                        & ~models.Q(motivo="")
+                    )
+                ),
+                name="tareas_delop_restore_motive",
+            ),
         ]
 
     def clean(self):
         super().clean()
-        if self.result_code == LOGICAL_DELETION_RESULT_CODE and (
+        if (
+            self.result_code
+            in {LOGICAL_DELETION_RESULT_CODE, LOGICAL_RESTORATION_RESULT_CODE}
+            or self.reverses_operation_id is not None
+        ) and (
             not self.motivo or not self.motivo.strip()
         ):
+            message = (
+                "El motivo de eliminación es obligatorio."
+                if self.result_code == LOGICAL_DELETION_RESULT_CODE
+                else "El motivo de restauración es obligatorio."
+            )
+            raise ValidationError({"motivo": message})
+        restoration_pending = (
+            self.reverses_operation_id is not None
+            and self.status == self.Estado.PENDIENTE
+            and self.result_code == ""
+        )
+        restoration_committed = (
+            self.reverses_operation_id is not None
+            and self.status == self.Estado.COMMITTED
+            and self.result_code == LOGICAL_RESTORATION_RESULT_CODE
+        )
+        if self.reverses_operation_id is not None and not (
+            restoration_pending or restoration_committed
+        ):
             raise ValidationError(
-                {"motivo": "El motivo de eliminación es obligatorio."}
+                {
+                    "reverses_operation": (
+                        "La operación de restauración tiene un estado o resultado inválido."
+                    )
+                }
+            )
+        if (
+            self.result_code == LOGICAL_RESTORATION_RESULT_CODE
+            and self.reverses_operation_id is None
+        ):
+            raise ValidationError(
+                {
+                    "reverses_operation": (
+                        "Una restauración lógica debe referenciar una eliminación."
+                    )
+                }
             )
 
 
