@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from threading import Barrier
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -244,7 +245,6 @@ class LogicalRestorationLedgerTests(TestCase):
         wrong_company = self._restoration_input(
             reverses_operation_id=UUID(source.operation_id),
         )
-
         with self.storage.atomic() as unit:
             with self.assertRaises(DeletionLedgerConflict):
                 unit.create_restoration_pending(wrong_company)
@@ -271,6 +271,22 @@ class LogicalRestorationLedgerTests(TestCase):
                         operation_id=uuid4(),
                     )
                 )
+
+    def test_source_with_reverse_link_is_not_an_original_deletion(self):
+        with self.storage.atomic() as unit:
+            source = unit.get_operation(self.deletion_operation_id)
+        if source is None:
+            raise AssertionError("No se encontró la operación de origen.")
+        invalid_source = replace(source, reverses_operation_id=uuid4())
+
+        with self.storage.atomic() as unit:
+            with patch.object(
+                unit,
+                "get_restoration_source_operation",
+                return_value=invalid_source,
+            ):
+                with self.assertRaises(DeletionLedgerStateError):
+                    unit.create_restoration_pending(self._restoration_input())
 
     def test_restoration_cannot_reverse_a_restoration_or_file_cleanup_operation(self):
         restoration = TareaEliminacionOperacion.objects.create(
@@ -481,6 +497,7 @@ class MySQLRestorationLedgerTests(TestCase):
 
     def test_mysql_insert_is_parameterized_and_does_not_touch_task_rows(self):
         source_row = self._operation_row(operation_id=self.source_operation_id)
+        source_restoration_row = (*source_row, None)
         restoration_row = self._operation_row(
             operation_id=self.restoration_operation_id,
             reverse_id=self.source_operation_id,
@@ -495,10 +512,10 @@ class MySQLRestorationLedgerTests(TestCase):
             self.config_version,
             "tareas",
         )
-        unit._operation_row = MagicMock(side_effect=[source_row, None])
+        unit._operation_row = MagicMock(return_value=None)
         unit._restoration_by_source = MagicMock(return_value=None)
         unit._restoration_operation_row = MagicMock(
-            side_effect=[None, restoration_row]
+            side_effect=[source_restoration_row, None, restoration_row]
         )
         unit._execute = MagicMock(side_effect=[file_cursor, insert_cursor])
         unit.get_manifest = MagicMock(
@@ -542,6 +559,111 @@ class MySQLRestorationLedgerTests(TestCase):
                 task_after.eliminacion_operacion_id,
             ),
             markers_before,
+        )
+
+    def test_mysql_adapter_rejects_reverse_linked_source_even_if_result_says_deleted(self):
+        source_operation_id = uuid4()
+        invalid_source_row = (
+            *self._operation_row(operation_id=source_operation_id),
+            uuid4().hex,
+        )
+        unit = MySQLDeletionLedgerUnitOfWork(
+            MagicMock(),
+            self.backend_identity,
+            self.config_version,
+            "tareas",
+        )
+        unit._restoration_operation_row = MagicMock(
+            return_value=invalid_source_row
+        )
+
+        with patch(
+            "tareas.services.deletion_ledger._check_mysql_restoration_schema"
+        ):
+            with self.assertRaises(DeletionLedgerStateError):
+                unit.create_restoration_pending(
+                    RestorationOperationInput(
+                        actor_id=self.actor.pk,
+                        empresa_id=self.empresa.pk,
+                        reverses_operation_id=source_operation_id,
+                        fingerprint="b" * 64,
+                        manifest=(
+                            DeletionInventoryItem("tareas.tarea", self.task.pk),
+                        ),
+                        operation_id=uuid4(),
+                        motivo="No revertir una restauración",
+                    )
+                )
+        unit._restoration_operation_row.assert_called_once_with(
+            source_operation_id,
+            lock=True,
+        )
+
+    def test_mysql_restoration_transition_commits_only_a_valid_pending_operation(self):
+        pending_row = self._operation_row(
+            operation_id=self.restoration_operation_id,
+            reverse_id=self.source_operation_id,
+            restore=True,
+        )
+        source_row = (
+            *self._operation_row(operation_id=self.source_operation_id),
+            None,
+        )
+        committed_values = dict(
+            zip(_RESTORATION_OPERATION_COLUMNS, pending_row)
+        )
+        committed_values.update(
+            {
+                "status": TareaEliminacionOperacion.Estado.COMMITTED,
+                "result_code": LOGICAL_RESTORATION_RESULT_CODE,
+                "audit_status": TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+                "committed_at": timezone.now(),
+            }
+        )
+        committed_row = tuple(
+            committed_values[column]
+            for column in _RESTORATION_OPERATION_COLUMNS
+        )
+        file_cursor = MagicMock()
+        file_cursor.fetchone.return_value = None
+        unit = MySQLDeletionLedgerUnitOfWork(
+            MagicMock(),
+            self.backend_identity,
+            self.config_version,
+            "tareas",
+        )
+        unit._restoration_operation_row = MagicMock(
+            side_effect=[pending_row, source_row, committed_row]
+        )
+        unit.get_manifest = MagicMock(return_value=self.operation.manifest)
+        unit._execute = MagicMock(return_value=file_cursor)
+        unit._update_operation = MagicMock()
+
+        with patch(
+            "tareas.services.deletion_ledger._check_mysql_restoration_schema"
+        ):
+            record = unit.mark_logically_restored(self.restoration_operation_id)
+
+        self.assertEqual(record.operation_id, self.restoration_operation_id)
+        self.assertEqual(record.reverses_operation_id, self.source_operation_id)
+        self.assertEqual(
+            record.result_code,
+            LOGICAL_RESTORATION_RESULT_CODE,
+        )
+        self.assertEqual(record.status, TareaEliminacionOperacion.Estado.COMMITTED)
+        self.assertEqual(
+            record.audit_status,
+            TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+        )
+        unit._update_operation.assert_called_once()
+        update_values = unit._update_operation.call_args.args[1]
+        self.assertEqual(
+            update_values["result_code"],
+            LOGICAL_RESTORATION_RESULT_CODE,
+        )
+        self.assertEqual(
+            update_values["status"],
+            TareaEliminacionOperacion.Estado.COMMITTED,
         )
 
 

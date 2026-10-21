@@ -427,9 +427,11 @@ proveedores Django distintos vigentes sin sumar rondas.
   requiere autorización y ejecución separadas.
 - L2 y L3: implementadas y evaluadas mediante el gate correctivo del 2026-10-18;
   el estado vigente y sus limitaciones se registran abajo.
-- L4: consulta historica implementada en solo lectura. El ledger de la Etapa 1 L5 está
-  implementado y probado; el servicio de restauración, HTTP, auditoría post-commit y
-  proyección L4 siguen pendientes. No hay ruta de restauración. L6 permanece pendiente.
+- L4: consulta historica implementada en solo lectura. L5 Etapa 1 (ledger) y Etapa 2
+  (preview, servicio transaccional interno y auditoría post-commit) están implementadas y
+  probadas en SQLite aislada y con fixtures sintéticas en MariaDB de desarrollo. HTTP,
+  proyección L4 y ciclos siguen pendientes; T16 commit incierto permanece sin ejecutar.
+  No hay ruta de restauración ni se modificaron datos productivos. L6 permanece pendiente.
 - Habilitación del POST de restauración y de las nuevas claves globales: requiere aprobación
   del contrato L5 y autorización de implementación separada.
 - Registro técnico inicial de la app en los tres archivos `AppDocs/*`: resuelto, autorizado,

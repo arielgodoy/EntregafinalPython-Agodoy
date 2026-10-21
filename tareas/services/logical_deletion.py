@@ -384,8 +384,8 @@ class _DjangoTaskAdapter:
             ),
             deleted_field.get_db_prep_save(False, self.connection),
         )
-        # L2 is the sole authorized writer for these fields; public queryset
-        # bulk-write APIs reject them.
+        # L2 and L5 services are the only authorized writers for these fields;
+        # public queryset bulk-write APIs reject them.
         with self.connection.cursor() as cursor:
             cursor.execute(sql, params)
             return cursor.rowcount

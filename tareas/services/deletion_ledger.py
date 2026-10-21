@@ -915,6 +915,10 @@ def _assert_restoration_source(
         raise DeletionLedgerConflict(
             "Una restauración debe usar un UUID nuevo."
         )
+    if source.reverses_operation_id is not None:
+        raise DeletionLedgerStateError(
+            "La operación origen ya es una restauración lógica."
+        )
     if source.empresa_id != operation.empresa_id:
         raise DeletionLedgerConflict(
             "La operación de eliminación pertenece a otra empresa."
@@ -1137,12 +1141,33 @@ class DjangoDeletionLedgerUnitOfWork:
         except TareaEliminacionOperacion.DoesNotExist as exc:
             raise DeletionLedgerStateError("La operación no existe en el ledger.") from exc
 
-    def get_operation(self, operation_id: UUID) -> DeletionOperationRecord | None:
-        model = (
-            TareaEliminacionOperacion.objects.using(self.alias)
-            .filter(operation_id=operation_id.hex)
-            .first()
+    def get_operation(
+        self,
+        operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        query = TareaEliminacionOperacion.objects.using(self.alias).filter(
+            operation_id=operation_id.hex
         )
+        if lock:
+            query = query.select_for_update()
+        model = query.first()
+        return _operation_record_from_model(model) if model is not None else None
+
+    def get_restoration_source_operation(
+        self,
+        operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        _check_django_restoration_schema(self.alias)
+        query = TareaEliminacionOperacion.objects.using(self.alias).filter(
+            operation_id=operation_id.hex
+        )
+        if lock:
+            query = query.select_for_update()
+        model = query.first()
         return _operation_record_from_model(model) if model is not None else None
 
     def get_restoration_operation(
@@ -1155,7 +1180,26 @@ class DjangoDeletionLedgerUnitOfWork:
             .filter(operation_id=operation_id.hex)
             .first()
         )
-        if model is None or model.reverses_operation_id is None:
+        if model is None or getattr(model, "reverses_operation_id", None) is None:
+            return None
+        return _validate_restoration_record_state(
+            _operation_record_from_model(model)
+        )
+
+    def get_restoration_for_source(
+        self,
+        source_operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        _check_django_restoration_schema(self.alias)
+        query = TareaEliminacionOperacion.objects.using(self.alias).filter(
+            reverses_operation_id=source_operation_id.hex
+        )
+        if lock:
+            query = query.select_for_update()
+        model = query.first()
+        if model is None:
             return None
         return _validate_restoration_record_state(
             _operation_record_from_model(model)
@@ -1164,16 +1208,19 @@ class DjangoDeletionLedgerUnitOfWork:
     def get_manifest(
         self,
         operation_id: UUID,
+        *,
+        lock: bool = False,
     ) -> tuple[DeletionInventoryItem, ...]:
-        self._operation(operation_id, lock=False)
+        self._operation(operation_id, lock=lock)
+        query = TareaEliminacionElemento.objects.using(self.alias).filter(
+            operacion_id=operation_id.hex
+        ).order_by("tipo", "object_id")
+        if lock and connections[self.alias].features.has_select_for_update:
+            query = query.select_for_update()
         return tuple(
             sorted(
                 DeletionInventoryItem(model_label=kind, object_id=object_id)
-                for kind, object_id in (
-                    TareaEliminacionElemento.objects.using(self.alias)
-                    .filter(operacion_id=operation_id.hex)
-                    .values_list("tipo", "object_id")
-                )
+                for kind, object_id in query.values_list("tipo", "object_id")
             )
         )
 
@@ -1253,19 +1300,11 @@ class DjangoDeletionLedgerUnitOfWork:
         operation: RestorationOperationInput,
     ) -> DeletionOperationRecord:
         operation = _normalize_restoration_operation(operation)
-        _check_django_restoration_schema(self.alias)
-        try:
-            source_model = (
-                TareaEliminacionOperacion.objects.using(self.alias)
-                .select_for_update()
-                .get(operation_id=operation.reverses_operation_id.hex)
-            )
-        except TareaEliminacionOperacion.DoesNotExist as exc:
-            raise DeletionLedgerStateError(
-                "La operación de eliminación que se intenta revertir no existe."
-            ) from exc
-        source = _operation_record_from_model(source_model)
-        _assert_restoration_source(
+        source = self.get_restoration_source_operation(
+            operation.reverses_operation_id,
+            lock=True,
+        )
+        source = _assert_restoration_source(
             operation,
             source,
             backend_type="DJANGO",
@@ -1580,6 +1619,105 @@ class DjangoDeletionLedgerUnitOfWork:
             ],
         )
         return _operation_record_from_model(operation)
+
+    def mark_logically_restored(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        _check_django_restoration_schema(self.alias)
+        operation_model = self._operation(operation_id)
+        operation = _operation_record_from_model(operation_model)
+        if operation.reverses_operation_id is None:
+            raise DeletionLedgerStateError(
+                "La operación no es una restauración lógica."
+            )
+
+        source_model = self._operation(operation.reverses_operation_id)
+        source = _operation_record_from_model(source_model)
+        manifest = self.get_manifest(operation_id)
+        source_manifest = _validate_source_manifest(
+            source,
+            self.get_manifest(source.operation_id),
+        )
+        restoration_input = RestorationOperationInput(
+            actor_id=operation.actor_id,
+            empresa_id=operation.empresa_id,
+            reverses_operation_id=source.operation_id,
+            fingerprint=operation.fingerprint,
+            manifest=manifest,
+            operation_id=operation.operation_id,
+            motivo=operation.motivo or "",
+        )
+        _assert_restoration_source(
+            restoration_input,
+            source,
+            backend_type="DJANGO",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        _normalize_restoration_manifest(
+            manifest,
+            root_task_id=source.root_task_id,
+            source_manifest=source_manifest,
+        )
+        _assert_restoration_operation_matches(
+            operation,
+            restoration_input,
+            source=source,
+            manifest=source_manifest,
+            backend_type="DJANGO",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        if TareaEliminacionArchivo.objects.using(self.alias).filter(
+            operacion_id=operation_id.hex
+        ).exists():
+            raise DeletionLedgerStateError(
+                "Una restauración lógica no puede programar limpieza de archivos."
+            )
+        if operation.status == TareaEliminacionOperacion.Estado.COMMITTED:
+            if operation.result_code != LOGICAL_RESTORATION_RESULT_CODE:
+                raise DeletionLedgerStateError(
+                    "El resultado persistido de la restauración no es válido."
+                )
+            return _validate_restoration_record_state(operation)
+        if (
+            operation.status != TareaEliminacionOperacion.Estado.PENDIENTE
+            or operation.result_code != ""
+            or operation.audit_status
+            != TareaEliminacionOperacion.EstadoAuditoria.NO_ENCOLADA
+            or not operation.motivo
+            or not operation.motivo.strip()
+        ):
+            raise DeletionLedgerStateError(
+                "La operación pendiente no puede confirmarse como restauración."
+            )
+
+        now = timezone.now()
+        operation_model.status = TareaEliminacionOperacion.Estado.COMMITTED
+        operation_model.result_code = LOGICAL_RESTORATION_RESULT_CODE
+        operation_model.audit_status = (
+            TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE
+        )
+        operation_model.file_cleanup_status = (
+            TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+        )
+        operation_model.committed_at = now
+        operation_model.updated_at = now
+        operation_model.save(
+            using=self.alias,
+            update_fields=[
+                "status",
+                "result_code",
+                "audit_status",
+                "file_cleanup_status",
+                "committed_at",
+                "updated_at",
+            ],
+        )
+        return _validate_restoration_record_state(
+            _operation_record_from_model(operation_model)
+        )
 
     def record_audit_result(
         self,
@@ -1932,9 +2070,35 @@ class MySQLDeletionLedgerUnitOfWork:
         finally:
             cursor.close()
 
-    def get_operation(self, operation_id: UUID) -> DeletionOperationRecord | None:
-        row = self._operation_row(operation_id, lock=False)
+    def get_operation(
+        self,
+        operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        row = self._operation_row(operation_id, lock=lock)
         return _operation_record_from_row(row) if row is not None else None
+
+    def get_restoration_source_operation(
+        self,
+        operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        row = self._restoration_operation_row(operation_id, lock=lock)
+        return (
+            _operation_record_from_row(
+                row,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+            if row is not None
+            else None
+        )
 
     def get_restoration_operation(
         self,
@@ -1956,16 +2120,41 @@ class MySQLDeletionLedgerUnitOfWork:
             return None
         return _validate_restoration_record_state(record)
 
+    def get_restoration_for_source(
+        self,
+        source_operation_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> DeletionOperationRecord | None:
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        row = self._restoration_by_source(source_operation_id, lock=lock)
+        if row is None:
+            return None
+        record = _operation_record_from_row(
+            row,
+            columns=_RESTORATION_OPERATION_COLUMNS,
+        )
+        return _validate_restoration_record_state(record)
+
     def get_manifest(
         self,
         operation_id: UUID,
+        *,
+        lock: bool = False,
     ) -> tuple[DeletionInventoryItem, ...]:
-        if self._operation_row(operation_id, lock=False) is None:
+        if self._operation_row(operation_id, lock=lock) is None:
             raise DeletionLedgerStateError("La operación no existe en el ledger.")
         return tuple(
             sorted(
                 DeletionInventoryItem(model_label=kind, object_id=object_id)
-                for kind, object_id in self._inventory_rows(operation_id)
+                for kind, object_id in self._inventory_rows(
+                    operation_id,
+                    lock=lock,
+                )
             )
         )
 
@@ -2106,9 +2295,10 @@ class MySQLDeletionLedgerUnitOfWork:
             raise DeletionLedgerBackendError(
                 "BASE_TAREAS requiere una base para el ledger de restauración."
             )
-        _check_mysql_restoration_schema(self.connection, self.database_name)
-        source_row = self._operation_row(operation.reverses_operation_id)
-        source = _operation_record_from_row(source_row) if source_row else None
+        source = self.get_restoration_source_operation(
+            operation.reverses_operation_id,
+            lock=True,
+        )
         source = _assert_restoration_source(
             operation,
             source,
@@ -2342,10 +2532,15 @@ class MySQLDeletionLedgerUnitOfWork:
                 {"file_cleanup_status": TareaEliminacionOperacion.EstadoArchivos.PENDIENTE},
             )
 
-    def _inventory_rows(self, operation_id: UUID):
-        cursor = self._execute(
+    def _inventory_rows(self, operation_id: UUID, *, lock: bool = False):
+        sql = (
             "SELECT `tipo`, `object_id` FROM `tareas_eliminacion_elemento` "
-            "WHERE `operacion_id` = %s",
+            "WHERE `operacion_id` = %s ORDER BY `tipo`, `object_id`"
+        )
+        if lock:
+            sql += " FOR UPDATE"
+        cursor = self._execute(
+            sql,
             (operation_id.hex,),
         )
         try:
@@ -2520,6 +2715,128 @@ class MySQLDeletionLedgerUnitOfWork:
                 "No se pudo recuperar la operación lógica confirmada."
             )
         return _operation_record_from_row(updated)
+
+    def mark_logically_restored(
+        self,
+        operation_id: UUID,
+    ) -> DeletionOperationRecord:
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        row = self._restoration_operation_row(operation_id)
+        if row is None:
+            raise DeletionLedgerStateError("La operación no existe en el ledger.")
+        operation = _operation_record_from_row(
+            row,
+            columns=_RESTORATION_OPERATION_COLUMNS,
+        )
+        if operation.reverses_operation_id is None:
+            raise DeletionLedgerStateError(
+                "La operación no es una restauración lógica."
+            )
+
+        source_row = self._restoration_operation_row(
+            operation.reverses_operation_id
+        )
+        if source_row is None:
+            raise DeletionLedgerStateError(
+                "La operación de eliminación que se intenta revertir no existe."
+            )
+        source = _operation_record_from_row(
+            source_row,
+            columns=_RESTORATION_OPERATION_COLUMNS,
+        )
+        manifest = self.get_manifest(operation_id)
+        source_manifest = _validate_source_manifest(
+            source,
+            self.get_manifest(source.operation_id),
+        )
+        restoration_input = RestorationOperationInput(
+            actor_id=operation.actor_id,
+            empresa_id=operation.empresa_id,
+            reverses_operation_id=source.operation_id,
+            fingerprint=operation.fingerprint,
+            manifest=manifest,
+            operation_id=operation.operation_id,
+            motivo=operation.motivo or "",
+        )
+        _assert_restoration_source(
+            restoration_input,
+            source,
+            backend_type="MYSQL_CONFIG",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        _normalize_restoration_manifest(
+            manifest,
+            root_task_id=source.root_task_id,
+            source_manifest=source_manifest,
+        )
+        _assert_restoration_operation_matches(
+            operation,
+            restoration_input,
+            source=source,
+            manifest=source_manifest,
+            backend_type="MYSQL_CONFIG",
+            backend_identity=self.backend_identity,
+            config_version=self.config_version,
+        )
+        file_table = _mysql_identifier(TareaEliminacionArchivo._meta.db_table)
+        cursor = self._execute(
+            f"SELECT 1 FROM {file_table} WHERE `operacion_id` = %s LIMIT 1",
+            (operation_id.hex,),
+        )
+        try:
+            has_files = cursor.fetchone() is not None
+        finally:
+            cursor.close()
+        if has_files:
+            raise DeletionLedgerStateError(
+                "Una restauración lógica no puede programar limpieza de archivos."
+            )
+        if operation.status == TareaEliminacionOperacion.Estado.COMMITTED:
+            if operation.result_code != LOGICAL_RESTORATION_RESULT_CODE:
+                raise DeletionLedgerStateError(
+                    "El resultado persistido de la restauración no es válido."
+                )
+            return _validate_restoration_record_state(operation)
+        if (
+            operation.status != TareaEliminacionOperacion.Estado.PENDIENTE
+            or operation.result_code != ""
+            or operation.audit_status
+            != TareaEliminacionOperacion.EstadoAuditoria.NO_ENCOLADA
+            or not operation.motivo
+            or not operation.motivo.strip()
+        ):
+            raise DeletionLedgerStateError(
+                "La operación pendiente no puede confirmarse como restauración."
+            )
+
+        self._update_operation(
+            operation_id,
+            {
+                "status": TareaEliminacionOperacion.Estado.COMMITTED,
+                "result_code": LOGICAL_RESTORATION_RESULT_CODE,
+                "audit_status": TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+                "file_cleanup_status": (
+                    TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+                ),
+                "committed_at": timezone.now(),
+            },
+        )
+        updated = self._restoration_operation_row(operation_id)
+        if updated is None:
+            raise DeletionLedgerSchemaError(
+                "No se pudo recuperar la restauración lógica confirmada."
+            )
+        return _validate_restoration_record_state(
+            _operation_record_from_row(
+                updated,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+        )
 
     def record_audit_result(
         self,

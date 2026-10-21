@@ -352,8 +352,10 @@ Product Owner y no se repitió durante este cierre.
 
 - La anulación ordinaria sigue siendo distinta. L2/L3 mantienen la marca lógica y la
   exclusión operacional; L4 es consulta histórica GET-only. El contrato L5 permite una
-  restauración explícita y la Etapa 1 ya prepara el ledger; el servicio que cambia marcas
-  y la ruta de restauración todavía no están implementados.
+  restauración explícita; el ledger y el servicio interno transaccional Etapa 2 están
+  implementados y probados en base temporal y con fixtures sintéticas en MariaDB de
+  desarrollo. No hay ruta ni proyección L4; el guard L2 sigue bloqueando ciclos posteriores
+  y no se restauró ningún dato productivo.
 - P1 Local: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN; permanece `LEGACY API PENDIENTE`.
 - P2 Proveedor: BLOQUEADO/PENDIENTE DE CONTRATO O AUTORIZACIÓN para integración,
   validación y conciliación con ERP legacy; el maestro Django local no queda bloqueado.
@@ -395,8 +397,8 @@ La validación del contrato central se ejecutó solo en bases de test aisladas:
 - El alias efectivo de auditoría bajo `AppDocs.settings_test` es `default` SQLite. No se demostró concurrencia sobre MySQL de producción; el índice único y la semántica del motor real requieren validación antes del despliegue.
 
 En esa fotografía, L2 permanecía pendiente de integración y L3 no se había iniciado.
-L4 está implementada como consulta histórica GET-only. L5 Etapa 1 prepara el ledger, pero
-no implementa servicio/ruta de restauración; L6 permanece pendiente.
+L4 está implementada como consulta histórica GET-only. L5 Etapas 1–2 preparan el ledger y
+el servicio interno, pero no la ruta HTTP ni la proyección L4; L6 permanece pendiente.
 
 ### Cierre L2/L3 previo a la auditoría correctiva (histórico; reabierto)
 
@@ -616,6 +618,19 @@ documenta pruebas futuras y no autoriza una restauración ni escritura ahora.
 - `python manage.py check --settings=AppDocs.settings_test`: sin problemas.
 - `python manage.py makemigrations --check --dry-run --settings=AppDocs.settings_test`: no se detectaron cambios adicionales.
 - La migración `0034` solo se aplicó por el test runner a su base temporal. No se ejecutaron migraciones, SQL DDL/DML ni restauraciones en bases reales.
+
+### L5 Etapa 2.3 — campaña MariaDB de desarrollo (2026-10-20)
+
+- Conexión operacional: `BASE_TAREAS` → `django_tareas` → `tareas`; MariaDB 10.11.13.
+- T01–T12 y T14: PASS con el servicio y transacciones reales en MariaDB; T13: parcial,
+  con el caso E-solo cubierto por la regresión aislada; T15: commit operacional real y
+  auditoría central simulada en memoria; T16: pendiente por no interrumpir conexiones.
+- Cada conexión operacional comprobó `DATABASE()`, `VERSION()` y `CURRENT_USER()`; las
+  fixtures se limpiaron, no hubo escrituras en SQLite real/`DB_sistema` ni cambios de
+  archivos físicos.
+- Regresión focal L2/L3/L4/L5 en `AppDocs.settings_test`: 153 PASS.
+- Una ejecución ampliada de 164 pruebas tuvo cinco errores en `test_permanent_deletion.py`
+  por un argumento `purpose` faltante en el flujo de eliminación física, fuera del scope L5.
 
 ## Verificación de cierre
 

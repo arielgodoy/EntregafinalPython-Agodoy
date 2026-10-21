@@ -530,17 +530,17 @@ comprueba ambos de forma independiente. No eliminar físicamente ni tocar archiv
   reutilizar `TareaEliminacionElemento` para el manifiesto exacto. Agregar la migración
   Django, contrato SQL/preflight MYSQL_CONFIG y primitivas internas de registro/lectura
   pendientes. Ninguna marca de Tarea cambia; no se crea evento ni se aplica schema real.
-- [ ] T157 Implementar `tareas/services/logical_restoration.py` para previsualizar la
+- [x] T157 Implementar `tareas/services/logical_restoration.py` para previsualizar la
   operación por su UUID, leer solo el manifiesto original, validar empresa/permisos y
   presentar filas ausentes, estados actuales, relaciones, archivos referenciados y
   bloqueos sin mutar datos ni reconstruir la jerarquía. Depende de T156.
-- [ ] T158 Implementar el servicio transaccional de restauración en
+- [x] T158 Implementar el servicio transaccional de restauración en
   `tareas/services/logical_restoration.py`: revalidar bajo locks toda la operación y
   manifiesto, rechazar cualquier fila ausente/inconsistente, limpiar únicamente las marcas
   lógicas y confirmar la nueva operación/manifiesto en una transacción de `BASE_TAREAS`.
-  Cambiar el guard L2 de raíz para permitir ciclos solo cuando la eliminación vigente fue
-  restaurada; no reutilizar UUIDs anteriores. Depende de T156–T157.
-- [ ] T159 Integrar la auditoría post-commit mediante la API idempotente pública ya
+  No cambia el guard L2 de raíz; los ciclos siguen bloqueados hasta una tarea separada.
+  Depende de T156–T157.
+- [x] T159 Integrar la auditoría post-commit mediante la API idempotente pública ya
   disponible; registrar resultado/error en el ledger y agregar reconciliación por UUID
   para respuesta ambigua o evento pendiente, sin duplicar eventos ni modificar `auditoria`.
   Depende de T158.
@@ -552,7 +552,7 @@ comprueba ambos de forma independiente. No eliminar físicamente ni tocar archiv
   de eliminación anteriores, distinguir `CURRENTLY_DELETED`/`RESTORED`/`INCONSISTENT` y
   mostrar la nueva operación de restauración sin presentar campos actuales como snapshots.
   Depende de T156 y T158.
-- [ ] T162 Añadir pruebas unitarias del preview, manifiesto, validaciones de estado,
+- [x] T162 Añadir pruebas unitarias del preview, manifiesto, validaciones de estado,
   restauración todo-o-nada, idempotencia, rollback y conservación de datos para los casos
   focales de `spec.md`/`quickstart.md`. Depende de T156–T158.
 - [ ] T163 Añadir pruebas de integración de vistas/permisos/CSRF/L4, auditoría post-commit,
@@ -562,5 +562,13 @@ comprueba ambos de forma independiente. No eliminar físicamente ni tocar archiv
   sobre una instancia aislada cuyo nombre efectivo de base sea `tareas`; no apuntar a
   producción ni aplicar DDL/migraciones operativas durante tests. Depende de T163.
 
-**Estado de L5**: T156 completa; T157–T164 pendientes. No se implementó ni ejecutó una
-restauración y L5 no queda cerrada.
+**Estado de L5**: T156–T159 y T162 están completas; T160–T161 y T163–T165 siguen
+pendientes. El servicio se probó en `AppDocs.settings_test` y con fixtures sintéticas en
+MariaDB de desarrollo: T01–T12 y T14 PASS; T13 parcial; T15 con auditoría central simulada;
+T16 pendiente. Las fixtures se limpiaron. No hay ruta HTTP ni proyección L4, y el guard L2
+no cambió.
+
+- [ ] T165 Evaluar por separado el cambio del guard L2 de raíz para admitir nuevos ciclos
+  de eliminación/restauración, solo tras autorización específica. No forma parte de la
+  Etapa 2 del servicio y permanece bloqueado mientras el guard actual rechace una raíz con
+  una operación histórica. Depende de T158.

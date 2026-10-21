@@ -1248,8 +1248,8 @@ notificaciones y email existentes.
   eliminadas quedan excluidas de KPI operacionales y reportes históricos habituales.
 - **FR-R17 — Restauración exclusiva L5**: Una eliminación lógica solo puede revertirse
   mediante la restauración L5 y las reglas L5-R01…L5-R12. No se restaura por anulación,
-  reactivación, cambio directo de estado ni otra operación. Hasta que L5 se implemente,
-  no existe endpoint ni servicio de restauración disponible.
+  reactivación, cambio directo de estado ni otra operación. El servicio interno L5 no
+  habilita acceso web: hasta completar la interfaz L5 no existe endpoint de restauración.
 
 ### Contrato de consulta L4
 

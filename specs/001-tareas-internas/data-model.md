@@ -803,7 +803,7 @@ marcador neutro. Los documentos y evidencias se muestran como metadatos sin byte
 Si el registro fisico no esta disponible o falta el permiso operacional, la seccion se marca
 como no disponible/restringida; no se inventan datos ni se crean tablas de historial.
 
-## Operación de restauración lógica L5 (Etapa 1 implementada; restauración no implementada)
+## Operación de restauración lógica L5 (Etapa 1 ledger y Etapa 2 interna implementados)
 
 El contrato de servicio/estados se detalla en
 [contracts/logical-restoration.md](contracts/logical-restoration.md).
@@ -833,17 +833,19 @@ Etapa 1 añade el campo/model constraints, la migración Django `0034_logical_re
 el contrato MySQL existente `tareas/sql/deletion_ledger_schema.sql` para bases nuevas y
 `tareas/sql/logical_restoration_schema.sql` para la evolución aditiva de una base existente.
 `preview_logical_restoration_schema()` valida en modo lectura la base autorizada, columna,
-unicidad y FK. Ninguna migración ni sentencia DDL se aplicó a una base real.
+unicidad y FK. El SQL aditivo L5 se aplicó directamente, con autorización, a la base de
+desarrollo `tareas` el 2026-10-20 y el preflight quedó `CURRENT`; no se aplicaron migraciones
+Django a la base operacional ni se modificó producción.
 
-En la futura etapa del servicio transaccional, dentro de una única transacción del backend
-resuelto de `BASE_TAREAS`, se bloquearán y
-validan la operación original, su manifiesto y todas las filas de `Tarea`; se exige que
-cada fila exista físicamente, pertenezca a la empresa activa y continúe marcada por el
-UUID de eliminación referenciado. La nueva operación y su manifiesto se escriben en esa
-misma transacción y solo entonces se limpian `eliminada`, `eliminada_en`, `eliminada_por`
-y `eliminacion_operacion_id`. Todos los demás campos y relaciones permanecen intactos.
-Una inconsistencia o fila faltante revierte el conjunto completo. El commit incierto se
-resuelve consultando el UUID nuevo, nunca reutilizándolo para otra operación.
+El servicio transaccional de Etapa 2, dentro de una única transacción del backend resuelto
+de `BASE_TAREAS`, bloquea y valida la operación original, su manifiesto y todas las filas
+de `Tarea`; exige que cada fila exista físicamente, pertenezca a la empresa activa y
+continúe marcada por el UUID de eliminación referenciado. La nueva operación y su
+manifiesto se escriben en esa misma transacción y solo entonces se limpian `eliminada`,
+`eliminada_en`, `eliminada_por` y `eliminacion_operacion_id`. Todos los demás campos y
+relaciones permanecen intactos. Una inconsistencia o fila faltante revierte el conjunto
+completo. El commit incierto se resuelve consultando el UUID nuevo, nunca reutilizándolo
+para otra operación.
 
 El manifiesto actual registra los IDs, no los bordes padre/hijo. Las relaciones se
 conservan físicamente y los escritores oficiales L3 bloquean mutaciones sobre tareas
@@ -858,9 +860,11 @@ permanece y la restauración completa se rechaza; no se recrean filas ni datos. 
 proyección L4 no debe tratar una marca ya limpiada como una eliminación vigente ni
 presentar campos actuales como un snapshot de la fecha de eliminación.
 
-El servicio que limpiará las marcas, la transición a `COMMITTED`/`LOGICALLY_RESTORED`,
-la conciliación de auditoría y la proyección L4 siguen pendientes. La Etapa 1 solo prepara
-el ledger y no ejecuta ni completa una restauración.
+El servicio interno de Etapa 2 limpia las marcas y confirma
+`COMMITTED/LOGICALLY_RESTORED`; la auditoría idempotente se entrega post-commit y puede
+conciliarse con el mismo UUID. La proyección L4, las rutas HTTP y la habilitación de ciclos
+siguen pendientes. El guard L2 no se modifica en esta etapa y no se ejecutó una restauración
+real.
 
 ## Límites y fuera de alcance
 
@@ -868,9 +872,10 @@ el ledger y no ejecuta ni completa una restauración.
   La eliminación lógica definitiva queda autorizada en FR-R06…FR-R17, pero sus marcas,
   filtros y pantalla histórica están en fases separadas; L1 implementa únicamente
   metadatos, ledger y preparación de esquema.
-- La restauración L5 está especificada pero no implementada; hasta que se apruebe y ejecute
-  esa fase, no existe endpoint ni servicio que la realice. Reactivar una tarea anulada no
-  elimina ni cambia la marca conceptual de eliminación.
+- El servicio interno de restauración L5 está implementado, pero no existe endpoint ni
+  proyección L4 que permita ejecutarlo desde la interfaz. El guard L2 sigue bloqueando
+  ciclos sucesivos. Reactivar una tarea anulada no elimina ni cambia la marca conceptual
+  de eliminación.
 - No hay usuarios externos ni enlaces públicos.
 - No hay plantilla de hitos ni vencimiento automático de documentos.
 - Local permanece `LEGACY API PENDIENTE`; no se modelan tabla, ID o elegibilidad cerrada.

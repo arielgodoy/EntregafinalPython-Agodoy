@@ -1,13 +1,14 @@
 # Contract: L5 Logical Task Restoration
 
-**Status**: Etapa 1 de persistencia/ledger implementada; servicio L5 no implementado
+**Status**: Etapa 2 del servicio interno implementada y probada; HTTP/L4 siguen diferidos
 **Feature**: [spec.md](../spec.md)
 **Data model**: [data-model.md](../data-model.md)
 **Web routes**: [web-urls.md](web-urls.md)
 
-This document defines the L5 restoration service and HTTP contract. Etapa 1 solo prepara
-el ledger y su esquema. No implementa el servicio, no restaura tareas y no autoriza aplicar
-migraciones/DDL a bases reales, cambiar permisos ni ejecutar operaciones productivas.
+This document defines the L5 restoration service and deferred HTTP contract. Etapa 1 preparó
+el ledger; Etapa 2 implementa solo preview, restauración interna transaccional y auditoría
+post-commit. No registra rutas ni autoriza operaciones productivas. La campaña autorizada
+del 2026-10-20 usó exclusivamente fixtures sintéticas en la base de desarrollo `tareas`.
 
 ## Boundary and invariants
 
@@ -27,9 +28,10 @@ migraciones/DDL a bases reales, cambiar permisos ni ejecutar operaciones product
 - L4 remains GET-only. I on `Tareas - Tareas eliminadas` controls history visibility;
   S on `Tareas` controls restoration. Neither permission grants the other.
 
-## Proposed service interface
+## Internal service interface
 
-Names are proposals for implementation, not existing public APIs:
+The APIs below are implemented in `tareas/services/logical_restoration.py`. They are not
+HTTP endpoints and do not expose restoration through L4:
 
 ```text
 build_logical_restoration_preview(
@@ -94,16 +96,20 @@ ledger DDL plus additive `logical_restoration_schema.sql` contract are updated. 
 read-only `preview_logical_restoration_schema()` checks the configured backend and, for
 MYSQL_CONFIG, reports the server version and checks the exact selected database, column,
 unique index and source FK. It does not certify server-version compatibility or CHECK
-enforcement. No migration or DDL has been applied to a real database. The Django migration
-router allows migrations to SYSTEM aliases; deployers must explicitly target the configured
-`BASE_TAREAS` Django alias, not migrate an unrelated `default` database.
+enforcement. The additive L5 SQL contract was applied by direct SQL to the owner-authorized
+development database `tareas` on 2026-10-20; the L5 preflight is `CURRENT`. No Django
+migration was applied to the operational database, and this test authorization does not
+extend to production. The Django migration router allows migrations to SYSTEM aliases;
+deployers must explicitly target the configured `BASE_TAREAS` Django alias, not migrate an
+unrelated `default` database.
 
-Future callers must create the pending operation and copied manifest inside one
-`BASE_TAREAS` transaction. A pre-commit failure rolls them back. The future restore service
-must set `COMMITTED/LOGICALLY_RESTORED` only in the same transaction as task-marker changes;
-Etapa 1 does not expose that transition. A commit with uncertain acknowledgement is
-resolved by the new UUID; it is never reused. A rolled-back attempt leaves no committed
-restoration row. No cross-database transaction with audit or filesystem is claimed.
+The service locks the company, exact manifest task rows, retained relation/document rows,
+the source operation and its manifest. It creates or resumes the matching pending row,
+copies the exact manifest, clears only the four logical-deletion markers, and transitions
+the new ledger operation to `COMMITTED/LOGICALLY_RESTORED` in the same `BASE_TAREAS`
+transaction. A pre-commit failure rolls back both task markers and new ledger data. A commit
+with uncertain acknowledgement is resolved by the same new UUID; it is never reused for a
+different request. No cross-database transaction with audit or filesystem is claimed.
 
 For `MYSQL_CONFIG`, resolve through the existing Tareas role and public Settings
 connection API, use parameterized SQL, check `SELECT DATABASE()` equals exactly `tareas`,
@@ -203,16 +209,41 @@ conexiones simuladas. La ejecución focalizada combinada registró 163 PASS, 0 F
 0 SKIP para persistencia/schema L5 y regresiones L2/L3/L4. La carrera concurrente se
 probó en SQLite aislada; MariaDB real sigue pendiente.
 
+## Etapa 2 actual
+
+Implementados `build_logical_restoration_preview()`, `restore_logical_task_tree()` y
+`reconcile_logical_restoration_audit()` en `tareas/services/logical_restoration.py`, además
+de las transiciones y locks de ledger requeridos en los adaptadores existentes. El preview
+es de solo lectura e incluye el manifiesto, filas/estados, relaciones retenidas, documentos,
+referencias no expuestas de archivos, advertencias y bloqueos. La confirmación vuelve a
+calcular su fingerprint bajo locks; las filas ausentes o inconsistentes bloquean todo el
+manifiesto. No cambia estados de negocio, relaciones, documentos ni archivos.
+
+Se permite continuar cuando la auditoría de la eliminación original sigue pendiente o con
+error; el preview lo informa y cada operación de auditoría se concilia independientemente.
+Las referencias externas de origen se informan como advertencia y no bloquean, según la
+decisión del propietario. La disponibilidad física de archivos no se comprueba.
+
+La auditoría de restauración se entrega después del commit mediante
+`AuditoriaService.log_event_idempotent()` y se reconcilia por el UUID de restauración. El
+servicio no agrega rutas, vistas, tokens HTTP ni cambia la proyección L4. El guard de raíz
+L2 permanece intacto: los ciclos posteriores de eliminación/restauración todavía no están
+habilitados. El 2026-10-20 se ejecutó una campaña con fixtures sintéticas en MariaDB
+10.11.13: T01–T12 y T14 pasaron; T13 quedó parcial, T15 usó un doble de auditoría central
+en memoria y T16 permanece pendiente. Las conexiones operacionales de la campaña verificaron
+`DATABASE() = tareas`; se limpiaron las fixtures y no se tocaron archivos físicos ni otras
+bases. La regresión focal de `AppDocs.settings_test` registró 153 PASS.
+
 ## Open decisions
 
 - Whether exact parent-child edge snapshots are required to detect direct SQL changes
   outside official L3 writers.
-- Whether a source deletion with unresolved audit status blocks preview or can be restored
-  while the original audit is reconciled independently.
 - The authoritative, non-destructive way to confirm an external file is missing.
 - The response to replaying an old deletion UUID after its task was restored; it must never
   execute another deletion.
 - Whether failed, rolled-back restoration attempts require a durable history row separate
   from committed restoration operations.
+- Repeated cycles remain blocked by the unchanged L2 root guard and require separate
+  authorization before that guard can be changed.
 - New Spanish/English UI keys, if needed, require separate authorization for global
   translation files outside `tareas/`.
