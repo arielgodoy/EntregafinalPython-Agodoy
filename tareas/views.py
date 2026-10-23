@@ -50,6 +50,8 @@ _MENSAJE_EMPRESA_BASE_00 = (
 _CLAVE_EMPRESA_BASE_00_REQUERIDA = "tareas.empresa_base00.requerida"
 _LOGICAL_DELETION_PREVIEW_SALT = "tareas.logical-deletion-preview"
 _LOGICAL_DELETION_PREVIEW_MAX_AGE = 900
+_LOGICAL_RESTORATION_PREVIEW_SALT = "tareas.logical-restoration-preview"
+_LOGICAL_RESTORATION_PREVIEW_MAX_AGE = 900
 
 
 def _guard_empresa_base_00(request):
@@ -175,6 +177,7 @@ from .forms import (
     ReunionParticipanteForm,
     ReunionRevisionForm,
     ReunionTareaForm,
+    TareaCreateForm,
     TareaForm,
     TaskEditForm,
     ReprogramTaskForm,
@@ -219,7 +222,15 @@ from .services.reading import (
     get_previous_comment_page,
     recognize_loaded_comments,
 )
-from .services.hierarchy import get_children, get_parent, is_effectively_annulled
+from .services.hierarchy import (
+    get_children,
+    get_parent,
+    is_effectively_annulled,
+)
+from .services.hierarchy_creation import (
+    list_eligible_hierarchy_parents,
+    create_child_task_atomic,
+)
 from .services.lifecycle import (
     annul_task,
     approve_closure,
@@ -324,6 +335,11 @@ from .services.logical_deletion import (
     LogicalDeletionNotFound,
     LogicalDeletionStorageError,
     logically_delete_task_tree,
+)
+from .services.logical_restoration import (
+    LogicalRestorationError,
+    build_logical_restoration_preview,
+    restore_logical_task_tree,
 )
 from .services.deleted_tasks_history import (
     DeletedTaskHistoryError,
@@ -1239,6 +1255,15 @@ class DeletedTaskHistoryOperationView(DeletedTasksHistoryAccessMixin, View):
             if item.task is not None
         )
         user_labels = _history_user_labels(user_ids)
+        empresa = _history_empresa(request)
+        can_preview_restoration = bool(
+            operation.deletion_status in {"CURRENTLY_DELETED", "INCONSISTENT"}
+            and _history_can_read_tareas(
+                request,
+                empresa,
+                "supervisor",
+            )
+        )
         return render(
             request,
             self.template_name,
@@ -1259,6 +1284,15 @@ class DeletedTaskHistoryOperationView(DeletedTasksHistoryAccessMixin, View):
                 ),
                 "task_list_url": reverse("tareas:eliminadas_lista"),
                 "task_item_label": "tareas.tarea",
+                "can_preview_restoration": can_preview_restoration,
+                "restoration_preview_url": (
+                    reverse(
+                        "tareas:restauracion_logica",
+                        kwargs={"operation_id": operation.operation_id},
+                    )
+                    if can_preview_restoration
+                    else None
+                ),
             },
         )
 
@@ -1371,6 +1405,426 @@ def _has_explicit_deleted_history_ingresar(user, empresa):
             ingresar=True,
         ).exists()
     )
+
+
+def _can_create_hierarchy_task(user, empresa):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and get_valid_users_for_empresa(
+            empresa,
+            active_only=True,
+        ).filter(pk=user.pk).exists()
+        and user_has_permission_for_empresa(
+            user=user,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="crear",
+        )
+    )
+
+
+class TareaRestauracionLogicaPreviewView(
+    TareasLoginVerificarPermisoMixin,
+    View,
+):
+    template_name = "tareas/tarea_restauracion_logica_preview.html"
+    vista_nombre = "Tareas"
+    permiso_requerido = "supervisor"
+    http_method_names = ["get", "post"]
+
+    def _authorized_company(self, request):
+        empresa_id = _get_empresa_id(request)
+        empresa = Empresa.objects.using("default").filter(
+            pk=empresa_id,
+            codigo="00",
+        ).first()
+        if (
+            empresa is None
+            or not _can_logically_delete_task(request.user, empresa)
+            or not _has_explicit_deleted_history_ingresar(request.user, empresa)
+        ):
+            return None
+        return empresa
+
+    def _render_error(
+        self,
+        request,
+        *,
+        operation_id,
+        error_kind,
+        status,
+        restoration_operation_id=None,
+        preview_token=None,
+        motivo="",
+        retry_confirmation=False,
+    ):
+        return render(
+            request,
+            self.template_name,
+            {
+                "preview": None,
+                "preview_error": error_kind,
+                "restoration_operation_id": restoration_operation_id,
+                "preview_token": preview_token,
+                "motivo": motivo,
+                "retry_confirmation": retry_confirmation,
+                "history_url": reverse("tareas:eliminadas_lista"),
+                "restoration_url": reverse(
+                    "tareas:restauracion_logica",
+                    kwargs={"operation_id": operation_id},
+                ),
+                "operation_url": reverse(
+                    "tareas:eliminacion_operacion_detalle",
+                    kwargs={"operation_id": operation_id},
+                ),
+            },
+            status=status,
+        )
+
+    def get(self, request, operation_id):
+        empresa = self._authorized_company(request)
+        if empresa is None:
+            return VerificarPermisoMixin.handle_no_permission(self, request)
+
+        empresa_id = _get_empresa_id(request)
+        try:
+            preview = build_logical_restoration_preview(
+                actor=request.user,
+                empresa_id=empresa_id,
+                deletion_operation_id=operation_id,
+            )
+        except LogicalRestorationError as exc:
+            if exc.code == "RESTORATION_NOT_FOUND":
+                raise Http404 from exc
+            if exc.code in {
+                "RESTORATION_UNAUTHORIZED",
+                "RESTORATION_HISTORY_ACCESS_REQUIRED",
+            }:
+                return VerificarPermisoMixin.handle_no_permission(
+                    self,
+                    request,
+                )
+            conflict_codes = {
+                "RESTORATION_INVALID_REQUEST",
+                "RESTORATION_NOT_ELIGIBLE",
+                "RESTORATION_ALREADY_COMPLETED",
+                "RESTORATION_MANIFEST_INCOMPLETE",
+                "RESTORATION_TASK_MISSING",
+                "RESTORATION_STATE_CONFLICT",
+                "RESTORATION_HIERARCHY_CONFLICT",
+                "RESTORATION_PREVIEW_STALE",
+                "RESTORATION_OPERATION_ID_CONFLICT",
+                "RESTORATION_AUDIT_CONFLICT",
+            }
+            if exc.code in conflict_codes:
+                logger.info(
+                    "Logical restoration preview is blocked: code=%s operation=%s",
+                    exc.code,
+                    operation_id,
+                )
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind="conflict",
+                    status=409,
+                )
+            logger.error(
+                "Logical restoration preview is unavailable: code=%s operation=%s",
+                exc.code,
+                operation_id,
+            )
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="unavailable",
+                status=503,
+            )
+
+        restoration_operation_id = uuid4() if preview.can_restore else None
+        preview_token = None
+        if restoration_operation_id is not None:
+            preview_token = signing.dumps(
+                {
+                    "actor_id": request.user.pk,
+                    "empresa_id": empresa_id,
+                    "deletion_operation_id": preview.deletion_operation_id.hex,
+                    "restoration_operation_id": restoration_operation_id.hex,
+                    "manifest": [
+                        {
+                            "model_label": item.model_label,
+                            "object_id": item.object_id,
+                        }
+                        for item in preview.manifest
+                    ],
+                    "fingerprint": preview.fingerprint,
+                },
+                salt=_LOGICAL_RESTORATION_PREVIEW_SALT,
+                compress=True,
+            )
+        return render(
+            request,
+            self.template_name,
+            {
+                "preview": preview,
+                "can_restore": preview.can_restore,
+                "preview_token": preview_token,
+                "restoration_operation_id": (
+                    restoration_operation_id.hex
+                    if restoration_operation_id is not None
+                    else None
+                ),
+                "history_url": reverse("tareas:eliminadas_lista"),
+                "operation_url": reverse(
+                    "tareas:eliminacion_operacion_detalle",
+                    kwargs={"operation_id": preview.deletion_operation_id},
+                ),
+            },
+            status=200 if preview.can_restore else 409,
+        )
+
+    @staticmethod
+    def _valid_manifest(manifest):
+        if not isinstance(manifest, list) or not manifest:
+            return False
+
+        object_ids = set()
+        for item in manifest:
+            if (
+                not isinstance(item, dict)
+                or set(item) != {"model_label", "object_id"}
+                or item["model_label"] != Tarea._meta.label_lower
+                or type(item["object_id"]) is not int
+                or item["object_id"] < 1
+                or item["object_id"] in object_ids
+            ):
+                return False
+            object_ids.add(item["object_id"])
+        return True
+
+    def _load_confirmation_payload(self, request, operation_id, empresa_id):
+        try:
+            payload = signing.loads(
+                request.POST.get("preview_token", ""),
+                salt=_LOGICAL_RESTORATION_PREVIEW_SALT,
+                max_age=_LOGICAL_RESTORATION_PREVIEW_MAX_AGE,
+            )
+        except signing.BadSignature:
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+        if (
+            type(payload.get("actor_id")) is not int
+            or payload["actor_id"] != request.user.pk
+            or type(payload.get("empresa_id")) is not int
+            or payload["empresa_id"] != empresa_id
+            or not self._valid_manifest(payload.get("manifest"))
+        ):
+            return None
+
+        try:
+            source_operation_id = UUID(str(payload.get("deletion_operation_id")))
+            restoration_operation_id = UUID(
+                str(payload.get("restoration_operation_id"))
+            )
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+        submitted_restoration_operation_id = request.POST.get(
+            "restoration_operation_id",
+            "",
+        )
+        try:
+            submitted_restoration_operation_id = UUID(
+                submitted_restoration_operation_id
+            )
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+        fingerprint = payload.get("fingerprint")
+        if (
+            source_operation_id != operation_id
+            or submitted_restoration_operation_id != restoration_operation_id
+            or not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in fingerprint)
+        ):
+            return None
+        return payload, restoration_operation_id
+
+    def post(self, request, operation_id):
+        empresa = self._authorized_company(request)
+        if empresa is None:
+            return VerificarPermisoMixin.handle_no_permission(self, request)
+
+        empresa_id = _get_empresa_id(request)
+        confirmation = self._load_confirmation_payload(
+            request,
+            operation_id,
+            empresa_id,
+        )
+        if confirmation is None:
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="token_invalid",
+                status=400,
+            )
+        payload, restoration_operation_id = confirmation
+
+        if request.POST.get("confirm_restore") != "yes":
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="confirmation_required",
+                status=400,
+            )
+        motivo = request.POST.get("motivo", "").strip()
+        if not motivo:
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="reason_required",
+                status=400,
+            )
+
+        try:
+            result = restore_logical_task_tree(
+                actor=request.user,
+                empresa_id=empresa_id,
+                deletion_operation_id=operation_id,
+                restoration_operation_id=restoration_operation_id,
+                motivo=motivo,
+                expected_fingerprint=payload["fingerprint"],
+            )
+        except LogicalRestorationError as exc:
+            if exc.code == "RESTORATION_NOT_FOUND":
+                raise Http404 from exc
+            if exc.code in {
+                "RESTORATION_UNAUTHORIZED",
+                "RESTORATION_HISTORY_ACCESS_REQUIRED",
+            }:
+                return VerificarPermisoMixin.handle_no_permission(
+                    self,
+                    request,
+                )
+            if exc.code == "RESTORATION_AUDIT_PENDING":
+                return redirect(
+                    "tareas:eliminacion_operacion_detalle",
+                    operation_id=operation_id,
+                )
+            if exc.code == "RESTORATION_AUDIT_CONFLICT":
+                logger.error(
+                    "Logical restoration committed with an audit conflict: operation=%s",
+                    restoration_operation_id,
+                )
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind="audit_conflict",
+                    status=409,
+                )
+            if exc.code == "RESTORATION_COMMIT_UNCERTAIN":
+                logger.error(
+                    "Logical restoration commit remains uncertain: operation=%s",
+                    restoration_operation_id,
+                )
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind="commit_uncertain",
+                    status=503,
+                    restoration_operation_id=restoration_operation_id.hex,
+                    preview_token=request.POST.get("preview_token", ""),
+                    motivo=motivo,
+                    retry_confirmation=True,
+                )
+            if exc.code == "RESTORATION_INVALID_REQUEST":
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind="token_invalid",
+                    status=400,
+                )
+            if exc.code in {
+                "RESTORATION_NOT_ELIGIBLE",
+                "RESTORATION_ALREADY_COMPLETED",
+                "RESTORATION_MANIFEST_INCOMPLETE",
+                "RESTORATION_TASK_MISSING",
+                "RESTORATION_STATE_CONFLICT",
+                "RESTORATION_HIERARCHY_CONFLICT",
+                "RESTORATION_PREVIEW_STALE",
+                "RESTORATION_OPERATION_ID_CONFLICT",
+            }:
+                logger.info(
+                    "Logical restoration confirmation was rejected: code=%s operation=%s",
+                    exc.code,
+                    restoration_operation_id,
+                )
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind=(
+                        "preview_stale"
+                        if exc.code == "RESTORATION_PREVIEW_STALE"
+                        else "conflict"
+                    ),
+                    status=409,
+                )
+            if exc.code == "RESTORATION_BACKEND_UNAVAILABLE":
+                logger.error(
+                    "Logical restoration backend is unavailable: operation=%s",
+                    restoration_operation_id,
+                )
+                return self._render_error(
+                    request,
+                    operation_id=operation_id,
+                    error_kind="unavailable",
+                    status=503,
+                )
+            logger.error(
+                "Logical restoration failed with an unmapped service error: code=%s operation=%s",
+                exc.code,
+                restoration_operation_id,
+            )
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="unavailable",
+                status=503,
+            )
+
+        if result.status != TareaEliminacionOperacion.Estado.COMMITTED:
+            logger.error(
+                "Logical restoration returned an unconfirmed result: operation=%s",
+                restoration_operation_id,
+            )
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="conflict",
+                status=409,
+            )
+        if result.audit_status not in {
+            TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA,
+            TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+            TareaEliminacionOperacion.EstadoAuditoria.ERROR,
+        }:
+            logger.error(
+                "Logical restoration has an unsupported audit state: operation=%s",
+                restoration_operation_id,
+            )
+            return self._render_error(
+                request,
+                operation_id=operation_id,
+                error_kind="audit_conflict",
+                status=409,
+            )
+        return redirect(
+            "tareas:eliminacion_operacion_detalle",
+            operation_id=operation_id,
+        )
 
 
 class TareaEliminacionLogicaView(TareasLoginVerificarPermisoMixin, View):
@@ -2398,8 +2852,29 @@ class DetalleTareaView(TareasLoginVerificarPermisoMixin, DetailView):
         )
         hierarchy = self.detail_result.hierarchy
         context["tarea_padre"] = hierarchy.parent
+        context["tarea_raiz"] = hierarchy.root
         context["tareas_hijas"] = hierarchy.children
+        context["jerarquia_profundidad"] = hierarchy.depth
+        if hierarchy.depth == 0:
+            hierarchy_type = "mother" if hierarchy.children else "main"
+        elif hierarchy.depth == 1:
+            hierarchy_type = "child"
+        else:
+            hierarchy_type = "grandchild"
+        context["jerarquia_tipo"] = hierarchy_type
+        context["jerarquia_es_madre"] = bool(
+            hierarchy.depth == 1 and hierarchy.children
+        )
         context["tarea_anulada_efectivamente"] = hierarchy.effectively_annulled
+        context["puede_crear_tarea_hija"] = bool(
+            self.detail_result.core.estado == Tarea.Estado.ACTIVA
+            and not hierarchy.effectively_annulled
+            and hierarchy.depth < 2
+            and _can_create_hierarchy_task(
+                self.request.user,
+                self.detail_empresa,
+            )
+        )
         effective_ids = _detail_effective_participant_ids(self.detail_result)
         comentarios_vinculado = (
             self.request.user.is_active and self.request.user.pk in effective_ids
@@ -3667,19 +4142,64 @@ class RevocarEnlaceTareaView(TareasLoginVerificarPermisoMixin, View):
 
 class CrearTareaView(TareasLoginVerificarPermisoMixin, CreateView):
     model = Tarea
-    form_class = TareaForm
+    form_class = TareaCreateForm
     template_name = "tareas/tarea_form.html"
     vista_nombre = "Tareas"
     permiso_requerido = "crear"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        initial["tarea_madre"] = self.request.GET.get("tarea_madre", "")
+        return initial
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get("tarea_madre", "").strip():
+            empresa_id = _get_empresa_id(request)
+            empresa = Empresa.objects.using("default").filter(
+                pk=empresa_id,
+            ).first()
+            if empresa is None or not _can_create_hierarchy_task(
+                request.user,
+                empresa,
+            ):
+                return VerificarPermisoMixin.handle_no_permission(self, request)
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        empresa_id = _get_empresa_id(self.request)
-        kwargs["active_company"] = get_object_or_404(Empresa, pk=empresa_id)
+        if not hasattr(self, "active_company"):
+            empresa_id = _get_empresa_id(self.request)
+            self.active_company = get_object_or_404(
+                Empresa.objects.using("default"),
+                pk=empresa_id,
+            )
+        self.allow_hierarchy = _can_create_hierarchy_task(
+            self.request.user,
+            self.active_company,
+        )
+        self.hierarchy_options_unavailable = False
+        self.hierarchy_parents = ()
+        if self.allow_hierarchy:
+            try:
+                self.hierarchy_parents = list_eligible_hierarchy_parents(
+                    empresa_id=self.active_company.pk,
+                )
+            except (TaskStorageError, ValidationError) as exc:
+                logger.error(
+                    "Unable to load eligible task parents for company=%s",
+                    self.active_company.pk,
+                )
+                self.hierarchy_options_unavailable = True
+        kwargs["active_company"] = self.active_company
+        kwargs["hierarchy_parents"] = self.hierarchy_parents
+        kwargs["allow_hierarchy"] = self.allow_hierarchy
+        kwargs["hierarchy_options_unavailable"] = (
+            self.hierarchy_options_unavailable
+        )
         return kwargs
 
     def form_valid(self, form):
-        empresa = self.get_form_kwargs()["active_company"]
+        empresa = form.active_company
         data = CreateTaskDraftInput(
             titulo=form.cleaned_data["titulo"],
             descripcion=form.cleaned_data.get("descripcion", ""),
@@ -3693,16 +4213,57 @@ class CrearTareaView(TareasLoginVerificarPermisoMixin, CreateView):
             ),
             fecha_tope=form.cleaned_data["fecha_tope"],
         )
+        parent_id = form.cleaned_data.get("tarea_madre_id")
         try:
-            result = create_task_draft(
-                data,
-                active_company=empresa,
-                actor=self.request.user,
-            )
+            if parent_id is not None:
+                if not _can_create_hierarchy_task(self.request.user, empresa):
+                    return VerificarPermisoMixin.handle_no_permission(
+                        self,
+                        self.request,
+                    )
+                child_result = create_child_task_atomic(
+                    data,
+                    active_company=empresa,
+                    actor=self.request.user,
+                    parent_id=parent_id,
+                    departamento_id=form.cleaned_data.get("departamento_id"),
+                )
+                result = child_result.task
+                relation_id = child_result.relation_id
+            else:
+                result = create_task_draft(
+                    data,
+                    active_company=empresa,
+                    actor=self.request.user,
+                )
+                relation_id = None
         except (TaskStorageError, ValidationError) as exc:
-            form.add_error(None, str(exc))
+            if parent_id is not None:
+                logger.info(
+                    "Hierarchical task creation was rejected for company=%s parent=%s",
+                    empresa.pk,
+                    parent_id,
+                )
+                form.add_error(
+                    None,
+                    ValidationError(
+                        "tareas.messages.generic_error",
+                        code="tareas.messages.generic_error",
+                    ),
+                )
+            else:
+                form.add_error(None, str(exc))
             return self.form_invalid(form)
         self.object = result.task
+        after = {
+            "estado": result.estado,
+            "prioridad": result.prioridad,
+            "responsable_id": result.responsable_id,
+            "correlativo": result.correlativo,
+        }
+        if parent_id is not None:
+            after["tarea_madre_id"] = parent_id
+            after["tarea_relacion_id"] = relation_id
         log_task_operation(
             self.request,
             task_id=result.id,
@@ -3710,12 +4271,7 @@ class CrearTareaView(TareasLoginVerificarPermisoMixin, CreateView):
             action="CREATE",
             operation="create_task",
             correlativo=result.correlativo,
-            after={
-                "estado": result.estado,
-                "prioridad": result.prioridad,
-                "responsable_id": result.responsable_id,
-                "correlativo": result.correlativo,
-            },
+            after=after,
         )
         return redirect("tareas:detalle_tarea", pk=result.id)
 

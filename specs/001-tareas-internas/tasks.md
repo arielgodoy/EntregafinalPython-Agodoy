@@ -81,11 +81,11 @@ description: "Task list for the Tareas Internas master feature"
 - [x] T025 [US3] Implementar `TareaParticipante`, roles, invitados y confirmación de lectura en `tareas/models.py` o servicios propios, validando usuarios activos y empresa activa. El detalle administra explícitamente `PARTICIPANTE` e `INVITADO_OBSERVADOR`; creador y responsable siguen siendo relaciones implícitas sin filas artificiales.
 - [x] T026 [US3] Implementar reasignación trazable en `tareas/services/assignment.py`, incluyendo responsable anterior/nuevo, usuario, fecha y motivo.
 - [x] T027 [US3] Implementar asignación independiente por responsable y asignación masiva en `tareas/services/assignment.py`, conservando nombre propio y fecha común por tarea.
-- [x] T028 [US3] Implementar `TareaRelacion` con padre/hijo/nieto y límite de dos niveles en `tareas/services/hierarchy.py`, adoptando el nuevo contrato de anulación por flag: `Tarea.anulada` (BooleanField) y `anulada_efectivamente` LÓGICA (tarea OR padre OR abuelo), SIN snapshots de estados de descendientes NI cascadas físicas de `ANULADA`. Anular/reactivar solo cambia `anulada` de la tarea afectada; una hija anulada directamente sigue anulada tras reactivar el padre. Validar anti-ciclo, un solo padre y máximo padre→hija→nieta. Integrar participantes cuando corresponda; el cambio de departamento solo se permite cuando su definición esté cerrada, sin inventar Local. REQUIERE primero la remediación del modelo de anulación de Phase 2 (ver nota en T018).
-- [x] T029 [US3] Implementar navegación vertical y validación de cierre bloqueado por descendientes en `tareas/views.py`, `tareas/urls.py` y templates propios.
+- [x] T028 [US3] Implementar `TareaRelacion` con padre/hijo/nieto y límite de dos niveles en `tareas/services/hierarchy.py`, adoptando el nuevo contrato de anulación por flag: `Tarea.anulada` (BooleanField) y `anulada_efectivamente` LÓGICA (tarea OR padre OR abuelo), SIN snapshots de estados de descendientes NI cascadas físicas de `ANULADA`. Anular/reactivar solo cambia `anulada` de la tarea afectada; una hija anulada directamente sigue anulada tras reactivar el padre. Validar anti-ciclo, un solo padre y máximo padre→hija→nieta. Integrar participantes cuando corresponda; el cambio de departamento solo se permite cuando su definición esté cerrada, sin inventar Local. La creación jerárquica exige madre ACTIVA y válida; la regla se revalida en la operación atómica. REQUIERE primero la remediación del modelo de anulación de Phase 2 (ver nota en T018).
+- [x] T029 [US3] Implementar navegación vertical y bloqueo de cierre por descendientes en `tareas/views.py`, `tareas/urls.py` y templates propios. La acción `Crear tarea hija` reutiliza el formulario y ruta `crear_tarea`, con selector opcional de madre; crea hija/nieta completa mediante `create_child_task_atomic(...)`, hereda dimensiones conforme a FR-E02 y conserva el guard Base 00.
 - [x] T030 [US3] Implementar `fecha_tope` con nulabilidad técnica histórica pero obligatoria desde el alta de Tarea nueva, manteniendo la defensa al publicar; `fecha_cumplimiento` con limpieza al rechazo de cierre, cálculo derivado de atraso, causas múltiples por reprogramación y reprogramación con justificación obligatoria en `tareas/services/scheduling.py`, conforme a FR-G01…G05.
 - [x] T031 [US3] Implementar `MiniTarea` con una persona, checkbox hecho/no hecho y bloqueo de cierre en `tareas/models.py` y `tareas/services/closure.py`.
-- [x] T032 [US3] Añadir tests de asignación, usuarios inactivos, participantes, lectura, reasignación, jerarquía, fechas, atraso, reprogramación y mini-tareas en `tareas/tests/test_assignment.py`, `tareas/tests/test_hierarchy.py` y `tareas/tests/test_scheduling.py`.
+- [x] T032 [US3] Añadir tests de asignación, usuarios inactivos, participantes, lectura, reasignación, jerarquía, fechas, atraso, reprogramación y mini-tareas en `tareas/tests/test_assignment.py`, `tareas/tests/test_hierarchy.py`, `tareas/tests/test_hierarchy_creation.py`, `tareas/tests/test_hierarchy_views.py` y `tareas/tests/test_scheduling.py`. Los arneses manuales de MariaDB modelan la precondición de madre ACTIVA; no se ejecutan como parte de la regresión local.
 - [x] T033 [US3] Preparar migraciones aditivas de asignación, jerarquía, fechas y mini-tareas en `tareas/migrations/`, preservando datos existentes; la migración de jerarquía introduce `Tarea.anulada` y la relación, sin snapshots de estados de descendientes ni cascada física; no ejecutar migraciones durante esta generación.
 - [x] T034 [US3] Validar escenarios E9 de `specs/001-tareas-internas/quickstart.md` y documentar cualquier bloqueo de integración externa sin implementar P1 Local.
 
@@ -544,13 +544,23 @@ comprueba ambos de forma independiente. No eliminar físicamente ni tocar archiv
   disponible; registrar resultado/error en el ledger y agregar reconciliación por UUID
   para respuesta ambigua o evento pendiente, sin duplicar eventos ni modificar `auditoria`.
   Depende de T158.
-- [ ] T160 Integrar preview y confirmación HTTP desde L4 usando POST/CSRF, motivo y token
-  ligado a actor, empresa, eliminación, manifiesto y fingerprint. Revalidar `ingresar` en
-  `Tareas - Tareas eliminadas` y `supervisor` en `Tareas` en backend/servicio; `eliminar`,
-  `is_staff` e `is_superuser` no sustituyen S. Mantener L4 GET-only. Depende de T157 y T159.
-- [ ] T161 Extender el servicio y las vistas L4 para mantener consultables las operaciones
+- [x] T160-A Registrar el GET de previsualización L5 desde L4 en modo estrictamente
+  read-only. Validar I en `Tareas - Tareas eliminadas` y S en `Tareas`, empresa activa y
+  Base 00; consumir `build_logical_restoration_preview()` y preparar token firmado con
+  actor, empresa, eliminación, UUID nuevo, manifiesto y fingerprint. No implementar POST
+  ni mutar el ledger. Depende de T157 y T159.
+- [x] T160-B Integrar el POST de confirmación desde L4 con CSRF, motivo y confirmación
+  obligatorios; validar token firmado y vigente, actor, empresa, eliminación, UUID,
+  manifiesto y fingerprint; delegar exclusivamente en `restore_logical_task_tree()`.
+  Preservar UUID en reintentos, distinguir auditoría pendiente/conflicto y commit incierto,
+  aplicar PRG hacia L4 y cubrir permisos/CSRF/conflictos con pruebas HTTP aisladas.
+  `eliminar`, `is_staff` e `is_superuser` no sustituyen S. Sin MariaDB, migraciones ni DDL.
+  Validación: 30 pruebas de `test_logical_restoration_views.py` PASS.
+  Depende de T160-A.
+- [x] T161 Extender el servicio y las vistas L4 para mantener consultables las operaciones
   de eliminación anteriores, distinguir `CURRENTLY_DELETED`/`RESTORED`/`INCONSISTENT` y
   mostrar la nueva operación de restauración sin presentar campos actuales como snapshots.
+  Proyección L4 de solo lectura, aislamiento por empresa y gate i18n ES/EN completados.
   Depende de T156 y T158.
 - [x] T162 Añadir pruebas unitarias del preview, manifiesto, validaciones de estado,
   restauración todo-o-nada, idempotencia, rollback y conservación de datos para los casos
@@ -562,11 +572,11 @@ comprueba ambos de forma independiente. No eliminar físicamente ni tocar archiv
   sobre una instancia aislada cuyo nombre efectivo de base sea `tareas`; no apuntar a
   producción ni aplicar DDL/migraciones operativas durante tests. Depende de T163.
 
-**Estado de L5**: T156–T159 y T162 están completas; T160–T161 y T163–T165 siguen
-pendientes. El servicio se probó en `AppDocs.settings_test` y con fixtures sintéticas en
-MariaDB de desarrollo: T01–T12 y T14 PASS; T13 parcial; T15 con auditoría central simulada;
-T16 pendiente. Las fixtures se limpiaron. No hay ruta HTTP ni proyección L4, y el guard L2
-no cambió.
+**Estado de L5**: T156–T162 están completas, incluidos T160-A, T160-B y T161; T163–T165
+siguen pendientes. El servicio se probó en `AppDocs.settings_test` y con fixtures sintéticas
+en MariaDB de desarrollo: T01–T12 y T14 PASS; T13 parcial; T15 con auditoría central
+simulada; T16 pendiente. Las fixtures se limpiaron. GET y POST HTTP de preview/restauración
+están registrados; no se modificó el guard L2 ni se ejecutaron pruebas reales MariaDB en T160-B.
 
 - [ ] T165 Evaluar por separado el cambio del guard L2 de raíz para admitir nuevos ciclos
   de eliminación/restauración, solo tras autorización específica. No forma parte de la

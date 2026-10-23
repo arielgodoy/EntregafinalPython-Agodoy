@@ -87,6 +87,45 @@
                                     </div>
                                 </section>
 
+                                {% if not object and form.allow_hierarchy %}
+                                <section class="border-top pt-4 mb-4" aria-labelledby="jerarquia-titulo">
+                                    <h5 id="jerarquia-titulo" class="h6 text-uppercase text-muted mb-3">
+                                        <span data-key="tareas.hierarchy.form.section">Jerarquía de tareas</span>
+                                    </h5>
+                                    <div class="mb-3">
+                                        <label for="{{ form.tarea_madre.id_for_label }}" class="form-label" data-key="tareas.hierarchy.form.parent_label">Tarea madre</label>
+                                        <select name="{{ form.tarea_madre.html_name }}" id="{{ form.tarea_madre.id_for_label }}" class="form-select" data-hierarchy-parent>
+                                            <option value="" data-task-kind="main" data-key="tareas.hierarchy.form.parent_none"{% if not form.tarea_madre.value %} selected{% endif %}>Sin tarea madre — Tarea principal</option>
+                                            {% for parent in form.hierarchy_parents %}
+                                            <option value="{{ parent.task_id }}" data-task-kind="{% if parent.depth == 0 %}child{% else %}grandchild{% endif %}" data-scope="{{ parent.tipo_ambito|default:'' }}" data-department-id="{{ parent.departamento_id|default_if_none:'' }}"{% if form.tarea_madre.value|stringformat:"s" == parent.task_id|stringformat:"s" %} selected{% endif %}>{{ parent.correlativo }} — {{ parent.titulo }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        {% if form.tarea_madre.errors %}
+                                        <div class="text-danger small">{% include "tareas/_i18n_form_errors.html" with errors=form.tarea_madre.errors.as_data %}</div>
+                                        {% endif %}
+                                        <div class="form-text" data-key="tareas.hierarchy.form.parent_help">Solo se muestran tareas ACTIVA de la empresa actual que pueden recibir otro nivel.</div>
+                                        {% if form.hierarchy_options_unavailable %}
+                                        <div class="alert alert-warning mt-2 mb-0" role="status"><span data-key="tareas.hierarchy.form.parents_unavailable">No se pudo consultar la jerarquía. Aún puedes crear una tarea principal; la creación jerárquica no está disponible.</span></div>
+                                        {% elif form.hierarchy_options_empty %}
+                                        <div class="form-text mt-2" data-key="tareas.hierarchy.form.no_eligible_parents">No hay tareas madre elegibles; puedes crear una tarea principal.</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="alert alert-info py-2" role="status" data-hierarchy-task-kind>
+                                        <span data-task-kind-label="main"{% if form.selected_parent %} hidden{% endif %} data-key="tareas.hierarchy.form.type_main">Se creará una tarea principal.</span>
+                                        <span data-task-kind-label="child"{% if not form.selected_parent or form.selected_parent.depth != 0 %} hidden{% endif %} data-key="tareas.hierarchy.form.type_child">Se creará una tarea hija completa.</span>
+                                        <span data-task-kind-label="grandchild"{% if not form.selected_parent or form.selected_parent.depth != 1 %} hidden{% endif %} data-key="tareas.hierarchy.form.type_grandchild">Se creará una tarea nieta completa.</span>
+                                    </div>
+                                    <div class="mb-3" data-hierarchy-department{% if not form.selected_parent or form.selected_parent.tipo_ambito != "DEPARTAMENTO" %} hidden{% endif %}>
+                                        <label for="{{ form.departamento.id_for_label }}" class="form-label" data-key="tareas.hierarchy.form.department_label">Departamento de la tarea hija</label>
+                                        {{ form.departamento }}
+                                        <div class="form-text" data-key="tareas.hierarchy.form.department_help">Se hereda el departamento de la madre; puedes seleccionar otro departamento de la misma empresa.</div>
+                                        {% if form.departamento.errors %}
+                                        <div class="text-danger small">{% include "tareas/_i18n_form_errors.html" with errors=form.departamento.errors.as_data %}</div>
+                                        {% endif %}
+                                    </div>
+                                </section>
+                                {% endif %}
+
                                 <div class="text-end">
                                     <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><span data-key="tareas.actions.cancelar">Cancelar</span></a>
                                     <button type="submit" class="btn btn-primary"><span data-key="tareas.actions.guardar">Guardar</span></button>
@@ -102,5 +141,5 @@
 {% endblock content %}
 
 {% block extra_js %}
-{% if object %}<script src="{% static 'tareas/js/participant_admin.js' %}"></script>{% endif %}
+{% if object %}<script src="{% static 'tareas/js/participant_admin.js' %}"></script>{% else %}<script defer src="{% static 'tareas/js/hierarchy_creation_form.js' %}"></script>{% endif %}
 {% endblock extra_js %}

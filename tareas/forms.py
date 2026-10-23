@@ -8,6 +8,7 @@ from django import forms
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
+from organizacion.models import Departamento
 from tareas.services.reading import COMMENT_PAGE_SIZE
 from tareas.services.comment_storage import resolve_comment_storage
 from tareas.services.document_storage import resolve_document_storage
@@ -492,6 +493,124 @@ class TareaForm(forms.ModelForm):
             "descripcion": forms.Textarea(attrs={"rows": 4}),
             "fecha_tope": forms.DateInput(attrs={"type": "date"}),
         }
+
+
+class TareaCreateForm(TareaForm):
+    tarea_madre = forms.ChoiceField(
+        required=False,
+        error_messages={"invalid_choice": "tareas.messages.generic_error"},
+    )
+    departamento = forms.ModelChoiceField(
+        queryset=Departamento.objects.none(),
+        required=False,
+        empty_label="",
+        error_messages={"invalid_choice": "tareas.messages.generic_error"},
+    )
+
+    def __init__(
+        self,
+        *args,
+        hierarchy_parents=(),
+        allow_hierarchy=True,
+        hierarchy_options_unavailable=False,
+        **kwargs,
+    ):
+        active_company = kwargs.get("active_company")
+        super().__init__(*args, **kwargs)
+        self.hierarchy_parents = tuple(hierarchy_parents)
+        self.allow_hierarchy = bool(allow_hierarchy)
+        self.hierarchy_options_unavailable = hierarchy_options_unavailable
+        self.hierarchy_options_empty = bool(
+            self.allow_hierarchy
+            and not self.hierarchy_parents
+            and not self.hierarchy_options_unavailable
+        )
+        self._parent_by_id = {
+            str(parent.task_id): parent for parent in self.hierarchy_parents
+        }
+        self.fields["tarea_madre"].choices = [("", "")] + (
+            [
+                (
+                    str(parent.task_id),
+                    f"{parent.correlativo} — {parent.titulo}",
+                )
+                for parent in self.hierarchy_parents
+            ]
+            if self.allow_hierarchy
+            else []
+        )
+        self.fields["departamento"].queryset = (
+            Departamento.objects.using("default").filter(
+                empresa_id=active_company.pk,
+            ).order_by("codigo", "pk")
+            if active_company is not None
+            else Departamento.objects.none()
+        )
+        self.fields["departamento"].widget.attrs["class"] = "form-select"
+        self.selected_parent = None
+
+        selected_parent_id = (
+            self.data.get("tarea_madre")
+            if self.is_bound
+            else self.initial.get("tarea_madre")
+        )
+        self.selected_parent = self._parent_by_id.get(str(selected_parent_id or ""))
+        if (
+            not self.is_bound
+            and self.selected_parent is not None
+            and self.selected_parent.tipo_ambito == Tarea.Ambito.DEPARTAMENTO
+        ):
+            self.initial.setdefault(
+                "departamento",
+                self.selected_parent.departamento_id,
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        parent_id = cleaned_data.get("tarea_madre")
+        parent = self._parent_by_id.get(str(parent_id or ""))
+        self.selected_parent = parent
+
+        if not parent_id:
+            cleaned_data["tarea_madre_id"] = None
+            cleaned_data["departamento_id"] = None
+            if cleaned_data.get("departamento") is not None:
+                self.add_error(
+                    "departamento",
+                    forms.ValidationError("tareas.messages.generic_error"),
+                )
+            return cleaned_data
+
+        if parent is None:
+            self.add_error(
+                "tarea_madre",
+                forms.ValidationError("tareas.messages.generic_error"),
+            )
+            return cleaned_data
+
+        cleaned_data["tarea_madre_id"] = parent.task_id
+        selected_department = cleaned_data.get("departamento")
+        if parent.tipo_ambito == Tarea.Ambito.DEPARTAMENTO:
+            department_id = (
+                selected_department.pk
+                if selected_department is not None
+                else parent.departamento_id
+            )
+            if department_id is None:
+                self.add_error(
+                    "departamento",
+                    forms.ValidationError("tareas.messages.generic_error"),
+                )
+            cleaned_data["departamento_id"] = department_id
+        else:
+            if selected_department is not None:
+                self.add_error(
+                    "departamento",
+                    forms.ValidationError("tareas.messages.generic_error"),
+                )
+            cleaned_data["departamento_id"] = None
+
+        return cleaned_data
 
 
 class ReprogramTaskForm(forms.Form):

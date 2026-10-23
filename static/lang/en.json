@@ -1255,7 +1255,7 @@
     "tareas.connection_roles.status.missing": "NOT CONFIGURED",
     "tareas.list.title": "Tasks",
     "tareas.deleted_history.title": "Deleted Tasks",
-    "tareas.deleted_history.description": "Read-only historical view",
+    "tareas.deleted_history.description": "Logical deletion and restoration history",
     "tareas.deleted_history.filters.title": "Filters",
     "tareas.deleted_history.filter.search": "Search",
     "tareas.deleted_history.filter.date_from": "Deleted from",
@@ -1276,6 +1276,7 @@
     "tareas.deleted_history.column.reference": "Reference",
     "tareas.deleted_history.column.title": "Title",
     "tareas.deleted_history.column.state": "State",
+    "tareas.deleted_history.column.restoration_status": "Record status",
     "tareas.deleted_history.column.deleted_at": "Deleted",
     "tareas.deleted_history.column.actor": "User",
     "tareas.deleted_history.column.audit": "Audit",
@@ -1283,6 +1284,7 @@
     "tareas.deleted_history.column.actions": "Actions",
     "tareas.deleted_history.action.view_task": "View task",
     "tareas.deleted_history.action.view_operation": "Operation",
+    "tareas.deleted_history.action.preview_restoration": "Preview restoration",
     "tareas.deleted_history.action.back": "Back to history",
     "tareas.deleted_history.error.invalid_filters": "The filters are invalid.",
     "tareas.deleted_history.error.unavailable": "History is currently unavailable.",
@@ -1291,6 +1293,9 @@
     "tareas.deleted_history.page.previous": "Previous",
     "tareas.deleted_history.page.next": "Next",
     "tareas.deleted_history.not_available": "Not available",
+    "tareas.deleted_history.projection.currently_deleted": "Currently deleted",
+    "tareas.deleted_history.projection.restored": "Restored",
+    "tareas.deleted_history.projection.inconsistent": "Inconsistent",
     "tareas.deleted_history.physical.physically_retained": "Physically retained",
     "tareas.deleted_history.physical.physically_absent": "Physically absent",
     "tareas.deleted_history.physical.inconsistent": "Inconsistent",
@@ -1331,6 +1336,7 @@
     "tareas.deleted_history.operation.created_at": "Started",
     "tareas.deleted_history.operation.committed_at": "Committed",
     "tareas.deleted_history.operation.status": "Status",
+    "tareas.deleted_history.operation.deletion_status": "Deletion status",
     "tareas.deleted_history.operation.result": "Result",
     "tareas.deleted_history.operation.audit": "Audit status",
     "tareas.deleted_history.operation.audit_consistency": "Audit consistency",
@@ -1347,6 +1353,22 @@
     "tareas.deleted_history.operation.files": "File references",
     "tareas.deleted_history.operation.attempts": "Attempts",
     "tareas.deleted_history.operation.no_files": "The operation has no file references.",
+    "tareas.deleted_history.restoration.title": "Linked restoration operation",
+    "tareas.deleted_history.restoration.id": "Restoration UUID",
+    "tareas.deleted_history.restoration.source_operation": "Source deletion",
+    "tareas.deleted_history.restoration.actor": "User",
+    "tareas.deleted_history.restoration.reason": "Restoration reason",
+    "tareas.deleted_history.restoration.created_at": "Started",
+    "tareas.deleted_history.restoration.committed_at": "Committed",
+    "tareas.deleted_history.restoration.status": "Ledger status",
+    "tareas.deleted_history.restoration.result": "Result code",
+    "tareas.deleted_history.restoration.audit": "Audit status",
+    "tareas.deleted_history.restoration.audit_event": "Audit event",
+    "tareas.deleted_history.restoration.validation": "Link and manifest",
+    "tareas.deleted_history.restoration.validation_valid": "Valid and linked to the original deletion",
+    "tareas.deleted_history.restoration.validation_invalid": "Inconsistent link or manifest",
+    "tareas.deleted_history.restoration.pending_notice": "The restoration operation is pending; the deletion is not considered restored.",
+    "tareas.deleted_history.restoration.audit_unconfirmed": "The restoration is committed; central audit is not yet confirmed.",
     "tareas.deleted_history.detail.heading": "Historical details",
     "tareas.deleted_history.detail.task_data": "Retained data",
     "tareas.deleted_history.detail.reference": "Reference",
@@ -1364,6 +1386,7 @@
     "tareas.deleted_history.detail.local": "Location",
     "tareas.deleted_history.detail.department": "Department",
     "tareas.deleted_history.detail.core_unavailable": "The operational row is no longer available; only the ledger reference is retained.",
+    "tareas.deleted_history.detail.restored_snapshot_unavailable": "The task was restored. The ledger retains the trace, but not a snapshot of its data before restoration.",
     "tareas.deleted_history.related.hierarchy": "Operation hierarchy",
     "tareas.deleted_history.related.parent": "Parent",
     "tareas.deleted_history.related.child": "Child",
@@ -1373,6 +1396,7 @@
     "tareas.deleted_history.related.mini_tasks": "Mini-tasks and history",
     "tareas.deleted_history.related.documents": "Documents and history",
     "tareas.deleted_history.related.documents_notice": "Only metadata is shown; files and URLs are not exposed in history.",
+    "tareas.deleted_history.related.restored_snapshot_unavailable": "Current related data is not presented as a historical snapshot of the deletion.",
     "tareas.deleted_history.related.evidence": "Closure and milestone evidence",
     "tareas.deleted_history.related.transitions": "Transitions and closures",
     "tareas.deleted_history.related.comments": "Comments",
@@ -1605,8 +1629,26 @@
     "tareas.hierarchy.annulled": "Annulled",
     "tareas.hierarchy.anulada_efectivamente": "Annulled",
     "tareas.hierarchy.children": "Children:",
-    "tareas.hierarchy.parent": "Parent:",
+    "tareas.hierarchy.parent": "Mother:",
     "tareas.hierarchy.title": "Hierarchy",
+    "tareas.hierarchy.kind.main": "Main task",
+    "tareas.hierarchy.kind.mother": "Parent task",
+    "tareas.hierarchy.kind.child": "Child task",
+    "tareas.hierarchy.kind.grandchild": "Grandchild task",
+    "tareas.hierarchy.kind.also_mother": "Also a parent",
+    "tareas.hierarchy.direct_mother": "Direct mother:",
+    "tareas.hierarchy.create_child": "Create child task",
+    "tareas.hierarchy.form.section": "Task hierarchy",
+    "tareas.hierarchy.form.parent_label": "Parent task",
+    "tareas.hierarchy.form.parent_none": "No parent task — Main task",
+    "tareas.hierarchy.form.parent_help": "Only ACTIVE tasks in the current company that can receive another level are listed.",
+    "tareas.hierarchy.form.parents_unavailable": "The hierarchy could not be loaded. You can still create a main task; hierarchical creation is unavailable.",
+    "tareas.hierarchy.form.no_eligible_parents": "There are no eligible parent tasks; you can create a main task.",
+    "tareas.hierarchy.form.type_main": "A main task will be created.",
+    "tareas.hierarchy.form.type_child": "A complete child task will be created.",
+    "tareas.hierarchy.form.type_grandchild": "A complete grandchild task will be created.",
+    "tareas.hierarchy.form.department_label": "Department for the child task",
+    "tareas.hierarchy.form.department_help": "The parent's department is inherited; you may select another department in the same company.",
     "tareas.links.created_at": "Created",
     "tareas.links.created_by": "Created by",
     "tareas.links.empty": "No shared links.",
@@ -1861,7 +1903,7 @@
     ,"tareas.logical_deletion.preview.descendant_count": "Descendants"
     ,"tareas.logical_deletion.preview.description": "Review the scope before confirming. Records are retained for historical consultation."
     ,"tareas.logical_deletion.preview.hierarchy": "Tasks included in the hierarchy"
-    ,"tareas.logical_deletion.preview.logical_only": "Logical deletion marks the tasks in scope and retains their records; it does not physically delete documents or allow restoration."
+    ,"tareas.logical_deletion.preview.logical_only": "Logical deletion marks the tasks in scope and retains their records and documents; it does not delete files. Restoration is a separate logical operation that preserves traceability."
     ,"tareas.logical_deletion.preview.no_blockers": "The preview found no blockers."
     ,"tareas.logical_deletion.preview.no_elements": "There are no related items."
     ,"tareas.logical_deletion.preview.no_shared_references": "No shared references were found."
@@ -1882,4 +1924,82 @@
     ,"tareas.logical_deletion.preview.warning_prefix": "Warning"
     ,"tareas.logical_deletion.preview.warnings": "Warnings"
     ,"tareas.logical_deletion.success": "Logical deletion completed."
+    ,"tareas.logical_restoration.preview.title": "Logical restoration preview"
+    ,"tareas.logical_restoration.preview.description": "Review the operation and exact manifest. This page is read-only and does not restore data."
+    ,"tareas.logical_restoration.preview.back": "Back to operation"
+    ,"tareas.logical_restoration.preview.error.conflict": "The restoration is not eligible or is unavailable for confirmation."
+    ,"tareas.logical_restoration.preview.error.unavailable": "The preview could not be generated."
+    ,"tareas.logical_restoration.preview.error.token_invalid": "The confirmation is invalid or expired. Review the operation again."
+    ,"tareas.logical_restoration.preview.error.reason_required": "Enter the required reason for restoring."
+    ,"tareas.logical_restoration.preview.error.confirmation_required": "Explicitly confirm that you reviewed the restoration."
+    ,"tareas.logical_restoration.preview.error.preview_stale": "The manifest or state changed after the preview. Review the operation before trying again."
+    ,"tareas.logical_restoration.preview.error.audit_conflict": "The operational restoration is confirmed, but the central audit has a conflict. Review the history detail; do not start another restoration."
+    ,"tareas.logical_restoration.preview.error.commit_uncertain": "The commit result could not be resolved. Keep the same UUID and retry this confirmation."
+    ,"tareas.logical_restoration.preview.reason": "Restoration reason"
+    ,"tareas.logical_restoration.preview.reason_help": "The reason will be associated with the restoration operation."
+    ,"tareas.logical_restoration.preview.confirmation": "I confirm that I reviewed the task and every manifest item to be restored."
+    ,"tareas.logical_restoration.preview.confirm_button": "Confirm restoration"
+    ,"tareas.logical_restoration.preview.retry_operation_id": "Restoration UUID to keep unchanged"
+    ,"tareas.logical_restoration.preview.retry_same_operation": "Retry the same operation"
+    ,"tareas.logical_restoration.preview.current_values_notice": "Descriptive data is read from the current manifest rows; it is not a historical snapshot stored in the ledger."
+    ,"tareas.logical_restoration.preview.confirmation_not_enabled": "Confirmation is not enabled yet. This stage only allows review of the preview."
+    ,"tareas.logical_restoration.preview.blocked": "The operation is blocked. Review the blockers before requesting confirmation."
+    ,"tareas.logical_restoration.preview.deletion_summary": "Original deletion operation"
+    ,"tareas.logical_restoration.preview.operation_id": "Deletion UUID"
+    ,"tareas.logical_restoration.preview.root_task": "Root task"
+    ,"tareas.logical_restoration.preview.company": "Company"
+    ,"tareas.logical_restoration.preview.deletion_actor": "Deleting user"
+    ,"tareas.logical_restoration.preview.deletion_created_at": "Deletion date"
+    ,"tareas.logical_restoration.preview.deletion_reason": "Deletion reason"
+    ,"tareas.logical_restoration.preview.source_audit": "Deletion audit"
+    ,"tareas.logical_restoration.preview.manifest_count": "Tasks in manifest"
+    ,"tareas.logical_restoration.preview.restoration_operation_id": "UUID reserved for this preview"
+    ,"tareas.logical_restoration.preview.eligibility": "Eligibility"
+    ,"tareas.logical_restoration.preview.eligible": "Eligible for restoration"
+    ,"tareas.logical_restoration.preview.not_eligible": "Not eligible for restoration"
+    ,"tareas.logical_restoration.preview.external_references": "References from tasks outside the manifest"
+    ,"tareas.logical_restoration.preview.manifest": "Exact task manifest"
+    ,"tareas.logical_restoration.preview.manifest_item_type": "Type"
+    ,"tareas.logical_restoration.preview.task_id": "ID"
+    ,"tareas.logical_restoration.preview.correlativo": "Reference"
+    ,"tareas.logical_restoration.preview.task_title": "Current title"
+    ,"tareas.logical_restoration.preview.task_state": "Current state"
+    ,"tareas.logical_restoration.preview.row_status": "Row"
+    ,"tareas.logical_restoration.preview.root_badge": "Root"
+    ,"tareas.logical_restoration.preview.row_present": "Present"
+    ,"tareas.logical_restoration.preview.row_missing": "Missing"
+    ,"tareas.logical_restoration.preview.no_tasks": "No tasks are available in the manifest."
+    ,"tareas.logical_restoration.preview.task_details": "Current rows included in the manifest"
+    ,"tareas.logical_restoration.preview.hierarchy": "Retained hierarchy relationships"
+    ,"tareas.logical_restoration.preview.parent": "Parent"
+    ,"tareas.logical_restoration.preview.child": "Child"
+    ,"tareas.logical_restoration.preview.no_hierarchy": "There are no hierarchy relationships to show."
+    ,"tareas.logical_restoration.preview.documents": "Retained documents"
+    ,"tareas.logical_restoration.preview.document_id": "Document"
+    ,"tareas.logical_restoration.preview.document_task": "Task"
+    ,"tareas.logical_restoration.preview.document_type": "Type"
+    ,"tareas.logical_restoration.preview.document_format": "Format"
+    ,"tareas.logical_restoration.preview.document_state": "State"
+    ,"tareas.logical_restoration.preview.file_reference": "File reference"
+    ,"tareas.logical_restoration.preview.url_reference": "URL reference"
+    ,"tareas.logical_restoration.preview.present": "Present"
+    ,"tareas.logical_restoration.preview.absent": "Absent"
+    ,"tareas.logical_restoration.preview.files_not_touched": "Physical files are not checked, recreated, or modified."
+    ,"tareas.logical_restoration.preview.no_documents": "There are no related documents to show."
+    ,"tareas.logical_restoration.preview.warnings": "Warnings"
+    ,"tareas.logical_restoration.preview.warning.source_audit_unconfirmed": "The original deletion audit is not confirmed; it is reconciled separately."
+    ,"tareas.logical_restoration.preview.warning.external_origin_references": "There are references from tasks outside the manifest; they will not be modified."
+    ,"tareas.logical_restoration.preview.warning.files_not_verified": "Physical availability of referenced files was not verified."
+    ,"tareas.logical_restoration.preview.warning.other": "Informational warning from the service."
+    ,"tareas.logical_restoration.preview.no_warnings": "There are no warnings."
+    ,"tareas.logical_restoration.preview.blockers": "Blockers"
+    ,"tareas.logical_restoration.preview.blocker.manifest_incomplete": "The manifest does not match the original deletion."
+    ,"tareas.logical_restoration.preview.blocker.already_completed": "The original deletion already has a committed restoration."
+    ,"tareas.logical_restoration.preview.blocker.state_conflict": "Current markers do not match the original deletion."
+    ,"tareas.logical_restoration.preview.blocker.task_missing": "A manifest task is missing; it will not be reconstructed."
+    ,"tareas.logical_restoration.preview.blocker.hierarchy_conflict": "The retained relationships do not form a valid hierarchy."
+    ,"tareas.logical_restoration.preview.blocker.not_eligible": "The original operation is not eligible for restoration."
+    ,"tareas.logical_restoration.preview.blocker.other": "The service reported a blocker that prevents restoration."
+    ,"tareas.logical_restoration.preview.no_blockers": "There are no blockers."
+    ,"tareas.logical_restoration.preview.cancel": "Back to history"
 }

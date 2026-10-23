@@ -114,6 +114,24 @@ automático, adjuntos e historial de T104 sin cambios.
 - Se preservan los cambios locales preexistentes protegidos en `.vscode/settings.json` y
   `tareas/services/permanent_deletion.py`; no se autoriza commit ni push.
 
+### Session 2026-10-23 — Creación jerárquica desde Crear tarea
+
+- La creación de tareas principales, hijas y nietas reutiliza el formulario y la ruta
+  existentes `crear_tarea`; no se crea una pantalla de jerarquía separada ni se usa
+  `MiniTarea` como sustituto de una Tarea completa.
+- Se conserva el `EmpresaBase00GuardMixin` existente para el formulario. La empresa del
+  registro procede de la sesión; la conexión operacional `BASE_TAREAS` continúa usando
+  su configuración actual, cuyo catálogo MySQL pertenece a Base 00. No se amplía en
+  esta implementación el alcance de empresa activa.
+- Solo una madre con `estado=ACTIVA`, no anulada ni efectivamente anulada, puede recibir
+  una nueva hija. Una Tarea nueva comienza en `BORRADOR`; una hija debe publicarse y
+  quedar `ACTIVA` antes de poder recibir una nieta. Se conserva el máximo de dos niveles.
+- Las dimensiones de una madre con ámbito `LOCAL` se conservan en descendientes y no
+  se permite agregar Departamento en esa rama. Para una madre `DEPARTAMENTO`, se hereda
+  el ámbito y el departamento inicial; se permite elegir otro Departamento de la misma
+  empresa, manteniendo `local_id=NULL`. Una madre histórica sin ámbito produce una hija
+  también sin ámbito. Se respeta el XOR existente entre Local y Departamento.
+
 ### Session 2026-09-07
 
 - Q: ¿Publicar con responsable desactivado/eliminado? → A: Bloquear la publicación e informar; el usuario debe asignar un responsable válido antes de publicar.
@@ -391,7 +409,7 @@ participantes en múltiples responsables y no requiere implementación ahora.
 ## E. Jerarquía de Trabajo
 
 - **FR-E01**: Una tarea MUST soportar padre → hijos → nietos, con máximo DOS niveles bajo el padre.
-- **FR-E02**: Los descendientes MUST heredar las dimensiones base del padre, pero MUST poder cambiar el departamento.
+- **FR-E02**: Los descendientes MUST heredar las dimensiones base del padre, pero MUST poder cambiar el departamento cuando la madre tenga ámbito `DEPARTAMENTO`. Si la madre tiene ámbito `LOCAL`, se conserva exactamente el mismo Local y `tipo_ambito=LOCAL`; no se asigna Departamento en esa rama. Una madre sin ámbito produce descendientes sin ámbito. Se conserva el XOR entre `local_id` y `departamento_id`, y toda dimensión debe pertenecer a la Empresa de la Tarea.
 - **FR-E03**: El padre MUST NOT cerrar mientras haya descendientes sin cerrar.
 - **FR-E04**: MUST existir navegación vertical (padre ↔ descendientes).
 - **FR-E05**: **Anulación por flag (diseño simplificado aprobado)**: `Tarea.anulada` (BooleanField, default False). Anular una tarea pone `anulada=True` y reactivar pone `anulada=False`, SIN cambiar `estado`, responsable, participantes, correlativo, `cierre_completado`, relaciones ni ningún otro dato funcional. NO se usa `estado == ANULADA` junto a `anulada == True` como doble fuente de verdad.
@@ -403,6 +421,7 @@ participantes en múltiples responsables y no requiere implementación ahora.
 - **FR-E11**: **Cierre de padre con descendientes**: el padre no puede cerrarse mientras tenga descendientes operativos pendientes. Una descendiente anulada efectivamente MUST NOT considerarse trabajo pendiente activo.
 - **FR-E12**: **Empresa en jerarquía**: toda relación jerárquica MUST permanecer dentro de la misma Empresa; padre, hija y nieta comparten el mismo `empresa_id` obligatorio.
 - **FR-E13**: **Ciclos y profundidad**: una tarea MUST NOT ser hija de sí misma; MUST NOT existir ciclo (A→B→A); cada tarea tiene como máximo un padre; máximo padre→hija→nieta (sin tercer nivel bajo la raíz). La validación concreta se implementa en el servicio de jerarquía.
+- **FR-E14 — Madre elegible para creación**: Solo una Tarea con estado `ACTIVA` puede recibir una nueva hija. La madre no puede estar anulada ni efectivamente anulada por un ancestro, eliminada lógicamente, pertenecer a otra Empresa o exceder la profundidad máxima. La regla MUST revalidarse dentro de `create_child_task_atomic(...)`; el selector HTML no es autoridad. La nueva Tarea completa nace como `BORRADOR`. La acción se presenta en el detalle únicamente para una madre elegible y con permiso `Tareas` + `crear`, respetando el guard Base 00 existente y la Empresa activa de sesión.
 
 **Key Entities — E**: Relación padre/hija (tarea_padre), Subtarea, Mini-tarea.
 

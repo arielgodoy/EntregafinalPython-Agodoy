@@ -52,14 +52,17 @@ class MySQLDetailStorageTests(TestCase):
         role.database_name = "tareas"
         role.save()
 
-    def _fake_connection(self, task_rows=None, parent_rows=None, child_rows=None, participant_rows=None,
-                         mini_rows=None, event_rows=None, attachment_rows=None):
+    def _fake_connection(self, task_rows=None, parent_rows=None, ancestor_rows=None,
+                         child_rows=None, participant_rows=None, mini_rows=None,
+                         event_rows=None, attachment_rows=None):
         connection = MagicMock()
         cursor = MagicMock()
         task_rows = task_rows if task_rows is not None else []
         parent_rows = parent_rows if parent_rows is not None else []
+        ancestor_rows = ancestor_rows if ancestor_rows is not None else []
         child_rows = child_rows if child_rows is not None else []
         participant_rows = participant_rows if participant_rows is not None else []
+        task_id = task_rows[0][0] if task_rows else None
 
         def execute(sql, params=()):
             cursor._last_sql = sql
@@ -74,12 +77,17 @@ class MySQLDetailStorageTests(TestCase):
                     )
                 ]
                 cursor._result = task_rows
-            elif "from tareas_tarearelacion" in lower and "padre_id" in lower:
+            elif "from tareas_tarearelacion" in lower and "where r.padre_id = %s" in lower:
                 cursor.description = [(name,) for name in ("id", "correlativo", "titulo", "estado", "anulada")]
                 cursor._result = child_rows
-            elif "from tareas_tarearelacion" in lower:
+            elif "from tareas_tarearelacion" in lower and "where r.hija_id = %s" in lower:
                 cursor.description = [(name,) for name in ("id", "correlativo", "titulo", "estado", "anulada")]
-                cursor._result = parent_rows
+                if params[0] == task_id:
+                    cursor._result = parent_rows
+                elif parent_rows and params[0] == parent_rows[0][0]:
+                    cursor._result = ancestor_rows
+                else:
+                    cursor._result = []
             elif "from tareas_tareaparticipante" in lower:
                 cursor.description = [("usuario_id",), ("rol",)]
                 cursor._result = participant_rows
@@ -172,6 +180,8 @@ class MySQLDetailStorageTests(TestCase):
         self.assertEqual(result.core.correlativo, "B0000003")
         self.assertEqual(result.core.titulo, "MYSQL task")
         self.assertEqual(result.participants[0].username, self.user.username)
+        self.assertEqual(result.hierarchy.depth, 0)
+        self.assertEqual(result.hierarchy.root.id, 3)
         task_query = next(
             call.args[0]
             for call in cursor.execute.call_args_list
@@ -183,6 +193,51 @@ class MySQLDetailStorageTests(TestCase):
             for call in cursor.execute.call_args_list
         ))
         open_connection.assert_called_once_with(self.connection, database_name="tareas")
+
+    @patch("tareas.services.detail_storage.open_mysql_connection")
+    def test_mysql_hierarchy_projects_direct_parent_root_depth_and_company_scope(
+        self,
+        open_connection,
+    ):
+        task_row = (
+            3, "Tarea nieta", "Description", "NORMAL", "A0000003", 0, 0, 0,
+            "ACTIVA", self.user.pk, self.empresa.pk, self.user.pk,
+            "2026-10-05", "2026-10-05", None, "2026-10-31", None,
+        )
+        connection, cursor = self._fake_connection(
+            task_rows=[task_row],
+            parent_rows=[(2, "A0000002", "Madre directa", "ACTIVA", 1)],
+            ancestor_rows=[(1, "A0000001", "Tarea principal", "ACTIVA", 0)],
+        )
+        open_connection.return_value = nullcontext(connection)
+
+        result = MySQLTaskDetailStorage(
+            self.connection,
+            "tareas",
+        ).get_task_detail(
+            task_id=3,
+            empresa_id=self.empresa.pk,
+            sections=TaskDetailSections(
+                mini_tasks=False,
+                links=False,
+                milestones=False,
+                documents=False,
+            ),
+        )
+
+        self.assertEqual(result.hierarchy.parent.id, 2)
+        self.assertEqual(result.hierarchy.root.id, 1)
+        self.assertEqual(result.hierarchy.depth, 2)
+        self.assertTrue(result.hierarchy.effectively_annulled)
+        hierarchy_sql = [
+            call.args[0].lower()
+            for call in cursor.execute.call_args_list
+            if "from tareas_tarearelacion" in call.args[0].lower()
+            and "where r.hija_id = %s" in call.args[0].lower()
+        ]
+        self.assertTrue(hierarchy_sql)
+        self.assertTrue(all("p.empresa_id = %s" in sql for sql in hierarchy_sql))
+        self.assertTrue(all("c.empresa_id = %s" in sql for sql in hierarchy_sql))
 
     @patch("tareas.services.detail_storage.open_mysql_connection")
     def test_missing_mysql_task_has_no_django_fallback(self, open_connection):

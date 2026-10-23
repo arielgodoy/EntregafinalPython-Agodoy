@@ -1,0 +1,328 @@
+{% extends "partials/base.html" %}
+{% load static tz %}
+
+{% block title %}Previsualización de restauración lógica{% endblock title %}
+
+{% block pagetitle %}
+{% include "partials/page-title.html" with title="Restaurar tarea" pagetitle="Tareas" title_key="tareas.logical_restoration.preview.title" pagetitle_key="menu.tareas" %}
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div id="l5-restoration-preview" class="container-fluid">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                <div>
+                    <h4 class="fw-semibold mb-1"><span data-key="tareas.logical_restoration.preview.title">Previsualización de restauración lógica</span></h4>
+                    <p class="text-muted mb-0"><span data-key="tareas.logical_restoration.preview.description">Revisa la operación y el manifiesto exacto. Esta pantalla es de solo lectura y no restaura datos.</span></p>
+                </div>
+                <a class="btn btn-outline-secondary" href="{{ operation_url }}"><span data-key="tareas.logical_restoration.preview.back">Volver a la operación</span></a>
+            </div>
+
+            {% if preview_error %}
+            <div class="alert alert-{% if preview_error == 'conflict' or preview_error == 'preview_stale' or preview_error == 'audit_conflict' %}warning{% else %}danger{% endif %}" role="alert">
+                {% if preview_error == "conflict" %}
+                <span data-key="tareas.logical_restoration.preview.error.conflict">La restauración no es elegible o no está disponible para confirmación.</span>
+                {% elif preview_error == "token_invalid" %}
+                <span data-key="tareas.logical_restoration.preview.error.token_invalid">La confirmación no es válida o venció. Vuelve a revisar la operación.</span>
+                {% elif preview_error == "reason_required" %}
+                <span data-key="tareas.logical_restoration.preview.error.reason_required">Indica el motivo obligatorio para restaurar.</span>
+                {% elif preview_error == "confirmation_required" %}
+                <span data-key="tareas.logical_restoration.preview.error.confirmation_required">Confirma explícitamente que revisaste la restauración.</span>
+                {% elif preview_error == "preview_stale" %}
+                <span data-key="tareas.logical_restoration.preview.error.preview_stale">El manifiesto o el estado cambió desde la previsualización. Revisa la operación antes de volver a intentarlo.</span>
+                {% elif preview_error == "audit_conflict" %}
+                <span data-key="tareas.logical_restoration.preview.error.audit_conflict">La restauración operacional está confirmada, pero existe un conflicto de auditoría central. Revisa el detalle histórico; no vuelvas a iniciar otra restauración.</span>
+                {% elif preview_error == "commit_uncertain" %}
+                <span data-key="tareas.logical_restoration.preview.error.commit_uncertain">No se pudo resolver el resultado del commit. Conserva el mismo UUID y reintenta esta confirmación.</span>
+                {% else %}
+                <span data-key="tareas.logical_restoration.preview.error.unavailable">No se pudo generar la previsualización.</span>
+                {% endif %}
+            </div>
+            {% if retry_confirmation %}
+            <div class="card border-warning mb-4">
+                <div class="card-body">
+                    <p class="mb-2">
+                        <span data-key="tareas.logical_restoration.preview.retry_operation_id">UUID de restauración que debe conservarse</span>:
+                        <code>{{ restoration_operation_id }}</code>
+                    </p>
+                    <form method="post" action="{{ restoration_url }}" data-logical-restoration-form>
+                        {% csrf_token %}
+                        <input type="hidden" name="preview_token" value="{{ preview_token }}">
+                        <input type="hidden" name="restoration_operation_id" value="{{ restoration_operation_id }}">
+                        <input type="hidden" name="motivo" value="{{ motivo }}">
+                        <input type="hidden" name="confirm_restore" value="yes">
+                        <button type="submit" class="btn btn-warning" data-restoration-submit>
+                            <span data-key="tareas.logical_restoration.preview.retry_same_operation">Reintentar la misma operación</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            {% if preview %}
+            <div class="alert alert-info" role="note">
+                <span data-key="tareas.logical_restoration.preview.current_values_notice">Los datos descriptivos se leen de las filas actuales del manifiesto; no son una instantánea histórica guardada por el ledger.</span>
+            </div>
+
+            {% if not can_restore %}
+            <div class="alert alert-warning" role="status">
+                <span data-key="tareas.logical_restoration.preview.blocked">La operación está bloqueada. Revisa los bloqueos antes de solicitar una confirmación.</span>
+            </div>
+            {% endif %}
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-7">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.deletion_summary">Operación original de eliminación</span></h5></div>
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.operation_id">UUID de eliminación</dt>
+                                <dd class="col-sm-8 text-break"><code>{{ preview.deletion_operation_id }}</code></dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.root_task">Tarea raíz</dt>
+                                <dd class="col-sm-8">{{ preview.root_correlativo }} — {{ preview.root_task_id }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.company">Empresa</dt>
+                                <dd class="col-sm-8">{{ preview.empresa_codigo }} — {{ preview.empresa_descripcion|default:"—" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.deletion_actor">Usuario que eliminó</dt>
+                                <dd class="col-sm-8">{{ preview.deletion_actor_id }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.deletion_created_at">Fecha de eliminación</dt>
+                                <dd class="col-sm-8">{{ preview.deletion_committed_at|default:preview.deletion_created_at|localtime|date:"Y-m-d H:i" }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.deletion_reason">Motivo de eliminación</dt>
+                                <dd class="col-sm-8">{{ preview.deletion_motivo|default:"—"|linebreaksbr }}</dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.source_audit">Auditoría de eliminación</dt>
+                                <dd class="col-sm-8"><code>{{ preview.source_audit_status }}</code></dd>
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.manifest_count">Tareas en el manifiesto</dt>
+                                <dd class="col-sm-8">{{ preview.task_ids|length }}</dd>
+                                {% if restoration_operation_id %}
+                                <dt class="col-sm-4" data-key="tareas.logical_restoration.preview.restoration_operation_id">UUID reservado para esta previsualización</dt>
+                                <dd class="col-sm-8 text-break"><code>{{ restoration_operation_id }}</code></dd>
+                                {% endif %}
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-5">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.eligibility">Elegibilidad</span></h5></div>
+                        <div class="card-body">
+                            {% if preview.can_restore %}
+                            <span class="badge bg-success-subtle text-success" data-key="tareas.logical_restoration.preview.eligible">Elegible para restauración</span>
+                            {% else %}
+                            <span class="badge bg-danger-subtle text-danger" data-key="tareas.logical_restoration.preview.not_eligible">No elegible para restauración</span>
+                            {% endif %}
+                            {% if preview.external_origin_reference_count %}
+                            <p class="small text-muted mt-3 mb-0">
+                                <span data-key="tareas.logical_restoration.preview.external_references">Referencias desde tareas externas al manifiesto</span>:
+                                {{ preview.external_origin_reference_count }}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.manifest">Manifiesto exacto de tareas</span></h5></div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col" data-key="tareas.logical_restoration.preview.manifest_item_type">Tipo</th>
+                                <th scope="col" data-key="tareas.logical_restoration.preview.task_id">ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in preview.manifest %}
+                            <tr>
+                                <td><code>{{ item.model_label }}</code></td>
+                                <td>{{ item.object_id }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="2" class="text-center text-muted py-4"><span data-key="tareas.logical_restoration.preview.no_tasks">El manifiesto no contiene tareas.</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-body border-top">
+                    <h6 class="fw-semibold mb-3"><span data-key="tareas.logical_restoration.preview.task_details">Filas actuales incluidas en el manifiesto</span></h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col" data-key="tareas.logical_restoration.preview.task_id">ID</th>
+                                    <th scope="col" data-key="tareas.logical_restoration.preview.correlativo">Correlativo</th>
+                                    <th scope="col" data-key="tareas.logical_restoration.preview.task_title">Título actual</th>
+                                    <th scope="col" data-key="tareas.logical_restoration.preview.task_state">Estado actual</th>
+                                    <th scope="col" data-key="tareas.logical_restoration.preview.row_status">Fila</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in preview.tasks %}
+                                <tr>
+                                    <td>{{ task.task_id }}{% if task.task_id == preview.root_task_id %} <span class="badge bg-primary-subtle text-primary" data-key="tareas.logical_restoration.preview.root_badge">Raíz</span>{% endif %}</td>
+                                    <td>{{ task.correlativo|default:"—" }}</td>
+                                    <td>{{ task.titulo|default:"—" }}</td>
+                                    <td><code>{{ task.estado|default:"—" }}</code></td>
+                                    <td>
+                                        {% if task.physically_present %}
+                                        <span data-key="tareas.logical_restoration.preview.row_present">Presente</span>
+                                        {% else %}
+                                        <span data-key="tareas.logical_restoration.preview.row_missing">Ausente</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="5" class="text-center text-muted py-4"><span data-key="tareas.logical_restoration.preview.no_tasks">No hay tareas disponibles en el manifiesto.</span></td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.hierarchy">Relaciones jerárquicas conservadas</span></h5></div>
+                        <div class="card-body">
+                            {% for edge in preview.hierarchy %}
+                            <div class="border-bottom py-2">
+                                <span data-key="tareas.logical_restoration.preview.parent">Padre</span> {{ edge.0 }}
+                                <i class="ri-arrow-right-line mx-2" aria-hidden="true"></i>
+                                <span data-key="tareas.logical_restoration.preview.child">Hija</span> {{ edge.1 }}
+                            </div>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_restoration.preview.no_hierarchy">No hay relaciones jerárquicas que mostrar.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.documents">Documentos conservados</span></h5></div>
+                        <div class="card-body">
+                            {% for document in preview.documents %}
+                            <div class="border-bottom py-2">
+                                <div class="fw-medium">
+                                    <span data-key="tareas.logical_restoration.preview.document_id">Documento</span>
+                                    {{ document.document_id }}
+                                    <span class="text-muted">·</span>
+                                    <span data-key="tareas.logical_restoration.preview.document_task">Tarea</span>
+                                    {{ document.task_id }}
+                                </div>
+                                <small class="text-muted">
+                                    <span data-key="tareas.logical_restoration.preview.document_type">Tipo</span>: <code>{{ document.tipo }}</code>
+                                    · <span data-key="tareas.logical_restoration.preview.document_format">Formato</span>: <code>{{ document.formato_archivo }}</code>
+                                    · <span data-key="tareas.logical_restoration.preview.document_state">Estado</span>: <code>{{ document.estado }}</code>
+                                </small>
+                                <div class="small mt-1">
+                                    <span data-key="tareas.logical_restoration.preview.file_reference">Referencia de archivo</span>:
+                                    {% if document.has_file %}<span data-key="tareas.logical_restoration.preview.present">Presente</span>{% else %}<span data-key="tareas.logical_restoration.preview.absent">Ausente</span>{% endif %}
+                                    · <span data-key="tareas.logical_restoration.preview.url_reference">Referencia URL</span>:
+                                    {% if document.has_url %}<span data-key="tareas.logical_restoration.preview.present">Presente</span>{% else %}<span data-key="tareas.logical_restoration.preview.absent">Ausente</span>{% endif %}
+                                </div>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_restoration.preview.no_documents">No hay documentos relacionados que mostrar.</p>
+                            {% endfor %}
+                            <p class="small text-muted mt-3 mb-0"><span data-key="tareas.logical_restoration.preview.files_not_touched">No se comprueba, recrea ni modifica ningún archivo físico.</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.warnings">Advertencias</span></h5></div>
+                        <div class="card-body">
+                            {% for issue in preview.warnings %}
+                            <div class="border-bottom py-2">
+                                <code>{{ issue.code }}</code>
+                                {% if issue.code == "SOURCE_AUDIT_UNCONFIRMED" %}
+                                <span data-key="tareas.logical_restoration.preview.warning.source_audit_unconfirmed">La auditoría de la eliminación original no está confirmada; se concilia por separado.</span>
+                                {% elif issue.code == "EXTERNAL_ORIGIN_REFERENCES" %}
+                                <span data-key="tareas.logical_restoration.preview.warning.external_origin_references">Hay referencias desde tareas externas al manifiesto; no se modificarán.</span>
+                                {% elif issue.code == "FILES_NOT_VERIFIED" %}
+                                <span data-key="tareas.logical_restoration.preview.warning.files_not_verified">La disponibilidad física de archivos referenciados no se verificó.</span>
+                                {% else %}
+                                <span data-key="tareas.logical_restoration.preview.warning.other">Advertencia informativa del servicio.</span>
+                                {% endif %}
+                            </div>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_restoration.preview.no_warnings">No hay advertencias.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <div class="card h-100">
+                        <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.logical_restoration.preview.blockers">Bloqueos</span></h5></div>
+                        <div class="card-body">
+                            {% for issue in preview.blockers %}
+                            <div class="border-bottom py-2">
+                                <code>{{ issue.code }}</code>
+                                {% if issue.code == "RESTORATION_MANIFEST_INCOMPLETE" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.manifest_incomplete">El manifiesto no coincide con la eliminación original.</span>
+                                {% elif issue.code == "RESTORATION_ALREADY_COMPLETED" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.already_completed">La eliminación original ya tiene una restauración confirmada.</span>
+                                {% elif issue.code == "RESTORATION_STATE_CONFLICT" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.state_conflict">Las marcas actuales no coinciden con la eliminación original.</span>
+                                {% elif issue.code == "RESTORATION_TASK_MISSING" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.task_missing">Falta una tarea del manifiesto; no se reconstruirá.</span>
+                                {% elif issue.code == "RESTORATION_HIERARCHY_CONFLICT" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.hierarchy_conflict">Las relaciones conservadas no forman una jerarquía válida.</span>
+                                {% elif issue.code == "RESTORATION_NOT_ELIGIBLE" %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.not_eligible">La operación original no es elegible para restauración.</span>
+                                {% else %}
+                                <span data-key="tareas.logical_restoration.preview.blocker.other">El servicio informó un bloqueo que impide restaurar.</span>
+                                {% endif %}
+                            </div>
+                            {% empty %}
+                            <p class="text-muted mb-0" data-key="tareas.logical_restoration.preview.no_blockers">No hay bloqueos.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if can_restore %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="post" action="{% url 'tareas:restauracion_logica' operation_id=preview.deletion_operation_id %}" data-logical-restoration-form>
+                        {% csrf_token %}
+                        <input type="hidden" name="preview_token" value="{{ preview_token }}">
+                        <input type="hidden" name="restoration_operation_id" value="{{ restoration_operation_id }}">
+                        <div class="mb-3">
+                            <label for="logical-restoration-reason" class="form-label">
+                                <span data-key="tareas.logical_restoration.preview.reason">Motivo de restauración</span>
+                            </label>
+                            <textarea id="logical-restoration-reason" name="motivo" class="form-control" rows="3" required>{{ motivo|default:"" }}</textarea>
+                            <div class="form-text" data-key="tareas.logical_restoration.preview.reason_help">El motivo quedará asociado a la operación de restauración.</div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input id="logical-restoration-confirm" class="form-check-input" type="checkbox" name="confirm_restore" value="yes" required>
+                            <label class="form-check-label" for="logical-restoration-confirm" data-key="tareas.logical_restoration.preview.confirmation">Confirmo que revisé la tarea y todos los elementos del manifiesto que se restaurarán.</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary" data-restoration-submit>
+                            <span data-key="tareas.logical_restoration.preview.confirm_button">Confirmar restauración</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="d-flex flex-wrap justify-content-end gap-2">
+                <a class="btn btn-light" href="{{ operation_url }}"><span data-key="tareas.logical_restoration.preview.cancel">Volver al historial</span></a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script defer src="{% static 'tareas/js/logical_restoration_preview.js' %}"></script>
+{% endblock extra_js %}

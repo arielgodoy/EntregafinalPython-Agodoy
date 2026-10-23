@@ -29,7 +29,12 @@
                     <h4 class="fw-semibold mb-1"><span data-key="tareas.deleted_history.operation.title">Detalle de operación</span></h4>
                     <p class="text-muted mb-0 text-break">{{ operation.operation_id }}</p>
                 </div>
-                <a class="btn btn-outline-secondary" href="{{ task_list_url }}"><span data-key="tareas.deleted_history.action.back">Volver al historial</span></a>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if can_preview_restoration %}
+                    <a class="btn btn-outline-primary" href="{{ restoration_preview_url }}"><span data-key="tareas.deleted_history.action.preview_restoration">Previsualizar restauración</span></a>
+                    {% endif %}
+                    <a class="btn btn-outline-secondary" href="{{ task_list_url }}"><span data-key="tareas.deleted_history.action.back">Volver al historial</span></a>
+                </div>
             </div>
 
             <div class="card mb-4">
@@ -42,6 +47,16 @@
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.reason">Motivo</dt><dd class="col-sm-9">{{ operation.motivo|default:"—"|linebreaksbr }}</dd>
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.created_at">Iniciada</dt><dd class="col-sm-9">{{ operation.created_at|localtime|date:"Y-m-d H:i" }}</dd>
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.committed_at">Confirmada</dt><dd class="col-sm-9">{{ operation.committed_at|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.operation.deletion_status">Estado de la eliminación</dt>
+                        <dd class="col-sm-9">
+                            {% if operation.deletion_status == "CURRENTLY_DELETED" %}
+                            <span data-key="tareas.deleted_history.projection.currently_deleted">CURRENTLY_DELETED</span>
+                            {% elif operation.deletion_status == "RESTORED" %}
+                            <span data-key="tareas.deleted_history.projection.restored">RESTORED</span>
+                            {% else %}
+                            <span data-key="tareas.deleted_history.projection.inconsistent">INCONSISTENT</span>
+                            {% endif %}
+                        </dd>
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.status">Estado</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.status.{{ operation.status|lower }}">{{ operation.status }}</span></dd>
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.result">Resultado</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.result.{{ operation.result_code|lower }}">{{ operation.result_code }}</span></dd>
                         <dt class="col-sm-3" data-key="tareas.deleted_history.operation.audit">Estado de auditoría</dt><dd class="col-sm-9"><span data-key="tareas.deleted_history.audit.{{ operation.audit_status|lower }}">{{ operation.audit_status }}</span></dd>
@@ -59,6 +74,55 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if operation.restoration %}
+            <section id="l5-restoration-trace" class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><span data-key="tareas.deleted_history.restoration.title">Operación de restauración vinculada</span></h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.id">UUID de restauración</dt>
+                        <dd class="col-sm-9 text-break"><code>{{ operation.restoration.operation_id }}</code></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.source_operation">Eliminación de origen</dt>
+                        <dd class="col-sm-9 text-break"><code>{{ operation.operation_id }}</code></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.actor">Usuario</dt>
+                        <dd class="col-sm-9">{{ operation.restoration.actor_id }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.reason">Motivo</dt>
+                        <dd class="col-sm-9">{{ operation.restoration.motivo|default:"—"|linebreaksbr }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.created_at">Iniciada</dt>
+                        <dd class="col-sm-9">{{ operation.restoration.created_at|localtime|date:"Y-m-d H:i" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.committed_at">Confirmada</dt>
+                        <dd class="col-sm-9">{{ operation.restoration.committed_at|localtime|date:"Y-m-d H:i"|default:"—" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.status">Estado del ledger</dt>
+                        <dd class="col-sm-9"><code>{{ operation.restoration.status }}</code></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.result">Resultado</dt>
+                        <dd class="col-sm-9"><code>{{ operation.restoration.result_code|default:"—" }}</code></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.audit">Estado de auditoría</dt>
+                        <dd class="col-sm-9"><code>{{ operation.restoration.audit_status }}</code></dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.audit_event">Evento de auditoría</dt>
+                        <dd class="col-sm-9">{{ operation.restoration.audit_event_id|default:"—" }}</dd>
+                        <dt class="col-sm-3" data-key="tareas.deleted_history.restoration.validation">Vínculo y manifiesto</dt>
+                        <dd class="col-sm-9">
+                            {% if operation.restoration.manifest_matches and operation.restoration.metadata_matches %}
+                            <span data-key="tareas.deleted_history.restoration.validation_valid">Válidos y vinculados a la eliminación original</span>
+                            {% else %}
+                            <span data-key="tareas.deleted_history.restoration.validation_invalid">Vínculo o manifiesto inconsistente</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                    {% if operation.restoration.status == "PENDING" %}
+                    <div class="alert alert-warning mt-3 mb-0" role="status">
+                        <span data-key="tareas.deleted_history.restoration.pending_notice">La operación de restauración está pendiente; la eliminación aún no se considera restaurada.</span>
+                    </div>
+                    {% elif operation.restoration.status == "COMMITTED" and operation.restoration.result_code == "LOGICALLY_RESTORED" and operation.restoration.audit_status != "CONFIRMED" %}
+                    <div class="alert alert-warning mt-3 mb-0" role="status">
+                        <span data-key="tareas.deleted_history.restoration.audit_unconfirmed">La restauración está confirmada; la auditoría central aún no está confirmada.</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+            {% endif %}
 
             <div class="card mb-4">
                 <div class="card-header"><h5 class="card-title mb-0"><span data-key="tareas.deleted_history.operation.items">Elementos del manifiesto</span></h5></div>

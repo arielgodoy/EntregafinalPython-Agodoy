@@ -11,6 +11,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "AppDocs.settings")
@@ -23,7 +24,7 @@ django.setup()
 from settings.services.mysql_connections import open_mysql_connection
 
 from django.contrib.auth.models import User
-from tareas.models import Empresa
+from tareas.models import Empresa, Tarea
 from tareas.services.assignment_storage import resolve_assignment_storage
 from tareas.services.hierarchy_creation import create_child_task_atomic
 from tareas.services.connection_roles import (
@@ -125,6 +126,49 @@ def _create_task(storage, actor_id: int, responsible_id: int, label: str) -> int
         ],
     )
     return int(created[0].id)
+
+
+def _activate_hierarchy_parent(context, task_id: int) -> None:
+    with open_mysql_connection(
+        context.mysql_connection,
+        database_name=context.database_name,
+    ) as connection:
+        with bounded_mysql_lock_wait(connection):
+            with mysql_mutation_transaction(connection):
+                cursor = connection.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT correlativo FROM tareas_tarea "
+                        "WHERE id=%s AND empresa_id=%s AND estado=%s FOR UPDATE",
+                        (task_id, COMPANY_ID, Tarea.Estado.BORRADOR),
+                    )
+                    row = cursor.fetchone()
+                    if row is None or not str(row[0]).startswith("B"):
+                        raise HarnessConfigurationError(
+                            "La tarea sintética no puede activarse como madre."
+                        )
+                    now = timezone.now()
+                    cursor.execute(
+                        "UPDATE tareas_tarea SET correlativo=%s,estado=%s,"
+                        "fecha_publicacion=%s,fecha_asignacion=%s,fecha_tope=%s "
+                        "WHERE id=%s AND empresa_id=%s AND estado=%s",
+                        (
+                            f"A{str(row[0])[1:]}",
+                            Tarea.Estado.ACTIVA,
+                            now,
+                            now,
+                            timezone.localdate() + timedelta(days=30),
+                            task_id,
+                            COMPANY_ID,
+                            Tarea.Estado.BORRADOR,
+                        ),
+                    )
+                    if cursor.rowcount != 1:
+                        raise HarnessConfigurationError(
+                            "No se pudo activar la tarea sintética madre."
+                        )
+                finally:
+                    cursor.close()
 
 
 def _lock_tree_and_inventory(connection, task_ids: tuple[int, ...]) -> dict[str, Any]:
@@ -403,6 +447,7 @@ def run_harness() -> dict[str, Any]:
             parent_id = _create_task(
                 assignment_storage, actor_id, responsible_id, "PARENT"
             )
+            _activate_hierarchy_parent(context, parent_id)
             child_id = _create_task(
                 assignment_storage, actor_id, responsible_id, "CHILD"
             )

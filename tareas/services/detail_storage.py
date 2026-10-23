@@ -67,6 +67,8 @@ class TaskDetailTaskReference:
 @dataclass(frozen=True)
 class TaskDetailHierarchy:
     parent: TaskDetailTaskReference | None
+    root: TaskDetailTaskReference
+    depth: int
     children: tuple[TaskDetailTaskReference, ...]
     effectively_annulled: bool
 
@@ -441,10 +443,18 @@ class DjangoTaskDetailStorage:
                 hija_id=task.pk,
                 hija__empresa_id=empresa_id,
                 hija__eliminada=False,
+                padre__empresa_id=empresa_id,
                 padre__eliminada=False,
             )
             .select_related("padre")
             .first()
+        )
+        root_reference = TaskDetailTaskReference(
+            id=task.pk,
+            correlativo=task.correlativo,
+            titulo=task.titulo,
+            estado=task.estado,
+            anulada=task.anulada,
         )
         parent_reference = None
         if parent is not None:
@@ -455,6 +465,8 @@ class DjangoTaskDetailStorage:
                 estado=parent.padre.estado,
                 anulada=parent.padre.anulada,
             )
+            root_reference = parent_reference
+        depth = 1 if parent is not None else 0
         children = tuple(
             TaskDetailTaskReference(
                 id=child.pk,
@@ -479,12 +491,22 @@ class DjangoTaskDetailStorage:
                     hija_id=current_parent.pk,
                     hija__empresa_id=empresa_id,
                     hija__eliminada=False,
+                    padre__empresa_id=empresa_id,
                     padre__eliminada=False,
                 )
                 .select_related("padre")
                 .first()
             )
             current_parent = current_parent.padre if current_parent else None
+            if current_parent is not None and depth < 2:
+                depth += 1
+                root_reference = TaskDetailTaskReference(
+                    id=current_parent.pk,
+                    correlativo=current_parent.correlativo,
+                    titulo=current_parent.titulo,
+                    estado=current_parent.estado,
+                    anulada=current_parent.anulada,
+                )
 
         participant_rows = list(
             TareaParticipante.objects.using(self.alias)
@@ -631,6 +653,8 @@ class DjangoTaskDetailStorage:
         )
         hierarchy = TaskDetailHierarchy(
             parent=parent_reference,
+            root=root_reference,
+            depth=depth,
             children=children,
             effectively_annulled=ancestor_annulled,
         )
@@ -891,9 +915,11 @@ class MySQLTaskDetailStorage:
                     cursor,
                     "SELECT p.id, p.correlativo, p.titulo, p.estado, p.anulada "
                     "FROM tareas_tarearelacion r JOIN tareas_tarea p ON p.id = r.padre_id "
+                    "JOIN tareas_tarea c ON c.id = r.hija_id "
                     "WHERE r.hija_id = %s AND p.empresa_id = %s "
-                    "AND p.eliminada = 0 LIMIT 1",
-                    (task_id, empresa_id),
+                    "AND c.empresa_id = %s AND p.eliminada = 0 "
+                    "AND c.eliminada = 0 LIMIT 1",
+                    (task_id, empresa_id, empresa_id),
                 )
                 child_rows = self._rows(
                     cursor,
@@ -927,22 +953,58 @@ class MySQLTaskDetailStorage:
                 }
 
                 ancestor_annulled = bool(task["anulada"])
+                if parent_rows:
+                    ancestor_annulled = (
+                        ancestor_annulled or bool(parent_rows[0]["anulada"])
+                    )
                 current_parent_id = parent_rows[0]["id"] if parent_rows else None
+                depth = 1 if current_parent_id is not None else 0
+                root_reference = TaskDetailTaskReference(
+                    id=task["id"],
+                    correlativo=task["correlativo"],
+                    titulo=task["titulo"],
+                    estado=task["estado"],
+                    anulada=bool(task["anulada"]),
+                )
+                if parent_rows:
+                    parent_row = parent_rows[0]
+                    root_reference = TaskDetailTaskReference(
+                        parent_row["id"],
+                        parent_row["correlativo"],
+                        parent_row["titulo"],
+                        parent_row["estado"],
+                        bool(parent_row["anulada"]),
+                    )
                 for _level in range(2):
                     if current_parent_id is None:
                         break
                     ancestor_rows = self._rows(
                         cursor,
-                        "SELECT p.id, p.anulada FROM tareas_tarearelacion r "
+                        "SELECT p.id, p.correlativo, p.titulo, p.estado, p.anulada "
+                        "FROM tareas_tarearelacion r "
                         "JOIN tareas_tarea p ON p.id = r.padre_id "
+                        "JOIN tareas_tarea c ON c.id = r.hija_id "
                         "WHERE r.hija_id = %s AND p.empresa_id = %s "
-                        "AND p.eliminada = 0 LIMIT 1",
-                        (current_parent_id, empresa_id),
+                        "AND c.empresa_id = %s AND p.eliminada = 0 "
+                        "AND c.eliminada = 0 LIMIT 1",
+                        (current_parent_id, empresa_id, empresa_id),
                     )
                     if not ancestor_rows:
                         break
-                    ancestor_annulled = ancestor_annulled or bool(ancestor_rows[0]["anulada"])
-                    current_parent_id = ancestor_rows[0]["id"]
+                    ancestor = ancestor_rows[0]
+                    ancestor_annulled = (
+                        ancestor_annulled or bool(ancestor["anulada"])
+                    )
+                    current_parent_id = ancestor["id"]
+                    if depth < 2:
+                        depth += 1
+                        root_reference = TaskDetailTaskReference(
+                            ancestor["id"],
+                            ancestor["correlativo"],
+                            ancestor["titulo"],
+                            ancestor["estado"],
+                            bool(ancestor["anulada"]),
+                        )
 
                 mini_rows = []
                 event_rows = []
@@ -1088,6 +1150,8 @@ class MySQLTaskDetailStorage:
             parent = TaskDetailTaskReference(row["id"], row["correlativo"], row["titulo"], row["estado"], bool(row["anulada"]))
         hierarchy = TaskDetailHierarchy(
             parent=parent,
+            root=root_reference,
+            depth=depth,
             children=tuple(TaskDetailTaskReference(row["id"], row["correlativo"], row["titulo"], row["estado"], bool(row["anulada"])) for row in child_rows),
             effectively_annulled=ancestor_annulled,
         )

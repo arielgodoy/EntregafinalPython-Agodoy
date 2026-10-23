@@ -104,6 +104,7 @@
                                 <th scope="col" data-key="tareas.deleted_history.column.reference">Referencia</th>
                                 <th scope="col" data-key="tareas.deleted_history.column.title">Título</th>
                                 <th scope="col" data-key="tareas.deleted_history.column.state">Estado</th>
+                                <th scope="col" data-key="tareas.deleted_history.column.restoration_status">Estado histórico</th>
                                 <th scope="col" data-key="tareas.deleted_history.column.deleted_at">Eliminada</th>
                                 <th scope="col" data-key="tareas.deleted_history.column.actor">Usuario</th>
                                 <th scope="col" data-key="tareas.deleted_history.column.audit">Auditoría</th>
@@ -127,6 +128,15 @@
                                         <span data-key="tareas.deleted_history.not_available">No disponible</span>
                                     {% endif %}
                                 </td>
+                                <td id="l5-deletion-projection">
+                                    {% if row.item.deletion_status == "CURRENTLY_DELETED" %}
+                                    <span data-key="tareas.deleted_history.projection.currently_deleted">CURRENTLY_DELETED</span>
+                                    {% elif row.item.deletion_status == "RESTORED" %}
+                                    <span data-key="tareas.deleted_history.projection.restored">RESTORED</span>
+                                    {% else %}
+                                    <span data-key="tareas.deleted_history.projection.inconsistent">INCONSISTENT</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ row.item.deleted_at|localtime|date:"Y-m-d H:i" }}</td>
                                 <td>{{ row.actor_label|default:row.item.actor_id }}</td>
                                 <td><span data-key="tareas.deleted_history.audit.{{ row.item.audit_status|lower }}">{{ row.item.audit_status }}</span></td>
@@ -138,7 +148,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">
+                                <td colspan="9" class="text-center text-muted py-4">
                                     <span data-key="tareas.deleted_history.empty">No se encontraron tareas eliminadas.</span>
                                 </td>
                             </tr>

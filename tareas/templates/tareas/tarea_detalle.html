@@ -40,6 +40,14 @@ Detalle de tarea
                                 <div class="task-detail__badges">
                                     <span class="badge bg-success-subtle text-success"><span data-key="tareas.fields.estado">Estado</span>: {% include "tareas/_state_label.html" with value=tarea.estado %}</span>
                                     <span class="badge bg-info-subtle text-info"><span data-key="tareas.fields.prioridad">Prioridad</span>: {% include "tareas/_priority_label.html" with value=tarea.prioridad %}</span>
+                                    <span class="badge bg-secondary-subtle text-secondary">
+                                        {% if jerarquia_tipo == "main" %}<span data-key="tareas.hierarchy.kind.main">Tarea principal</span>
+                                        {% elif jerarquia_tipo == "mother" %}<span data-key="tareas.hierarchy.kind.mother">Tarea madre</span>
+                                        {% elif jerarquia_tipo == "child" %}
+                                            <span data-key="tareas.hierarchy.kind.child">Tarea hija</span>{% if jerarquia_es_madre %}<span aria-hidden="true"> · </span><span data-key="tareas.hierarchy.kind.also_mother">También es madre</span>{% endif %}
+                                        {% else %}<span data-key="tareas.hierarchy.kind.grandchild">Tarea nieta</span>
+                                        {% endif %}
+                                    </span>
                                 </div>
                             </div>
 
@@ -48,6 +56,7 @@ Detalle de tarea
                                     <a href="{% url 'tareas:listar_tareas' %}" class="btn btn-secondary"><i class="ri-arrow-left-line" aria-hidden="true"></i><span data-key="tareas.actions.volver">Volver</span></a>
                                 </div>
                                 <div class="task-detail__task-actions d-flex flex-wrap justify-content-end align-items-center gap-2">
+                                    {% if puede_crear_tarea_hija %}<a href="{% url 'tareas:crear_tarea' %}?tarea_madre={{ tarea.pk }}" class="btn btn-outline-primary"><i class="ri-node-tree" aria-hidden="true"></i><span data-key="tareas.hierarchy.create_child">Crear tarea hija</span></a>{% endif %}
                                     {% if puede_administrar_tarea %}<a href="{% url 'tareas:editar_tarea' tarea.pk %}" class="btn btn-outline-secondary"><i class="ri-edit-line" aria-hidden="true"></i><span data-key="tareas.actions.editar">Editar</span></a>{% endif %}
                                     {% if puede_eliminar_logicamente %}<a href="{% url 'tareas:eliminacion_logica' tarea.pk %}" class="btn btn-outline-danger"><i class="ri-delete-bin-line" aria-hidden="true"></i><span data-key="tareas.logical_deletion.action">Eliminar tarea</span></a>{% endif %}
                                     {% if puede_reprogramar %}<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reprogramar-tarea-modal"><i class="ri-calendar-event-line" aria-hidden="true"></i><span data-key="tareas.reprogramming.action">Reprogramar</span></button>{% endif %}
@@ -100,21 +109,38 @@ Detalle de tarea
                             <section class="task-detail__hierarchy mb-4" aria-labelledby="tareas-jerarquia-titulo">
                                 <h5 id="tareas-jerarquia-titulo"><span data-key="tareas.hierarchy.title">Jerarquía</span></h5>
                                 {% if tarea_padre %}
+                                {% if jerarquia_profundidad == 2 %}
                                 <p class="mb-2">
-                                    <span data-key="tareas.hierarchy.parent">Padre:</span>
-                                    <a href="{% url 'tareas:detalle_tarea' tarea_padre.pk %}">
+                                    <span data-key="tareas.hierarchy.direct_mother">Madre directa:</span>
+                                    <a class="link-primary text-decoration-underline" href="{% url 'tareas:detalle_tarea' tarea_padre.pk %}">
+                                        {{ tarea_padre.correlativo|default:"—" }} - {{ tarea_padre.titulo }}
+                                    </a>
+                                    (<span>{% include "tareas/_state_label.html" with value=tarea_padre.estado %}</span>)
+                                </p>
+                                <p class="mb-2">
+                                    <span data-key="tareas.hierarchy.kind.main">Tarea principal</span>:
+                                    <a class="link-primary text-decoration-underline" href="{% url 'tareas:detalle_tarea' tarea_raiz.pk %}">
+                                        {{ tarea_raiz.correlativo|default:"—" }} - {{ tarea_raiz.titulo }}
+                                    </a>
+                                    (<span>{% include "tareas/_state_label.html" with value=tarea_raiz.estado %}</span>)
+                                </p>
+                                {% else %}
+                                <p class="mb-2">
+                                    <span data-key="tareas.hierarchy.parent">Madre:</span>
+                                    <a class="link-primary text-decoration-underline" href="{% url 'tareas:detalle_tarea' tarea_padre.pk %}">
                                         {{ tarea_padre.correlativo|default:"—" }} - {{ tarea_padre.titulo }}
                                     </a>
                                     (<span>{% include "tareas/_state_label.html" with value=tarea_padre.estado %}</span>)
                                 </p>
                                 {% endif %}
-                                {% if tareas_hijas %}
+                                {% endif %}
+                                {% if tareas_hijas and jerarquia_profundidad < 2 %}
                                 <div>
                                     <span data-key="tareas.hierarchy.children">Hijas:</span>
                                     <ul class="mb-0">
                                         {% for hija in tareas_hijas %}
                                         <li>
-                                            <a href="{% url 'tareas:detalle_tarea' hija.pk %}">
+                                            <a class="link-primary text-decoration-underline" href="{% url 'tareas:detalle_tarea' hija.pk %}">
                                                 {{ hija.correlativo|default:"—" }} - {{ hija.titulo }}
                                             </a>
                                             (<span>{% include "tareas/_state_label.html" with value=hija.estado %}</span>)

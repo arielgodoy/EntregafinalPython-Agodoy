@@ -1,14 +1,16 @@
 # Contract: L5 Logical Task Restoration
 
-**Status**: Etapa 2 del servicio interno implementada y probada; HTTP/L4 siguen diferidos
+**Status**: Etapa 2 del servicio, T161 L4 projection, T160-A GET preview y T160-B POST confirmation implemented and tested
 **Feature**: [spec.md](../spec.md)
 **Data model**: [data-model.md](../data-model.md)
 **Web routes**: [web-urls.md](web-urls.md)
 
-This document defines the L5 restoration service and deferred HTTP contract. Etapa 1 preparó
-el ledger; Etapa 2 implementa solo preview, restauración interna transaccional y auditoría
-post-commit. No registra rutas ni autoriza operaciones productivas. La campaña autorizada
-del 2026-10-20 usó exclusivamente fixtures sintéticas en la base de desarrollo `tareas`.
+This document defines the L5 restoration service and HTTP contract. Etapa 1 preparó el
+ledger; Etapa 2 implementa preview, restauración interna transaccional y auditoría
+post-commit. T160-A registra el GET de previsualización y T160-B el POST de confirmación
+HTTP. El POST delega exclusivamente en el servicio transaccional y conserva la separación
+entre commit operacional y auditoría central. La campaña autorizada del 2026-10-20 usó
+exclusivamente fixtures sintéticas en la base de desarrollo `tareas`.
 
 ## Boundary and invariants
 
@@ -30,8 +32,11 @@ del 2026-10-20 usó exclusivamente fixtures sintéticas en la base de desarrollo
 
 ## Internal service interface
 
-The APIs below are implemented in `tareas/services/logical_restoration.py`. They are not
-HTTP endpoints and do not expose restoration through L4:
+The APIs below are implemented in `tareas/services/logical_restoration.py`; they are
+service functions, not HTTP endpoints. T160-A exposes
+`build_logical_restoration_preview()` through GET. T160-B exposes
+`restore_logical_task_tree()` through POST. Audit reconciliation remains available only
+through its internal service interface:
 
 ```text
 build_logical_restoration_preview(
@@ -147,6 +152,39 @@ Etapa 1 does not create audit events, reconcile them, or set a restoration to `C
 The original deletion's pending audit policy and durable logging of failed attempts remain
 open decisions for subsequent stages.
 
+## L4 read projection — T161
+
+L4 remains read-only. The deletion operation and its original manifest remain queryable;
+the history reader joins a restoration only through `reverses_operation_id` and the active
+company. It exposes the linked restoration UUID, actor, motive, timestamps, ledger result
+and audit status on the original operation detail.
+
+The task projection is `CURRENTLY_DELETED`, `RESTORED` or `INCONSISTENT`. `RESTORED`
+requires a committed `LOGICALLY_RESTORED` operation linked to the source, matching company,
+root and backend, an exact task-only manifest match, and cleared deletion markers for the
+whole manifest. `PENDING` is not a restoration; while the source markers remain intact the
+history continues to show `CURRENTLY_DELETED`. A broken link, manifest mismatch, missing
+row or inconsistent markers fails closed. `PHYSICALLY_ABSENT` remains a separate row
+condition. Central audit `PENDING` or `ERROR` does not undo an operationally committed
+restoration and is displayed separately.
+
+The ledger does not retain a complete task snapshot. Once a task is restored, L4 does not
+render current task fields as historical deletion data. Its operational row is withheld
+from the historical detail while the immutable deletion and restoration ledger fields
+remain visible. The ledger also does not snapshot relationship edges, so L4 does not
+present the current topology as the historical topology after restoration or inconsistency.
+L4 adds no mutation method or route; existing history URLs stay GET-only.
+
+### I18N contract
+
+Every new or changed visible label, status, warning, message and action uses an existing
+`data-key`/`message_key` and has matching entries in both `static/lang/sp.json` and
+`static/lang/en.json`. T161/T160-A/T160-B i18n acceptance includes catalog parity, no missing
+keys, no dynamic translation keys and no unkeyed literal copy in the new surfaces. The
+catalog entries are limited to keys required by the implemented restoration surfaces;
+the global i18n mechanism is unchanged. The status/result codes and UUID values remain
+technical ledger values.
+
 ## Controlled errors
 
 Service errors map to controlled response keys; never return raw DB, SQL or filesystem
@@ -175,21 +213,25 @@ An external file confirmed missing is reported as unavailable metadata; the rest
 does not recreate it and does not fail solely because no physical file cleanup is needed.
 The mechanism for authoritative file-existence checks remains pending.
 
-## Proposed HTTP routes
+## HTTP routes
 
-These routes are **DEFERRED** and must not be registered until L5 implementation is
-separately authorized:
+| Status | Method | Route | Name | Permission and behavior |
+|---|---|---|---|---|
+| IMPLEMENTED — T160-A | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | Read-only preview; require L4 I and S on `Tareas` separately |
+| IMPLEMENTED — T160-B | POST | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | CSRF, explicit confirmation, required reason, signed preview; revalidate L4 I and S; commit through service |
 
-| Method | Proposed route | Name | Permission and behavior |
-|---|---|---|---|
-| GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | Read-only preview; require L4 I and S on `Tareas` separately |
-| POST | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | CSRF, reason, signed preview; revalidate L4 I and S on `Tareas`; commit through service |
-
-GET never mutates. The confirmation is a traditional POST with CSRF and explicit reason;
-the response is controlled and does not expose raw exceptions. The existing L4 list,
-task-detail and operation-detail paths remain GET-only. The restore action is visible
-from L4 only when S is also present; no sidebar permission or new VICMEAS View is created
-by this contract.
+GET never mutates and renders the service preview as HTML. It prepares a signed token
+binding actor, active company, source deletion UUID, new restoration UUID, exact manifest
+and preview fingerprint, but creates no database record. A new UUID is generated once per
+eligible preview. POST validates the signature and 900-second expiry, actor, active
+company, source UUID, restoration UUID, manifest shape and fingerprint; it requires a
+non-empty reason and explicit confirmation, then delegates to
+`restore_logical_task_tree()` for transactional revalidation and idempotent execution.
+Retries use the same signed UUID without requiring another GET. A confirmed operational
+commit with pending/error audit redirects to the original L4 operation; an uncertain
+commit retains the same token and UUID for retry. The existing L4 list, task-detail and
+operation-detail paths remain GET-only. The preview link is visible from the L4 operation
+detail only when S is also present; no sidebar permission or new VICMEAS View is created.
 
 ## Etapa 1 actual
 

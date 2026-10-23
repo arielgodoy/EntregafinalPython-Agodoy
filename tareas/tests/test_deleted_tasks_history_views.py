@@ -1,6 +1,7 @@
 import json
 import re
 from io import StringIO
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
@@ -17,12 +18,57 @@ from access_control.services.permissions import (
     SIDEBAR_GROUPS,
     get_sidebar_visible_items,
 )
+from tareas.models import TareaEliminacionOperacion
 from tareas.vicmeas import DELETED_TASKS_HISTORY
 from tareas.services.deleted_tasks_history import (
     DeletedTaskHistoryFilters,
     DeletedTaskHistoryNotFound,
     DeletedTaskHistoryPage,
 )
+
+
+class _ScopedI18nTextAudit(HTMLParser):
+    _VOID_ELEMENTS = {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    }
+
+    def __init__(self, scope_ids):
+        super().__init__(convert_charrefs=True)
+        self.scope_ids = set(scope_ids)
+        self.found_scopes = set()
+        self.untranslated_text = []
+        self._stack = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        parent_in_scope = self._stack[-1][1] if self._stack else False
+        parent_keyed = self._stack[-1][2] if self._stack else False
+        scope_id = attributes.get("id")
+        in_scope = parent_in_scope or scope_id in self.scope_ids
+        keyed = parent_keyed or "data-key" in attributes
+        if scope_id in self.scope_ids:
+            self.found_scopes.add(scope_id)
+        if tag not in self._VOID_ELEMENTS:
+            self._stack.append((tag, in_scope, keyed))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in self._VOID_ELEMENTS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index][0] == tag:
+                del self._stack[index:]
+                break
+
+    def handle_data(self, data):
+        if not self._stack or not self._stack[-1][1] or self._stack[-1][2]:
+            return
+        visible = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", "", data, flags=re.DOTALL).strip()
+        if visible.strip("—:·"):
+            self.untranslated_text.append(visible)
 
 
 class DeletedTasksHistoryViewTests(TestCase):
@@ -131,6 +177,33 @@ class DeletedTasksHistoryViewTests(TestCase):
 
         self.assertEqual(response.status_code, 405)
         history_reader.assert_not_called()
+
+    def test_history_get_is_read_only_and_never_calls_restoration_service(self):
+        self._grant_history(ingresar=True)
+        self._activate_company()
+        page = DeletedTaskHistoryPage(
+            items=(),
+            total=0,
+            page=1,
+            page_size=25,
+            total_pages=0,
+        )
+        operation_count = TareaEliminacionOperacion.objects.count()
+
+        with (
+            patch(
+                "tareas.views.list_deleted_task_history",
+                return_value=page,
+            ),
+            patch(
+                "tareas.services.logical_restoration.restore_logical_task_tree",
+            ) as restoration_writer,
+        ):
+            response = self.client.get(reverse("tareas:eliminadas_lista"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TareaEliminacionOperacion.objects.count(), operation_count)
+        restoration_writer.assert_not_called()
 
     def test_operation_and_task_details_use_only_the_active_company(self):
         self._grant_history(ingresar=True)
@@ -250,6 +323,67 @@ class DeletedTasksHistoryViewTests(TestCase):
                 )
                 self.assertEqual(used_keys - catalog.keys(), set())
                 self.assertEqual(duplicate_l4_keys, set())
+
+    def test_restoration_projection_text_is_keyed_and_catalogued(self):
+        root = Path(settings.BASE_DIR)
+        scoped_templates = (
+            (
+                root / "tareas" / "templates" / "tareas" / "deleted_tasks_history_list.html",
+                ("l5-deletion-projection",),
+            ),
+            (
+                root / "tareas" / "templates" / "tareas" / "deleted_task_history_operation.html",
+                ("l5-restoration-trace",),
+            ),
+            (
+                root / "tareas" / "templates" / "tareas" / "deleted_task_history_detail.html",
+                ("l5-restored-snapshot-notice",),
+            ),
+        )
+        for path, scope_ids in scoped_templates:
+            parser = _ScopedI18nTextAudit(scope_ids)
+            parser.feed(path.read_text(encoding="utf-8"))
+            with self.subTest(template=path.name):
+                self.assertEqual(parser.found_scopes, set(scope_ids))
+                self.assertEqual(parser.untranslated_text, [])
+
+        required_keys = {
+            "tareas.deleted_history.column.restoration_status",
+            "tareas.deleted_history.projection.currently_deleted",
+            "tareas.deleted_history.projection.restored",
+            "tareas.deleted_history.projection.inconsistent",
+            "tareas.deleted_history.restoration.title",
+            "tareas.deleted_history.restoration.id",
+            "tareas.deleted_history.restoration.source_operation",
+            "tareas.deleted_history.restoration.actor",
+            "tareas.deleted_history.restoration.reason",
+            "tareas.deleted_history.restoration.created_at",
+            "tareas.deleted_history.restoration.committed_at",
+            "tareas.deleted_history.restoration.status",
+            "tareas.deleted_history.restoration.result",
+            "tareas.deleted_history.restoration.audit",
+            "tareas.deleted_history.restoration.audit_event",
+            "tareas.deleted_history.restoration.validation",
+            "tareas.deleted_history.restoration.validation_valid",
+            "tareas.deleted_history.restoration.validation_invalid",
+            "tareas.deleted_history.restoration.pending_notice",
+            "tareas.deleted_history.restoration.audit_unconfirmed",
+            "tareas.deleted_history.detail.restored_snapshot_unavailable",
+            "tareas.deleted_history.related.restored_snapshot_unavailable",
+        }
+        for language in ("sp", "en"):
+            catalog = json.loads(
+                (root / "static" / "lang" / f"{language}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with self.subTest(language=language):
+                self.assertEqual(required_keys - catalog.keys(), set())
+                logical_only_text = catalog[
+                    "tareas.logical_deletion.preview.logical_only"
+                ].casefold()
+                self.assertNotIn("no permite restaurarlos", logical_only_text)
+                self.assertNotIn("allow restoration", logical_only_text)
 
     def test_catalog_command_registers_only_view_without_creating_permissions(self):
         permissions_before = Permiso.objects.count()

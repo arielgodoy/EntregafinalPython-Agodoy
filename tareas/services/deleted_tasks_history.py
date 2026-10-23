@@ -32,6 +32,7 @@ from ..models import (
     HitoEvidencia,
     HitoHistorial,
     LOGICAL_DELETION_RESULT_CODE,
+    LOGICAL_RESTORATION_RESULT_CODE,
     MiniTarea,
     MiniTareaEvento,
     Tarea,
@@ -110,6 +111,7 @@ class DeletedTaskHistoryItem:
     audit_status: str
     audit_event_id: int | None
     physical_status: str
+    deletion_status: str = "CURRENTLY_DELETED"
 
     @property
     def historical_reference(self) -> str:
@@ -169,6 +171,22 @@ class DeletionHistoryAudit:
 
 
 @dataclass(frozen=True)
+class DeletedTaskRestoration:
+    operation_id: UUID
+    actor_id: int
+    motivo: str | None
+    status: str
+    result_code: str
+    created_at: datetime
+    committed_at: datetime | None
+    audit_status: str
+    audit_event_id: int | None
+    audit_error_code: str
+    manifest_matches: bool
+    metadata_matches: bool
+
+
+@dataclass(frozen=True)
 class DeletedTaskHistoryOperation:
     operation_id: UUID
     empresa_id: int
@@ -194,6 +212,8 @@ class DeletedTaskHistoryOperation:
     files: tuple[DeletionHistoryFile, ...]
     relations: tuple[DeletionHistoryRelation, ...]
     hierarchy_status: str
+    deletion_status: str = "CURRENTLY_DELETED"
+    restoration: DeletedTaskRestoration | None = None
 
 
 @dataclass(frozen=True)
@@ -468,7 +488,18 @@ def _list_query(
             "operation_id", "empresa_id", "root_task_id", "root_correlativo",
             "actor_id", "motivo", "status", "result_code", "audit_status",
             "audit_event_id", "audit_error_code", "file_cleanup_status",
-            "created_at", "committed_at",
+            "created_at", "committed_at", "backend_type", "backend_identity",
+            "backend_config_version",
+        )
+    }
+    restoration = {
+        name: _column(TareaEliminacionOperacion, name, quote)
+        for name in (
+            "operation_id", "reverses_operation", "empresa_id", "root_task_id",
+            "actor_id", "motivo", "status", "result_code", "audit_status",
+            "audit_event_id", "audit_error_code", "file_cleanup_status",
+            "created_at", "committed_at", "backend_type", "backend_identity",
+            "backend_config_version",
         )
     }
     item = {
@@ -510,6 +541,9 @@ def _list_query(
         f"LEFT JOIN {task_table} task "
         f"ON task.{task['id']} = item.{item['object_id']} "
         f"AND task.{task['empresa']} = op.{op['empresa_id']}"
+        f" LEFT JOIN {op_table} restoration "
+        f"ON restoration.{restoration['reverses_operation']} = op.{op['operation_id']} "
+        f"AND restoration.{restoration['empresa_id']} = op.{op['empresa_id']}"
     )
     where = [
         f"op.{op['empresa_id']} = %s",
@@ -579,6 +613,26 @@ def _list_query(
         f"op.{op['result_code']} AS result_code, "
         f"op.{op['audit_status']} AS audit_status, "
         f"op.{op['audit_event_id']} AS audit_event_id, "
+        f"op.{op['backend_type']} AS backend_type, "
+        f"op.{op['backend_identity']} AS backend_identity, "
+        f"op.{op['backend_config_version']} AS backend_config_version, "
+        f"restoration.{restoration['operation_id']} AS restoration_operation_id, "
+        f"restoration.{restoration['reverses_operation']} AS restoration_source_operation_id, "
+        f"restoration.{restoration['empresa_id']} AS restoration_empresa_id, "
+        f"restoration.{restoration['root_task_id']} AS restoration_root_task_id, "
+        f"restoration.{restoration['actor_id']} AS restoration_actor_id, "
+        f"restoration.{restoration['motivo']} AS restoration_motivo, "
+        f"restoration.{restoration['status']} AS restoration_status, "
+        f"restoration.{restoration['result_code']} AS restoration_result_code, "
+        f"restoration.{restoration['audit_status']} AS restoration_audit_status, "
+        f"restoration.{restoration['audit_event_id']} AS restoration_audit_event_id, "
+        f"restoration.{restoration['audit_error_code']} AS restoration_audit_error_code, "
+        f"restoration.{restoration['file_cleanup_status']} AS restoration_file_cleanup_status, "
+        f"restoration.{restoration['created_at']} AS restoration_created_at, "
+        f"restoration.{restoration['committed_at']} AS restoration_committed_at, "
+        f"restoration.{restoration['backend_type']} AS restoration_backend_type, "
+        f"restoration.{restoration['backend_identity']} AS restoration_backend_identity, "
+        f"restoration.{restoration['backend_config_version']} AS restoration_backend_config_version, "
         f"item.{item['object_id']} AS task_id, "
         f"task.{task['id']} AS physical_task_id, "
         f"task.{task['correlativo']} AS task_correlativo, "
@@ -602,6 +656,353 @@ def _dict_rows(cursor: _HistoryCursor) -> tuple[dict[str, object], ...]:
     description = cursor.description or ()
     names = tuple(column[0] for column in description)
     return tuple(dict(zip(names, row)) for row in cursor.fetchall())
+
+
+def _uuid_matches(value: object, expected: UUID) -> bool:
+    if value is None:
+        return False
+    try:
+        return (value if isinstance(value, UUID) else UUID(str(value))) == expected
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+def _manifest_entries(
+    rows: Sequence[dict[str, object]],
+) -> tuple[tuple[str, int], ...]:
+    return tuple(
+        sorted(
+            (
+                str(row["item_type"]),
+                _required_history_int(row["object_id"], "object_id"),
+            )
+            for row in rows
+        )
+    )
+
+
+def _task_markers_match_deletion(
+    task: dict[str, object] | None,
+    *,
+    operation_id: UUID,
+    empresa_id: int,
+    actor_id: int,
+) -> bool:
+    return bool(
+        task
+        and _required_history_int(task["empresa_id"], "task_empresa_id") == empresa_id
+        and task["eliminada"] in (True, 1)
+        and task["eliminada_en"] is not None
+        and task["eliminada_por"] == actor_id
+        and _uuid_matches(task["eliminacion_operacion_id"], operation_id)
+    )
+
+
+def _task_markers_are_clear(task: dict[str, object] | None, empresa_id: int) -> bool:
+    return bool(
+        task
+        and _required_history_int(task["empresa_id"], "task_empresa_id") == empresa_id
+        and task["eliminada"] in (False, 0)
+        and task["eliminada_en"] is None
+        and task["eliminada_por"] is None
+        and task["eliminacion_operacion_id"] is None
+    )
+
+
+def _restoration_row_from_list(row: dict[str, object]) -> dict[str, object] | None:
+    if row.get("restoration_operation_id") is None:
+        return None
+    return {
+        "operation_id": row["restoration_operation_id"],
+        "reverses_operation_id": row["restoration_source_operation_id"],
+        "empresa_id": row["restoration_empresa_id"],
+        "root_task_id": row["restoration_root_task_id"],
+        "actor_id": row["restoration_actor_id"],
+        "motivo": row["restoration_motivo"],
+        "status": row["restoration_status"],
+        "result_code": row["restoration_result_code"],
+        "audit_status": row["restoration_audit_status"],
+        "audit_event_id": row["restoration_audit_event_id"],
+        "audit_error_code": row["restoration_audit_error_code"],
+        "file_cleanup_status": row["restoration_file_cleanup_status"],
+        "created_at": row["restoration_created_at"],
+        "committed_at": row["restoration_committed_at"],
+        "backend_type": row["restoration_backend_type"],
+        "backend_identity": row["restoration_backend_identity"],
+        "backend_config_version": row["restoration_backend_config_version"],
+    }
+
+
+def _project_deletion_status(
+    *,
+    source: dict[str, object],
+    source_manifest: Sequence[dict[str, object]],
+    task_rows: dict[int, dict[str, object]],
+    restoration_row: dict[str, object] | None,
+    restoration_manifest: Sequence[dict[str, object]] = (),
+) -> tuple[str, DeletedTaskRestoration | None]:
+    source_operation_id = _normal_uuid(str(source["operation_id"]))
+    empresa_id = _required_history_int(source["empresa_id"], "empresa_id")
+    root_task_id = _required_history_int(source["root_task_id"], "root_task_id")
+    actor_id = _required_history_int(source["actor_id"], "actor_id")
+    source_entries = _manifest_entries(source_manifest)
+    task_ids = tuple(
+        object_id
+        for item_type, object_id in source_entries
+        if item_type == TASK_ITEM_LABEL
+    )
+    source_manifest_valid = bool(
+        source_entries
+        and len(task_ids) == len(source_entries)
+        and len(task_ids) == len(set(task_ids))
+        and (TASK_ITEM_LABEL, root_task_id) in source_entries
+    )
+    all_tasks_present = bool(task_ids) and all(
+        task_id in task_rows for task_id in task_ids
+    )
+    currently_deleted = bool(
+        source_manifest_valid
+        and all_tasks_present
+        and all(
+            _task_markers_match_deletion(
+                task_rows.get(task_id),
+                operation_id=source_operation_id,
+                empresa_id=empresa_id,
+                actor_id=actor_id,
+            )
+            for task_id in task_ids
+        )
+    )
+    markers_cleared = bool(
+        source_manifest_valid
+        and all_tasks_present
+        and all(
+            _task_markers_are_clear(task_rows.get(task_id), empresa_id)
+            for task_id in task_ids
+        )
+    )
+
+    linked_restoration = restoration_row
+    if linked_restoration is not None and (
+        not _uuid_matches(
+            linked_restoration.get("reverses_operation_id"),
+            source_operation_id,
+        )
+        or _required_history_int(
+            linked_restoration["empresa_id"],
+            "restoration_empresa_id",
+        )
+        != empresa_id
+    ):
+        linked_restoration = None
+
+    restoration = None
+    manifest_matches = False
+    metadata_matches = False
+    if linked_restoration is not None:
+        restoration_id = _normal_uuid(
+            str(linked_restoration["operation_id"])
+        )
+        manifest_matches = bool(
+            source_manifest_valid
+            and _manifest_entries(restoration_manifest) == source_entries
+        )
+        metadata_matches = bool(
+            _required_history_int(
+                linked_restoration["root_task_id"],
+                "restoration_root_task_id",
+            )
+            == root_task_id
+            and linked_restoration["backend_type"] == source["backend_type"]
+            and linked_restoration["backend_identity"] == source["backend_identity"]
+            and linked_restoration["backend_config_version"]
+            == source["backend_config_version"]
+            and linked_restoration["file_cleanup_status"] == "NOT_REQUIRED"
+            and isinstance(linked_restoration["motivo"], str)
+            and bool(linked_restoration["motivo"].strip())
+        )
+        restoration = DeletedTaskRestoration(
+            operation_id=restoration_id,
+            actor_id=_required_history_int(
+                linked_restoration["actor_id"],
+                "restoration_actor_id",
+            ),
+            motivo=(
+                str(linked_restoration["motivo"])
+                if linked_restoration["motivo"] is not None
+                else None
+            ),
+            status=str(linked_restoration["status"]),
+            result_code=str(linked_restoration["result_code"] or ""),
+            created_at=_required_history_datetime(
+                linked_restoration["created_at"],
+                "restoration_created_at",
+            ),
+            committed_at=_optional_history_datetime(
+                linked_restoration["committed_at"],
+                "restoration_committed_at",
+            ),
+            audit_status=str(linked_restoration["audit_status"]),
+            audit_event_id=_optional_history_int(
+                linked_restoration["audit_event_id"],
+                "restoration_audit_event_id",
+            ),
+            audit_error_code=str(linked_restoration["audit_error_code"] or ""),
+            manifest_matches=manifest_matches,
+            metadata_matches=metadata_matches,
+        )
+
+    if restoration is None:
+        deletion_status = (
+            "CURRENTLY_DELETED" if currently_deleted else "INCONSISTENT"
+        )
+    elif (
+        restoration.status == TareaEliminacionOperacion.Estado.PENDIENTE
+        and restoration.result_code == ""
+    ):
+        deletion_status = (
+            "CURRENTLY_DELETED" if currently_deleted else "INCONSISTENT"
+        )
+    elif (
+        restoration.status == TareaEliminacionOperacion.Estado.COMMITTED
+        and restoration.result_code == LOGICAL_RESTORATION_RESULT_CODE
+    ):
+        deletion_status = (
+            "RESTORED"
+            if metadata_matches and manifest_matches and markers_cleared
+            else "INCONSISTENT"
+        )
+    else:
+        deletion_status = "INCONSISTENT"
+    return deletion_status, restoration
+
+
+def _list_deletion_projections(
+    cursor: _HistoryCursor,
+    quote: Callable[[str], str],
+    *,
+    empresa_id: int,
+    rows: Sequence[dict[str, object]],
+) -> dict[str, tuple[str, DeletedTaskRestoration | None]]:
+    source_rows: dict[str, dict[str, object]] = {}
+    restoration_rows: dict[str, dict[str, object] | None] = {}
+    for row in rows:
+        source_id = _normal_uuid(str(row["operation_id"])).hex
+        if source_id in source_rows:
+            continue
+        source_rows[source_id] = {
+            "operation_id": row["operation_id"],
+            "empresa_id": row["empresa_id"],
+            "root_task_id": row["root_task_id"],
+            "actor_id": row["actor_id"],
+            "backend_type": row["backend_type"],
+            "backend_identity": row["backend_identity"],
+            "backend_config_version": row["backend_config_version"],
+        }
+        restoration_rows[source_id] = _restoration_row_from_list(row)
+
+    source_ids = tuple(source_rows)
+    restoration_ids = tuple(
+        sorted(
+            {
+                _normal_uuid(str(restoration["operation_id"])).hex
+                for restoration in restoration_rows.values()
+                if restoration is not None
+            }
+        )
+    )
+    manifest_operation_ids = tuple(sorted(set(source_ids + restoration_ids)))
+    if not manifest_operation_ids:
+        return {}
+
+    item = TareaEliminacionElemento
+    item_table = _table(item, quote)
+    operation_placeholders = ", ".join("%s" for _ in manifest_operation_ids)
+    cursor.execute(
+        f"SELECT {_column(item, 'operacion', quote)} AS operation_id, "
+        f"{_column(item, 'tipo', quote)} AS item_type, "
+        f"{_column(item, 'object_id', quote)} AS object_id "
+        f"FROM {item_table} "
+        f"WHERE {_column(item, 'operacion', quote)} IN ({operation_placeholders}) "
+        f"ORDER BY {_column(item, 'operacion', quote)}, "
+        f"{_column(item, 'tipo', quote)}, {_column(item, 'object_id', quote)}",
+        manifest_operation_ids,
+    )
+    manifests: dict[str, list[dict[str, object]]] = {}
+    for manifest_row in _dict_rows(cursor):
+        manifest_operation_id = _normal_uuid(
+            str(manifest_row["operation_id"])
+        ).hex
+        manifests.setdefault(manifest_operation_id, []).append(manifest_row)
+
+    task = Tarea
+    task_table = _table(task, quote)
+    task_placeholders = ", ".join("%s" for _ in source_ids)
+    cursor.execute(
+        f"SELECT source_item.{_column(item, 'operacion', quote)} AS source_operation_id, "
+        f"source_item.{_column(item, 'object_id', quote)} AS manifest_task_id, "
+        f"task.{_column(task, 'id', quote)} AS physical_task_id, "
+        f"task.{_column(task, 'empresa', quote)} AS empresa_id, "
+        f"task.{_column(task, 'eliminada', quote)} AS eliminada, "
+        f"task.{_column(task, 'eliminada_en', quote)} AS eliminada_en, "
+        f"task.{_column(task, 'eliminada_por', quote)} AS eliminada_por, "
+        f"task.{_column(task, 'eliminacion_operacion_id', quote)} AS eliminacion_operacion_id "
+        f"FROM {item_table} source_item "
+        f"LEFT JOIN {task_table} task "
+        f"ON task.{_column(task, 'id', quote)} = source_item.{_column(item, 'object_id', quote)} "
+        f"AND task.{_column(task, 'empresa', quote)} = %s "
+        f"WHERE source_item.{_column(item, 'operacion', quote)} "
+        f"IN ({task_placeholders}) "
+        f"AND source_item.{_column(item, 'tipo', quote)} = %s",
+        (empresa_id, *source_ids, TASK_ITEM_LABEL),
+    )
+    task_rows_by_source: dict[str, dict[int, dict[str, object]]] = {
+        operation_id: {} for operation_id in source_ids
+    }
+    for task_row in _dict_rows(cursor):
+        source_id = _normal_uuid(
+            str(task_row["source_operation_id"])
+        ).hex
+        task_id = _required_history_int(
+            task_row["manifest_task_id"],
+            "manifest_task_id",
+        )
+        physical = (
+            None
+            if task_row["physical_task_id"] is None
+            else {
+                "empresa_id": task_row["empresa_id"],
+                "eliminada": task_row["eliminada"],
+                "eliminada_en": task_row["eliminada_en"],
+                "eliminada_por": task_row["eliminada_por"],
+                "eliminacion_operacion_id": task_row[
+                    "eliminacion_operacion_id"
+                ],
+            }
+        )
+        if physical is not None:
+            task_rows_by_source[source_id][task_id] = physical
+
+    projections = {}
+    for source_id, source_row in source_rows.items():
+        restoration = restoration_rows[source_id]
+        restoration_id = (
+            _normal_uuid(str(restoration["operation_id"])).hex
+            if restoration is not None
+            else None
+        )
+        projections[source_id] = _project_deletion_status(
+            source=source_row,
+            source_manifest=manifests.get(source_id, ()),
+            task_rows=task_rows_by_source[source_id],
+            restoration_row=restoration,
+            restoration_manifest=(
+                manifests.get(restoration_id, ())
+                if restoration_id is not None
+                else ()
+            ),
+        )
+    return projections
 
 
 def _select_related_rows(
@@ -1031,11 +1432,17 @@ def _history_item(row: dict[str, object]) -> DeletedTaskHistoryItem:
     actor_id = _required_history_int(row["actor_id"], "actor_id")
     task_id = _required_history_int(row["task_id"], "task_id")
     root_task_id = _required_history_int(row["root_task_id"], "root_task_id")
+    deletion_status = str(row.get("deletion_status", "INCONSISTENT"))
     physical_status = _physical_status(row, operation_id, actor_id)
-    retained = physical_status == "PHYSICALLY_RETAINED"
+    if deletion_status == "RESTORED" and row.get("physical_task_id") is not None:
+        physical_status = "PHYSICALLY_RETAINED"
+    snapshot_available = (
+        deletion_status == "CURRENTLY_DELETED"
+        and physical_status == "PHYSICALLY_RETAINED"
+    )
     deleted_at_value = (
         row.get("task_deleted_at")
-        if retained and row.get("task_deleted_at") is not None
+        if snapshot_available and row.get("task_deleted_at") is not None
         else row.get("deleted_at")
     )
     return DeletedTaskHistoryItem(
@@ -1047,17 +1454,17 @@ def _history_item(row: dict[str, object]) -> DeletedTaskHistoryItem:
         root_correlativo=str(row["root_correlativo"] or ""),
         correlativo=(
             str(row["task_correlativo"])
-            if retained and row.get("task_correlativo") is not None
+            if snapshot_available and row.get("task_correlativo") is not None
             else None
         ),
         titulo=(
             str(row["task_title"])
-            if retained and row.get("task_title") is not None
+            if snapshot_available and row.get("task_title") is not None
             else None
         ),
         estado=(
             str(row["task_state"])
-            if retained and row.get("task_state") is not None
+            if snapshot_available and row.get("task_state") is not None
             else None
         ),
         deleted_at=_optional_history_datetime(deleted_at_value, "deleted_at"),
@@ -1071,6 +1478,7 @@ def _history_item(row: dict[str, object]) -> DeletedTaskHistoryItem:
             "audit_event_id",
         ),
         physical_status=physical_status,
+        deletion_status=deletion_status,
     )
 
 
@@ -1096,7 +1504,29 @@ def list_deleted_task_history(
                 "total",
             )
             cursor.execute(data_sql, data_params)
-            items = tuple(_history_item(row) for row in _dict_rows(cursor))
+            rows = _dict_rows(cursor)
+            projections = (
+                _list_deletion_projections(
+                    cursor,
+                    quote,
+                    empresa_id=empresa_id,
+                    rows=rows,
+                )
+                if rows
+                else {}
+            )
+            items = tuple(
+                _history_item(
+                    {
+                        **row,
+                        "deletion_status": projections.get(
+                            _normal_uuid(str(row["operation_id"])).hex,
+                            ("INCONSISTENT", None),
+                        )[0],
+                    }
+                )
+                for row in rows
+            )
     except DeletedTaskHistoryError:
         raise
     except Exception as exc:
@@ -1130,9 +1560,10 @@ def get_deleted_task_history_operation(
             op_table = _table(op, quote)
             op_fields = (
                 "operation_id", "empresa_id", "root_task_id", "root_correlativo",
-                "actor_id", "motivo", "backend_type", "backend_identity", "status",
-                "result_code", "audit_status", "audit_event_id", "audit_error_code",
-                "file_cleanup_status", "created_at", "committed_at",
+                "actor_id", "motivo", "backend_type", "backend_identity",
+                "backend_config_version", "status", "result_code", "audit_status",
+                "audit_event_id", "audit_error_code", "file_cleanup_status",
+                "created_at", "committed_at",
                 "dependency_summary",
             )
             op_sql = ", ".join(
@@ -1167,6 +1598,48 @@ def get_deleted_task_history_operation(
                 (operation_id.hex,),
             )
             manifest_rows = _dict_rows(cursor)
+
+            restoration_row = None
+            restoration_manifest_rows: tuple[dict[str, object], ...] = ()
+            restoration_fields = (
+                "operation_id", "empresa_id", "root_task_id", "actor_id",
+                "motivo", "backend_type", "backend_identity",
+                "backend_config_version", "status", "result_code",
+                "audit_status", "audit_event_id", "audit_error_code",
+                "file_cleanup_status", "created_at", "committed_at",
+            )
+            restoration_sql = ", ".join(
+                f"restoration.{_column(op, name, quote)} AS {name}"
+                for name in restoration_fields
+            )
+            restoration_sql += (
+                f", restoration.{_column(op, 'reverses_operation', quote)} "
+                "AS reverses_operation_id"
+            )
+            cursor.execute(
+                f"SELECT {restoration_sql} FROM {op_table} restoration "
+                f"WHERE restoration.{_column(op, 'reverses_operation', quote)} = %s "
+                f"AND restoration.{_column(op, 'empresa_id', quote)} = %s",
+                (operation_id.hex, empresa_id),
+            )
+            restoration_rows = _dict_rows(cursor)
+            if len(restoration_rows) > 1:
+                raise DeletedTaskHistoryUnavailable(
+                    "El ledger contiene más de una restauración vinculada."
+                )
+            if restoration_rows:
+                restoration_row = restoration_rows[0]
+                cursor.execute(
+                    f"SELECT {_column(item, 'tipo', quote)} AS item_type, "
+                    f"{_column(item, 'object_id', quote)} AS object_id "
+                    f"FROM {item_table} "
+                    f"WHERE {_column(item, 'operacion', quote)} = %s "
+                    f"ORDER BY {_column(item, 'tipo', quote)}, "
+                    f"{_column(item, 'object_id', quote)}",
+                    (str(restoration_row["operation_id"]),),
+                )
+                restoration_manifest_rows = _dict_rows(cursor)
+
             task_rows: dict[int, dict[str, object]] = {}
             task_ids = tuple(
                 sorted(
@@ -1202,6 +1675,25 @@ def get_deleted_task_history_operation(
                     _required_history_int(row["id"], "task_id"): row
                     for row in _dict_rows(cursor)
                 }
+            projection_task_rows = {
+                task_id: {
+                    "empresa_id": row["empresa"],
+                    "eliminada": row["eliminada"],
+                    "eliminada_en": row["eliminada_en"],
+                    "eliminada_por": row["eliminada_por"],
+                    "eliminacion_operacion_id": row[
+                        "eliminacion_operacion_id"
+                    ],
+                }
+                for task_id, row in task_rows.items()
+            }
+            deletion_status, restoration = _project_deletion_status(
+                source=operation_row,
+                source_manifest=manifest_rows,
+                task_rows=projection_task_rows,
+                restoration_row=restoration_row,
+                restoration_manifest=restoration_manifest_rows,
+            )
 
             files: tuple[DeletionHistoryFile, ...] = ()
             file_table = _table(file_model, quote)
@@ -1281,6 +1773,9 @@ def get_deleted_task_history_operation(
                     )
                     else "HISTORICAL_RELATIONS_UNAVAILABLE"
                 )
+            if deletion_status != "CURRENTLY_DELETED":
+                relations = ()
+                hierarchy_status = "HISTORICAL_RELATIONS_UNAVAILABLE"
     except DeletedTaskHistoryError:
         raise
     except Exception as exc:
@@ -1314,6 +1809,7 @@ def get_deleted_task_history_operation(
             "result_code": operation_row["result_code"],
             "audit_status": operation_row["audit_status"],
             "audit_event_id": operation_row["audit_event_id"],
+            "deletion_status": deletion_status,
             "task_id": object_id,
             "physical_task_id": physical["id"] if physical else None,
             "task_correlativo": physical["correlativo"] if physical else None,
@@ -1327,6 +1823,7 @@ def get_deleted_task_history_operation(
         }
         if (
             physical
+            and deletion_status == "CURRENTLY_DELETED"
             and _physical_status(
                 row,
                 operation_id,
@@ -1465,6 +1962,8 @@ def get_deleted_task_history_operation(
         files=files,
         relations=relations,
         hierarchy_status=hierarchy_status,
+        deletion_status=deletion_status,
+        restoration=restoration,
     )
 
 
@@ -1513,6 +2012,24 @@ def get_deleted_task_history_detail(
             "La tarea histórica no existe en la operación de la empresa activa."
         )
     task_item = manifest_item.task
+    if task_item.deletion_status == "RESTORED":
+        return DeletedTaskHistoryDetail(
+            operation=operation,
+            task=task_item,
+            description=None,
+            prioridad=None,
+            fecha_creacion=None,
+            fecha_publicacion=None,
+            fecha_asignacion=None,
+            fecha_tope=None,
+            fecha_cumplimiento=None,
+            creada_por_id=None,
+            responsable_id=None,
+            local_id=None,
+            departamento_id=None,
+            core_information_available=False,
+            related=_empty_related_history("RESTORED"),
+        )
     if task_item.physical_status != "PHYSICALLY_RETAINED":
         related = _empty_related_history(
             "UNAVAILABLE_OBJECT_MISSING"

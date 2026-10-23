@@ -1217,7 +1217,7 @@
     "tareas.connection_roles.status.missing": "NO CONFIGURADO",
     "tareas.list.title": "Tareas",
     "tareas.deleted_history.title": "Tareas eliminadas",
-    "tareas.deleted_history.description": "Consulta histórica de solo lectura",
+    "tareas.deleted_history.description": "Historial de eliminaciones lógicas y sus restauraciones",
     "tareas.deleted_history.filters.title": "Filtros",
     "tareas.deleted_history.filter.search": "Búsqueda",
     "tareas.deleted_history.filter.date_from": "Eliminada desde",
@@ -1238,6 +1238,7 @@
     "tareas.deleted_history.column.reference": "Referencia",
     "tareas.deleted_history.column.title": "Título",
     "tareas.deleted_history.column.state": "Estado",
+    "tareas.deleted_history.column.restoration_status": "Estado del registro",
     "tareas.deleted_history.column.deleted_at": "Eliminada",
     "tareas.deleted_history.column.actor": "Usuario",
     "tareas.deleted_history.column.audit": "Auditoría",
@@ -1245,6 +1246,7 @@
     "tareas.deleted_history.column.actions": "Acciones",
     "tareas.deleted_history.action.view_task": "Ver tarea",
     "tareas.deleted_history.action.view_operation": "Operación",
+    "tareas.deleted_history.action.preview_restoration": "Previsualizar restauración",
     "tareas.deleted_history.action.back": "Volver al historial",
     "tareas.deleted_history.error.invalid_filters": "Los filtros no son válidos.",
     "tareas.deleted_history.error.unavailable": "El historial no está disponible en este momento.",
@@ -1253,6 +1255,9 @@
     "tareas.deleted_history.page.previous": "Anterior",
     "tareas.deleted_history.page.next": "Siguiente",
     "tareas.deleted_history.not_available": "No disponible",
+    "tareas.deleted_history.projection.currently_deleted": "Actualmente eliminada",
+    "tareas.deleted_history.projection.restored": "Restaurada",
+    "tareas.deleted_history.projection.inconsistent": "Inconsistente",
     "tareas.deleted_history.physical.physically_retained": "Conservada físicamente",
     "tareas.deleted_history.physical.physically_absent": "Ausente físicamente",
     "tareas.deleted_history.physical.inconsistent": "Inconsistente",
@@ -1293,6 +1298,7 @@
     "tareas.deleted_history.operation.created_at": "Iniciada",
     "tareas.deleted_history.operation.committed_at": "Confirmada",
     "tareas.deleted_history.operation.status": "Estado",
+    "tareas.deleted_history.operation.deletion_status": "Estado de la eliminación",
     "tareas.deleted_history.operation.result": "Resultado",
     "tareas.deleted_history.operation.audit": "Estado de auditoría",
     "tareas.deleted_history.operation.audit_consistency": "Consistencia de auditoría",
@@ -1309,6 +1315,22 @@
     "tareas.deleted_history.operation.files": "Referencias de archivos",
     "tareas.deleted_history.operation.attempts": "Intentos",
     "tareas.deleted_history.operation.no_files": "La operación no registra referencias de archivos.",
+    "tareas.deleted_history.restoration.title": "Operación de restauración vinculada",
+    "tareas.deleted_history.restoration.id": "UUID de restauración",
+    "tareas.deleted_history.restoration.source_operation": "Eliminación de origen",
+    "tareas.deleted_history.restoration.actor": "Usuario",
+    "tareas.deleted_history.restoration.reason": "Motivo de restauración",
+    "tareas.deleted_history.restoration.created_at": "Iniciada",
+    "tareas.deleted_history.restoration.committed_at": "Confirmada",
+    "tareas.deleted_history.restoration.status": "Estado del ledger",
+    "tareas.deleted_history.restoration.result": "Código de resultado",
+    "tareas.deleted_history.restoration.audit": "Estado de auditoría",
+    "tareas.deleted_history.restoration.audit_event": "Evento de auditoría",
+    "tareas.deleted_history.restoration.validation": "Vínculo y manifiesto",
+    "tareas.deleted_history.restoration.validation_valid": "Válidos y vinculados a la eliminación original",
+    "tareas.deleted_history.restoration.validation_invalid": "Vínculo o manifiesto inconsistente",
+    "tareas.deleted_history.restoration.pending_notice": "La operación de restauración está pendiente; la eliminación aún no se considera restaurada.",
+    "tareas.deleted_history.restoration.audit_unconfirmed": "La restauración está confirmada; la auditoría central aún no está confirmada.",
     "tareas.deleted_history.detail.heading": "Detalle histórico",
     "tareas.deleted_history.detail.task_data": "Datos conservados",
     "tareas.deleted_history.detail.reference": "Referencia",
@@ -1326,6 +1348,7 @@
     "tareas.deleted_history.detail.local": "Local",
     "tareas.deleted_history.detail.department": "Departamento",
     "tareas.deleted_history.detail.core_unavailable": "La fila operacional ya no está disponible; se conserva únicamente la referencia del ledger.",
+    "tareas.deleted_history.detail.restored_snapshot_unavailable": "La tarea fue restaurada. El ledger conserva la trazabilidad, pero no una instantánea de sus datos anteriores a la restauración.",
     "tareas.deleted_history.related.hierarchy": "Jerarquía de la operación",
     "tareas.deleted_history.related.parent": "Padre",
     "tareas.deleted_history.related.child": "Hija",
@@ -1335,6 +1358,7 @@
     "tareas.deleted_history.related.mini_tasks": "MiniTareas e historial",
     "tareas.deleted_history.related.documents": "Documentos e historial",
     "tareas.deleted_history.related.documents_notice": "Se muestra solo metadatos; los archivos y URL no se exponen desde el historial.",
+    "tareas.deleted_history.related.restored_snapshot_unavailable": "Los datos actuales relacionados no se presentan como una instantánea histórica de la eliminación.",
     "tareas.deleted_history.related.evidence": "Evidencia de cierre e hitos",
     "tareas.deleted_history.related.transitions": "Transiciones y cierres",
     "tareas.deleted_history.related.comments": "Comentarios",
@@ -1567,8 +1591,26 @@
     "tareas.hierarchy.annulled": "Anulada",
     "tareas.hierarchy.anulada_efectivamente": "Anulada",
     "tareas.hierarchy.children": "Hijas:",
-    "tareas.hierarchy.parent": "Padre:",
+    "tareas.hierarchy.parent": "Madre:",
     "tareas.hierarchy.title": "Jerarquía",
+    "tareas.hierarchy.kind.main": "Tarea principal",
+    "tareas.hierarchy.kind.mother": "Tarea madre",
+    "tareas.hierarchy.kind.child": "Tarea hija",
+    "tareas.hierarchy.kind.grandchild": "Tarea nieta",
+    "tareas.hierarchy.kind.also_mother": "También es madre",
+    "tareas.hierarchy.direct_mother": "Madre directa:",
+    "tareas.hierarchy.create_child": "Crear tarea hija",
+    "tareas.hierarchy.form.section": "Jerarquía de tareas",
+    "tareas.hierarchy.form.parent_label": "Tarea madre",
+    "tareas.hierarchy.form.parent_none": "Sin tarea madre — Tarea principal",
+    "tareas.hierarchy.form.parent_help": "Solo se muestran tareas ACTIVA de la empresa actual que pueden recibir otro nivel.",
+    "tareas.hierarchy.form.parents_unavailable": "No se pudo consultar la jerarquía. Aún puedes crear una tarea principal; la creación jerárquica no está disponible.",
+    "tareas.hierarchy.form.no_eligible_parents": "No hay tareas madre elegibles; puedes crear una tarea principal.",
+    "tareas.hierarchy.form.type_main": "Se creará una tarea principal.",
+    "tareas.hierarchy.form.type_child": "Se creará una tarea hija completa.",
+    "tareas.hierarchy.form.type_grandchild": "Se creará una tarea nieta completa.",
+    "tareas.hierarchy.form.department_label": "Departamento de la tarea hija",
+    "tareas.hierarchy.form.department_help": "Se hereda el departamento de la madre; puedes seleccionar otro departamento de la misma empresa.",
     "tareas.links.created_at": "Creación",
     "tareas.links.created_by": "Creado por",
     "tareas.links.empty": "No hay enlaces compartidos.",
@@ -1823,7 +1865,7 @@
     ,"tareas.logical_deletion.preview.descendant_count": "Descendientes"
     ,"tareas.logical_deletion.preview.description": "Revisa el alcance antes de confirmar. Esta acción conserva los registros para consulta histórica."
     ,"tareas.logical_deletion.preview.hierarchy": "Tareas incluidas en la jerarquía"
-    ,"tareas.logical_deletion.preview.logical_only": "La eliminación lógica marca las tareas del alcance y conserva sus registros; no elimina físicamente documentos ni permite restaurarlos."
+    ,"tareas.logical_deletion.preview.logical_only": "La eliminación lógica marca las tareas del alcance y conserva sus registros y documentos; no elimina archivos. La restauración es una operación lógica independiente que mantiene la trazabilidad."
     ,"tareas.logical_deletion.preview.no_blockers": "No se detectaron bloqueos en la previsualización."
     ,"tareas.logical_deletion.preview.no_elements": "No hay elementos relacionados."
     ,"tareas.logical_deletion.preview.no_shared_references": "No se detectaron referencias compartidas."
@@ -1844,4 +1886,82 @@
     ,"tareas.logical_deletion.preview.warning_prefix": "Advertencia"
     ,"tareas.logical_deletion.preview.warnings": "Advertencias"
     ,"tareas.logical_deletion.success": "Eliminación lógica completada."
+    ,"tareas.logical_restoration.preview.title": "Previsualización de restauración lógica"
+    ,"tareas.logical_restoration.preview.description": "Revisa la operación y el manifiesto exacto. Esta pantalla es de solo lectura y no restaura datos."
+    ,"tareas.logical_restoration.preview.back": "Volver a la operación"
+    ,"tareas.logical_restoration.preview.error.conflict": "La restauración no es elegible o no está disponible para confirmación."
+    ,"tareas.logical_restoration.preview.error.unavailable": "No se pudo generar la previsualización."
+    ,"tareas.logical_restoration.preview.error.token_invalid": "La confirmación no es válida o venció. Vuelve a revisar la operación."
+    ,"tareas.logical_restoration.preview.error.reason_required": "Indica el motivo obligatorio para restaurar."
+    ,"tareas.logical_restoration.preview.error.confirmation_required": "Confirma explícitamente que revisaste la restauración."
+    ,"tareas.logical_restoration.preview.error.preview_stale": "El manifiesto o el estado cambió desde la previsualización. Revisa la operación antes de volver a intentarlo."
+    ,"tareas.logical_restoration.preview.error.audit_conflict": "La restauración operacional está confirmada, pero existe un conflicto de auditoría central. Revisa el detalle histórico; no vuelvas a iniciar otra restauración."
+    ,"tareas.logical_restoration.preview.error.commit_uncertain": "No se pudo resolver el resultado del commit. Conserva el mismo UUID y reintenta esta confirmación."
+    ,"tareas.logical_restoration.preview.reason": "Motivo de restauración"
+    ,"tareas.logical_restoration.preview.reason_help": "El motivo quedará asociado a la operación de restauración."
+    ,"tareas.logical_restoration.preview.confirmation": "Confirmo que revisé la tarea y todos los elementos del manifiesto que se restaurarán."
+    ,"tareas.logical_restoration.preview.confirm_button": "Confirmar restauración"
+    ,"tareas.logical_restoration.preview.retry_operation_id": "UUID de restauración que debe conservarse"
+    ,"tareas.logical_restoration.preview.retry_same_operation": "Reintentar la misma operación"
+    ,"tareas.logical_restoration.preview.current_values_notice": "Los datos descriptivos se leen de las filas actuales del manifiesto; no son una instantánea histórica guardada por el ledger."
+    ,"tareas.logical_restoration.preview.confirmation_not_enabled": "La confirmación todavía no está habilitada. Esta etapa solo permite revisar la previsualización."
+    ,"tareas.logical_restoration.preview.blocked": "La operación está bloqueada. Revisa los bloqueos antes de solicitar una confirmación."
+    ,"tareas.logical_restoration.preview.deletion_summary": "Operación original de eliminación"
+    ,"tareas.logical_restoration.preview.operation_id": "UUID de eliminación"
+    ,"tareas.logical_restoration.preview.root_task": "Tarea raíz"
+    ,"tareas.logical_restoration.preview.company": "Empresa"
+    ,"tareas.logical_restoration.preview.deletion_actor": "Usuario que eliminó"
+    ,"tareas.logical_restoration.preview.deletion_created_at": "Fecha de eliminación"
+    ,"tareas.logical_restoration.preview.deletion_reason": "Motivo de eliminación"
+    ,"tareas.logical_restoration.preview.source_audit": "Auditoría de eliminación"
+    ,"tareas.logical_restoration.preview.manifest_count": "Tareas en el manifiesto"
+    ,"tareas.logical_restoration.preview.restoration_operation_id": "UUID reservado para esta previsualización"
+    ,"tareas.logical_restoration.preview.eligibility": "Elegibilidad"
+    ,"tareas.logical_restoration.preview.eligible": "Elegible para restauración"
+    ,"tareas.logical_restoration.preview.not_eligible": "No elegible para restauración"
+    ,"tareas.logical_restoration.preview.external_references": "Referencias desde tareas externas al manifiesto"
+    ,"tareas.logical_restoration.preview.manifest": "Manifiesto exacto de tareas"
+    ,"tareas.logical_restoration.preview.manifest_item_type": "Tipo"
+    ,"tareas.logical_restoration.preview.task_id": "ID"
+    ,"tareas.logical_restoration.preview.correlativo": "Correlativo"
+    ,"tareas.logical_restoration.preview.task_title": "Título actual"
+    ,"tareas.logical_restoration.preview.task_state": "Estado actual"
+    ,"tareas.logical_restoration.preview.row_status": "Fila"
+    ,"tareas.logical_restoration.preview.root_badge": "Raíz"
+    ,"tareas.logical_restoration.preview.row_present": "Presente"
+    ,"tareas.logical_restoration.preview.row_missing": "Ausente"
+    ,"tareas.logical_restoration.preview.no_tasks": "No hay tareas disponibles en el manifiesto."
+    ,"tareas.logical_restoration.preview.task_details": "Filas actuales incluidas en el manifiesto"
+    ,"tareas.logical_restoration.preview.hierarchy": "Relaciones jerárquicas conservadas"
+    ,"tareas.logical_restoration.preview.parent": "Padre"
+    ,"tareas.logical_restoration.preview.child": "Hija"
+    ,"tareas.logical_restoration.preview.no_hierarchy": "No hay relaciones jerárquicas que mostrar."
+    ,"tareas.logical_restoration.preview.documents": "Documentos conservados"
+    ,"tareas.logical_restoration.preview.document_id": "Documento"
+    ,"tareas.logical_restoration.preview.document_task": "Tarea"
+    ,"tareas.logical_restoration.preview.document_type": "Tipo"
+    ,"tareas.logical_restoration.preview.document_format": "Formato"
+    ,"tareas.logical_restoration.preview.document_state": "Estado"
+    ,"tareas.logical_restoration.preview.file_reference": "Referencia de archivo"
+    ,"tareas.logical_restoration.preview.url_reference": "Referencia URL"
+    ,"tareas.logical_restoration.preview.present": "Presente"
+    ,"tareas.logical_restoration.preview.absent": "Ausente"
+    ,"tareas.logical_restoration.preview.files_not_touched": "No se comprueba, recrea ni modifica ningún archivo físico."
+    ,"tareas.logical_restoration.preview.no_documents": "No hay documentos relacionados que mostrar."
+    ,"tareas.logical_restoration.preview.warnings": "Advertencias"
+    ,"tareas.logical_restoration.preview.warning.source_audit_unconfirmed": "La auditoría de la eliminación original no está confirmada; se concilia por separado."
+    ,"tareas.logical_restoration.preview.warning.external_origin_references": "Hay referencias desde tareas externas al manifiesto; no se modificarán."
+    ,"tareas.logical_restoration.preview.warning.files_not_verified": "La disponibilidad física de archivos referenciados no se verificó."
+    ,"tareas.logical_restoration.preview.warning.other": "Advertencia informativa del servicio."
+    ,"tareas.logical_restoration.preview.no_warnings": "No hay advertencias."
+    ,"tareas.logical_restoration.preview.blockers": "Bloqueos"
+    ,"tareas.logical_restoration.preview.blocker.manifest_incomplete": "El manifiesto no coincide con la eliminación original."
+    ,"tareas.logical_restoration.preview.blocker.already_completed": "La eliminación original ya tiene una restauración confirmada."
+    ,"tareas.logical_restoration.preview.blocker.state_conflict": "Las marcas actuales no coinciden con la eliminación original."
+    ,"tareas.logical_restoration.preview.blocker.task_missing": "Falta una tarea del manifiesto; no se reconstruirá."
+    ,"tareas.logical_restoration.preview.blocker.hierarchy_conflict": "Las relaciones conservadas no forman una jerarquía válida."
+    ,"tareas.logical_restoration.preview.blocker.not_eligible": "La operación original no es elegible para restauración."
+    ,"tareas.logical_restoration.preview.blocker.other": "El servicio informó un bloqueo que impide restaurar."
+    ,"tareas.logical_restoration.preview.no_blockers": "No hay bloqueos."
+    ,"tareas.logical_restoration.preview.cancel": "Volver al historial"
 }

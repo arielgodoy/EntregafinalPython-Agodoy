@@ -215,6 +215,20 @@ concreta.
 
 Esta política no modifica ni debilita ninguna otra regla existente de este índice.
 
+### I18N de funcionalidades nuevas o modificadas
+
+Toda funcionalidad con textos visibles nuevos o modificados debe cerrar el gate i18n:
+`data-key`/`message_key` correcto, clave presente en `sp.json` y `en.json`, sin claves
+dinámicas y con etiquetas ES/EN completas. La prueba focal de la app y la validación
+manual de ambos idiomas forman parte de la aceptación.
+
+Los catálogos globales solo se editan con autorización expresa del propietario, y solo
+para las claves requeridas por el scope autorizado. Se conservan estructura y claves
+ajenas; no se cambia el mecanismo global ni se crean catálogos paralelos por app. La
+autorización L5 registrada el 2026-10-21 cubre las claves necesarias para T161; la
+autorización del 2026-10-23 la extiende únicamente a las claves requeridas por T160-A.
+Estas autorizaciones no se extienden a otras tareas o funcionalidades.
+
 ### Arquitectura
 
 - `COPILOT/ARQUITECTURA_APPS.md`

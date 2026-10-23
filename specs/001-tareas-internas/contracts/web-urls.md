@@ -118,12 +118,32 @@ autorizan crear endpoints ausentes.
 
 - **Response 200**: HTML con título, descripción, prioridad, estado, responsable, fecha de
   creación y fecha de publicación (si existe).
+- **Jerarquía**: identifica una tarea principal sin hijas, tarea madre, tarea hija (con
+  indicador adicional si también tiene hijas) o nieta usando únicamente las relaciones
+  `TareaRelacion`, su profundidad y sus hijas directas. Una nieta enlaza tanto a su madre
+  directa como a la tarea principal; cada enlace reutiliza esta ruta de detalle.
+- **Aislamiento de referencias**: madre, raíz e hijas solo se muestran cuando pertenecen
+  a la Empresa activa y no están eliminadas; la vista de destino vuelve a validar
+  `Tareas` + `ingresar` y la Empresa activa. El GET es de solo lectura y las hijas se
+  proyectan en una consulta acotada, sin consultas por cada hija.
 - **404**: si la tarea no pertenece a la empresa activa.
 
 ### Crear — `POST /tareas/crear/`
 
-- **Request (form)**: `titulo` (requerido), `descripcion`, `prioridad`, `responsable` (opcional).
-- **Response 302**: redirect a detalle; la tarea queda en `BORRADOR` con
+- **Request (form)**: `titulo` (requerido), `descripcion`, `prioridad`, `responsable`
+  (opcional) y `tarea_madre` (opcional).
+- **Sin `tarea_madre`**: conserva el flujo de raíz existente mediante `create_task_draft()`.
+- **Con `tarea_madre`**: el ID debe pertenecer a una Tarea elegible de la Empresa activa;
+  `create_child_task_atomic()` revalida empresa, estado `ACTIVA`, anulación efectiva,
+  jerarquía y dimensiones, y crea la Tarea hija/nieta como `BORRADOR` dentro de su
+  transacción. El selector del formulario no es autoridad. El detalle ofrece el enlace
+  contextual a `/tareas/crear/?tarea_madre=<id>` solo cuando el usuario tiene `Tareas` +
+  `crear` y la madre es elegible.
+- **Dimensiones**: con madre `LOCAL`, se conservan el ámbito y Local, sin Departamento;
+  con madre `DEPARTAMENTO`, se conserva el ámbito, se propone su Departamento y se permite
+  elegir otro de la misma Empresa; sin ámbito, la nueva Tarea queda sin ámbito. Se mantiene
+  el XOR Local/Departamento.
+- **Response 302**: redirect al detalle; la tarea queda en `BORRADOR` con
   `empresa = session['empresa_id']` y `fecha_creacion` registrada.
 - **Response 200** (form inválido): errores de campo en el formulario.
 
@@ -283,7 +303,7 @@ La auditoría central se entrega tras el commit y no promete atomicidad distribu
 resultado de auditoría pendiente o un commit incierto se informa explícitamente; no se
 presenta como éxito confirmado ni se inicia automáticamente una segunda operación.
 
-### L5 — Restauración lógica (contrato diferido; no implementado)
+### L5 — Restauración lógica (T160-A GET y T160-B POST implementados)
 
 Contrato completo de servicio, estados y errores:
 [logical-restoration.md](logical-restoration.md).
@@ -295,16 +315,27 @@ explícito sobre `Tareas`; la previsualización y confirmación revalidan I y S 
 I no autoriza la escritura y S no concede acceso a L4. `eliminar` (E), `is_staff` e
 `is_superuser` no sustituyen S.
 
-| Estado | Método | Ruta propuesta | Nombre sugerido | Vista/permiso |
+| Estado | Método | Ruta | Nombre | Vista/permiso |
 |---|---|---|---|---|
-| DEFERRED | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S) y validación explícita I de L4; solo preview |
-| DEFERRED | POST | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S), validación I de contexto L4, CSRF y motivo obligatorio |
+| IMPLEMENTED — T160-A | GET | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S) y validación explícita I de L4; solo preview |
+| IMPLEMENTED — T160-B | POST | `/tareas/eliminadas/operacion/<uuid:operation_id>/restaurar/` | `restauracion_logica` | `Tareas` + `supervisor` (S), validación I de L4, CSRF, confirmación explícita, motivo y token firmado |
 
 El GET no escribe. Presenta la operación original, raíz/correlativo, empresa, actor/fecha/
-motivo, manifiesto completo, información retenida y bloqueos; el POST requiere confirmación
-explícita y un token ligado al actor, empresa, eliminación, UUID nuevo de restauración,
-manifiesto y fingerprint. Cualquier cambio del alcance exige nuevo preview. La ruta
-permanece fuera de `tareas/urls.py` hasta la implementación aprobada.
+motivo, manifiesto completo, información retenida y bloqueos. Cuando el preview es elegible,
+prepara un token firmado ligado al actor, empresa, eliminación, UUID nuevo de restauración,
+manifiesto y fingerprint; no crea filas en el ledger. El formulario de POST solo se muestra
+para previews elegibles, exige motivo y confirmación explícita, y protege los envíos
+duplicados en la interfaz sin depender de esa protección para la idempotencia. El token
+expira a los 900 segundos y vincula actor, empresa, eliminación, UUID de restauración,
+manifiesto y fingerprint. La vista conserva I de L4 y S de `Tareas` como validaciones
+independientes; el servicio L5 vuelve a validar S, empresa, manifiesto y fingerprint.
+
+El POST solo acepta confirmaciones CSRF válidas y llama a `restore_logical_task_tree()`.
+Usa el UUID firmado en todos los reintentos; no requiere otro GET ni genera un UUID nuevo
+por reenvío. Un commit operacional confirmado sigue siendo restauración confirmada aunque
+la auditoría central quede pendiente/error; el flujo redirige al detalle L4 original, que
+proyecta el estado `RESTORED`. Un commit incierto devuelve una respuesta controlada con
+el mismo token y UUID para reintentar; no se inicia una operación distinta.
 
 El servicio valida de nuevo S, pertenencia y empresa activa, carga el manifiesto durable
 sin ampliarlo desde la jerarquía actual y confirma marcas, nueva operación y manifiesto en
@@ -322,7 +353,7 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | 1 | Transición de estado | POST | `transicionar_tarea` | Solo pares permitidos; registra auditoría |
 | 1 | Anular/reactivar | POST | `anular_tarea` / `reactivar_tarea` | Solo cambia el flag `anulada` de la tarea; anulación efectiva lógica (tarea+padre+abuelo); nunca borrar ni tocar estados |
 | 2 | Participantes/reasignación | GET/POST | `participantes_tarea` / `reasignar_tarea` | Usuarios activos y empresa activa |
-| 2 | Jerarquía | GET/POST | `jerarquia_tarea` | Máximo dos niveles padre→hija→nieta; no aplica a MiniTarea |
+| IMPLEMENTED | Crear hija/nieta | GET/POST | `/tareas/crear/` (`crear_tarea`) | Formulario único con madre opcional; Tarea completa, madre `ACTIVA`, máximo dos niveles |
 | 2 | MiniTareas en detalle | GET | `/tareas/<pk>/` (`detalle_tarea`) | `Tareas` + `ingresar`; lista MiniTareas de la Tarea y bitácora mínima |
 | 2 | Crear MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/` (`minitareas_tarea`) | Responsable principal o `S`; estado `ACTIVA`/`GESTION`; comentario no aplica a alta |
 | 2 | Cerrar MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/cerrar/` (`cerrar_minitarea`) | Persona asignada, responsable o `S`; modal/comentario obligatorio; estado `ACTIVA`/`GESTION` |
@@ -331,6 +362,11 @@ sesión autenticada, empresa activa, aislamiento, ICMEAS y respuestas controlada
 | 2 | Eliminar MiniTarea | POST | `/tareas/<tarea_id>/mini-tareas/<mini_tarea_id>/eliminar/` (`eliminar_minitarea`) | `Tareas` + `modificar`; responsable principal o `S`; solo `hecho=False` y sin eventos; modal/CSRF; respuesta controlada |
 
 El POST `cerrar_minitarea` acepta `multipart/form-data`. Además del comentario obligatorio y los destinatarios opt-in de T104, admite cero a cinco archivos opcionales. No expone selector ni metadatos documentales adicionales: cada archivo usa internamente el tipo neutro `DocumentoTarea.Tipo.OTRO`, las validaciones y el procesamiento de imágenes vigentes, y queda relacionado con el `Comentario` automático mediante `ComentarioAdjunto`. El cierre no genera una comunicación adicional de Comentarios.
+
+La creación de Tareas hijas y nietas reutiliza `/tareas/crear/`; no existe una ruta
+`jerarquia_tarea` de creación separada. La estructura padre-hija se registra mediante
+`create_child_task_atomic()` y `TareaRelacion`; las MiniTareas permanecen en su flujo
+independiente y no representan Tareas completas.
 
 La tabla de MiniTareas muestra un indicador compacto solo para el último `CIERRE` vigente de una MiniTarea `HECHA`: no muestra indicador con cero adjuntos, muestra `Archivo` con uno y `N archivos` con varios. El historial muestra cada adjunto dentro de su evento `CIERRE`; un evento `REAPERTURA` y un evento histórico sin `comentario_feed` no muestran adjuntos. La relación `MiniTareaEvento.comentario_feed` es la única forma válida de resolver la trazabilidad y no se permite reconstrucción por fecha, actor, texto, posición o nombre de archivo.
 | 2 | Reprogramación (implementada T134.2E) | POST | `reprogramar_tarea` | `Tareas` + `modificar`; solo ACTIVA/GESTION no anulada efectivamente; modal, CSRF, PRG al Detalle e historial especializado |

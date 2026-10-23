@@ -19,6 +19,11 @@ urlpatterns = [
         name='eliminada_detalle',
     ),
     path(
+        'eliminadas/operacion/<uuid:operation_id>/restaurar/',
+        views.TareaRestauracionLogicaPreviewView.as_view(),
+        name='restauracion_logica',
+    ),
+    path(
         'eliminadas/operacion/<uuid:operation_id>/',
         views.DeletedTaskHistoryOperationView.as_view(),
         name='eliminacion_operacion_detalle',

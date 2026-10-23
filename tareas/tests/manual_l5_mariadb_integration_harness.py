@@ -40,6 +40,7 @@ from auditoria.services import AuditIdempotencyStorageError, AuditoriaService
 from settings.services import mysql_connections
 from tareas.models import (
     LOGICAL_RESTORATION_RESULT_CODE,
+    Tarea,
     TareaEliminacionOperacion,
 )
 from tareas.services.assignment_storage import resolve_assignment_storage
@@ -429,6 +430,48 @@ class L5MariaDBCampaign:
         self.state.task_ids.append(task_id)
         return task_id
 
+    def _activate_hierarchy_parent(self, task_id: int) -> None:
+        row = self._read(
+            "SELECT correlativo FROM tareas_tarea "
+            "WHERE id=%s AND empresa_id=%s AND estado=%s",
+            (task_id, self.company.pk, Tarea.Estado.BORRADOR),
+        )
+        if not row or not str(row[0][0]).startswith("B"):
+            raise CampaignError(
+                "La tarea sintética no puede activarse como madre."
+            )
+        correlativo = str(row[0][0])
+        now = timezone.now()
+        with self.guarded_open(
+            self.context.mysql_connection,
+            database_name=DATABASE_NAME,
+        ) as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute(
+                    "UPDATE tareas_tarea SET correlativo=%s,estado=%s,"
+                    "fecha_publicacion=%s,fecha_asignacion=%s,fecha_tope=%s "
+                    "WHERE id=%s AND empresa_id=%s AND estado=%s AND correlativo=%s",
+                    (
+                        f"A{correlativo[1:]}",
+                        Tarea.Estado.ACTIVA,
+                        now,
+                        now,
+                        timezone.localdate() + timedelta(days=30),
+                        task_id,
+                        self.company.pk,
+                        Tarea.Estado.BORRADOR,
+                        correlativo,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise CampaignError(
+                        "No se pudo activar la tarea sintética madre."
+                    )
+                connection.commit()
+            finally:
+                cursor.close()
+
     def _create_child(self, label: str, parent_id: int) -> int:
         result = create_child_task_atomic(
             CreateTaskDraftInput(
@@ -596,7 +639,9 @@ class L5MariaDBCampaign:
 
     def _test_t02_tree_and_document(self):
         root_id = self._create_task("T02_PARENT")
+        self._activate_hierarchy_parent(root_id)
         child_id = self._create_child("T02_CHILD", root_id)
+        self._activate_hierarchy_parent(child_id)
         grandchild_id = self._create_child("T02_GRANDCHILD", child_id)
         document_id = self._insert_document(child_id, "T02_DOCUMENT")
         source_id = self._delete_logically(root_id, "T02")

@@ -18,9 +18,42 @@ CATALOGS = {
 MESSAGE_KEY_PATTERN = re.compile(
     r"tareas\.(?:messages|validation|links)(?:\.[a-z0-9_]+)+"
 )
+HIERARCHY_DETAIL_KEYS = {
+    "tareas.hierarchy.parent",
+    "tareas.hierarchy.children",
+    "tareas.hierarchy.kind.main",
+    "tareas.hierarchy.kind.mother",
+    "tareas.hierarchy.kind.child",
+    "tareas.hierarchy.kind.grandchild",
+    "tareas.hierarchy.kind.also_mother",
+    "tareas.hierarchy.direct_mother",
+}
 
 
 class TareasI18nTests(SimpleTestCase):
+    def test_hierarchy_detail_labels_have_catalog_parity_without_duplicate_keys(self):
+        for language in ("sp", "en"):
+            self.assertTrue(
+                HIERARCHY_DETAIL_KEYS.issubset(CATALOGS[language]),
+                f"Missing hierarchy detail translations in {language}",
+            )
+            duplicates = []
+
+            def object_pairs_hook(pairs):
+                seen = set()
+                for key, _value in pairs:
+                    if key in HIERARCHY_DETAIL_KEYS and key in seen:
+                        duplicates.append(key)
+                    seen.add(key)
+                return dict(pairs)
+
+            catalog_path = ROOT / f"static/lang/{language}.json"
+            json.loads(
+                catalog_path.read_text(encoding="utf-8"),
+                object_pairs_hook=object_pairs_hook,
+            )
+            self.assertEqual(duplicates, [])
+
     def test_comment_document_types_use_cataloged_dynamic_i18n_keys(self):
         template = (ROOT / "tareas/templates/tareas/_tarea_comentarios.html").read_text(encoding="utf-8")
         script = (ROOT / "tareas/static/tareas/js/task_comments.js").read_text(encoding="utf-8")
