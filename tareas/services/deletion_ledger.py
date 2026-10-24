@@ -1238,6 +1238,23 @@ class DjangoDeletionLedgerUnitOfWork:
         )
         return _operation_record_from_model(model) if model is not None else None
 
+    def get_root_operations(
+        self,
+        empresa_id: int,
+        root_task_id: int,
+        *,
+        lock: bool = True,
+    ) -> tuple[DeletionOperationRecord, ...]:
+        _check_django_restoration_schema(self.alias)
+        query = (
+            TareaEliminacionOperacion.objects.using(self.alias)
+            .filter(empresa_id=empresa_id, root_task_id=root_task_id)
+            .order_by("created_at", "operation_id")
+        )
+        if lock:
+            query = query.select_for_update()
+        return tuple(_operation_record_from_model(model) for model in query)
+
     def create_pending(self, operation: DeletionOperationInput) -> DeletionOperationRecord:
         operation = _normalize_operation(operation)
         defaults = _operation_values(
@@ -2175,6 +2192,39 @@ class MySQLDeletionLedgerUnitOfWork:
         finally:
             cursor.close()
         return _operation_record_from_row(row) if row is not None else None
+
+    def get_root_operations(
+        self,
+        empresa_id: int,
+        root_task_id: int,
+        *,
+        lock: bool = True,
+    ) -> tuple[DeletionOperationRecord, ...]:
+        if not self.database_name:
+            raise DeletionLedgerBackendError(
+                "BASE_TAREAS requiere una base para el ledger de restauración."
+            )
+        _check_mysql_restoration_schema(self.connection, self.database_name)
+        sql = (
+            f"SELECT {_RESTORATION_OPERATION_COLUMN_SQL} "
+            "FROM `tareas_eliminacion_operacion` "
+            "WHERE `empresa_id` = %s AND `root_task_id` = %s "
+            "ORDER BY `created_at`, `operation_id`"
+        )
+        if lock:
+            sql += " FOR UPDATE"
+        cursor = self._execute(sql, (empresa_id, root_task_id))
+        try:
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+        return tuple(
+            _operation_record_from_row(
+                row,
+                columns=_RESTORATION_OPERATION_COLUMNS,
+            )
+            for row in rows
+        )
 
     def create_pending(self, operation: DeletionOperationInput) -> DeletionOperationRecord:
         operation = _normalize_operation(operation)

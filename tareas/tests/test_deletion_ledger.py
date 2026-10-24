@@ -133,6 +133,36 @@ class DeletionLedgerTests(TestCase):
         self.items = (DeletionInventoryItem("tareas.tarea", self.task.pk),)
         self.files = (DeletionFileReference("default", "tareas/test/privado.pdf"),)
 
+    def test_mysql_root_operations_are_company_scoped_ordered_and_locked(self):
+        unit = MySQLDeletionLedgerUnitOfWork(
+            MagicMock(),
+            "mysql_config:7:tareas",
+            "test-config",
+            database_name="tareas",
+        )
+        cursor = MagicMock()
+        cursor.fetchall.return_value = ()
+
+        with patch(
+            "tareas.services.deletion_ledger._check_mysql_restoration_schema"
+        ) as schema_check:
+            with patch.object(unit, "_execute", return_value=cursor) as execute:
+                operations = unit.get_root_operations(
+                    self.empresa.pk,
+                    self.task.pk,
+                )
+
+        self.assertEqual(operations, ())
+        schema_check.assert_called_once()
+        sql, params = execute.call_args.args
+        self.assertIn("`empresa_id` = %s AND `root_task_id` = %s", sql)
+        self.assertIn(
+            "ORDER BY `created_at`, `operation_id` FOR UPDATE",
+            sql,
+        )
+        self.assertIn("`reverses_operation_id`", sql)
+        self.assertEqual(params, (self.empresa.pk, self.task.pk))
+
     def _persist_pending(self, *, include_files=False):
         with self.storage.atomic() as unit:
             unit.create_pending(self.operation)

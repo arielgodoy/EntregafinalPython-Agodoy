@@ -613,6 +613,8 @@ def _list_query(
         f"op.{op['result_code']} AS result_code, "
         f"op.{op['audit_status']} AS audit_status, "
         f"op.{op['audit_event_id']} AS audit_event_id, "
+        f"op.{op['created_at']} AS source_created_at, "
+        f"op.{op['committed_at']} AS source_committed_at, "
         f"op.{op['backend_type']} AS backend_type, "
         f"op.{op['backend_identity']} AS backend_identity, "
         f"op.{op['backend_config_version']} AS backend_config_version, "
@@ -665,6 +667,42 @@ def _uuid_matches(value: object, expected: UUID) -> bool:
         return (value if isinstance(value, UUID) else UUID(str(value))) == expected
     except (TypeError, ValueError, AttributeError):
         return False
+
+
+def _operation_timeline_is_valid(
+    operation: dict[str, object],
+    *,
+    not_before: datetime | None = None,
+) -> bool:
+    created_at = operation.get("created_at")
+    committed_at = operation.get("committed_at")
+    if (
+        not isinstance(created_at, datetime)
+        or not isinstance(committed_at, datetime)
+        or (not_before is not None and not isinstance(not_before, datetime))
+    ):
+        return False
+    try:
+        return committed_at >= created_at and (
+            not_before is None or created_at >= not_before
+        )
+    except TypeError:
+        return False
+
+
+def _restoration_timeline_is_valid(
+    source: dict[str, object],
+    restoration: dict[str, object],
+) -> bool:
+    source_committed_at = source.get("committed_at")
+    return bool(
+        _operation_timeline_is_valid(source)
+        and isinstance(source_committed_at, datetime)
+        and _operation_timeline_is_valid(
+            restoration,
+            not_before=source_committed_at,
+        )
+    )
 
 
 def _manifest_entries(
@@ -733,6 +771,312 @@ def _restoration_row_from_list(row: dict[str, object]) -> dict[str, object] | No
     }
 
 
+def _load_current_deletion_contexts(
+    cursor: _HistoryCursor,
+    quote: Callable[[str], str],
+    *,
+    empresa_id: int,
+    task_rows_by_source: dict[str, dict[int, dict[str, object]]],
+) -> dict[str, dict[str, object]]:
+    current_operation_ids = set()
+    for source_id, task_rows in task_rows_by_source.items():
+        for task_row in task_rows.values():
+            raw_operation_id = task_row.get("eliminacion_operacion_id")
+            if raw_operation_id is None:
+                continue
+            try:
+                operation_id = _normal_uuid(raw_operation_id).hex
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if operation_id != source_id:
+                current_operation_ids.add(operation_id)
+    if not current_operation_ids:
+        return {}
+
+    operation_ids = tuple(sorted(current_operation_ids))
+    placeholders = ", ".join("%s" for _ in operation_ids)
+    operation = TareaEliminacionOperacion
+    operation_table = _table(operation, quote)
+    operation_fields = (
+        ("operation_id", "operation_id"),
+        ("reverses_operation", "reverses_operation_id"),
+        ("empresa_id", "empresa_id"),
+        ("root_task_id", "root_task_id"),
+        ("root_correlativo", "root_correlativo"),
+        ("actor_id", "actor_id"),
+        ("motivo", "motivo"),
+        ("backend_type", "backend_type"),
+        ("backend_identity", "backend_identity"),
+        ("backend_config_version", "backend_config_version"),
+        ("status", "status"),
+        ("result_code", "result_code"),
+        ("audit_status", "audit_status"),
+        ("file_cleanup_status", "file_cleanup_status"),
+        ("created_at", "created_at"),
+        ("committed_at", "committed_at"),
+    )
+    operation_select = ", ".join(
+        f"op.{_column(operation, field_name, quote)} AS {alias}"
+        for field_name, alias in operation_fields
+    )
+    cursor.execute(
+        f"SELECT {operation_select} FROM {operation_table} op "
+        f"WHERE op.{_column(operation, 'operation_id', quote)} "
+        f"IN ({placeholders}) "
+        f"AND op.{_column(operation, 'empresa_id', quote)} = %s",
+        (*operation_ids, empresa_id),
+    )
+    operation_rows = {
+        _normal_uuid(str(row["operation_id"])).hex: row
+        for row in _dict_rows(cursor)
+    }
+    if not operation_rows:
+        return {}
+
+    source_ids = tuple(sorted(operation_rows))
+    source_placeholders = ", ".join("%s" for _ in source_ids)
+    cursor.execute(
+        f"SELECT {_column(operation, 'operation_id', quote)} AS operation_id, "
+        f"{_column(operation, 'reverses_operation', quote)} AS reverses_operation_id, "
+        f"{_column(operation, 'empresa_id', quote)} AS empresa_id, "
+        f"{_column(operation, 'root_task_id', quote)} AS root_task_id, "
+        f"{_column(operation, 'root_correlativo', quote)} AS root_correlativo, "
+        f"{_column(operation, 'actor_id', quote)} AS actor_id, "
+        f"{_column(operation, 'motivo', quote)} AS motivo, "
+        f"{_column(operation, 'backend_type', quote)} AS backend_type, "
+        f"{_column(operation, 'backend_identity', quote)} AS backend_identity, "
+        f"{_column(operation, 'backend_config_version', quote)} AS backend_config_version, "
+        f"{_column(operation, 'status', quote)} AS status, "
+        f"{_column(operation, 'result_code', quote)} AS result_code, "
+        f"{_column(operation, 'file_cleanup_status', quote)} AS file_cleanup_status, "
+        f"{_column(operation, 'created_at', quote)} AS created_at, "
+        f"{_column(operation, 'committed_at', quote)} AS committed_at "
+        f"FROM {operation_table} "
+        f"WHERE {_column(operation, 'reverses_operation', quote)} "
+        f"IN ({source_placeholders}) "
+        f"AND {_column(operation, 'empresa_id', quote)} = %s "
+        f"ORDER BY {_column(operation, 'operation_id', quote)}",
+        (*source_ids, empresa_id),
+    )
+    restorations_by_source: dict[str, list[dict[str, object]]] = {
+        source_id: [] for source_id in source_ids
+    }
+    restoration_rows = _dict_rows(cursor)
+    restoration_ids = []
+    for row in restoration_rows:
+        source_id = _normal_uuid(str(row["reverses_operation_id"])).hex
+        restorations_by_source.setdefault(source_id, []).append(row)
+        restoration_ids.append(_normal_uuid(str(row["operation_id"])).hex)
+
+    manifest_operation_ids = tuple(sorted(set(source_ids + tuple(restoration_ids))))
+    manifest_placeholders = ", ".join(
+        "%s" for _ in manifest_operation_ids
+    )
+    item = TareaEliminacionElemento
+    cursor.execute(
+        f"SELECT {_column(item, 'operacion', quote)} AS operation_id, "
+        f"{_column(item, 'tipo', quote)} AS item_type, "
+        f"{_column(item, 'object_id', quote)} AS object_id "
+        f"FROM {_table(item, quote)} "
+        f"WHERE {_column(item, 'operacion', quote)} "
+        f"IN ({manifest_placeholders}) "
+        f"ORDER BY {_column(item, 'operacion', quote)}, "
+        f"{_column(item, 'tipo', quote)}, {_column(item, 'object_id', quote)}",
+        manifest_operation_ids,
+    )
+    manifests: dict[str, list[dict[str, object]]] = {}
+    for row in _dict_rows(cursor):
+        manifest_id = _normal_uuid(str(row["operation_id"])).hex
+        manifests.setdefault(manifest_id, []).append(row)
+
+    task = Tarea
+    task_id_column = _column(task, "id", quote)
+    task_company_column = _column(task, "empresa", quote)
+    task_deleted_column = _column(task, "eliminada", quote)
+    task_deleted_at_column = _column(task, "eliminada_en", quote)
+    task_deleted_by_column = _column(task, "eliminada_por", quote)
+    task_operation_column = _column(task, "eliminacion_operacion_id", quote)
+    cursor.execute(
+        f"SELECT {task_id_column} AS task_id, "
+        f"{task_company_column} AS empresa_id, "
+        f"{task_deleted_column} AS eliminada, "
+        f"{task_deleted_at_column} AS eliminada_en, "
+        f"{task_deleted_by_column} AS eliminada_por, "
+        f"{task_operation_column} AS eliminacion_operacion_id "
+        f"FROM {_table(task, quote)} "
+        f"WHERE {task_company_column} = %s "
+        f"AND {task_operation_column} IN ({source_placeholders}) "
+        f"ORDER BY {task_id_column}",
+        (empresa_id, *source_ids),
+    )
+    marked_tasks: dict[str, dict[int, dict[str, object]]] = {
+        source_id: {} for source_id in source_ids
+    }
+    for row in _dict_rows(cursor):
+        marker_id = _normal_uuid(str(row["eliminacion_operacion_id"])).hex
+        marked_tasks.setdefault(marker_id, {})[
+            _required_history_int(row["task_id"], "task_id")
+        ] = {
+            "empresa_id": row["empresa_id"],
+            "eliminada": row["eliminada"],
+            "eliminada_en": row["eliminada_en"],
+            "eliminada_por": row["eliminada_por"],
+            "eliminacion_operacion_id": row["eliminacion_operacion_id"],
+        }
+
+    contexts = {}
+    for source_id, row in operation_rows.items():
+        restoration_rows_for_source = restorations_by_source.get(source_id, [])
+        contexts[source_id] = {
+            **row,
+            "manifest_entries": tuple(manifests.get(source_id, ())),
+            "restorations": tuple(
+                {
+                    **restoration,
+                    "manifest_entries": tuple(
+                        manifests.get(
+                            _normal_uuid(str(restoration["operation_id"])).hex,
+                            (),
+                        )
+                    ),
+                }
+                for restoration in restoration_rows_for_source
+            ),
+            "marked_tasks": marked_tasks.get(source_id, {}),
+        }
+    return contexts
+
+
+def _has_valid_later_deletion(
+    *,
+    source: dict[str, object],
+    source_entries: tuple[tuple[str, int], ...],
+    task_rows: dict[int, dict[str, object]],
+    restoration: DeletedTaskRestoration,
+    current_operations: dict[str, dict[str, object]],
+) -> bool:
+    source_operation_id = _normal_uuid(str(source["operation_id"]))
+    empresa_id = _required_history_int(source["empresa_id"], "empresa_id")
+    root_task_id = _required_history_int(source["root_task_id"], "root_task_id")
+    source_task_ids = {
+        object_id
+        for item_type, object_id in source_entries
+        if item_type == TASK_ITEM_LABEL
+    }
+    marker_ids = set()
+    for task_id in source_task_ids:
+        task = task_rows.get(task_id)
+        if (
+            task is None
+            or task["eliminada"] not in (True, 1)
+            or task["eliminada_en"] is None
+            or task["eliminada_por"] is None
+        ):
+            return False
+        try:
+            marker_ids.add(
+                _normal_uuid(task["eliminacion_operacion_id"]).hex
+            )
+        except (TypeError, ValueError, AttributeError):
+            return False
+
+    if len(marker_ids) != 1:
+        return False
+    current_id = next(iter(marker_ids))
+    if current_id == source_operation_id.hex:
+        return False
+    current = current_operations.get(current_id)
+    if (
+        current is None
+        or _normal_uuid(str(current["operation_id"])).hex != current_id
+        or current.get("reverses_operation_id") is not None
+        or _required_history_int(current["empresa_id"], "current_empresa_id")
+        != empresa_id
+        or _required_history_int(current["root_task_id"], "current_root_task_id")
+        != root_task_id
+        or current["status"] != TareaEliminacionOperacion.Estado.COMMITTED
+        or current["result_code"] != LOGICAL_DELETION_RESULT_CODE
+        or current["file_cleanup_status"] != "NOT_REQUIRED"
+        or current["backend_type"] != source["backend_type"]
+        or current["backend_identity"] != source["backend_identity"]
+        or current["backend_config_version"] != source["backend_config_version"]
+        or not isinstance(current["motivo"], str)
+        or not current["motivo"].strip()
+    ):
+        return False
+
+    current_manifest = _manifest_entries(current.get("manifest_entries", ()))
+    current_task_ids = {
+        object_id
+        for item_type, object_id in current_manifest
+        if item_type == TASK_ITEM_LABEL
+    }
+    if (
+        not current_manifest
+        or len(current_task_ids) != len(current_manifest)
+        or len(current_manifest) != len(set(current_manifest))
+        or (TASK_ITEM_LABEL, root_task_id) not in current_manifest
+        or not source_task_ids.issubset(current_task_ids)
+        or set(current.get("marked_tasks", {})) != current_task_ids
+    ):
+        return False
+    if any(
+        not _task_markers_match_deletion(
+            current["marked_tasks"].get(task_id),
+            operation_id=UUID(current_id),
+            empresa_id=empresa_id,
+            actor_id=_required_history_int(
+                current["actor_id"],
+                "current_actor_id",
+            ),
+        )
+        for task_id in current_task_ids
+    ):
+        return False
+
+    if (
+        restoration.committed_at is None
+        or not _operation_timeline_is_valid(
+            current,
+            not_before=restoration.committed_at,
+        )
+    ):
+        return False
+
+    current_restorations = current.get("restorations", ())
+    if len(current_restorations) > 1:
+        return False
+    if current_restorations:
+        pending = current_restorations[0]
+        if (
+            not _uuid_matches(
+                pending.get("reverses_operation_id"),
+                UUID(current_id),
+            )
+            or _required_history_int(
+                pending["empresa_id"],
+                "current_restoration_empresa_id",
+            )
+            != empresa_id
+            or _required_history_int(
+                pending["root_task_id"],
+                "current_restoration_root_task_id",
+            )
+            != root_task_id
+            or pending["status"] != TareaEliminacionOperacion.Estado.PENDIENTE
+            or (pending["result_code"] or "") != ""
+            or pending["file_cleanup_status"] != "NOT_REQUIRED"
+            or pending["backend_type"] != current["backend_type"]
+            or pending["backend_identity"] != current["backend_identity"]
+            or pending["backend_config_version"]
+            != current["backend_config_version"]
+            or _manifest_entries(pending.get("manifest_entries", ()))
+            != current_manifest
+        ):
+            return False
+    return True
+
+
 def _project_deletion_status(
     *,
     source: dict[str, object],
@@ -740,6 +1084,7 @@ def _project_deletion_status(
     task_rows: dict[int, dict[str, object]],
     restoration_row: dict[str, object] | None,
     restoration_manifest: Sequence[dict[str, object]] = (),
+    current_operations: dict[str, dict[str, object]] | None = None,
 ) -> tuple[str, DeletedTaskRestoration | None]:
     source_operation_id = _normal_uuid(str(source["operation_id"]))
     empresa_id = _required_history_int(source["empresa_id"], "empresa_id")
@@ -867,9 +1212,28 @@ def _project_deletion_status(
         restoration.status == TareaEliminacionOperacion.Estado.COMMITTED
         and restoration.result_code == LOGICAL_RESTORATION_RESULT_CODE
     ):
+        restoration_chronology_valid = (
+            linked_restoration is not None
+            and _restoration_timeline_is_valid(source, linked_restoration)
+        )
+        restored_before_later_deletion = (
+            metadata_matches
+            and manifest_matches
+            and restoration_chronology_valid
+            and _has_valid_later_deletion(
+                source=source,
+                source_entries=source_entries,
+                task_rows=task_rows,
+                restoration=restoration,
+                current_operations=current_operations or {},
+            )
+        )
         deletion_status = (
             "RESTORED"
-            if metadata_matches and manifest_matches and markers_cleared
+            if metadata_matches
+            and manifest_matches
+            and restoration_chronology_valid
+            and (markers_cleared or restored_before_later_deletion)
             else "INCONSISTENT"
         )
     else:
@@ -895,6 +1259,8 @@ def _list_deletion_projections(
             "empresa_id": row["empresa_id"],
             "root_task_id": row["root_task_id"],
             "actor_id": row["actor_id"],
+            "created_at": row["source_created_at"],
+            "committed_at": row["source_committed_at"],
             "backend_type": row["backend_type"],
             "backend_identity": row["backend_identity"],
             "backend_config_version": row["backend_config_version"],
@@ -983,6 +1349,12 @@ def _list_deletion_projections(
         if physical is not None:
             task_rows_by_source[source_id][task_id] = physical
 
+    current_operation_contexts = _load_current_deletion_contexts(
+        cursor,
+        quote,
+        empresa_id=empresa_id,
+        task_rows_by_source=task_rows_by_source,
+    )
     projections = {}
     for source_id, source_row in source_rows.items():
         restoration = restoration_rows[source_id]
@@ -1001,6 +1373,7 @@ def _list_deletion_projections(
                 if restoration_id is not None
                 else ()
             ),
+            current_operations=current_operation_contexts,
         )
     return projections
 
@@ -1687,12 +2060,19 @@ def get_deleted_task_history_operation(
                 }
                 for task_id, row in task_rows.items()
             }
+            current_operation_contexts = _load_current_deletion_contexts(
+                cursor,
+                quote,
+                empresa_id=empresa_id,
+                task_rows_by_source={operation_id.hex: projection_task_rows},
+            )
             deletion_status, restoration = _project_deletion_status(
                 source=operation_row,
                 source_manifest=manifest_rows,
                 task_rows=projection_task_rows,
                 restoration_row=restoration_row,
                 restoration_manifest=restoration_manifest_rows,
+                current_operations=current_operation_contexts,
             )
 
             files: tuple[DeletionHistoryFile, ...] = ()

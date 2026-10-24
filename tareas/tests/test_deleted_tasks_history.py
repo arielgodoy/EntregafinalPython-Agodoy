@@ -62,6 +62,8 @@ class DeletedTaskHistoryQueryTests(SimpleTestCase):
             "result_code",
             "audit_status",
             "audit_event_id",
+            "source_created_at",
+            "source_committed_at",
             "backend_type",
             "backend_identity",
             "backend_config_version",
@@ -105,6 +107,8 @@ class DeletedTaskHistoryQueryTests(SimpleTestCase):
             "result_code": LOGICAL_DELETION_RESULT_CODE,
             "audit_status": "CONFIRMED",
             "audit_event_id": 6,
+            "source_created_at": datetime(2026, 10, 19, 11, 0),
+            "source_committed_at": datetime(2026, 10, 19, 11, 30),
             "backend_type": "MYSQL_CONFIG",
             "backend_identity": "mysql:BASE_TAREAS",
             "backend_config_version": "",
@@ -267,6 +271,8 @@ class DeletedTaskHistoryQueryTests(SimpleTestCase):
             "result_code",
             "audit_status",
             "audit_event_id",
+            "source_created_at",
+            "source_committed_at",
             "backend_type",
             "backend_identity",
             "backend_config_version",
@@ -309,6 +315,8 @@ class DeletedTaskHistoryQueryTests(SimpleTestCase):
             LOGICAL_DELETION_RESULT_CODE,
             "CONFIRMED",
             6,
+            datetime(2026, 10, 19, 11, 0),
+            datetime(2026, 10, 19, 11, 30),
             "MYSQL_CONFIG",
             "mysql:BASE_TAREAS",
             "base-config",
@@ -409,6 +417,8 @@ class DeletedTaskRestorationProjectionTests(SimpleTestCase):
             "empresa_id": 1,
             "root_task_id": 84,
             "actor_id": 8,
+            "created_at": datetime(2026, 10, 19, 11, 0),
+            "committed_at": datetime(2026, 10, 19, 11, 30),
             "backend_type": "MYSQL_CONFIG",
             "backend_identity": "mysql:BASE_TAREAS",
             "backend_config_version": "base-config",
@@ -452,13 +462,21 @@ class DeletedTaskRestorationProjectionTests(SimpleTestCase):
             "committed_at": datetime(2026, 10, 20, 9, 1),
         }
 
-    def _project(self, *, restoration=None, tasks=None, restore_manifest=()):
+    def _project(
+        self,
+        *,
+        restoration=None,
+        tasks=None,
+        restore_manifest=(),
+        current_operations=None,
+    ):
         return _project_deletion_status(
             source=self.source,
             source_manifest=self.manifest,
             task_rows=tasks if tasks is not None else self.deleted_tasks,
             restoration_row=restoration,
             restoration_manifest=restore_manifest,
+            current_operations=current_operations,
         )
 
     def test_original_deletion_remains_current_when_no_restoration_exists(self):
@@ -480,6 +498,171 @@ class DeletedTaskRestorationProjectionTests(SimpleTestCase):
         self.assertEqual(restoration.audit_status, "PENDING")
         self.assertTrue(restoration.manifest_matches)
         self.assertTrue(restoration.metadata_matches)
+
+    def test_committed_restoration_with_commit_before_creation_is_inconsistent(self):
+        restoration = {
+            **self.restoration,
+            "committed_at": datetime(2026, 10, 20, 8, 59),
+        }
+
+        status, _restoration = self._project(
+            restoration=restoration,
+            tasks=self.restored_tasks,
+            restore_manifest=self.manifest,
+        )
+
+        self.assertEqual(status, "INCONSISTENT")
+
+    def test_committed_restoration_requires_complete_ordered_timestamps(self):
+        cases = (
+            (
+                self.source,
+                {**self.restoration, "committed_at": None},
+            ),
+            (
+                {
+                    **self.source,
+                    "committed_at": datetime(2026, 10, 20, 9, 30),
+                },
+                {
+                    **self.restoration,
+                    "created_at": datetime(2026, 10, 20, 9, 0),
+                    "committed_at": datetime(2026, 10, 20, 9, 40),
+                },
+            ),
+            (
+                {
+                    **self.source,
+                    "committed_at": datetime(2026, 10, 19, 10, 59),
+                },
+                self.restoration,
+            ),
+        )
+
+        for source, restoration in cases:
+            with self.subTest(
+                source_committed_at=source["committed_at"],
+                restoration_created_at=restoration["created_at"],
+                restoration_committed_at=restoration["committed_at"],
+            ):
+                status, _restoration = _project_deletion_status(
+                    source=source,
+                    source_manifest=self.manifest,
+                    task_rows=self.restored_tasks,
+                    restoration_row=restoration,
+                    restoration_manifest=self.manifest,
+                )
+                self.assertEqual(status, "INCONSISTENT")
+
+    def test_restored_cycle_stays_restored_while_a_later_deletion_is_current(self):
+        later_id = "b8a1a88534744a1b93716acba49d246d"
+        later_operation = {
+            "operation_id": later_id,
+            "reverses_operation_id": None,
+            "empresa_id": 1,
+            "root_task_id": 84,
+            "root_correlativo": "B0000084",
+            "actor_id": 10,
+            "motivo": "Segunda eliminación",
+            "backend_type": "MYSQL_CONFIG",
+            "backend_identity": "mysql:BASE_TAREAS",
+            "backend_config_version": "base-config",
+            "status": "COMMITTED",
+            "result_code": LOGICAL_DELETION_RESULT_CODE,
+            "audit_status": "PENDING",
+            "file_cleanup_status": "NOT_REQUIRED",
+            "created_at": datetime(2026, 10, 20, 9, 2),
+            "committed_at": datetime(2026, 10, 20, 9, 3),
+            "manifest_entries": self.manifest,
+            "marked_tasks": {
+                84: {
+                    "empresa_id": 1,
+                    "eliminada": True,
+                    "eliminada_en": datetime(2026, 10, 20, 9, 3),
+                    "eliminada_por": 10,
+                    "eliminacion_operacion_id": later_id,
+                }
+            },
+            "restoration": None,
+        }
+        later_deleted_task = {
+            84: {
+                "empresa_id": 1,
+                "eliminada": True,
+                "eliminada_en": datetime(2026, 10, 20, 9, 3),
+                "eliminada_por": 10,
+                "eliminacion_operacion_id": later_id,
+            }
+        }
+
+        status, restoration = self._project(
+            restoration=self.restoration,
+            tasks=later_deleted_task,
+            restore_manifest=self.manifest,
+            current_operations={later_id: later_operation},
+        )
+
+        self.assertEqual(status, "RESTORED")
+        self.assertEqual(restoration.operation_id, self.restoration_id)
+
+        later_operation["committed_at"] = datetime(2026, 10, 20, 9, 1)
+        invalid_later_status, _restoration = self._project(
+            restoration=self.restoration,
+            tasks=later_deleted_task,
+            restore_manifest=self.manifest,
+            current_operations={later_id: later_operation},
+        )
+        self.assertEqual(invalid_later_status, "INCONSISTENT")
+
+    def test_unverified_later_deletion_does_not_hide_an_inconsistent_chain(self):
+        later_id = "b8a1a88534744a1b93716acba49d246d"
+        later_operation = {
+            "operation_id": later_id,
+            "reverses_operation_id": None,
+            "empresa_id": 1,
+            "root_task_id": 999,
+            "root_correlativo": "B0000999",
+            "actor_id": 10,
+            "motivo": "Operación de otra raíz",
+            "backend_type": "MYSQL_CONFIG",
+            "backend_identity": "mysql:BASE_TAREAS",
+            "backend_config_version": "base-config",
+            "status": "COMMITTED",
+            "result_code": LOGICAL_DELETION_RESULT_CODE,
+            "audit_status": "CONFIRMED",
+            "file_cleanup_status": "NOT_REQUIRED",
+            "created_at": datetime(2026, 10, 20, 9, 2),
+            "committed_at": datetime(2026, 10, 20, 9, 3),
+            "manifest_entries": self.manifest,
+            "marked_tasks": {
+                84: {
+                    "empresa_id": 1,
+                    "eliminada": True,
+                    "eliminada_en": datetime(2026, 10, 20, 9, 3),
+                    "eliminada_por": 10,
+                    "eliminacion_operacion_id": later_id,
+                }
+            },
+            "restoration": None,
+        }
+        later_deleted_task = {
+            84: {
+                "empresa_id": 1,
+                "eliminada": True,
+                "eliminada_en": datetime(2026, 10, 20, 9, 3),
+                "eliminada_por": 10,
+                "eliminacion_operacion_id": later_id,
+            }
+        }
+
+        status, _restoration = self._project(
+            restoration=self.restoration,
+            tasks=later_deleted_task,
+            restore_manifest=self.manifest,
+            current_operations={later_id: later_operation},
+        )
+
+        self.assertEqual(status, "INCONSISTENT")
 
     def test_pending_restoration_does_not_change_current_deleted_projection(self):
         pending = {

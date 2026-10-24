@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import date
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -20,7 +21,12 @@ from tareas.services.deletion_ledger import (
     DjangoDeletionLedgerStorage,
     RestorationOperationInput,
 )
-from tareas.services.logical_deletion import logically_delete_task_tree
+from tareas.services.deleted_tasks_history import get_deleted_task_history_operation
+from tareas.services.hierarchy_creation import create_child_task_atomic
+from tareas.services.logical_deletion import (
+    LogicalDeletionConflict,
+    logically_delete_task_tree,
+)
 from tareas.services.logical_restoration import (
     LogicalRestorationError,
     _DjangoRestorationAdapter,
@@ -29,12 +35,14 @@ from tareas.services.logical_restoration import (
     reconcile_logical_restoration_audit,
     restore_logical_task_tree,
 )
+from tareas.services.task_storage import CreateTaskDraftInput
 from tareas.services.task_mutation_locks import (
     TaskMutationConflict,
     TaskMutationScopeError,
 )
 from tareas.tests.factories import (
     assign_permission,
+    configure_task_storage,
     create_empresa,
     create_tarea,
     create_user,
@@ -801,3 +809,323 @@ class LogicalRestorationServiceTests(TestCase):
                 reverses_operation_id=operation_id.hex,
             ).exists()
         )
+
+    def test_five_cycles_preserve_ids_manifests_and_l4_history(self):
+        original_task_ids = (self.root.pk, self.child.pk)
+        original_correlatives = {
+            task.pk: task.correlativo
+            for task in (self.root, self.child)
+        }
+        source_ids = [self.deletion_operation_id]
+        restoration_ids = []
+        expected_manifests = {
+            self.deletion_operation_id: original_task_ids,
+        }
+        current_task_ids = original_task_ids
+        source_id = self.deletion_operation_id
+        first_preview = None
+        first_restoration_id = None
+        first_restoration_reason = None
+
+        @contextmanager
+        def open_test_history_cursor():
+            connection = connections["default"]
+            cursor = connection.cursor()
+            try:
+                yield cursor, connection.vendor, connection.ops.quote_name
+            finally:
+                cursor.close()
+
+        def history_status(operation_id):
+            with patch(
+                "tareas.services.deleted_tasks_history._history_cursor",
+                side_effect=open_test_history_cursor,
+            ):
+                return get_deleted_task_history_operation(
+                    empresa_id=self.company.pk,
+                    operation_id=operation_id,
+                ).deletion_status
+
+        for cycle_number in range(1, 6):
+            self.deletion_operation_id = source_id
+            preview = self._preview()
+            self.assertEqual(set(preview.task_ids), set(current_task_ids))
+            restoration_id = uuid4()
+            restoration_reason = f"Restauración del ciclo {cycle_number}"
+            restored = self._restore(
+                preview,
+                operation_id=restoration_id,
+                motivo=restoration_reason,
+            )
+            restoration_ids.append(restoration_id)
+            self.assertEqual(restored.task_ids, tuple(sorted(current_task_ids)))
+            self.assertEqual(restored.reverses_operation_id, source_id)
+            self.assertEqual(
+                restored.status,
+                TareaEliminacionOperacion.Estado.COMMITTED,
+            )
+            expected_manifests[source_id] = tuple(sorted(current_task_ids))
+            expected_manifests[restoration_id] = tuple(sorted(current_task_ids))
+
+            if cycle_number == 1:
+                first_preview = preview
+                first_restoration_id = restoration_id
+                first_restoration_reason = restoration_reason
+                TareaEliminacionOperacion.objects.filter(
+                    operation_id=restoration_id.hex,
+                ).update(
+                    audit_status=TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+                )
+
+                Tarea.all_objects.filter(pk=self.root.pk).update(
+                    estado=Tarea.Estado.ACTIVA,
+                )
+                Tarea.all_objects.filter(pk=self.child.pk).update(
+                    estado=Tarea.Estado.ACTIVA,
+                )
+                configure_task_storage("default")
+                grandchild = create_child_task_atomic(
+                    CreateTaskDraftInput(
+                        titulo="Nieta incorporada tras la restauración",
+                        descripcion="",
+                        prioridad=Tarea.Prioridad.NORMAL,
+                        responsable_id=self.actor.pk,
+                        fecha_tope=date(2027, 1, 31),
+                    ),
+                    active_company=self.company,
+                    actor=self.actor,
+                    parent_id=self.child.pk,
+                )
+                current_task_ids = (*current_task_ids, grandchild.task.id)
+                added_child = create_child_task_atomic(
+                    CreateTaskDraftInput(
+                        titulo="Hija incorporada tras la restauración",
+                        descripcion="",
+                        prioridad=Tarea.Prioridad.NORMAL,
+                        responsable_id=self.actor.pk,
+                        fecha_tope=date(2027, 1, 31),
+                    ),
+                    active_company=self.company,
+                    actor=self.actor,
+                    parent_id=self.root.pk,
+                )
+                current_task_ids = (*current_task_ids, added_child.task.id)
+                expected_manifests[source_id] = original_task_ids
+
+            if cycle_number == 2:
+                TareaEliminacionOperacion.objects.filter(
+                    operation_id=restoration_id.hex,
+                ).update(
+                    audit_status=TareaEliminacionOperacion.EstadoAuditoria.ERROR,
+                )
+
+            if cycle_number == 5:
+                break
+
+            next_source_id = uuid4()
+            with patch(
+                "tareas.services.logical_deletion.resolve_deletion_ledger_storage",
+                return_value=self.storage,
+            ):
+                deletion = logically_delete_task_tree(
+                    actor=self.actor,
+                    empresa_id=self.company.pk,
+                    root_task_id=self.root.pk,
+                    motivo=f"Eliminación del ciclo {cycle_number + 1}",
+                    operation_id=next_source_id,
+                )
+            self.assertEqual(
+                set(deletion.task_ids),
+                set(current_task_ids),
+            )
+            source_ids.append(next_source_id)
+            source_id = next_source_id
+
+            if cycle_number == 1:
+                self.assertEqual(
+                    history_status(source_ids[0]),
+                    "RESTORED",
+                )
+                self.assertEqual(
+                    history_status(source_ids[1]),
+                    "CURRENTLY_DELETED",
+                )
+
+                markers_before_old_replay = tuple(
+                    Tarea.all_objects.filter(pk__in=current_task_ids)
+                    .order_by("pk")
+                    .values_list("eliminada", "eliminacion_operacion_id")
+                )
+                with patch(
+                    "tareas.services.logical_restoration.resolve_deletion_ledger_storage",
+                    return_value=self.storage,
+                ):
+                    old_restore_replay = restore_logical_task_tree(
+                        actor=self.actor,
+                        empresa_id=self.company.pk,
+                        deletion_operation_id=source_ids[0],
+                        restoration_operation_id=first_restoration_id,
+                        motivo=first_restoration_reason,
+                        expected_fingerprint=first_preview.fingerprint,
+                    )
+                self.assertTrue(old_restore_replay.replayed)
+                self.assertEqual(
+                    tuple(
+                        Tarea.all_objects.filter(pk__in=current_task_ids)
+                        .order_by("pk")
+                        .values_list("eliminada", "eliminacion_operacion_id")
+                    ),
+                    markers_before_old_replay,
+                )
+                operation_count_before_new_old_restore = (
+                    TareaEliminacionOperacion.objects.count()
+                )
+                with patch(
+                    "tareas.services.logical_restoration.resolve_deletion_ledger_storage",
+                    return_value=self.storage,
+                ):
+                    with self.assertRaises(LogicalRestorationError):
+                        restore_logical_task_tree(
+                            actor=self.actor,
+                            empresa_id=self.company.pk,
+                            deletion_operation_id=source_ids[0],
+                            restoration_operation_id=uuid4(),
+                            motivo=first_restoration_reason,
+                            expected_fingerprint=first_preview.fingerprint,
+                        )
+                self.assertEqual(
+                    TareaEliminacionOperacion.objects.count(),
+                    operation_count_before_new_old_restore,
+                )
+                self.assertEqual(
+                    tuple(
+                        Tarea.all_objects.filter(pk__in=current_task_ids)
+                        .order_by("pk")
+                        .values_list("eliminada", "eliminacion_operacion_id")
+                    ),
+                    markers_before_old_replay,
+                )
+                with patch(
+                    "tareas.services.logical_deletion.resolve_deletion_ledger_storage",
+                    return_value=self.storage,
+                ):
+                    with self.assertRaises(LogicalDeletionConflict):
+                        logically_delete_task_tree(
+                            actor=self.actor,
+                            empresa_id=self.company.pk,
+                            root_task_id=self.root.pk,
+                            motivo="Eliminación lógica de prueba",
+                            operation_id=source_ids[0],
+                        )
+                self.assertEqual(
+                    tuple(
+                        Tarea.all_objects.filter(pk__in=current_task_ids)
+                        .order_by("pk")
+                        .values_list("eliminada", "eliminacion_operacion_id")
+                    ),
+                    markers_before_old_replay,
+                )
+
+            if cycle_number == 2:
+                self.assertEqual(
+                    history_status(source_ids[0]),
+                    "RESTORED",
+                )
+                self.assertEqual(
+                    history_status(source_ids[1]),
+                    "RESTORED",
+                )
+                self.assertEqual(
+                    history_status(source_ids[2]),
+                    "CURRENTLY_DELETED",
+                )
+
+            if cycle_number == 4:
+                self.assertEqual(
+                    [history_status(item) for item in source_ids[:4]],
+                    ["RESTORED"] * 4,
+                )
+                self.assertEqual(
+                    history_status(source_ids[4]),
+                    "CURRENTLY_DELETED",
+                )
+
+        self.assertEqual(len(set(source_ids + restoration_ids)), 10)
+        self.assertEqual(
+            TareaEliminacionOperacion.objects.filter(
+                empresa_id=self.company.pk,
+                root_task_id=self.root.pk,
+            ).count(),
+            10,
+        )
+        for source_id, restoration_id in zip(source_ids, restoration_ids):
+            source_manifest = tuple(
+                TareaEliminacionElemento.objects.filter(
+                    operacion_id=source_id.hex,
+                    tipo=Tarea._meta.label_lower,
+                )
+                .order_by("object_id")
+                .values_list("object_id", flat=True)
+            )
+            restoration_manifest = tuple(
+                TareaEliminacionElemento.objects.filter(
+                    operacion_id=restoration_id.hex,
+                    tipo=Tarea._meta.label_lower,
+                )
+                .order_by("object_id")
+                .values_list("object_id", flat=True)
+            )
+            self.assertEqual(source_manifest, expected_manifests[source_id])
+            self.assertEqual(restoration_manifest, expected_manifests[source_id])
+            self.assertEqual(
+                TareaEliminacionOperacion.objects.get(
+                    operation_id=restoration_id.hex,
+                ).reverses_operation_id,
+                source_id.hex,
+            )
+
+        self.assertEqual(
+            {
+                task.pk: task.correlativo
+                for task in Tarea.all_objects.filter(
+                    pk__in=current_task_ids,
+                )
+            },
+            {
+                **original_correlatives,
+                grandchild.task.id: grandchild.task.correlativo,
+                added_child.task.id: added_child.task.correlativo,
+            },
+        )
+        self.assertEqual(
+            TareaRelacion.objects.filter(
+                padre_id__in=(self.root.pk, self.child.pk),
+                hija_id__in=current_task_ids,
+            ).count(),
+            3,
+        )
+        self.assertEqual(
+            DocumentoTarea.objects.filter(
+                tarea_id__in=current_task_ids,
+            ).count(),
+            1,
+        )
+        self.document.refresh_from_db()
+        self.assertEqual(
+            self.document.archivo.name,
+            "tareas/documentos/restoration-retained.pdf",
+        )
+        self.assertEqual(
+            DocumentoTarea.objects.filter(pk=self.document.pk).count(),
+            1,
+        )
+        self.assertEqual(
+            TareaEliminacionOperacion.objects.filter(
+                operation_id__in=[item.hex for item in restoration_ids],
+                status=TareaEliminacionOperacion.Estado.COMMITTED,
+                result_code=LOGICAL_RESTORATION_RESULT_CODE,
+            ).count(),
+            5,
+        )
+        for source_id in source_ids:
+            self.assertEqual(history_status(source_id), "RESTORED")

@@ -26,6 +26,7 @@ from auditoria.services import AuditIdempotencyConflict, AuditIdempotencyStorage
 
 from ..models import (
     LOGICAL_DELETION_RESULT_CODE,
+    LOGICAL_RESTORATION_RESULT_CODE,
     Tarea,
     TareaEliminacionOperacion,
     TareaRelacion,
@@ -39,6 +40,7 @@ from .deletion_ledger import (
     DeletionInventoryItem,
     DeletionLedgerCommitUncertain,
     DeletionLedgerError,
+    DeletionOperationRecord,
     DeletionOperationInput,
     DjangoDeletionLedgerStorage,
     MySQLDeletionLedgerStorage,
@@ -789,6 +791,146 @@ def _result_from_record(
     )
 
 
+def _validate_restored_root_history(
+    storage,
+    unit,
+    operations: tuple[DeletionOperationRecord, ...],
+    *,
+    empresa_id: int,
+    root_task_id: int,
+) -> set[int]:
+    if not operations:
+        raise LogicalDeletionConflict(
+            "El ledger histórico de la raíz está incompleto."
+        )
+
+    backend_type = (
+        "DJANGO"
+        if isinstance(storage, DjangoDeletionLedgerStorage)
+        else "MYSQL_CONFIG"
+    )
+    source_operations = {}
+    restorations = {}
+    for operation in operations:
+        if (
+            operation.empresa_id != empresa_id
+            or operation.root_task_id != root_task_id
+            or operation.backend_type != backend_type
+            or operation.backend_identity != storage.backend_identity
+            or operation.backend_config_version != storage.config_version
+        ):
+            raise LogicalDeletionConflict(
+                "El historial de la raíz no coincide con la empresa o backend actual."
+            )
+        if operation.reverses_operation_id is None:
+            source_operations[operation.operation_id] = operation
+        else:
+            if operation.reverses_operation_id in restorations:
+                raise LogicalDeletionConflict(
+                    "El historial contiene restauraciones duplicadas para una eliminación."
+                )
+            restorations[operation.reverses_operation_id] = operation
+
+    if (
+        not source_operations
+        or set(restorations) != set(source_operations)
+    ):
+        raise LogicalDeletionConflict(
+            "Todas las eliminaciones anteriores deben tener una restauración confirmada."
+        )
+
+    ordered_sources = sorted(
+        source_operations.values(),
+        key=lambda item: (item.created_at, item.operation_id.hex),
+    )
+    previous_task_ids = set()
+    previous_restored_at = None
+    for source in ordered_sources:
+        restoration = restorations[source.operation_id]
+        if (
+            source.status != TareaEliminacionOperacion.Estado.COMMITTED
+            or source.result_code != LOGICAL_DELETION_RESULT_CODE
+            or source.file_cleanup_status
+            != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+            or not source.motivo
+            or not source.motivo.strip()
+        ):
+            raise LogicalDeletionConflict(
+                "El historial contiene una eliminación incompatible o no confirmada."
+            )
+        if (
+            restoration.status != TareaEliminacionOperacion.Estado.COMMITTED
+            or restoration.result_code != LOGICAL_RESTORATION_RESULT_CODE
+            or restoration.reverses_operation_id != source.operation_id
+            or restoration.root_task_id != source.root_task_id
+            or restoration.root_correlativo != source.root_correlativo
+            or restoration.empresa_id != source.empresa_id
+            or restoration.backend_type != source.backend_type
+            or restoration.backend_identity != source.backend_identity
+            or restoration.backend_config_version != source.backend_config_version
+            or restoration.file_cleanup_status
+            != TareaEliminacionOperacion.EstadoArchivos.NO_REQUERIDA
+            or restoration.audit_status
+            not in {
+                TareaEliminacionOperacion.EstadoAuditoria.PENDIENTE,
+                TareaEliminacionOperacion.EstadoAuditoria.CONFIRMADA,
+                TareaEliminacionOperacion.EstadoAuditoria.ERROR,
+            }
+            or not restoration.motivo
+            or not restoration.motivo.strip()
+        ):
+            raise LogicalDeletionConflict(
+                "El historial contiene una restauración incompatible o no confirmada."
+            )
+        if (
+            source.committed_at is None
+            or restoration.committed_at is None
+            or source.committed_at < source.created_at
+            or restoration.created_at < source.committed_at
+            or restoration.committed_at < restoration.created_at
+            or (
+                previous_restored_at is not None
+                and source.created_at < previous_restored_at
+            )
+        ):
+            raise LogicalDeletionConflict(
+                "El orden cronológico del historial de la raíz no es válido."
+            )
+
+        source_manifest = unit.get_manifest(source.operation_id, lock=True)
+        restoration_manifest = unit.get_manifest(
+            restoration.operation_id,
+            lock=True,
+        )
+        source_task_ids = {
+            item.object_id
+            for item in source_manifest
+            if item.model_label == _TASK_ITEM_LABEL
+        }
+        if (
+            not source_manifest
+            or len(source_task_ids) != len(source_manifest)
+            or len(source_task_ids) != len(
+                {
+                    item.object_id
+                    for item in source_manifest
+                }
+            )
+            or DeletionInventoryItem(_TASK_ITEM_LABEL, root_task_id)
+            not in source_manifest
+            or source.dependency_summary.get(_TASK_ITEM_LABEL)
+            != len(source_manifest)
+            or restoration_manifest != source_manifest
+        ):
+            raise LogicalDeletionConflict(
+                "El manifiesto de una eliminación/restauración anterior es inconsistente."
+            )
+        previous_task_ids.update(source_task_ids)
+        previous_restored_at = restoration.committed_at
+
+    return previous_task_ids
+
+
 def _perform_in_transaction(
     storage,
     unit,
@@ -890,9 +1032,18 @@ def _perform_in_transaction(
             empresa_id,
             root_task_id,
         )
+        previous_task_ids = set()
         if previous_root_operation is not None:
-            raise LogicalDeletionConflict(
-                "La raíz ya tiene una operación de eliminación registrada."
+            root_history = unit.get_root_operations(
+                empresa_id,
+                root_task_id,
+            )
+            previous_task_ids = _validate_restored_root_history(
+                storage,
+                unit,
+                root_history,
+                empresa_id=empresa_id,
+                root_task_id=root_task_id,
             )
 
         task_ids, states = _collect_locked_tree(
@@ -901,6 +1052,10 @@ def _perform_in_transaction(
             operation_id=operation_id,
             allow_committed_marks=False,
         )
+        if not previous_task_ids.issubset(task_ids):
+            raise LogicalDeletionConflict(
+                "El árbol actual ya no contiene todas las tareas del historial previo."
+            )
         if any(state.eliminada for state in states.values()):
             raise LogicalDeletionConflict(
                 "El árbol contiene tareas ya eliminadas."
