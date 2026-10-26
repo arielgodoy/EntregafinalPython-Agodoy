@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
@@ -24,6 +25,7 @@ from access_control.services.permissions import (
 )
 
 from ..models import ReunionCreationRequest
+from .authorization import MEETINGS_VISTA_NAME, has_meeting_creation_permissions
 from .reunion_creation_idempotency_storage import (
     CreationRequestRecord,
     ReunionCreationRequestStorageError,
@@ -73,6 +75,25 @@ class ReunionCreationRequestOutcomeUnknown(ReunionCreationIdempotencyError):
         )
 
 
+class ReunionCreationRequestRetryable(ReunionCreationIdempotencyError):
+    """A transient lock or concurrency conflict prevented the operation."""
+
+
+class ReunionCreationRequestStorageFailure(ReunionCreationIdempotencyError):
+    """A storage failure with an explicit commit state for reconciliation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        request_id: UUID | None = None,
+        commit_confirmed: bool = False,
+    ):
+        self.request_id = request_id
+        self.commit_confirmed = commit_confirmed
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class ReunionCreationResult:
     request_id: UUID
@@ -92,6 +113,8 @@ CreationCallback = Callable[
     tuple[int, int],
 ]
 
+_CONFIRMATION_TOKEN_SALT = "tareas.reunion_creation.confirmation.v1"
+
 
 @contextmanager
 def _creation_atomic(storage, request_id: UUID):
@@ -99,7 +122,31 @@ def _creation_atomic(storage, request_id: UUID):
         with storage.atomic() as unit:
             yield unit
     except ReunionCreationRequestStorageError as exc:
-        raise ReunionCreationRequestOutcomeUnknown(request_id) from exc
+        if exc.outcome_unknown or exc.category == "UNKNOWN_COMMIT_RESULT":
+            raise ReunionCreationRequestOutcomeUnknown(request_id) from exc
+        if exc.commit_confirmed:
+            raise ReunionCreationRequestStorageFailure(
+                "La operación se confirmó; recupere el resultado con el mismo identificador.",
+                request_id=request_id,
+                commit_confirmed=True,
+            ) from exc
+        if exc.category == "CONFLICT":
+            raise ReunionCreationRequestConflict(
+                "La operación entró en conflicto con otra solicitud."
+            ) from exc
+        if exc.category == "INVALID_STATE":
+            raise ReunionCreationRequestStateError(
+                "La operación incumple el estado permitido."
+            ) from exc
+        if exc.category == "RETRYABLE":
+            raise ReunionCreationRequestRetryable(
+                "La operación está temporalmente bloqueada; consulte la solicitud."
+            ) from exc
+        raise ReunionCreationRequestStorageFailure(
+            "No se pudo completar la operación de idempotencia.",
+            request_id=request_id,
+            commit_confirmed=False,
+        ) from exc
 
 
 def new_creation_request_id() -> UUID:
@@ -187,11 +234,22 @@ def _aware_datetime(value, field_name: str) -> datetime:
     return value
 
 
+def _validate_expiration(expires_at: datetime, *, now: datetime | None = None) -> None:
+    current = now or timezone.now()
+    if expires_at <= current:
+        raise ReunionCreationRequestExpired(
+            "La solicitud de revisión ya expiró."
+        )
+    if expires_at > current + timedelta(seconds=REVIEW_TOKEN_TTL_SECONDS):
+        raise ValueError("La expiración excede el TTL máximo de revisión.")
+
+
 def _authorize_actor_company(
     *,
     empresa_id: int,
     actor_id: int,
-    require_create: bool = True,
+    require_meeting_create: bool = False,
+    required_permission: tuple[str, str] | None = None,
 ) -> None:
     company = (
         Empresa.objects.using("default")
@@ -217,20 +275,131 @@ def _authorize_actor_company(
         raise ReunionCreationRequestUnauthorized(
             "El actor no está activo o no pertenece a la empresa."
         )
-    if require_create and not user_has_permission_for_empresa(
-        user=actor,
+    if require_meeting_create and not has_meeting_creation_permissions(
+        actor=actor,
         empresa=company,
-        vista_nombre="Tareas",
-        accion="crear",
     ):
         raise ReunionCreationRequestUnauthorized(
-            "El actor no tiene permiso para crear reuniones en la empresa."
+            "El actor no tiene permisos para crear reuniones y su tarea planificada."
+        )
+    if required_permission is not None and not user_has_permission_for_empresa(
+        user=actor,
+        empresa=company,
+        vista_nombre=required_permission[0],
+        accion=required_permission[1],
+    ):
+        raise ReunionCreationRequestUnauthorized(
+            "El actor no tiene el permiso requerido para esta solicitud."
         )
 
 
 def new_request_expiration(*, now: datetime | None = None) -> datetime:
     current = now or timezone.now()
     return current + timedelta(seconds=REVIEW_TOKEN_TTL_SECONDS)
+
+
+def _confirmation_payload(
+    record: CreationRequestRecord,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "confirmed": True,
+        "request_id": record.request_id.hex,
+        "empresa_id": record.empresa_id,
+        "actor_id": record.actor_id,
+        "payload_hash": record.payload_hash,
+        "review_fingerprint": record.review_fingerprint,
+        "expires_at": record.expires_at.isoformat(),
+    }
+
+
+def issue_creation_confirmation(
+    *,
+    request_id,
+    empresa_id: int,
+    actor_id: int,
+    payload_hash: str,
+    review_fingerprint: str,
+    confirmed: bool,
+) -> str:
+    request_id = _normalize_request_id(request_id)
+    empresa_id = _positive_id(empresa_id, "empresa_id")
+    actor_id = _positive_id(actor_id, "actor_id")
+    payload_hash = _fingerprint(payload_hash, "payload_hash")
+    review_fingerprint = _fingerprint(
+        review_fingerprint,
+        "review_fingerprint",
+    )
+    if confirmed is not True:
+        raise ReunionCreationRequestStateError(
+            "La solicitud requiere confirmación explícita."
+        )
+    _authorize_actor_company(
+        empresa_id=empresa_id,
+        actor_id=actor_id,
+        require_meeting_create=True,
+    )
+    record = _load_creation_request_record(
+        request_id=request_id,
+        empresa_id=empresa_id,
+        actor_id=actor_id,
+    )
+    _assert_same_request(
+        record,
+        request_id=request_id,
+        empresa_id=empresa_id,
+        actor_id=actor_id,
+        payload_hash=payload_hash,
+    )
+    if record.status != ReunionCreationRequest.Estado.REVISION_PENDIENTE:
+        raise ReunionCreationRequestStateError(
+            "Solo se puede confirmar una revisión pendiente."
+        )
+    if record.review_fingerprint != review_fingerprint:
+        raise ReunionCreationRequestConflict(
+            "La revisión de similitud cambió; vuelva a previsualizar."
+        )
+    if record.expires_at <= timezone.now():
+        raise ReunionCreationRequestExpired(
+            "La solicitud expiró antes de ser confirmada."
+        )
+    return signing.dumps(
+        _confirmation_payload(record),
+        salt=_CONFIRMATION_TOKEN_SALT,
+        compress=True,
+    )
+
+
+def _validate_confirmation_token(
+    token: str,
+    record: CreationRequestRecord,
+) -> None:
+    if not isinstance(token, str) or not token:
+        raise ReunionCreationRequestStateError(
+            "Falta la confirmación firmada de la solicitud."
+        )
+    try:
+        payload = signing.loads(
+            token,
+            salt=_CONFIRMATION_TOKEN_SALT,
+            max_age=REVIEW_TOKEN_TTL_SECONDS,
+        )
+    except signing.SignatureExpired as exc:
+        raise ReunionCreationRequestExpired(
+            "La confirmación de la solicitud expiró."
+        ) from exc
+    except signing.BadSignature as exc:
+        raise ReunionCreationRequestStateError(
+            "La confirmación firmada no es válida."
+        ) from exc
+    if payload != _confirmation_payload(record):
+        raise ReunionCreationRequestConflict(
+            "La confirmación no corresponde a la revisión vigente."
+        )
+    if record.expires_at <= timezone.now():
+        raise ReunionCreationRequestExpired(
+            "La solicitud expiró antes de iniciar la creación."
+        )
 
 
 def create_review_request(
@@ -251,13 +420,11 @@ def create_review_request(
         "review_fingerprint",
     )
     expires_at = _aware_datetime(expires_at, "expires_at")
-    if expires_at <= timezone.now():
-        raise ReunionCreationRequestExpired(
-            "La solicitud de revisión ya expiró."
-        )
+    _validate_expiration(expires_at)
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        require_meeting_create=True,
     )
 
     storage = resolve_reunion_creation_request_storage()
@@ -279,7 +446,7 @@ def create_review_request(
         audit_event_id=None,
         audit_error_code="",
     )
-    with storage.atomic() as unit:
+    with _creation_atomic(storage, request_id) as unit:
         existing = unit.insert_or_get_request(proposed)
         _assert_same_request(
             existing,
@@ -332,17 +499,15 @@ def refresh_review_request(
         "review_fingerprint",
     )
     expires_at = _aware_datetime(expires_at, "expires_at")
-    if expires_at <= timezone.now():
-        raise ReunionCreationRequestExpired(
-            "La nueva previsualización ya expiró."
-        )
+    _validate_expiration(expires_at)
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        require_meeting_create=True,
     )
 
     storage = resolve_reunion_creation_request_storage()
-    with storage.atomic() as unit:
+    with _creation_atomic(storage, request_id) as unit:
         existing = unit.get_request(request_id, lock=True)
         if existing is None:
             raise ReunionCreationRequestNotFound(
@@ -387,6 +552,24 @@ def refresh_review_request(
         return refreshed
 
 
+def _load_creation_request_record(
+    *,
+    request_id: UUID,
+    empresa_id: int,
+    actor_id: int,
+) -> CreationRequestRecord:
+    storage = resolve_reunion_creation_request_storage()
+    with _creation_atomic(storage, request_id) as unit:
+        record = unit.get_request(request_id)
+    if record is None or (
+        record.empresa_id != empresa_id or record.actor_id != actor_id
+    ):
+        raise ReunionCreationRequestNotFound(
+            "La solicitud no existe en la empresa activa."
+        )
+    return record
+
+
 def get_creation_request(
     *,
     request_id,
@@ -399,17 +582,13 @@ def get_creation_request(
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        required_permission=(MEETINGS_VISTA_NAME, "ingresar"),
     )
-    storage = resolve_reunion_creation_request_storage()
-    with storage.atomic() as unit:
-        record = unit.get_request(request_id)
-    if record is None or (
-        record.empresa_id != empresa_id or record.actor_id != actor_id
-    ):
-        raise ReunionCreationRequestNotFound(
-            "La solicitud no existe en la empresa activa."
-        )
-    return record
+    return _load_creation_request_record(
+        request_id=request_id,
+        empresa_id=empresa_id,
+        actor_id=actor_id,
+    )
 
 
 def cancel_creation_request(
@@ -424,6 +603,7 @@ def cancel_creation_request(
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        required_permission=("Tareas", "crear"),
     )
     storage = resolve_reunion_creation_request_storage()
     with _creation_atomic(storage, request_id) as unit:
@@ -474,6 +654,7 @@ def expire_creation_request(
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        required_permission=("Tareas", "crear"),
     )
     now = _aware_datetime(now or timezone.now(), "now")
     storage = resolve_reunion_creation_request_storage()
@@ -565,11 +746,10 @@ def record_audit_delivery(
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
-        require_create=False,
     )
 
     storage = resolve_reunion_creation_request_storage()
-    with storage.atomic() as unit:
+    with _creation_atomic(storage, request_id) as unit:
         record = unit.get_request(request_id, lock=True)
         if record is None or (
             record.empresa_id != empresa_id or record.actor_id != actor_id
@@ -626,9 +806,8 @@ def execute_idempotent_creation(
     actor_id: int,
     payload_hash: str,
     review_fingerprint: str,
-    expires_at: datetime,
     create_callback: CreationCallback,
-    confirmation_validated: bool,
+    confirmation_token: str,
 ) -> ReunionCreationResult:
     request_id = _normalize_request_id(request_id)
     empresa_id = _positive_id(empresa_id, "empresa_id")
@@ -638,16 +817,12 @@ def execute_idempotent_creation(
         review_fingerprint,
         "review_fingerprint",
     )
-    expires_at = _aware_datetime(expires_at, "expires_at")
     if not callable(create_callback):
         raise TypeError("create_callback debe ser invocable.")
-    if confirmation_validated is not True:
-        raise ReunionCreationRequestStateError(
-            "La ejecución requiere una confirmación validada por la capa de aplicación."
-        )
     _authorize_actor_company(
         empresa_id=empresa_id,
         actor_id=actor_id,
+        require_meeting_create=True,
     )
 
     storage = resolve_reunion_creation_request_storage()
@@ -701,6 +876,11 @@ def execute_idempotent_creation(
             raise ReunionCreationRequestStateError(
                 "La solicitud no está pendiente de confirmación."
             )
+        _validate_confirmation_token(confirmation_token, record)
+        if not unit.transaction_active:
+            raise ReunionCreationRequestStateError(
+                "La unidad de trabajo no tiene una transacción activa."
+            )
 
         if not unit.transition_request(
             request_id,
@@ -724,6 +904,15 @@ def execute_idempotent_creation(
                 "create_callback debe devolver (task_id, meeting_id) positivos."
             )
         task_id, meeting_id = result_ids
+        if not unit.validate_creation_result(
+            request_id=request_id,
+            empresa_id=empresa_id,
+            task_id=task_id,
+            meeting_id=meeting_id,
+        ):
+            raise ReunionCreationRequestStateError(
+                "El callback no produjo una tarea y reunión relacionadas en la empresa."
+            )
         completed_at = timezone.now()
         if not unit.transition_request(
             request_id,
@@ -780,7 +969,9 @@ __all__ = [
     "ReunionCreationRequestExpired",
     "ReunionCreationRequestNotFound",
     "ReunionCreationRequestOutcomeUnknown",
+    "ReunionCreationRequestRetryable",
     "ReunionCreationRequestStateError",
+    "ReunionCreationRequestStorageFailure",
     "ReunionCreationRequestUnauthorized",
     "ReunionCreationResult",
     "cancel_creation_request",
@@ -791,6 +982,7 @@ __all__ = [
     "fingerprint_payload",
     "get_completed_result",
     "get_creation_request",
+    "issue_creation_confirmation",
     "new_creation_request_id",
     "new_request_expiration",
     "record_audit_delivery",

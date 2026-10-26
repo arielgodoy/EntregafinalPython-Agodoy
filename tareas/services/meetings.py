@@ -1,6 +1,6 @@
 import logging
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
@@ -8,6 +8,7 @@ from django.utils import timezone
 from access_control.services.permissions import get_valid_users_for_empresa
 
 from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Tarea
+from tareas.services.authorization import has_meeting_creation_permissions
 from tareas.services.lifecycle import publish_task
 from tareas.services.meeting_storage import (
     DjangoMeetingStorage,
@@ -111,6 +112,8 @@ def _create_meeting(*, storage, empresa, creada_por, titulo, descripcion,
                     fecha_hora_programada, modalidad, lugar_o_enlace, tipo_ambito,
                     local, departamento):
     _ensure_valid_company_user(empresa, creada_por)
+    if not has_meeting_creation_permissions(actor=creada_por, empresa=empresa):
+        raise PermissionDenied
     _validate_meeting_scope(empresa, tipo_ambito, local, departamento)
     planned_task = Tarea(
         titulo=f"Reunión: {titulo}",

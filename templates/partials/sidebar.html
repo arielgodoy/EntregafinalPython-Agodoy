@@ -175,7 +175,7 @@
                 </li>{% endif %}
 
                 <!-- Menú Tareas -->
-                {% if "tasks" in request.sidebar_visible_items %}<li class="nav-item">
+                {% if "tasks" in request.sidebar_visible_items or "tasks_meetings" in request.sidebar_visible_items %}<li class="nav-item">
                     <a class="nav-link menu-link" href="#sidebarTareas" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="sidebarTareas">
                         <i class="ri-task-line"></i> <span data-key="menu.tareas">Tareas</span>
                     </a>
@@ -189,6 +189,9 @@
                             </li>{% endif %}
                             {% if "tasks_create" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:crear_tarea' %}" class="nav-link" data-key="menu.tareas.create">Crear Tarea</a>
+                            </li>{% endif %}
+                            {% if "tasks_meetings" in request.sidebar_visible_items %}<li class="nav-item">
+                                <a href="{% url 'tareas:reunion_revision_lista' %}" class="nav-link" data-key="menu.tareas.meetings">Reuniones</a>
                             </li>{% endif %}
                             {% if "tasks_dashboard" in request.sidebar_visible_items %}<li class="nav-item">
                                 <a href="{% url 'tareas:mis_tareas' %}" class="nav-link" data-key="menu.tareas.dashboard">Mis Hitos y Tareas</a>

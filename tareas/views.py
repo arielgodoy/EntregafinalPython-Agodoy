@@ -209,7 +209,7 @@ from .services.participant_storage import (
     reassign_responsible,
     remove_task_participant,
 )
-from .services.authorization import can_manage_task
+from .services.authorization import MEETINGS_VISTA_NAME, can_manage_task
 from .services.closure import (
     can_create_mini_task,
 )
@@ -5312,6 +5312,19 @@ class DocumentosTareaView(TareasLoginVerificarPermisoMixin, View):
         )
 
 
+class ReunionesVistaRegistradaMixin:
+    def dispatch(self, request, *args, **kwargs):
+        if (
+            getattr(request.user, "is_authenticated", False)
+            and request.session.get("empresa_id")
+            and not Vista.objects.using("default")
+            .filter(nombre=MEETINGS_VISTA_NAME)
+            .exists()
+        ):
+            return VerificarPermisoMixin.handle_no_permission(self, request)
+        return super().dispatch(request, *args, **kwargs)
+
+
 class ReunionEmpresaQuerysetMixin:
     def get_queryset(self):
         empresa_id = _get_empresa_id(self.request)
@@ -5333,17 +5346,30 @@ class ReunionEmpresaQuerysetMixin:
         return meeting
 
 
-class ListarReunionesRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, ListView):
+class ListarReunionesRevisionView(
+    ReunionesVistaRegistradaMixin,
+    TareasLoginVerificarPermisoMixin,
+    ReunionEmpresaQuerysetMixin,
+    ListView,
+):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_lista.html"
     context_object_name = "reuniones"
-    vista_nombre = "Tareas"
+    vista_nombre = MEETINGS_VISTA_NAME
     permiso_requerido = "ingresar"
 
 
-class CrearReunionRevisionView(TareasLoginVerificarPermisoMixin, View):
+@method_decorator(
+    verificar_permiso(
+        "Tareas",
+        "crear",
+        crear_permiso_faltante=False,
+    ),
+    name="dispatch",
+)
+class CrearReunionRevisionView(ReunionesVistaRegistradaMixin, TareasLoginVerificarPermisoMixin, View):
     template_name = "tareas/reunion_revision_form.html"
-    vista_nombre = "Tareas"
+    vista_nombre = MEETINGS_VISTA_NAME
     permiso_requerido = "crear"
 
     def get(self, request):
@@ -5365,11 +5391,16 @@ class CrearReunionRevisionView(TareasLoginVerificarPermisoMixin, View):
         return render(request, self.template_name, {"form": form})
 
 
-class DetalleReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, DetailView):
+class DetalleReunionRevisionView(
+    ReunionesVistaRegistradaMixin,
+    TareasLoginVerificarPermisoMixin,
+    ReunionEmpresaQuerysetMixin,
+    DetailView,
+):
     model = ReunionRevision
     template_name = "tareas/reunion_revision_detalle.html"
     context_object_name = "reunion"
-    vista_nombre = "Tareas"
+    vista_nombre = MEETINGS_VISTA_NAME
     permiso_requerido = "ingresar"
 
     def get_object(self, queryset=None):
@@ -5382,9 +5413,14 @@ class DetalleReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpres
         return context
 
 
-class EditarReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, View):
+class EditarReunionRevisionView(
+    ReunionesVistaRegistradaMixin,
+    TareasLoginVerificarPermisoMixin,
+    ReunionEmpresaQuerysetMixin,
+    View,
+):
     template_name = "tareas/reunion_revision_form.html"
-    vista_nombre = "Tareas"
+    vista_nombre = MEETINGS_VISTA_NAME
     permiso_requerido = "modificar"
 
     def get_reunion(self, pk):
@@ -5407,8 +5443,13 @@ class EditarReunionRevisionView(TareasLoginVerificarPermisoMixin, ReunionEmpresa
         return render(request, self.template_name, {"form": form, "object": reunion})
 
 
-class ReunionRevisionActionView(TareasLoginVerificarPermisoMixin, ReunionEmpresaQuerysetMixin, View):
-    vista_nombre = "Tareas - Ciclo de vida"
+class ReunionRevisionActionView(
+    ReunionesVistaRegistradaMixin,
+    TareasLoginVerificarPermisoMixin,
+    ReunionEmpresaQuerysetMixin,
+    View,
+):
+    vista_nombre = MEETINGS_VISTA_NAME
     permiso_requerido = "modificar"
 
     def post(self, request, pk):

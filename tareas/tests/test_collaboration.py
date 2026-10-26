@@ -26,11 +26,24 @@ class T061CollaborationTests(TestCase):
         cls.participante = User.objects.create_user("collab_participant", email="participant@example.test")
         cls.externo = User.objects.create_user("collab_external", email="external@example.test")
         vista = Vista.objects.create(nombre="Tareas")
+        vista_reuniones = Vista.objects.create(
+            nombre="Tareas - Reuniones",
+            route_name="tareas:reunion_revision_lista",
+        )
         for usuario in (cls.usuario, cls.participante):
             Permiso.objects.create(
                 usuario=usuario,
                 empresa=cls.empresa,
                 vista=vista,
+                ingresar=True,
+                crear=True,
+                modificar=True,
+            )
+            Permiso.objects.create(
+                usuario=usuario,
+                empresa=cls.empresa,
+                vista=vista_reuniones,
+                ver=True,
                 ingresar=True,
                 crear=True,
                 modificar=True,

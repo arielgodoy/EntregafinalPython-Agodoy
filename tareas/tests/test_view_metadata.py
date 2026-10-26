@@ -1,7 +1,13 @@
 from django.test import SimpleTestCase
+from django.test import TestCase
 
+from access_control.models import Permiso, Vista
+from access_control.services.view_catalog import ensure_declared_views_catalog
 from access_control.services.view_catalog import audit_protected_views
+from access_control.services.view_registry import definitions_for_app
 from tareas import urls
+from tareas.services.authorization import MEETINGS_VISTA_NAME
+from tareas.vicmeas import MEETINGS
 
 
 class TareasViewMetadataTests(SimpleTestCase):
@@ -27,11 +33,11 @@ class TareasViewMetadataTests(SimpleTestCase):
             "reactivar_tarea": ("Tareas - Ciclo de vida", "modificar"),
             "hitos_tarea": ("Tareas - Hitos", "ingresar"),
             "documentos_tarea": ("Tareas - Documentos y evidencia", "modificar"),
-            "reunion_revision_lista": ("Tareas", "ingresar"),
-            "reunion_revision_crear": ("Tareas", "crear"),
-            "reunion_revision_detalle": ("Tareas", "ingresar"),
-            "reunion_revision_editar": ("Tareas", "modificar"),
-            "reunion_revision_accion": ("Tareas - Ciclo de vida", "modificar"),
+            "reunion_revision_lista": (MEETINGS_VISTA_NAME, "ingresar"),
+            "reunion_revision_crear": (MEETINGS_VISTA_NAME, "crear"),
+            "reunion_revision_detalle": (MEETINGS_VISTA_NAME, "ingresar"),
+            "reunion_revision_editar": (MEETINGS_VISTA_NAME, "modificar"),
+            "reunion_revision_accion": (MEETINGS_VISTA_NAME, "modificar"),
         }
 
         actual = {
@@ -52,3 +58,34 @@ class TareasViewMetadataTests(SimpleTestCase):
             [issue for issue in issues if issue.route_name and issue.route_name.startswith("tareas:")]
         )
         self.assertTrue(any(definition.vista_nombre == "Tareas" for definition in definitions))
+
+
+class MeetingViewRegistryTests(SimpleTestCase):
+    def test_canonical_definition_has_unique_identity_and_route_bindings(self):
+        definitions = definitions_for_app("tareas")
+        meeting_definitions = [
+            definition
+            for definition in definitions
+            if definition.nombre == MEETINGS_VISTA_NAME
+        ]
+
+        self.assertEqual(meeting_definitions, [MEETINGS])
+        self.assertEqual(MEETINGS.key, "tasks_meetings")
+        self.assertEqual(MEETINGS.app, "tareas")
+        self.assertEqual(MEETINGS.route_name, "tareas:reunion_revision_lista")
+        self.assertTrue(MEETINGS.navigable)
+        self.assertEqual(MEETINGS.group, "tasks")
+
+
+class MeetingViewCatalogDryRunTests(TestCase):
+    def test_catalog_dry_run_does_not_persist_view_or_permissions(self):
+        self.assertFalse(Vista.objects.filter(nombre=MEETINGS_VISTA_NAME).exists())
+        permissions_before = Permiso.objects.count()
+
+        result = ensure_declared_views_catalog(app="tareas", dry_run=True)
+
+        self.assertTrue(
+            any(item.nombre == MEETINGS_VISTA_NAME for item in result.created_rows)
+        )
+        self.assertFalse(Vista.objects.filter(nombre=MEETINGS_VISTA_NAME).exists())
+        self.assertEqual(Permiso.objects.count(), permissions_before)

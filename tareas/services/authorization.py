@@ -5,6 +5,8 @@ from access_control.services.permissions import (
     user_has_permission_for_empresa,
 )
 
+MEETINGS_VISTA_NAME = "Tareas - Reuniones"
+
 
 def can_manage_task(*, tarea, actor, vista_nombre="Tareas", accion="modificar"):
     """Return whether an actor may administer this concrete task."""
@@ -26,4 +28,24 @@ def can_manage_task(*, tarea, actor, vista_nombre="Tareas", accion="modificar"):
         empresa=tarea.empresa,
         vista_nombre=vista_nombre,
         accion="supervisor",
+    )
+
+
+def has_meeting_creation_permissions(*, actor, empresa):
+    """Require creation access to both the meeting surface and its planned task."""
+    return bool(
+        actor is not None
+        and actor.is_active
+        and user_has_permission_for_empresa(
+            user=actor,
+            empresa=empresa,
+            vista_nombre=MEETINGS_VISTA_NAME,
+            accion="crear",
+        )
+        and user_has_permission_for_empresa(
+            user=actor,
+            empresa=empresa,
+            vista_nombre="Tareas",
+            accion="crear",
+        )
     )

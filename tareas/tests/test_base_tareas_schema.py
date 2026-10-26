@@ -119,6 +119,33 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
             and item.startswith("CREATE TABLE")
         )
         self.assertIn("ENGINE=InnoDB", statement)
+        for constraint in (
+            "tareas_rc_payload_hash_ck",
+            "tareas_rc_review_hash_ck",
+            "tareas_rc_audit_status_ck",
+        ):
+            self.assertIn(constraint, statement)
+
+    def test_frozen_request_table_enforces_hash_and_audit_values(self):
+        sql = SCHEMA_PATH.read_text(encoding="utf-8")
+        statement = next(
+            item
+            for item in sql.split(";")
+            if "CREATE TABLE IF NOT EXISTS `tareas_reunion_creation_request`" in item
+        )
+
+        self.assertIn(
+            "`payload_hash` REGEXP BINARY '^[0-9a-f]{64}$'",
+            statement,
+        )
+        self.assertIn(
+            "`review_fingerprint` REGEXP BINARY '^[0-9a-f]{64}$'",
+            statement,
+        )
+        self.assertIn(
+            "`audit_status` IN ('NOT_QUEUED', 'PENDING', 'CONFIRMED', 'ERROR')",
+            statement,
+        )
 
     @patch("tareas.services.base_tareas_schema.DatabaseSchemaEditor")
     def test_schema_builder_keeps_internal_and_removes_external_foreign_keys(
@@ -184,7 +211,7 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
                     re.IGNORECASE | re.DOTALL,
                 )),
             ),
-            (40, True, True, True, True, True, True, 46,             120, 12, 21, True, True),
+            (40, True, True, True, True, True, True, 46, 120, 12, 21, True, True),
         )
 
     def test_frozen_schema_includes_logical_deletion_metadata(self):

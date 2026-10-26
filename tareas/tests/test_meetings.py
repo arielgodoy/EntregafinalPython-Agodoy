@@ -2,9 +2,10 @@ from datetime import date, datetime, time
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.test import TestCase
+from django.urls import reverse
 
 from access_control.models import Empresa, Permiso, Vista
 from organizacion.models import Departamento, Local, OrganizationalSource
@@ -30,8 +31,17 @@ class MeetingServiceTests(TestCase):
         cls.user = User.objects.create_user(username="meeting_creator", email="creator@example.test")
         cls.participant = User.objects.create_user(username="meeting_participant", email="participant@example.test")
         vista = Vista.objects.create(nombre="Tareas")
+        vista_reuniones = Vista.objects.create(nombre="Tareas - Reuniones")
         for user in (cls.user, cls.participant):
             Permiso.objects.create(usuario=user, empresa=cls.empresa, vista=vista, ingresar=True, crear=True, modificar=True)
+            Permiso.objects.create(
+                usuario=user,
+                empresa=cls.empresa,
+                vista=vista_reuniones,
+                ingresar=True,
+                crear=True,
+                modificar=True,
+            )
         cls.local = Local.objects.create(
             empresa=cls.empresa, codigo="LOC-M55", nombre="Local reunión", source=OrganizationalSource.LOCAL
         )
@@ -74,6 +84,30 @@ class MeetingServiceTests(TestCase):
         self.assertEqual(meeting.estado, ReunionRevision.Estado.PLANIFICADA)
         self.assertEqual(meeting.tarea_planificada.estado, Tarea.Estado.ACTIVA)
         self.assertEqual(meeting.tarea_planificada.local_id, self.local.pk)
+
+    def test_create_meeting_requires_both_vicmeas_create_permissions(self):
+        meetings_permission = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista__nombre="Tareas - Reuniones",
+        )
+        tasks_permission = Permiso.objects.get(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista__nombre="Tareas",
+        )
+
+        meetings_permission.crear = False
+        meetings_permission.save(update_fields=["crear"])
+        with self.assertRaises(PermissionDenied):
+            self.meeting()
+
+        meetings_permission.crear = True
+        meetings_permission.save(update_fields=["crear"])
+        tasks_permission.crear = False
+        tasks_permission.save(update_fields=["crear"])
+        with self.assertRaises(PermissionDenied):
+            self.meeting()
 
     def test_scope_xor_is_enforced(self):
         with self.assertRaises(ValidationError):
@@ -166,3 +200,102 @@ class MeetingServiceTests(TestCase):
         mark_meeting_completed(meeting, comentarios={item.pk: "Revisado"})
         meeting.refresh_from_db()
         self.assertEqual(meeting.estado, ReunionRevision.Estado.REALIZADA)
+
+
+class MeetingPermissionViewTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(codigo="00", descripcion="Empresa base")
+        self.user = User.objects.create_user(username="meeting_view_user")
+        self.tareas_vista = Vista.objects.create(nombre="Tareas")
+        self.tareas_permiso = Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=self.tareas_vista,
+            ver=True,
+            ingresar=True,
+            crear=True,
+            modificar=True,
+        )
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["empresa_id"] = self.empresa.pk
+        session.save()
+
+    def _create_meeting_view_permission(self, **flags):
+        vista, _created = Vista.objects.get_or_create(
+            nombre="Tareas - Reuniones",
+            defaults={"route_name": "tareas:reunion_revision_lista"},
+        )
+        values = {
+            "ver": True,
+            "ingresar": False,
+            "crear": False,
+            "modificar": False,
+        }
+        values.update(flags)
+        return Permiso.objects.create(
+            usuario=self.user,
+            empresa=self.empresa,
+            vista=vista,
+            **values,
+        )
+
+    def test_missing_registered_view_fails_closed_without_creating_it(self):
+        permissions_before = Permiso.objects.count()
+
+        response = self.client.get(reverse("tareas:reunion_revision_lista"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Vista.objects.filter(nombre="Tareas - Reuniones").exists()
+        )
+        self.assertEqual(Permiso.objects.count(), permissions_before)
+
+    def test_list_and_edit_use_meeting_permissions_not_tasks_permissions(self):
+        meeting_permission = self._create_meeting_view_permission(
+            ingresar=False,
+            modificar=False,
+        )
+
+        response = self.client.get(reverse("tareas:reunion_revision_lista"))
+        self.assertEqual(response.status_code, 403)
+
+        meeting_permission.ingresar = True
+        meeting_permission.save(update_fields=["ingresar"])
+        self.tareas_permiso.ingresar = False
+        self.tareas_permiso.save(update_fields=["ingresar"])
+        with patch("tareas.views.resolve_meeting_storage") as resolve_storage:
+            resolve_storage.return_value.list_meetings.return_value = []
+            response = self.client.get(reverse("tareas:reunion_revision_lista"))
+        self.assertEqual(response.status_code, 200)
+
+        self.tareas_permiso.modificar = True
+        self.tareas_permiso.save(update_fields=["modificar"])
+        response = self.client.get(
+            reverse("tareas:reunion_revision_editar", args=(999999,))
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_view_requires_both_create_permissions(self):
+        meeting_permission = self._create_meeting_view_permission(
+            crear=True,
+        )
+        self.tareas_permiso.crear = False
+        self.tareas_permiso.save(update_fields=["crear"])
+        permissions_before = Permiso.objects.count()
+
+        response = self.client.post(reverse("tareas:reunion_revision_crear"), {})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ReunionRevision.objects.exists())
+        self.assertFalse(Tarea.objects.exists())
+        self.assertEqual(Permiso.objects.count(), permissions_before)
+
+        self.tareas_permiso.crear = True
+        self.tareas_permiso.save(update_fields=["crear"])
+        meeting_permission.crear = False
+        meeting_permission.save(update_fields=["crear"])
+        response = self.client.post(reverse("tareas:reunion_revision_crear"), {})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ReunionRevision.objects.exists())
+        self.assertFalse(Tarea.objects.exists())

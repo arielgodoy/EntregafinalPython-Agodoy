@@ -156,11 +156,24 @@ class MeetingBackendParityTests(TestCase):
         cls.creator = User.objects.create_user("meeting_parity_creator")
         cls.participant = User.objects.create_user("meeting_parity_participant")
         vista = Vista.objects.create(nombre="Tareas")
+        vista_reuniones = Vista.objects.create(
+            nombre="Tareas - Reuniones",
+            route_name="tareas:reunion_revision_lista",
+        )
         for user in (cls.creator, cls.participant):
             Permiso.objects.create(
                 usuario=user,
                 empresa=cls.company,
                 vista=vista,
+                ingresar=True,
+                crear=True,
+                modificar=True,
+            )
+            Permiso.objects.create(
+                usuario=user,
+                empresa=cls.company,
+                vista=vista_reuniones,
+                ver=True,
                 ingresar=True,
                 crear=True,
                 modificar=True,

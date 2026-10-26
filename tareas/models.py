@@ -2267,6 +2267,29 @@ class ReunionCreationRequest(models.Model):
                 ),
                 name="tareas_rc_audit_result_ck",
             ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    payload_hash__regex=r"^[0-9a-f]{64}$",
+                ),
+                name="tareas_rc_payload_hash_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    review_fingerprint__regex=r"^[0-9a-f]{64}$",
+                ),
+                name="tareas_rc_review_hash_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    audit_status__in=[
+                        "NOT_QUEUED",
+                        "PENDING",
+                        "CONFIRMED",
+                        "ERROR",
+                    ],
+                ),
+                name="tareas_rc_audit_status_ck",
+            ),
         ]
 
     def clean(self):

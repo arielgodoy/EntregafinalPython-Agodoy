@@ -182,6 +182,7 @@ SIDEBAR_VIEW_NAMES = {
     "tasks_list": "Tareas",
     "tasks_deleted": "Tareas - Tareas eliminadas",
     "tasks_create": "Tareas",
+    "tasks_meetings": "Tareas - Reuniones",
     "tasks_dashboard": "Tareas - Dashboard personal",
     "tasks_connections": "Tareas - Conexiones SQL",
     "account_profile": "Accounts - Editar Perfil",
