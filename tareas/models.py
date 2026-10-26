@@ -2170,3 +2170,132 @@ class TareaEliminacionArchivo(models.Model):
                 name="tareas_del_archivo_estado_idx",
             ),
         ]
+
+
+class ReunionCreationRequest(models.Model):
+    class Estado(models.TextChoices):
+        REVISION_PENDIENTE = "REVIEW_PENDING", "Revisión pendiente"
+        EN_PROGRESO = "IN_PROGRESS", "En progreso"
+        COMPLETADA = "COMPLETED", "Completada"
+        CANCELADA = "CANCELLED", "Cancelada"
+        EXPIRADA = "EXPIRED", "Expirada"
+
+    class EstadoAuditoria(models.TextChoices):
+        NO_ENCOLADA = "NOT_QUEUED", "No encolada"
+        PENDIENTE = "PENDING", "Pendiente"
+        CONFIRMADA = "CONFIRMED", "Confirmada"
+        ERROR = "ERROR", "Error"
+
+    request_id = models.UUIDField(
+        primary_key=True,
+        default=uuid4,
+        editable=False,
+    )
+    empresa_id = models.PositiveBigIntegerField()
+    actor_id = models.PositiveBigIntegerField()
+    payload_hash = models.CharField(max_length=64)
+    review_fingerprint = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=16,
+        choices=Estado.choices,
+        default=Estado.REVISION_PENDIENTE,
+    )
+    expires_at = models.DateTimeField()
+    task_id = models.PositiveBigIntegerField(null=True, blank=True)
+    meeting_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    audit_status = models.CharField(
+        max_length=16,
+        choices=EstadoAuditoria.choices,
+        default=EstadoAuditoria.NO_ENCOLADA,
+    )
+    audit_event_id = models.PositiveBigIntegerField(null=True, blank=True)
+    audit_error_code = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        db_table = "tareas_reunion_creation_request"
+        ordering = ["-created_at", "request_id"]
+        indexes = [
+            models.Index(
+                fields=["empresa_id", "actor_id", "created_at"],
+                name="tareas_rc_owner_created_idx",
+            ),
+            models.Index(
+                fields=["status", "expires_at"],
+                name="tareas_rc_status_exp_idx",
+            ),
+            models.Index(
+                fields=["audit_status", "updated_at"],
+                name="tareas_rc_audit_upd_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        status="COMPLETED",
+                        task_id__isnull=False,
+                        meeting_id__isnull=False,
+                        completed_at__isnull=False,
+                    )
+                    | models.Q(
+                        status__in=[
+                            "REVIEW_PENDING",
+                            "IN_PROGRESS",
+                            "CANCELLED",
+                            "EXPIRED",
+                        ],
+                        task_id__isnull=True,
+                        meeting_id__isnull=True,
+                        completed_at__isnull=True,
+                    )
+                ),
+                name="tareas_rc_status_result_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        audit_status="CONFIRMED",
+                        audit_event_id__isnull=False,
+                    )
+                    | (
+                        ~models.Q(audit_status="CONFIRMED")
+                        & models.Q(audit_event_id__isnull=True)
+                    )
+                ),
+                name="tareas_rc_audit_result_ck",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.status == self.Estado.COMPLETADA:
+            if (
+                self.task_id is None
+                or self.meeting_id is None
+                or self.completed_at is None
+            ):
+                raise ValidationError(
+                    "Una solicitud completada requiere tarea, reunión y fecha."
+                )
+        elif any(
+            value is not None
+            for value in (self.task_id, self.meeting_id, self.completed_at)
+        ):
+            raise ValidationError(
+                "Una solicitud incompleta no puede referenciar resultados."
+            )
+        for field_name in ("payload_hash", "review_fingerprint"):
+            value = getattr(self, field_name)
+            if not re.fullmatch(r"[0-9a-f]{64}", value or ""):
+                raise ValidationError(
+                    {field_name: "La huella debe contener 64 caracteres hexadecimales."}
+                )
+        if (self.audit_status == self.EstadoAuditoria.CONFIRMADA) != (
+            self.audit_event_id is not None
+        ):
+            raise ValidationError(
+                {"audit_event_id": "El identificador debe coincidir con el estado de auditoría."}
+            )

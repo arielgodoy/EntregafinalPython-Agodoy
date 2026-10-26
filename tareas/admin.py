@@ -24,6 +24,7 @@ from .models import (
     MiniTarea,
     MiniTareaEvento,
     ReunionParticipante,
+    ReunionCreationRequest,
     ReunionRevision,
     ReunionTarea,
     Reprogramacion,
@@ -103,6 +104,8 @@ class ReadOnlyAdmin(admin.ModelAdmin):
             'mini_tarea',
             'motivo',
             'observaciones',
+            'payload_hash',
+            'review_fingerprint',
             'backend_identity',
             'backend_config_version',
             'error_code',
@@ -223,6 +226,7 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 READ_ONLY_MODELS = (
     Tarea,
+    ReunionCreationRequest,
     TareaEliminacionOperacion,
     TareaEliminacionElemento,
     TareaEliminacionArchivo,

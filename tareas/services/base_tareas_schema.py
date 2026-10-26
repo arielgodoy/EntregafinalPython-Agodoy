@@ -112,6 +112,7 @@ EXPECTED_DELETION_LEDGER_MODELS = (
     "TareaEliminacionElemento",
     "TareaEliminacionArchivo",
 )
+EXPECTED_TECHNICAL_MODELS = ("ReunionCreationRequest",)
 
 
 def get_operational_models():
@@ -128,6 +129,26 @@ def get_operational_models():
             "El inventario de modelos operacionales de Tareas no coincide con el contrato."
         )
     return models
+
+
+def get_technical_models():
+    """Return Tareas-owned technical tables excluded from business manifests."""
+    configured_models = apps.get_app_config("tareas").get_models()
+    models = tuple(
+        model
+        for model in configured_models
+        if model.__name__ in EXPECTED_TECHNICAL_MODELS
+    )
+    if {model.__name__ for model in models} != set(EXPECTED_TECHNICAL_MODELS):
+        raise BaseTareasSchemaInstallError(
+            "El inventario de modelos técnicos de Tareas no coincide con el contrato."
+        )
+    return models
+
+
+def get_base_tareas_schema_models():
+    """Return business and technical tables installed in BASE_TAREAS."""
+    return (*get_operational_models(), *get_technical_models())
 
 
 def get_deletion_ledger_models():
@@ -534,8 +555,12 @@ def build_base_tareas_schema_statements(connection) -> list[str]:
     """Collect MySQL DDL from current models without executing it."""
     collected: list[str] = []
     with DatabaseSchemaEditor(connection, collect_sql=True) as editor:
-        for model in get_operational_models():
+        for model in get_base_tareas_schema_models():
             editor.create_model(model)
+
+    technical_tables = {
+        model._meta.db_table for model in get_technical_models()
+    }
     collected.extend(editor.collected_sql)
 
     statements = []
@@ -543,6 +568,20 @@ def build_base_tareas_schema_statements(connection) -> list[str]:
         if _is_external_foreign_key(statement):
             continue
         normalized = _normalize_statement(statement)
+        table_match = _TABLE_NAME.match(normalized)
+        if table_match and table_match.group("table") in technical_tables:
+            engine_match = re.search(
+                r"\bENGINE\s*=\s*([A-Za-z0-9_]+)",
+                normalized,
+                re.IGNORECASE,
+            )
+            if engine_match:
+                if engine_match.group(1).casefold() != "innodb":
+                    raise BaseTareasSchemaInstallError(
+                        "La tabla técnica de solicitudes requiere InnoDB."
+                    )
+            else:
+                normalized += " ENGINE=InnoDB"
         if normalized:
             statements.append(normalized)
     if not statements:

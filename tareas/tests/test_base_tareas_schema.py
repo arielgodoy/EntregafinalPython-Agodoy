@@ -14,11 +14,12 @@ from django.template.loader import render_to_string
 
 from access_control.models import Empresa, Permiso, Vista
 from settings.models import SettingsMySQLConnection
-from tareas.models import TareaConnectionRole
+from tareas.models import ReunionCreationRequest, TareaConnectionRole
 from tareas.services.base_tareas_schema import (
     BaseTareasSchemaInstallError,
     DELETION_LEDGER_SCHEMA_PATH,
     EXPECTED_OPERATIONAL_MODELS,
+    EXPECTED_TECHNICAL_MODELS,
     SCHEMA_PATH,
     _compare_schema_snapshot,
     _parse_expected_schema,
@@ -28,6 +29,9 @@ from tareas.services.base_tareas_schema import (
     build_deletion_ledger_schema_statements,
     complete_base_tareas_reference_data,
     get_operational_models,
+    get_base_tareas_schema_models,
+    get_deletion_item_models,
+    get_technical_models,
     install_base_tareas_schema,
     preview_base_tareas_schema,
 )
@@ -96,6 +100,26 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
         )
         self.assertNotIn(TareaConnectionRole, models)
 
+    def test_technical_request_is_in_schema_but_outside_deletion_inventory(self):
+        technical_models = get_technical_models()
+
+        self.assertEqual(
+            {model.__name__ for model in technical_models},
+            set(EXPECTED_TECHNICAL_MODELS),
+        )
+        self.assertIn(ReunionCreationRequest, get_base_tareas_schema_models())
+        self.assertNotIn(ReunionCreationRequest, get_operational_models())
+        self.assertNotIn(ReunionCreationRequest, get_deletion_item_models())
+        statement = next(
+            item
+            for item in build_base_tareas_schema_statements(
+                self._mysql_preview_connection()
+            )
+            if "tareas_reunion_creation_request" in item
+            and item.startswith("CREATE TABLE")
+        )
+        self.assertIn("ENGINE=InnoDB", statement)
+
     @patch("tareas.services.base_tareas_schema.DatabaseSchemaEditor")
     def test_schema_builder_keeps_internal_and_removes_external_foreign_keys(
         self, schema_editor_class
@@ -160,7 +184,7 @@ class BaseTareasSchemaInventoryTests(SimpleTestCase):
                     re.IGNORECASE | re.DOTALL,
                 )),
             ),
-            (39, True, True, True, True, True, True, 46,             117, 11, 21, True, True),
+            (40, True, True, True, True, True, True, 46,             120, 12, 21, True, True),
         )
 
     def test_frozen_schema_includes_logical_deletion_metadata(self):
