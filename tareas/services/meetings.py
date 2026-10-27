@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
+from organizacion.models import Departamento, Local
 
 from tareas.models import ReunionParticipante, ReunionRevision, ReunionTarea, Tarea
 from tareas.services.authorization import has_meeting_creation_permissions
@@ -29,19 +30,70 @@ def _ensure_valid_company_user(empresa, usuario):
         raise ValidationError("El usuario no pertenece a la Empresa.")
 
 
-def _validate_meeting_scope(empresa, tipo_ambito, local, departamento):
+def _validate_scope_record(
+    model,
+    value,
+    empresa_id,
+    original_id,
+    company_error_key,
+    inactive_error_key,
+):
+    activo = (
+        model.objects.using("default")
+        .filter(pk=getattr(value, "pk", None), empresa_id=empresa_id)
+        .values_list("activo", flat=True)
+        .first()
+    )
+    if activo is None:
+        raise ValidationError(company_error_key, code=company_error_key)
+    if not activo and getattr(value, "pk", None) != original_id:
+        error_key = (
+            "tareas.meetings.errors.historical_reference_invalid"
+            if original_id is not None
+            else inactive_error_key
+        )
+        raise ValidationError(error_key, code=error_key)
+
+
+def _validate_meeting_scope(
+    empresa,
+    tipo_ambito,
+    local,
+    departamento,
+    *,
+    original_local_id=None,
+    original_departamento_id=None,
+):
+    if empresa is None or empresa.pk is None:
+        error_key = "tareas.meetings.errors.company_invalid"
+        raise ValidationError(error_key, code=error_key)
     if tipo_ambito == ReunionRevision.TipoAmbito.LOCAL:
         if local is None or departamento is not None:
-            raise ValidationError("El ámbito LOCAL requiere únicamente un Local.")
-        if local.empresa_id != empresa.pk:
-            raise ValidationError("El Local debe pertenecer a la Empresa.")
+            error_key = "tareas.meetings.errors.scope_incompatible"
+            raise ValidationError(error_key, code=error_key)
+        _validate_scope_record(
+            Local,
+            local,
+            empresa.pk,
+            original_local_id,
+            "tareas.meetings.errors.local_company",
+            "tareas.meetings.errors.local_inactive",
+        )
     elif tipo_ambito == ReunionRevision.TipoAmbito.DEPARTAMENTO:
         if departamento is None or local is not None:
-            raise ValidationError("El ámbito DEPARTAMENTO requiere únicamente un Departamento.")
-        if departamento.empresa_id != empresa.pk:
-            raise ValidationError("El Departamento debe pertenecer a la Empresa.")
+            error_key = "tareas.meetings.errors.scope_incompatible"
+            raise ValidationError(error_key, code=error_key)
+        _validate_scope_record(
+            Departamento,
+            departamento,
+            empresa.pk,
+            original_departamento_id,
+            "tareas.meetings.errors.department_company",
+            "tareas.meetings.errors.department_inactive",
+        )
     else:
-        raise ValidationError("El tipo de ámbito no es válido.")
+        error_key = "tareas.meetings.errors.scope_type_invalid"
+        raise ValidationError(error_key, code=error_key)
 
 
 def _validate_agenda(reunion, items):
@@ -158,6 +210,8 @@ def update_meeting(reunion, **changes):
     original_reunion = reunion
     storage = resolve_meeting_storage()
     reunion = storage.get_meeting(reunion.pk)
+    original_local_id = reunion.local_id
+    original_departamento_id = reunion.departamento_id
     editable_fields = (
         "titulo", "descripcion", "fecha_hora_programada", "modalidad",
         "lugar_o_enlace", "tipo_ambito", "local", "departamento",
@@ -165,6 +219,14 @@ def update_meeting(reunion, **changes):
     for field in editable_fields:
         if field in changes:
             setattr(reunion, field, changes[field])
+    _validate_meeting_scope(
+        reunion.empresa,
+        reunion.tipo_ambito,
+        reunion.local,
+        reunion.departamento,
+        original_local_id=original_local_id,
+        original_departamento_id=original_departamento_id,
+    )
     planned_task = storage.get_task(reunion.tarea_planificada_id)
     planned_task.titulo = f"Reunión: {reunion.titulo}"
     planned_task.descripcion = reunion.descripcion

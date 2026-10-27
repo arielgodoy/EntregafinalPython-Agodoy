@@ -1,1 +1,36 @@
-{% for error in errors %}{% if error.message|slice:":18" == "tareas.assignment." %}{% include "tareas/_assignment_message.html" with key=error.message %}{% elif error.code == "tareas.validation.evidence_file_or_url_required" %}<span data-key="tareas.validation.evidence_file_or_url_required">La evidencia debe indicar exactamente un archivo o una URL.</span>{% elif error.code == "tareas.validation.document_file_or_url_required" %}<span data-key="tareas.validation.document_file_or_url_required">El documento debe indicar exactamente un archivo o una URL.</span>{% elif error.code|slice:":7" == "tareas." %}<span data-key="tareas.messages.generic_error">No fue posible completar la operación.</span>{% else %}{{ error }}{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+{% for error in errors %}
+    {% if error.message|slice:":18" == "tareas.assignment." or error|slice:":18" == "tareas.assignment." %}
+        {% if error.message|slice:":18" == "tareas.assignment." %}
+            {% include "tareas/_assignment_message.html" with key=error.message %}
+        {% else %}
+            {% include "tareas/_assignment_message.html" with key=error %}
+        {% endif %}
+    {% elif error.message == "tareas.meetings.errors.company_invalid" or error.code == "tareas.meetings.errors.company_invalid" or error == "tareas.meetings.errors.company_invalid" %}
+        <span data-key="tareas.meetings.errors.company_invalid">No hay una Empresa activa válida para esta operación.</span>
+    {% elif error.message == "tareas.meetings.errors.local_company" or error.code == "tareas.meetings.errors.local_company" or error == "tareas.meetings.errors.local_company" %}
+        <span data-key="tareas.meetings.errors.local_company">El Local no está disponible para la Empresa activa.</span>
+    {% elif error.message == "tareas.meetings.errors.department_company" or error.code == "tareas.meetings.errors.department_company" or error == "tareas.meetings.errors.department_company" %}
+        <span data-key="tareas.meetings.errors.department_company">El Departamento no está disponible para la Empresa activa.</span>
+    {% elif error.message == "tareas.meetings.errors.local_inactive" or error.code == "tareas.meetings.errors.local_inactive" or error == "tareas.meetings.errors.local_inactive" %}
+        <span data-key="tareas.meetings.errors.local_inactive">El Local está inactivo y no puede asignarse a una reunión nueva.</span>
+    {% elif error.message == "tareas.meetings.errors.department_inactive" or error.code == "tareas.meetings.errors.department_inactive" or error == "tareas.meetings.errors.department_inactive" %}
+        <span data-key="tareas.meetings.errors.department_inactive">El Departamento está inactivo y no puede asignarse a una reunión nueva.</span>
+    {% elif error.message == "tareas.meetings.errors.historical_reference_invalid" or error.code == "tareas.meetings.errors.historical_reference_invalid" or error == "tareas.meetings.errors.historical_reference_invalid" %}
+        <span data-key="tareas.meetings.errors.historical_reference_invalid">No puede reemplazarse la referencia de esta reunión por un registro inactivo.</span>
+    {% elif error.message == "tareas.meetings.errors.scope_incompatible" or error.code == "tareas.meetings.errors.scope_incompatible" or error == "tareas.meetings.errors.scope_incompatible" %}
+        <span data-key="tareas.meetings.errors.scope_incompatible">La selección no es compatible con el tipo de ámbito de la reunión.</span>
+    {% elif error.message == "tareas.meetings.errors.scope_type_invalid" or error.code == "tareas.meetings.errors.scope_type_invalid" or error == "tareas.meetings.errors.scope_type_invalid" %}
+        <span data-key="tareas.meetings.errors.scope_type_invalid">El tipo de ámbito de la reunión no es válido.</span>
+    {% elif error.message == "tareas.meetings.errors.selection_invalid" or error.code == "tareas.meetings.errors.selection_invalid" or error == "tareas.meetings.errors.selection_invalid" %}
+        <span data-key="tareas.meetings.errors.selection_invalid">La selección no está disponible para la Empresa activa.</span>
+    {% elif error.code == "tareas.validation.evidence_file_or_url_required" or error == "tareas.validation.evidence_file_or_url_required" %}
+        <span data-key="tareas.validation.evidence_file_or_url_required">La evidencia debe indicar exactamente un archivo o una URL.</span>
+    {% elif error.code == "tareas.validation.document_file_or_url_required" or error == "tareas.validation.document_file_or_url_required" %}
+        <span data-key="tareas.validation.document_file_or_url_required">El documento debe indicar exactamente un archivo o una URL.</span>
+    {% elif error.code|slice:":7" == "tareas." or error|slice:":7" == "tareas." %}
+        <span data-key="tareas.messages.generic_error">No fue posible completar la operación.</span>
+    {% else %}
+        {{ error }}
+    {% endif %}
+    {% if not forloop.last %}<br>{% endif %}
+{% endfor %}

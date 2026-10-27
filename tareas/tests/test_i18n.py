@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+from django.core.exceptions import ValidationError
+from django.forms.utils import ErrorList
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
@@ -16,8 +18,46 @@ CATALOGS = {
     "en": json.loads((ROOT / "static/lang/en.json").read_text(encoding="utf-8")),
 }
 MESSAGE_KEY_PATTERN = re.compile(
-    r"tareas\.(?:messages|validation|links)(?:\.[a-z0-9_]+)+"
+    r"tareas\.(?:messages|validation|links|meetings)(?:\.[a-z0-9_]+)+"
 )
+MEETING_SCOPE_ERROR_MESSAGES = {
+    "tareas.meetings.errors.company_invalid": (
+        "No hay una Empresa activa válida para esta operación.",
+        "No valid active company is available for this operation.",
+    ),
+    "tareas.meetings.errors.local_company": (
+        "El Local no está disponible para la Empresa activa.",
+        "The Local is not available for the active company.",
+    ),
+    "tareas.meetings.errors.department_company": (
+        "El Departamento no está disponible para la Empresa activa.",
+        "The Department is not available for the active company.",
+    ),
+    "tareas.meetings.errors.local_inactive": (
+        "El Local está inactivo y no puede asignarse a una reunión nueva.",
+        "This Local is inactive and cannot be assigned to a new meeting.",
+    ),
+    "tareas.meetings.errors.department_inactive": (
+        "El Departamento está inactivo y no puede asignarse a una reunión nueva.",
+        "This Department is inactive and cannot be assigned to a new meeting.",
+    ),
+    "tareas.meetings.errors.historical_reference_invalid": (
+        "No puede reemplazarse la referencia de esta reunión por un registro inactivo.",
+        "This meeting's reference cannot be replaced with an inactive record.",
+    ),
+    "tareas.meetings.errors.scope_incompatible": (
+        "La selección no es compatible con el tipo de ámbito de la reunión.",
+        "The selection is not compatible with the meeting scope type.",
+    ),
+    "tareas.meetings.errors.scope_type_invalid": (
+        "El tipo de ámbito de la reunión no es válido.",
+        "The meeting scope type is invalid.",
+    ),
+    "tareas.meetings.errors.selection_invalid": (
+        "La selección no está disponible para la Empresa activa.",
+        "The selection is not available for the active company.",
+    ),
+}
 HIERARCHY_DETAIL_KEYS = {
     "tareas.hierarchy.parent",
     "tareas.hierarchy.children",
@@ -109,6 +149,7 @@ class TareasI18nTests(SimpleTestCase):
     def test_python_and_task_link_message_keys_exist_in_both_catalogs(self):
         sources = (
             ROOT / "tareas/forms.py",
+            ROOT / "tareas/services/meetings.py",
             ROOT / "tareas/views.py",
             ROOT / "tareas/static/tareas/js/task_links.js",
         )
@@ -137,6 +178,20 @@ class TareasI18nTests(SimpleTestCase):
         rendered_error = render_to_string("tareas/_i18n_form_errors.html", {"errors": [error]})
         self.assertNotIn("tareas.validation.unknown_future_code", rendered_error)
         self.assertIn('data-key="tareas.messages.generic_error"', rendered_error)
+
+        error_list = ErrorList(
+            [
+                ValidationError(
+                    "tareas.validation.unknown_future_code",
+                    code="tareas.validation.unknown_future_code",
+                )
+            ]
+        )
+        rendered_error_list = render_to_string(
+            "tareas/_i18n_form_errors.html",
+            {"errors": error_list},
+        )
+        self.assertIn('data-key="tareas.messages.generic_error"', rendered_error_list)
 
     def test_participant_messages_have_explicit_rendered_branches(self):
         added = render_to_string(
@@ -170,6 +225,23 @@ class TareasI18nTests(SimpleTestCase):
         self.assertTrue(used)
         self.assertTrue(used <= CATALOGS["sp"].keys())
         self.assertTrue(used <= CATALOGS["en"].keys())
+
+    def test_meeting_scope_errors_have_explicit_es_en_rendering(self):
+        for key, (spanish, english) in MEETING_SCOPE_ERROR_MESSAGES.items():
+            with self.subTest(key=key):
+                self.assertEqual(CATALOGS["sp"].get(key), spanish)
+                self.assertEqual(CATALOGS["en"].get(key), english)
+
+                for code in (key, "invalid_choice"):
+                    error_list = ErrorList([ValidationError(key, code=code)])
+                    for errors in (error_list, error_list.as_data()):
+                        rendered = render_to_string(
+                            "tareas/_i18n_form_errors.html",
+                            {"errors": errors},
+                        )
+                        self.assertIn(f'data-key="{key}"', rendered)
+                        self.assertIn(spanish, rendered)
+                        self.assertNotIn(f">{key}</span>", rendered)
 
     def test_catalogs_have_no_duplicate_tareas_keys(self):
         for language in ("sp", "en"):

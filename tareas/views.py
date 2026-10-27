@@ -5373,18 +5373,32 @@ class CrearReunionRevisionView(ReunionesVistaRegistradaMixin, TareasLoginVerific
     permiso_requerido = "crear"
 
     def get(self, request):
-        return render(request, self.template_name, {"form": ReunionRevisionForm()})
+        empresa = get_object_or_404(
+            Empresa.objects.using("default"),
+            pk=_get_empresa_id(request),
+        )
+        return render(
+            request,
+            self.template_name,
+            {"form": ReunionRevisionForm(empresa=empresa)},
+        )
 
     def post(self, request):
-        form = ReunionRevisionForm(request.POST)
+        empresa = get_object_or_404(
+            Empresa.objects.using("default"),
+            pk=_get_empresa_id(request),
+        )
+        form = ReunionRevisionForm(request.POST, empresa=empresa)
         if form.is_valid():
             try:
                 create_meeting(
-                    empresa=Empresa.objects.get(pk=_get_empresa_id(request)),
+                    empresa=empresa,
                     creada_por=request.user,
                     **form.cleaned_data,
                 )
-            except (ValidationError, TypeError) as exc:
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            except TypeError as exc:
                 form.add_error(None, str(exc))
             else:
                 return redirect("tareas:reunion_revision_lista")
@@ -5428,16 +5442,30 @@ class EditarReunionRevisionView(
 
     def get(self, request, pk):
         reunion = self.get_reunion(pk)
-        return render(request, self.template_name, {"form": ReunionRevisionForm(instance=reunion), "object": reunion})
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": ReunionRevisionForm(
+                    instance=reunion,
+                    empresa=reunion.empresa,
+                ),
+                "object": reunion,
+            },
+        )
 
     def post(self, request, pk):
         reunion = self.get_reunion(pk)
-        form = ReunionRevisionForm(request.POST, instance=reunion)
+        form = ReunionRevisionForm(
+            request.POST,
+            instance=reunion,
+            empresa=reunion.empresa,
+        )
         if form.is_valid():
             try:
                 update_meeting(reunion, **form.cleaned_data)
             except ValidationError as exc:
-                form.add_error(None, str(exc))
+                form.add_error(None, exc)
             else:
                 return redirect("tareas:reunion_revision_detalle", pk=reunion.pk)
         return render(request, self.template_name, {"form": form, "object": reunion})

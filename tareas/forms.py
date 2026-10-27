@@ -5,10 +5,12 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django import forms
+from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
-from organizacion.models import Departamento
+from organizacion.models import Departamento, Local
 from tareas.services.reading import COMMENT_PAGE_SIZE
 from tareas.services.comment_storage import resolve_comment_storage
 from tareas.services.document_storage import resolve_document_storage
@@ -693,6 +695,61 @@ class TaskEditForm(forms.Form):
 
 
 class ReunionRevisionForm(forms.ModelForm):
+    def __init__(self, *args, empresa=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        empresa_id = getattr(empresa, "pk", None)
+        if empresa_id is not None and not self.instance.pk:
+            self.instance.empresa_id = empresa_id
+
+        for field_name, model in (
+            ("local", Local),
+            ("departamento", Departamento),
+        ):
+            queryset = model.objects.using("default").none()
+            if empresa_id is not None:
+                queryset = model.objects.using("default").filter(
+                    empresa_id=empresa_id,
+                )
+                original_id = (
+                    getattr(self.instance, f"{field_name}_id", None)
+                    if self.instance.pk
+                    else None
+                )
+                if original_id is None:
+                    queryset = queryset.filter(activo=True)
+                else:
+                    queryset = queryset.filter(
+                        Q(activo=True) | Q(pk=original_id)
+                    )
+            self.fields[field_name].queryset = queryset
+            self.fields[field_name].error_messages.update(
+                {
+                    "invalid_choice": "tareas.meetings.errors.selection_invalid",
+                    None: "tareas.meetings.errors.scope_incompatible",
+                }
+            )
+        self.fields["tipo_ambito"].error_messages.update(
+            {
+                "invalid_choice": "tareas.meetings.errors.scope_type_invalid",
+                None: "tareas.meetings.errors.scope_type_invalid",
+            }
+        )
+
+    def _update_errors(self, errors):
+        if hasattr(errors, "error_dict"):
+            error_dict = errors.error_dict.copy()
+            for field_name in ("local", "departamento"):
+                current_errors = self._errors.get(field_name)
+                if current_errors and any(
+                    error.message == "tareas.meetings.errors.selection_invalid"
+                    for error in current_errors.as_data()
+                ):
+                    error_dict.pop(field_name, None)
+            if not error_dict:
+                return
+            errors = ValidationError(error_dict)
+        super()._update_errors(errors)
+
     class Meta:
         model = ReunionRevision
         fields = [

@@ -4,8 +4,15 @@
 {% block content %}
 <div class="main-content"><div class="page-content"><div class="container-fluid"><div class="card"><div class="card-body">
     <h4><span data-key="tareas.meetings.form_title">Reunión de revisión</span></h4>
-    {% if form.non_field_errors %}<div class="alert alert-danger">{% include "tareas/_i18n_form_errors.html" with errors=form.non_field_errors %}</div>{% endif %}
-    <form method="post">{% csrf_token %}{{ form.as_p }}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{% include "tareas/_i18n_form_errors.html" with errors=form.non_field_errors.as_data %}</div>{% endif %}
+    <form method="post">{% csrf_token %}
+        {% for field in form %}
+        <p>
+            {% if field.errors %}<span class="text-danger d-block" role="alert">{% include "tareas/_i18n_form_errors.html" with errors=field.errors.as_data %}</span>{% endif %}
+            {{ field.label_tag }} {{ field }}
+            {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+        </p>
+        {% endfor %}
         <button class="btn btn-primary" type="submit"><span data-key="tareas.actions.guardar">Guardar</span></button>
         <a class="btn btn-secondary" href="{% url 'tareas:reunion_revision_lista' %}"><span data-key="tareas.actions.cancelar">Cancelar</span></a>
     </form>
