@@ -12,6 +12,26 @@
 
 ## Clarifications
 
+### Session 2026-10-30 — Sincronizacion documental con Fase 1.6
+
+Esta SPEC MAESTRA conserva la autoridad sobre el dominio general de tareas.
+La [especificacion Fase 1.6](../003-organizacion-tareas-fase-1-6/spec.md) es el
+contrato especializado de membresias e integracion organizacional; no reemplaza
+esta maestra por tener un numero mayor. FR-P06 reconoce la Opcion B aprobada.
+
+Consultar el [contrato de elegibilidad y regularizacion](../003-organizacion-tareas-fase-1-6/contracts/tareas.md),
+el [modelo de membresias](../003-organizacion-tareas-fase-1-6/data-model.md),
+la [consistencia entre bases](../003-organizacion-tareas-fase-1-6/contracts/consistencia.md)
+y la [matriz de sincronizacion](../003-organizacion-tareas-fase-1-6/synchronization.md).
+La [trazabilidad F16](../003-organizacion-tareas-fase-1-6/traceability.md) conserva
+los requisitos especializados y sus pruebas, sin copiarlos integramente aqui.
+
+La sincronizacion no implementa ni activa Opcion B, no cambia roles funcionales,
+estados, cierres, evidencias, jerarquia, notificaciones ni autorizaciones existentes.
+Las restricciones adicionales de membresia se implementaran por etapas autorizadas.
+SYSTEM/CORE/SUPPORT, VICMEAS, sesiones, correo, auditoria central y router permanecen
+inmutables; una dependencia externa no concede permiso para modificarlos.
+
 ### Session 2026-09-25
 
 - La participación funcional efectiva para Comentarios es `Tarea.creada_por OR
@@ -274,11 +294,11 @@ Toda nueva superficie o task de UI de `tareas` debe pasar este gate antes de mar
 
 - **FR-A01**: Al crear una tarea se MUST reservar un único número secuencial por empresa; el borrador MUST mostrarlo como `B0000001` y al publicar el mismo número MUST mostrarse como `A0000001`. `TD` queda reservado para TO-DO futuro. La publicación transforma el mismo registro, conserva la misma PK, NO consume un segundo número y NO existen secuencias A/B independientes.
 - **FR-A02**: Un borrador MUST tener vida indefinida y ser visible inicialmente SOLO en el dashboard propio del creador.
-- **FR-A03** `[PARCIAL — implementación organizacional pendiente]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a un `organizacion.Local` o `organizacion.Departamento` cuando corresponda. Ambas dimensiones pertenecen directamente a Empresa; Departamento no depende de Local. La futura `APPLICATION_APP` `organizacion` será su owner canónico.
+- **FR-A03** `[MAESTROS Y ASOCIACION BASICA IMPLEMENTADOS — membresias Fase 1.6 pendientes]`: Toda tarea MUST pertenecer a una empresa (empresa activa al crearla) y MUST poder asociarse a un `organizacion.Local` o `organizacion.Departamento` cuando corresponda. Ambas dimensiones pertenecen directamente a Empresa; Departamento no depende de Local. La `APPLICATION_APP` existente `organizacion` es su owner canónico (T092/T093); la integracion de membresias se especifica en [Fase 1.6](../003-organizacion-tareas-fase-1-6/spec.md).
 - **FR-A04** `[PARCIAL — definición de Equipo/Activo pendiente]`: Una tarea MUST poder asociarse opcionalmente a un equipo/máquina/activo cuando corresponda. No se define aún modelo, campo, código ni relación de Equipo/Activo.
 - **FR-A05**: Toda tarea MUST registrar su creador (creada_por) automáticamente desde el usuario autenticado.
 - **FR-A06**: El correlativo MUST ser único por empresa y legible.
-- **FR-A07** `[ARQUITECTURA DEFINIDA — IMPLEMENTACIÓN PENDIENTE]`: Local se modelará como entidad Django canónica en `organizacion`, con PK interna, código funcional por Empresa y `legacy_code` separado. El ERP legacy (`g_maestroempresas`, accesible mediante `api`) es la fuente externa inicial y se integrará mediante sincronización futura; las APPLICATION_APPS no consultan SQL legacy directamente.
+- **FR-A07** `[MAESTRO CANONICO IMPLEMENTADO — sincronizacion ERP pendiente]`: Local es una entidad Django canónica en `organizacion`, con PK interna, código funcional por Empresa y `legacy_code` separado. El ERP legacy (`g_maestroempresas`, accesible mediante `api`) es la fuente externa inicial y se integrará mediante sincronización futura; las APPLICATION_APPS no consultan SQL legacy directamente.
 
 **Key Entities — A**: Tarea (correlativo_borrador `B*`, correlativo_activo `A*`, `TD*` reservado para TO-DO futuro, empresa, local [LEGACY], departamento, equipo_activo [opcional], creada_por).
 
@@ -340,6 +360,13 @@ posteriores de reprogramación.
 ---
 
 ## D. Asignación, Responsables y Participantes
+
+**Enlace Fase 1.6**: FR-D06 se precisa mediante F16-FR02 a F16-FR05: maximo un
+JEFE organizacional activo, sin advertencia automatica por vacancia. No es el
+supervisor funcional ni el permiso VICMEAS S. FR-D05/D12 a D17 se complementan
+con FR-P06 y el [contrato especializado](../003-organizacion-tareas-fase-1-6/contracts/tareas.md).
+FR-D03/D04 describen asignacion/clonacion, no el nuevo lote de sustituciones.
+No se amplian altas/cambios publicos de roles historicos por esta referencia.
 
 - **FR-D01**: La asignación base es tarea 1 a 1 (un responsable líder por tarea).
 - **FR-D02**: Una tarea de "trabajo en equipo" MUST soportar múltiples participantes.
@@ -407,6 +434,11 @@ participantes en múltiples responsables y no requiere implementación ahora.
 ---
 
 ## E. Jerarquía de Trabajo
+
+**Enlace Fase 1.6**: los cambios organizacionales y la baja departamental se sujetan
+a FR-E01 a FR-E14, sin cambiar parentesco, Empresa ni reglas de rama. F16-FR13 a
+F16-FR15 agregan revision y coordinacion; no trasladan tareas cerradas ni fuerzan
+reactivaciones. Ver [consistencia](../003-organizacion-tareas-fase-1-6/contracts/consistencia.md).
 
 - **FR-E01**: Una tarea MUST soportar padre → hijos → nietos, con máximo DOS niveles bajo el padre.
 - **FR-E02**: Los descendientes MUST heredar las dimensiones base del padre, pero MUST poder cambiar el departamento cuando la madre tenga ámbito `DEPARTAMENTO`. Si la madre tiene ámbito `LOCAL`, se conserva exactamente el mismo Local y `tipo_ambito=LOCAL`; no se asigna Departamento en esa rama. Una madre sin ámbito produce descendientes sin ámbito. Se conserva el XOR entre `local_id` y `departamento_id`, y toda dimensión debe pertenecer a la Empresa de la Tarea.
@@ -668,6 +700,13 @@ DEFERRED por semántica legacy no resuelta y `convenio` se reserva para una futu
 ---
 
 ## K. Notificaciones y Email
+
+**Enlace Fase 1.6**: F16-FR21/F16-FR22/F16-FR25/F16-FR28 agregan evidencia de
+regularizacion y entrega posterior al commit, consumiendo los contratos existentes.
+No cambian T054 ni sus destinatarios; tampoco las excepciones de MiniTarea
+(FR-F48/FR-F51/FR-T13), convocatoria (FR-M04) o enlaces (T058).
+Los detalles organizacionales aun ausentes siguen identificados como F16-G04 en
+[research F16](../003-organizacion-tareas-fase-1-6/research.md), no se infieren aqui.
 
 - **FR-K01**: Notificación interna por: asignación, aceptación/rechazo (cuando aplique), creación/edición/ocultación/restauración de Comentarios, documentos, cambio de responsable, vencimientos, aprobaciones, rechazo de cierre, cierre, anulación, reactivación y cambios clave. Leer la Tarea o Comentarios no genera notificación.
 - **FR-K02**: Las tareas críticas MUST notificar por sistema Y por email.
@@ -1110,6 +1149,20 @@ lectura ni migración masiva de datos.
 - **FR-P04**: Visibilidad según rol/participación del usuario.
 - **FR-P05**: Sin usuarios externos por ahora (ver R).
 
+- **FR-P06 — Integracion organizacional (Opcion B aprobada)**: Para ejercer
+  funciones operativas en cualquier Tarea, el usuario MUST tener al menos una
+  membresia departamental efectiva de la misma Empresa, tanto en ambito LOCAL,
+  DEPARTAMENTO como sin ambito. No se exige el Departamento de la Tarea ni una
+  relacion Local -> Departamento. La condicion es adicional a usuario activo,
+  acceso Empresa, VICMEAS, rol funcional, estado y restricciones de cada operacion.
+  Su definicion, suspension, recuperacion y preservacion de lectura historica
+  autorizada pertenecen a F16-FR07 a F16-FR12 y al
+  [contrato de elegibilidad](../003-organizacion-tareas-fase-1-6/contracts/tareas.md).
+  No elimina participaciones, cambia roles, reasigna automaticamente ni revierte
+  sustituciones anteriores; no obliga a completar ambitos historicos ni modifica
+  sesiones. Esta clausula es documental: su activacion requiere implementacion
+  autorizada y preparacion de membresias, no una migracion de datos implicita.
+
 ### Contrato cerrado de enlaces T058
 
 `EnlaceTarea` tiene un único `destinatario` `User` interno y obligatorio. Para
@@ -1439,6 +1492,11 @@ Mapeo de la Fase 1 (ya implementada) a los bloques:
 ---
 
 ## BLOQUEOS LEGACY (explícitos, no supuestos)
+
+**Precision de alcance Fase 1.6**: P1 y las menciones historicas a Local pendiente
+se refieren a integracion ERP/legacy y superficies expresamente diferidas, no a
+recrear los maestros canónicos ya implementados por T092/T093. Esta sincronizacion
+no habilita la dimension KPI Local ni modifica P2/Equipos.
 
 - **LOCAL (A/G/L)**: **`LEGACY API PENDIENTE`**. No se define modelo, tabla, endpoint, ID ni sincronización. Se necesita leer del legacy: estructura/tabla de locales, clave de vínculo, disponibilidad por empresa. DETENIDO hasta autorización y revisión del legacy con el usuario.
 - **PROVEEDOR (I/J/L)**: maestro global local Django planificado en `APPLICATION_APP proveedores`. La integración ERP/legacy, identificador externo, lookup, conciliación y sincronización quedan como P2 futuro.

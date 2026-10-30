@@ -1,5 +1,20 @@
 # Contracts: Tareas Internas - URLs web y respuestas por fases
 
+## Aplicabilidad futura de Fase 1.6
+
+[FR-P06](../spec.md) agrega elegibilidad organizacional en operaciones de gestion,
+no cambia URLs, nombres, metadata ACTIVE ni permisos de este contrato.
+Consultar la [matriz de superficies](../../003-organizacion-tareas-fase-1-6/contracts/tareas.md):
+crear/publicar/asignar y las demas familias pertinentes revalidaran membresia junto
+a sus reglas existentes, sin extender el gate a lectura, historial o cursor.
+La regularizacion individual/lote complementa, no sustituye, comandos individuales.
+
+El [maestro organizacional](../../003-organizacion-tareas-fase-1-6/contracts/organizacion.md)
+es una superficie propuesta, no una ruta implementada. Su nombre aprobado es
+`Tareas - Maestro de departamentos`; registro/navegacion/i18n requieren autorizacion
+externa. Las [dependencias y limites](../../003-organizacion-tareas-fase-1-6/synchronization.md)
+no habilitan cambios SYSTEM ni crean permisos/Vistas por boton.
+
 **Date**: 2026-09-07 | **Feature**: [spec.md](../spec.md) | **Data model**: [data-model.md](../data-model.md)
 
 Contrato de la interfaz web server-side rendered. No se inventa una API REST pública;

@@ -13,15 +13,29 @@ description: "Task list for the Tareas Internas master feature"
 
 **Scope rules**:
 
-- Toda lógica futura pertenece a `tareas/`; se reutilizan VICMEAS para visibilidad del sidebar, ICMEAS para autorización funcional, sesión, multiempresa, notificaciones y email existentes.
+- La lógica propia de este plan maestro pertenece a `tareas/`; se reutilizan VICMEAS para visibilidad del sidebar, ICMEAS para autorización funcional, sesión, multiempresa, notificaciones y email existentes. El dominio de membresias de `organizacion` tiene plan complementario y autorizacion propios, no se implementa bajo una autorizacion exclusiva de `tareas`.
 - VICMEAS ya está implementado en la infraestructura base. No crear una fase ni una task para implementarlo; las tasks de `tareas` solo deben consumir el mapping explícito de sus Vistas y preservar la independencia V/I.
 - El alta inicial de `tareas` en `AppDocs/app_classification.py`, `AppDocs/settings.py` y `AppDocs/urls.py` ya está resuelta; no se generan tareas pendientes para repetirla. APPLICATION BOUNDARY prohíbe cambios globales desde este scope.
-- P1 Local permanece `LEGACY API PENDIENTE`: no se crean tareas de implementación, filtros, modelos, IDs, endpoints ni sincronización.
+- P1 Local permanece `LEGACY API PENDIENTE` para integracion ERP/legacy y superficies diferidas: no se crean tareas de implementación, filtros, modelos, IDs, endpoints ni sincronización legacy. No implica recrear ni bloquear los maestros canónicos ya implementados por T092/T093.
 - P2 Proveedor limita únicamente la integración ERP; el maestro local Django se planifica en nuevas tasks posteriores al checkpoint histórico T048.
 - Cotizaciones se implementan solo hasta el punto previo a necesitar identidad real del proveedor; desde ese punto quedan bloqueadas.
 - Cualquier modificación futura adicional fuera de `tareas/`, incluidos cambios en `AppDocs/*`, requiere autorización expresa y una tarea autorizada específica.
 - `static/js/app.js` es vendor inmutable. No se modifica.
 - No se crean migraciones, código ni cambios en otras apps durante la generación de este archivo.
+
+**Sincronizacion Fase 1.6 (documental)**:
+[FR-P06](spec.md) reconoce Opcion B. Sus 42 tareas T170-T211 se mantienen solo en
+el [plan complementario](../003-organizacion-tareas-fase-1-6/tasks.md), enlazadas
+por la [matriz de sincronizacion](../003-organizacion-tareas-fase-1-6/synchronization.md).
+No sustituyen asignacion/clonacion, participacion, lifecycle, T053/T054 ni L4/L5;
+no se renumeran IDs, eliminan dependencias ni cambian checkboxes de este archivo.
+T092/T093 son antecedentes, no se vuelven a ejecutar. Elegibilidad operativa,
+suspension/recuperacion y regularizacion consumen los
+[contratos especializados](../003-organizacion-tareas-fase-1-6/contracts/tareas.md)
+sin cambiar lectura/cursor ni permisos existentes. SYSTEM y superficies globales
+son dependencias externas protegidas, no tareas implicitamente autorizadas.
+Primer bloque futuro: T170 -> T172 -> T173 -> T174 -> T175, sujeto a autorizacion;
+SYNC-C01 limita T199/T200, no esa cadena independiente.
 
 ## Phase 0: Setup, baseline and governance
 

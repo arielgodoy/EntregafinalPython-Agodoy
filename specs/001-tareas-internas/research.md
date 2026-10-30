@@ -8,6 +8,26 @@ bloquea la operación local de proveedores y queda reservado para integración E
 
 ## Decisions
 
+### Sincronizacion documental 2026-10-30 — Fase 1.6
+
+Decision aprobada: la maestra gobierna tareas y
+[Fase 1.6](../003-organizacion-tareas-fase-1-6/spec.md) gobierna membresias e
+integracion organizacional. FR-P06 enlaza la Opcion B sin sustituir VICMEAS,
+participacion ni reglas de operacion; no se crean versiones independientes de
+F16-FR01 a F16-FR30. No se renumeran decisiones D1 a D28.
+
+Evidencia: T092/T093 y los modelos actuales confirman que Local/Departamento
+existen; las referencias a una app futura son contexto historico. P1 mantiene
+pendiente la integracion legacy, no la identidad canónica de esos maestros.
+Fase 1.6 no resuelve P2 ni otras deudas historicas de esta maestra.
+
+Las relaciones y condiciones se concentran en la
+[matriz de sincronizacion](../003-organizacion-tareas-fase-1-6/synchronization.md);
+los bloqueos F16-G01 a F16-G10 conservan su clasificacion tecnica, funcional,
+documental o externa. Ninguna ausencia en SYSTEM se resuelve con infraestructura
+paralela ni se transforma automaticamente en una decision de negocio pendiente.
+No se ejecutaron pruebas ni se modificaron servicios con esta sincronizacion.
+
 ### D1. Frontera y compatibilidad
 
 - **Decision**: ampliar la app existente `tareas`, sin reutilizar ni modificar

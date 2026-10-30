@@ -1,5 +1,23 @@
 # Quickstart: Tareas Internas - SPEC MAESTRA
 
+## Extension futura Fase 1.6
+
+Esta guia mantiene sus escenarios y resultados historicos. Para una implementacion
+autorizada de [FR-P06](spec.md), agregar fixtures de membresias explicitas sin
+backfill y ejecutar los escenarios pertinentes del
+[quickstart complementario](../003-organizacion-tareas-fase-1-6/quickstart.md).
+Sus 36 escenarios son previsiones, no pruebas ejecutadas con esta sincronizacion.
+
+Separar regresion de lectura/cursor/historia de gestion: la primera conserva
+autorizacion existente; la segunda acumula Opcion B y permisos/rol/estado.
+La reasignacion individual ordinaria conserva su contrato; la regularizacion
+individual y el lote se validan separadamente, sin asumir commits individuales
+como prueba de todo-o-nada. Notificaciones mantienen T054 y las excepciones de
+MiniTarea, convocatoria y enlaces, no una politica nueva universal.
+El [primer bloque y sus limites](../003-organizacion-tareas-fase-1-6/synchronization.md)
+define pruebas futuras de persistencia/consultas y dependencias protegidas.
+No se ejecutaron tests, check Django, migraciones ni accesos a DB en esta entrega.
+
 **Date**: 2026-09-07 | **Feature**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
 
 Guía de validación ejecutable y progresiva. Los detalles de campos y rutas están en

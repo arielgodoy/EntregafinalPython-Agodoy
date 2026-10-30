@@ -24,6 +24,36 @@ identificador, conciliación y sincronización con ERP legacy.
 
 ## Technical Context
 
+### Dependencia complementaria: Fase 1.6
+
+La [Fase 1.6](../003-organizacion-tareas-fase-1-6/plan.md) implementara FR-P06
+mediante un plan propio, no sustituyendo fases ni tareas de esta maestra.
+Orden funcional requerido: persistencia organizacional -> servicios publicos ->
+administracion -> elegibilidad en tareas -> suspension/recuperacion -> regularizacion
+individual -> masiva -> baja departamental coordinada -> integracion -> validacion.
+La [matriz de sincronizacion](../003-organizacion-tareas-fase-1-6/synchronization.md)
+identifica la dependencia tecnica T200 -> T199 que aun condiciona ese orden.
+No se eliminan dependencias ni se habilita el bloque afectado por inferencia.
+
+Organizacion es owner de maestros/membresias/historia; tareas coordina operaciones
+de su dominio consumiendo la API publica, sin importacion inversa. T092/T093
+son antecedentes ejecutados, no tareas a repetir. P1 sigue limitado a legacy;
+no bloquea por si mismo persistencia de membresias.
+
+La integracion usa `default` para organizacion/SYSTEM y el backend resuelto por
+`BASE_TAREAS` para datos operacionales, conforme al
+[contrato de conexiones](contracts/connection-roles.md) y al
+[contrato de consistencia F16](../003-organizacion-tareas-fase-1-6/contracts/consistencia.md).
+Las descripciones iniciales de almacenamiento inferiores no autorizan usar router
+implicito/default como sustituto del resolver actual. No hay FK fisica ni JOIN
+cross-storage, ni garantia de atomicidad distribuida.
+
+Interfaces SYSTEM existentes se consumen sin cambios. Capacidad de auditoria
+organizacional ausente, registro/navegacion/i18n y cualquier cambio externo son
+dependencias protegidas con autorizacion independiente, fuera del scope de tareas.
+La [matriz de dependencias SYSTEM](../003-organizacion-tareas-fase-1-6/synchronization.md)
+identifica owner, interfaz y bloqueo; no es una lista de cambios autorizados.
+
 **Language/Version**: Python 3.11 (entorno local vigente) / Django 5.1.3
 
 **Primary Dependencies**: Django 5.1.3 (CBV, ORM, forms), `access_control`/VICMEAS,

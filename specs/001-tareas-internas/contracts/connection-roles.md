@@ -5,6 +5,15 @@
 
 ## Alcance
 
+**Integracion Fase 1.6**: [FR-P06](../spec.md) y
+[F16-FR23/F16-FR24](../../003-organizacion-tareas-fase-1-6/spec.md) consumen este
+contrato sin agregar roles ni cambiar el resolver. Organizacion permanece en
+`default`; las tareas usan `BASE_TAREAS`, que puede estar en otra base/servidor.
+La Empresa de negocio sigue siendo la de sesion aunque el catalogo MySQL de
+conexiones sea Base 00. Ver [consistencia](../../003-organizacion-tareas-fase-1-6/contracts/consistencia.md):
+IDs/DTOs, sin FK/JOIN entre bases ni promesa de rollback distribuido. Cualquier
+capacidad SYSTEM ausente queda como dependencia externa, no cambio de router.
+
 `GLOBAL POR APP`.
 
 Tareas mantiene un unico conjunto global de roles. No existe configuracion `(empresa,

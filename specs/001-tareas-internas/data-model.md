@@ -1,5 +1,23 @@
 # Data Model: Tareas Internas - SPEC MAESTRA
 
+## Complemento organizacional Fase 1.6
+
+[FR-P06 de la maestra](spec.md) integra la elegibilidad de
+[Fase 1.6](../003-organizacion-tareas-fase-1-6/spec.md).
+Su [modelo especializado](../003-organizacion-tareas-fase-1-6/data-model.md)
+define membresias/vigencia/roles/historia bajo el owner `organizacion`, y el
+ledger de regularizacion bajo `tareas`. No duplicar estas entidades ni mover
+participantes, responsables, creador, Hitos o MiniTareas fuera de su owner.
+
+Participacion funcional no equivale a elegibilidad organizacional: conservar
+los vinculos y hechos historicos aunque la membresia no permita gestion.
+Los eventos/IDs de operacion no sustituyen auditoria central ni el ledger L5.
+La integracion entre `default` y `BASE_TAREAS` usa identidades/DTOs conforme a
+[connection-roles](contracts/connection-roles.md) y
+[consistencia F16](../003-organizacion-tareas-fase-1-6/contracts/consistencia.md),
+sin FK fisica cross-storage, copia de maestros ni atomicidad distribuida.
+No se infieren membresias de datos antiguos ni se rellenan ambitos historicos.
+
 **Date**: 2026-09-07 | **Feature**: [spec.md](spec.md) | **Research**: [research.md](research.md)
 
 ## Entidad conceptual: `TareaConnectionRole`
@@ -231,16 +249,16 @@ Prioridad:  SIMPLE | NORMAL | URGENTE | CRITICA   (definición aprobada por el u
 
 ## Phase 2 boundary decisions
 
-- `Local` y `Departamento` tienen arquitectura canónica aprobada en la futura
-  `APPLICATION_APP` transversal `organizacion`; esta app todavía no existe y
-  no se implementa en esta feature.
-- `Local` será un modelo Django canónico con PK interna, FK obligatoria a
+- `Local` y `Departamento` tienen arquitectura canónica aprobada e implementada
+  en la `APPLICATION_APP` transversal `organizacion` (T092/T093).
+  Fase 1.6 agrega membresias; la integracion ERP/legacy sigue pendiente (P1).
+- `Local` es un modelo Django canónico con PK interna, FK obligatoria a
   `Empresa` (`on_delete=PROTECT`), `codigo` funcional único por Empresa,
   `nombre`, `activo`, `legacy_code` nullable separado, `source` y timestamps.
   El ERP legacy (`g_maestroempresas`, expuesto actualmente por `api`) será la
   fuente externa inicial mediante sincronización futura; `legacy_code` nunca
   será PK ni FK de dominio.
-- `Departamento` será un modelo Django canónico con PK interna, FK obligatoria
+- `Departamento` es un modelo Django canónico con PK interna, FK obligatoria
   a `Empresa` (`on_delete=PROTECT`), `codigo` funcional único por Empresa,
   `nombre`, `activo`, `source` y timestamps. Su fuente inicial será el catálogo
   local de `organizacion`; no tendrá FK obligatoria a `Local` ni `legacy_code`
