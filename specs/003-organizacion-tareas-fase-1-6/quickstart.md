@@ -3,14 +3,26 @@
 **NO EJECUTADA en la consolidacion documental.** No ejecutar ahora tests, migraciones,
 servidores, requests a entornos con datos ni comandos que inicialicen bases.
 
+## Rectificación SQL — preflight futuro
+
+La certificación futura debe ejecutarse contra una instancia MySQL aislada con el
+rol configurable `BASE_TAREAS`, nunca contra `default`. Antes de habilitar CRUD se
+verificará DDL versionado e idempotente, tablas InnoDB, PK preservadas, índices y
+unicidades (RUT global; Empresa+código), `source`/`activo` y timestamps, ausencia
+de FK/JOIN cross-database, permisos ICMEAS, Empresa activa, locks y rollback
+transaccional. El dry-run reconciliará conteos, IDs, códigos y referencias
+históricas; cualquier discrepancia bloquea el corte. Se probarán baja/reactivación,
+protección ERP, replay idempotente y fallos entre `BASE_TAREAS` y `default` sin
+afirmar 2PC. No se ejecuta nada de esto en esta rectificación documental.
+
 ## Prerrequisitos para una futura ejecucion autorizada
 
 Esta guia complementa, no sustituye, el
 [quickstart maestro](../001-tareas-internas/quickstart.md).
-La [matriz de sincronizacion](synchronization.md) separa las pruebas del primer
-bloque T170/T172-T175 de los 36 escenarios de aceptacion integral y registra
-SYNC-C01. No exigir que todo el plan este completado para probar solo persistencia/
-consultas; tampoco declarar aceptada toda Fase 1.6 por superar ese bloque.
+La [matriz de sincronizacion](synchronization.md) separa la evidencia historica
+T170/T172-T175 de la certificacion de la arquitectura C. Los 42 escenarios de
+aceptacion integral incluyen los nuevos maestros y sus gates. Tests en SQLite
+temporal no certifican el rol MySQL `BASE_TAREAS`.
 
 Implementacion de las tareas correspondientes, capacidad de auditoria organizacional,
 schema en bases temporales, catalogos i18n autorizados y gates de concurrencia.
@@ -57,13 +69,19 @@ SQLite secuencial no certifica PostgreSQL/MySQL ni locks entre procesos.
 | F16-AC27 | Perder respuesta de commit, reenviar mismo UUID y despues payload distinto | Resolver resultado sin aplicar dos veces; replay identico sin reemitir todo; payload distinto en conflicto |
 | F16-AC28 | Perder membresia de creador/responsable/participante/Hito/MiniTarea | Solo gestion suspendida; participacion historica y lectura autorizada no desaparecen; no ampliar privilegios |
 | F16-AC29 | JEFE sin M/C/E intenta administrar; usuario con V y sin I accede | Rol organizacional no autoriza; menu no filtra por I y acceso denegado usa 403 oficial |
-| F16-AC30 | Resolver BASE_TAREAS falla o apunta a otro backend; default carece de tablas de tareas | Error controlado sin fallback; cero escrituras operacionales en default; sin FK/JOIN remoto |
+| F16-AC30 | Resolver existente `tareas` para BASE_TAREAS falla o apunta a un backend invalido | Error controlado sin fallback ni resolver alternativo; cero escrituras en default; sin FK/JOIN remoto |
 | F16-AC31 | Reactivar Departamento con conflictos JEFE y membresias SUSPENDIDA/BAJA | Conflicto impide activacion; no levanta decisiones independientes ni restaura participantes sustituidos |
-| F16-AC32 | Confirmar transferencias y fallar finalizacion departamental en default | Departamento no se declara inactivo; transferencias confirmadas conservadas/auditadas; reintento revisa sin duplicar |
+| F16-AC32 | Confirmar transferencias y fallar la baja del maestro en BASE_TAREAS | Departamento no se declara inactivo; transferencias confirmadas conservadas/auditadas; reintento revisa sin duplicar |
 | F16-AC33 | Lote con varios roles, origen=destino, duplicados, motivo vacio o rol G03 no aprobado | Bloqueo explicito del lote; no degradar roles, fusionar filas ni escribir autoria historica |
 | F16-AC34 | Sustitucion individual, lecturas previas y sustitucion masiva equivalente | Mismas validaciones/motivo, cursores existentes intactos, historial saliente preservado, auditoria individual |
 | F16-AC35 | Arranque con usuarios legacy sin membresia, antes/despues de altas autorizadas | Inventario previo; sin alta inferida desde permisos/tareas; gate solo se activa con preparacion aprobada |
 | F16-AC36 | Abrir maestro/preview/errores en ES/EN, acceder sin permiso y operar formularios | Layout/modal propios, sin claves crudas, CSRF efectivo, vendor intacto, no confirm() ni nuevas dependencias |
+| F16-AC37 | Consultar/crear/editar Proveedor desde Empresas A y B con RUT normalizado | Solo tras G17 y corte autorizado: catalogo global unico en BASE_TAREAS; writer previo desactivado por via autorizada; antes, writer Tareas bloqueado; sin modelo espejo ni FK/filtro Empresa; una identidad VICMEAS |
+| F16-AC38 | Crear/editar Local source=LOCAL y modificar manualmente source=ERP | Solo tras G18/corte: aislamiento por Empresa; ERP rechazado; LOCAL conserva codigo/legacy_code/origen/ID; ICMEAS por accion; baja/reactivacion no se expone hasta T227; sin dual writer |
+| F16-AC39 | Crear/editar Departamento y solicitar cambio de codigo/Empresa/source/activo | Solo tras G19: codigo, Empresa y source inmutables; solo nombre editable; ICMEAS por accion; sin ORM/modelo espejo; baja/reactivacion solo T183 tras T201/G07; sin dual writer |
+| F16-AC40 | Resolver `BASE_TAREAS` desde `tareas` con config invalida o alias variable | Reutiliza resolver existente; no alias fijo, resolver por owner ni fallback a default; error controlado y sin writer alternativo |
+| F16-AC41 | Transicionar datos maestros usando APIs publicas y referencias de Tareas/Reuniones/Cotizaciones | PKs/IDs estables; sin lectura ORM privada, FK fisica cross-database, modelo espejo ni dos writers activos; bloqueado si no hay export/corte publico autorizado |
+| F16-AC42 | Confirmar una mutacion maestra, perder respuesta y fallar proyeccion central | Sin ledger/outbox seleccionado por anticipado; hasta tener contrato durable autorizado no se habilita el writer; una vez resuelto el gate, replay/conflicto y reconciliacion no duplican efectos |
 
 F16-AC06/12/28 prueban efectos de dominio; la audiencia/canal completos de eventos
 organizacionales se verifican solo al cerrar F16-G04, no se inventan en fixtures.

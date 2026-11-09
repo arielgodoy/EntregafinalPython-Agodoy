@@ -11,10 +11,29 @@ roles, permisos o lifecycle. La
 [matriz de sincronizacion](../synchronization.md) distingue asignacion/clonacion
 de regularizacion, lectura de operacion y dependencias SYSTEM protegidas.
 
+## Rectificación arquitectónica definitiva — 2026-11-09
+
+Proveedores, Locales y Departamentos se implementarán como tablas SQL MySQL en
+el rol configurable `BASE_TAREAS`. Todo DDL, servicio SQL e interfaz nueva vive
+en `tareas`; no se usarán modelos ORM, migraciones Django ni modelos espejo.
+La ausencia de APIs owner no bloquea el DDL ni el CRUD SQL target, pero sí bloquea
+la transición, la adaptación de callers y la habilitación productiva hasta cerrar
+fuente única, writers antiguos, auditoría, membresías y consistencia.
+
+Los servicios deben resolver la conexión mediante `tareas.services.connection_roles`,
+validar la Empresa activa donde corresponda, usar ICMEAS en las vistas, ejecutar
+mutaciones en transacciones InnoDB con unicidades/locks SQL y consumir auditoría,
+idempotencia y notificaciones existentes. No se crea un sistema paralelo.
+
 ## Capas y alcance de elegibilidad
 
-Tareas consume la API publica de organizacion; no lee internamente sus filas de
-membresia. Reutiliza `get_valid_users_for_empresa` (union vigente de usuarios con
+Toda nueva pantalla/orquestacion de maestros reside en `tareas`. Los modelos y
+servicios existentes de `proveedores` y `organizacion` permanecen intactos. Tareas
+no accede a sus modelos/ORM privados: consume solo APIs publicas ya existentes y
+usa su resolver `BASE_TAREAS` actual para el target aprobado. No se asume alias
+fijo, FK fisica ni JOIN cross-database.
+
+Tareas reutiliza `get_valid_users_for_empresa` (union vigente de usuarios con
 perfil de Empresa o Permiso) y `user_has_permission_for_empresa`. No sustituir
 esa semantica por otra tabla de acceso inventada.
 
@@ -43,6 +62,48 @@ explicitos, responsables de Hitos no anulados y MiniTareas segun T105.
 
 Nombres propuestos siguiendo comandos por IDs y resultados DTO existentes;
 no afirmar que estas funciones ya estan implementadas.
+
+Capacidades existentes y bloqueos para Tareas:
+
+| Dependencia | Estado verificable del contrato | Consecuencia |
+|---|---|---|
+| Autenticacion/sesion/Empresa | APIs oficiales de Django/access_control; `request.user`, `session['empresa_id']`, helpers de Empresa | Reutilizar; nunca aceptar Empresa autoritativa del cliente |
+| VICMEAS/ICMEAS | `VerificarPermisoMixin`, `verificar_permiso`, `user_has_permission_for_empresa` | Una identidad madre por maestro; sin permisos locales ni bypass |
+| Organizacion | Consultas publicas de Departamento/membresias y `change_membership` existen en el worktree; T176/T177 son historicas | La lectura de Departamento usa el almacenamiento actual y no certifica BASE_TAREAS; consumir solo flujos compatibles con fuente vigente, no CRUD ni lock MySQL |
+| Proveedores | CRUD existente usa ORM owner; no hay servicio público identificado | DDL/CRUD SQL target viable; G17 bloquea corte y writers antiguos |
+| Locales | No hay API pública owner de listado/CRUD identificada | DDL/CRUD SQL target viable; G18 bloquea transición, callers y coordinación ERP |
+| Departamentos | No hay API pública para create/update, JEFE atómico o lifecycle | DDL/CRUD SQL target viable; G19 bloquea membresías/lifecycle hasta contrato compatible |
+| Auditoria | Servicio central publico existente; alcance/registro de eventos Tareas y maestros debe verificarse por G02 | Reutilizar API; el registro técnico aprobado por T216 no es auditoria paralela |
+| Conexiones | Resolver `tareas.services.connection_roles` y APIs publicas de `settings` existentes | Reutilizar; no crear otro resolver ni modificar `DATABASES`/router |
+| Notificaciones | APIs publicas de `notificaciones` y correo de sistema `acounts` | Reutilizar solo segun contrato; no clonar SMTP/cola |
+| Sidebar/i18n | Recursos globales protegidos | Solo G05, con autorizacion especifica para cada excepcion |
+
+Los consumidores de Tareas usan IDs estables, nunca un `ModelChoiceField`/QuerySet
+de un owner remoto. Las lecturas/CRUD target se implementan mediante SQL autorizado en `tareas`, no
+mediante ORM owner. Los consumidores antiguos requieren adaptación antes del
+corte; no se mantiene una segunda fuente autoritativa. Fallos de resolver son
+errores explícitos, sin fallback a `default`.
+
+## Autonomía de catálogos y operación durable
+
+La aplicación `tareas` debe poder operar los catálogos target sin instalar
+`proveedores`, `organizacion`, `biblioteca` o `control_de_proyectos`. Solo puede
+requerir las SYSTEM APPS y las interfaces públicas de SYSTEM/CORE declaradas en
+este contrato. No se permiten imports directos de otra `APPLICATION_APP`, ORM
+privado, migración remota, tabla owner ni fallback a `default`.
+
+La validación Python de RUT pertenece a `tareas/utils/rut.py`. Debe exponer una
+API interna estable para limpiar, normalizar, calcular DV y validar el RUT
+completo, incluyendo `K`, `0` y valores vacíos según el contrato de Proveedores.
+La validación JavaScript de `static/js/funciones.js` es únicamente de UX.
+
+Toda mutación autorizada requiere un UUID y un registro técnico en
+`BASE_TAREAS`. La operación se identifica por UUID y hash de payload, incluye
+entidad, acción, Empresa, actor, resultado y estado de auditoría, y se bloquea
+con `FOR UPDATE` durante replay/reconciliación. La mutación y el registro
+participan de la misma transacción InnoDB. La auditoría central se proyecta
+mediante `AuditoriaService.log_event_idempotent()` después del commit; no se
+crea auditoría paralela ni se promete 2PC.
 
 | Interfaz | Entrada/salida |
 |---|---|

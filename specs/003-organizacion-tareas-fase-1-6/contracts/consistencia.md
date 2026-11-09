@@ -3,20 +3,56 @@
 **Estado**: diseno tecnico pendiente de implementacion y certificacion.
 No se cambia router, DATABASES ni infrastructure SYSTEM.
 
+## Rectificación arquitectónica definitiva — 2026-11-09
+
+Los tres maestros target son tablas MySQL InnoDB de `BASE_TAREAS`, creadas y
+operadas por servicios SQL de `tareas`. Cada mutación debe validar Empresa activa
+cuando aplique, unicidad, origen, estado y permisos; adquirir locks compatibles
+con el índice afectado; y confirmar o revertir en una transacción MySQL. No hay
+FK físicas ni JOINs cross-database.
+
+Esta garantía local no equivale a 2PC con `default`, auditoría o correo. Los
+fallos parciales entre bases deben dejar la operación explícitamente incierta,
+reconciliable e inhabilitada para producción hasta certificación. T176/T177 y el
+fence de `default` no protegen por sí solos escritores MySQL.
+
+### Operación durable de maestros
+
+Para Proveedores, Locales y Departamentos se selecciona un registro técnico de
+operaciones dentro de `BASE_TAREAS`. La fila de operación y la mutación del
+maestro comparten conexión, locks y límite transaccional InnoDB. El registro
+debe detectar UUID repetido con payload diferente, devolver el resultado
+confirmado ante replay y distinguir `UNKNOWN` de un rollback confirmado.
+
+Después del commit conocido, el servicio proyecta el evento mediante
+`AuditoriaService.log_event_idempotent()`. Un fallo de proyección deja
+`audit_status=PENDING` o `ERROR` para reconciliación; no repite la mutación.
+Si el commit de `BASE_TAREAS` es incierto, el servicio no responde éxito durable
+ni ejecuta una escritura ciega. El registro técnico no es una segunda auditoría
+central y no crea atomicidad distribuida.
+
 ## Limites de propiedad y transaccion
 
 | Dato/efecto | Propietario/base | Garantia requerida |
 |---|---|---|
-| Membresia, cambio de JEFE, historial de vigencia | organizacion/default | Cambio e historia juntos o ninguno |
-| Tareas/participaciones/detalles de regularizacion/UUID | tareas/BASE_TAREAS | Una transaccion para TODO el lote |
-| Auditoria central | auditoria, backend propio | Proyeccion por API publica; no participa ficticiamente del commit remoto |
+| Nuevas pantallas/orquestacion de maestros | tareas | Todo nuevo codigo funcional queda en `tareas`; consume solo APIs publicas disponibles |
+| Proveedor/Local/Departamento, estado actual | Modelos existentes de proveedores/organizacion, sin modificar | Permanecen fuentes/callers preexistentes hasta transicion autorizada; no habilitar writer paralelo |
+| Proveedor/Local/Departamento, objetivo | tareas/rol `BASE_TAREAS` | Fuente única tras corte autorizado; sin modelos duplicados ni FK/JOIN cross-database; DDL SQL versionado |
+| Membresia, cambio de JEFE, historial de vigencia y fence | organizacion/default, codigo historico preservado | Cambio e historia juntos; la adaptacion a ID externo no se asume implementada |
+| Tareas/participaciones/detalles de regularizacion/UUID | tareas/rol `BASE_TAREAS` | Una transaccion para TODO el lote en la conexion operacional resuelta |
+| Auditoria central | auditoria/default u owner configurado | Proyeccion por API publica; no participa ficticiamente del commit remoto |
 | Notificacion in-app/email | Infraestructura existente | Solo tras commit confirmado; entrega no atomica con tareas |
 
-Resolver BASE_TAREAS una vez por operacion, mediante `resolve_operational_backend`,
-y conservar identidad/configuracion verificada hasta terminar. No seleccionar
-storage por Empresa del request: el rol es GLOBAL POR APP, catalogo MySQL Empresa
-codigo 00; Empresa activa sigue siendo filtro de TODOS los datos de negocio.
-No confundir Empresa del catalogo de conexiones con Empresa del lote.
+Tareas reutiliza su resolver `BASE_TAREAS` ya existente mediante los contratos
+publicos SYSTEM; no crea resolvers para `proveedores`/`organizacion` ni importa
+helpers privados de esas apps. El rol puede resolver a alias Django o MySQL; no se
+asume nombre fijo. Empresa activa sigue siendo filtro de todos los datos
+company-scoped; Proveedores permanece global.
+
+No usar FK fisicas ni JOINs entre bases/owners. `empresa_id`, `local_id`,
+`departamento_id` y `proveedor_id` son referencias estables validadas por APIs
+publicas. La forma de migrar las FK/modelos actuales no esta autorizada ni resuelta;
+hasta un corte reconciliado no se habilita un writer nuevo sobre otra fuente.
 
 `AUDITORIA_TAREAS` no se habilita como nueva base por esta fase. Evidencia funcional
 de la operacion pertenece a BASE_TAREAS; auditoria transversal sigue su API.
@@ -26,9 +62,11 @@ de la operacion pertenece a BASE_TAREAS; auditoria transversal sigue su API.
 1. Validar contexto, firma/huella, UUID, seleccion/motivo y resolver backend sin
    escrituras. Verificar que todas las tablas afectadas son transaccionales y que
    schema/constraints necesarios estan disponibles; fallar cerrado si no.
-2. Adquirir fence de organizacion para la Empresa en `default`; despues obtener
-   Departamento/membresias relevantes en orden estable. Todo escritor de membresias
-   o `Departamento.activo` debe usar ese mismo fence.
+2. Adquirir la coordinacion organizacional para la Empresa; el fence T177 actual
+   reside en `default` y protege solo a escritores que participan. Leer membresias
+   en orden estable y validar el Departamento mediante el owner en `BASE_TAREAS`.
+   Todo escritor de Departamento o membresia debe seguir el protocolo certificado;
+   el fence SQLite no protege por si solo escritores MySQL.
 3. Bajo el fence, releer usuario/acceso Empresa, VICMEAS y membresias efectivas de
    actor/reemplazante; comparar revisiones del preview. El origen puede no ser elegible.
 4. Abrir UN limite transaccional BASE_TAREAS y adquirir el lock empresarial de
@@ -40,8 +78,9 @@ de la operacion pertenece a BASE_TAREAS; auditoria transversal sigue su API.
 6. Aplicar todas las mutaciones con primitives en esa misma conexion; conservar
    lecturas e identidad; guardar ledger de responsable cuando corresponda, detalles
    y UUID/resultado confirmado en la misma transaccion.
-7. Revalidar condiciones que no estan protegidas por el fence antes de commit.
-   Confirmar BASE_TAREAS; mantener fence de organizacion hasta conocer el resultado.
+7. Revalidar condiciones que no estan protegidas por el protocolo antes de commit.
+   Confirmar el backend resuelto de tareas; mantener la coordinacion hasta conocer
+   el resultado. No asumir que otra conexion `BASE_TAREAS` comparte transaccion.
 8. Liberar fence. Solo tras commit conocido, proyectar auditoria y notificaciones.
    Responder resultado confirmado separado del estado de efectos secundarios.
 
@@ -61,10 +100,10 @@ servicios individuales existentes y su comportamiento.
 **Propiedad funcional que se protege**: una membresia no puede cambiar mientras
 su elegibilidad protegida se usa para confirmar el lote. Si el cambio se confirma
 primero, el lote observa la nueva revision y rechaza el preview obsoleto; si el
-lote toma el fence primero, el cambio espera y se aplica despues del commit del
-lote. Una recuperacion posterior nunca deshace sustituciones confirmadas.
+lote obtiene exclusion certificada primero, el cambio espera y se aplica despues
+del commit del lote. Una recuperacion posterior nunca deshace sustituciones confirmadas.
 
-Propuesta: fila `ControlOrganizacionEmpresa` propia de organizacion. Evita carreras
+Propuesta: fila `ControlOrganizacionEmpresa` propia de organizacion en `default`. Evita carreras
 cuando no hay ninguna membresia que bloquear, protege altas, bajas, cambios de rol
 y Departamento activo, y simplifica un orden unico:
 
@@ -92,7 +131,9 @@ Un lease con expiracion tampoco demuestra seguridad sin fencing efectivo del
 consumidor. No implementar leases/versionado como sustituto silencioso de la
 garantia, ni aceptar despues un lote invalido como "consistencia eventual".
 
-La revision debe elegir y certificar un protocolo compatible con los backends
+T176/T177 son evidencia historica de membresias en `default`; no certifican el
+protocolo entre la membresia y los nuevos catalogos MySQL. La revision debe elegir
+y certificar un protocolo compatible con los backends
 desplegados, o registrar `MISSING_SYSTEM_CAPABILITY` y pedir una tarea externa
 acotada. Hasta entonces el diseno de lote esta documentado, no certificado.
 No se debilita el todo-o-nada de BASE_TAREAS por esta limitacion.
@@ -106,8 +147,11 @@ commit requiere capacidad/contrato externo; no esta demostrada por la doble lect
 
 ## Departamento: protocolo sin atomicidad distribuida
 
-La UI/orquestador de tareas coordina revision y llama interfaces publicas de
-organizacion; organizacion nunca importa tareas.
+La UI/orquestador de tareas solo puede coordinarse con interfaces publicas
+existentes. No puede importar modelos/helpers privados de organizacion ni escribir
+su estado. Las APIs publicas necesarias para crear/editar/activar Departamentos no
+estan disponibles; G19 bloquea estas mutaciones, incluido T201, hasta resolver la
+dependencia mediante autorizacion independiente.
 
 1. Preparar operacion con UUID/motivo y revision del Departamento; activo sigue
    siendo verdadero. Preview identifica tareas abiertas, cerradas historicas y
@@ -122,14 +166,17 @@ organizacion; organizacion nunca importa tareas.
    cambiandole el significado del campo rol.
 4. Reconsultar todas las tareas abiertas asociadas. Cualquier bloqueo o fila
    nueva impide finalizar; no esconder anuladas del chequeo.
-5. Solo con cero bloqueos confirmar baja `Departamento.activo=False` e historia
-   en default, manteniendo el control contra escritores hasta esa confirmacion.
+5. Solo con cero bloqueos podria confirmarse `Departamento.activo=False` en la
+   fuente autoritativa objetivo `BASE_TAREAS`, manteniendo el control contra
+   escritores. Esta operacion no se expone ni ejecuta hasta existir API publica
+   autorizada (G19) y evidencia G07; no crear una copia maestra en `default`.
 
-Las transferencias y la baja departamental son commits distintos. Si tareas
-confirma y default falla, Departamento sigue activo y las transferencias confirmadas
-se conservan; no simular rollback ni devolver "Departamento desactivado".
-Registrar/reconciliar la fase pendiente por UUID, revisar nuevamente antes de
-finalizar y permitir reintento sin duplicar transferencias.
+Las transferencias y la baja departamental pueden resolver conexiones/owners
+distintos y son commits separados salvo evidencia de una unica conexion transaccional
+certificada. Si tareas confirma y falla la actualizacion del maestro, el Departamento
+sigue activo y las transferencias confirmadas se conservan; no simular rollback ni
+devolver "Departamento desactivado". Registrar/reconciliar la fase pendiente por
+UUID, revisar nuevamente antes de finalizar y permitir reintento sin duplicar transferencias.
 Esto no rebaja F16-FR20: todo-o-nada aplica a cada lote de tareas, no a una
 transaccion distribuida entre la baja y el lote.
 
@@ -155,8 +202,9 @@ Un UUID ausente tras error no demuestra rollback si la primera conexion aun pued
 confirmar: esperar resolucion del backend/locks y verificar otra vez antes de
 autorizar reejecucion. No cambiar backend entre ejecucion y reconciliacion.
 
-Usar APIs centrales idempotentes donde existen (tareas) y claves de evento propias,
-sin ampliar su contrato global. Persistir el estado de proyeccion/entrega necesario
-en el ledger de dominio solo para reconciliar esta operacion, no crear otra cola
-global ni infraestructura shadow.
+No se selecciona todavia un ledger/outbox para los maestros. T216 debe comparar
+alternativas de idempotencia, auditoria y reconciliacion, y obtener autorizacion de
+owner antes de cualquier modelo/migracion o cambio CORE. No asumir que la API de
+auditoria existente haga atomicos los stores. Usar APIs idempotentes existentes
+donde el contrato las admite; no crear otra cola global ni infraestructura shadow.
 No se promete exactamente-una-vez para email ni atomicidad con filesystem.
