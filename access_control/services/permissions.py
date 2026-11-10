@@ -185,6 +185,9 @@ SIDEBAR_VIEW_NAMES = {
     "tasks_meetings": "Tareas - Reuniones",
     "tasks_dashboard": "Tareas - Dashboard personal",
     "tasks_connections": "Tareas - Conexiones SQL",
+    "tasks_masters_providers": "Proveedores - Maestro",
+    "tasks_masters_locals": "Tareas - Maestro de locales",
+    "tasks_masters_departments": "Tareas - Maestro de departamentos",
     "account_profile": "Accounts - Editar Perfil",
     "account_email": "Configuración - Cuentas de Correo",
     "chat_inbox": "Chat - Bandeja de entrada",
@@ -213,7 +216,6 @@ SIDEBAR_DEFINITION_KEYS = {
 
 SIDEBAR_GROUPS = {
     "library": ("library_add_owner", "library_add_property", "library_add_document_type", "library_list_owners", "library_list_properties", "library_list_document_types", "library_list_documents"),
-    "master_files": ("suppliers_master",),
     "gestion_dte": ("gestion_dte_index", "gestion_dte_cesiones", "gestion_dte_lectura", "gestion_dte_certificados", "settings_gestion_dte_connections"),
     "evaluaciones": ("evaluaciones_import", "evaluaciones_connections"),
     "projects": ("projects_list", "projects_create", "projects_clients", "projects_create_client", "projects_professionals", "projects_create_professional"),
@@ -224,6 +226,9 @@ SIDEBAR_GROUPS = {
         "tasks_dashboard",
         "tasks_connections",
         "tasks_deleted",
+        "tasks_masters_providers",
+        "tasks_masters_locals",
+        "tasks_masters_departments",
     ),
     "account": ("account_profile", "account_email"),
     "chat": ("chat_inbox", "chat_center"),
@@ -241,7 +246,6 @@ SIDEBAR_GROUPS = {
 
 SIDEBAR_GROUP_LABELS = {
     "library": "Biblioteca Digital",
-    "master_files": "Archivos Maestros",
     "gestion_dte": "Gestión DTE",
     "evaluaciones": "Evaluaciones",
     "projects": "Gestión de Proyectos",

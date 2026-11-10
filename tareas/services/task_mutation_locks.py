@@ -23,6 +23,14 @@ class TaskMutationLockUnsupported(TaskMutationLockError):
     """The operational backend cannot provide the requested row locks."""
 
 
+class TaskMutationCommitError(TaskMutationLockError):
+    """A transaction commit could not be confirmed."""
+
+
+class TaskMutationRollbackError(TaskMutationLockError):
+    """A transaction rollback could not be confirmed."""
+
+
 class TaskMutationScopeError(TaskMutationLockError):
     """Requested task rows are absent or belong to another company."""
 
@@ -322,8 +330,17 @@ def mysql_mutation_transaction(connection) -> Iterator[None]:
     """Use the already-open operational connection for one mutation transaction."""
     alias = getattr(connection, "alias", None)
     if isinstance(alias, str) and alias:
-        with transaction.atomic(using=alias):
-            yield
+        body_completed = False
+        try:
+            with transaction.atomic(using=alias):
+                yield
+                body_completed = True
+        except Exception as exc:
+            if body_completed:
+                raise TaskMutationCommitError(
+                    "No se pudo confirmar la transacción de mutación."
+                ) from exc
+            raise
         return
     try:
         connection.begin()
@@ -337,14 +354,14 @@ def mysql_mutation_transaction(connection) -> Iterator[None]:
         try:
             connection.rollback()
         except Exception as exc:
-            raise TaskMutationLockError(
+            raise TaskMutationRollbackError(
                 "No se pudo revertir la transacción de mutación."
             ) from exc
         raise
     try:
         connection.commit()
     except Exception as exc:
-        raise TaskMutationLockError(
+        raise TaskMutationCommitError(
             "No se pudo confirmar la transacción de mutación."
         ) from exc
 

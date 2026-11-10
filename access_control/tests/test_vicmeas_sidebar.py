@@ -366,7 +366,11 @@ class VicmeasSidebarTests(TestCase):
 
         access_keys = set(get_descendant_sidebar_keys("control_acceso"))
         database_manager_keys = set(get_descendant_sidebar_keys("database_manager"))
-        legacy_declared_keys = declared_keys - access_keys - database_manager_keys - {"access", "database_manager"}
+        legacy_declared_keys = declared_keys - access_keys - database_manager_keys - {
+            "access",
+            "database_manager",
+            "suppliers_master",
+        }
         self.assertEqual(template_keys, legacy_declared_keys)
         self.assertIn('{% include "partials/sidebar_node.html"', template.read_text(encoding="utf-8"))
 
@@ -820,13 +824,15 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertIn("suppliers_master", visible)
-        self.assertIn("master_files", visible)
+        self.assertNotIn("tasks", visible)
         self.assertNotIn("library", visible)
 
         self._activate(self.empresa_a)
         response = self.client.get(reverse("dashboard:dashboard_general"))
-        self.assertContains(response, "Proveedores")
-        self.assertContains(response, 'href="/proveedores/listado/"')
+        self.assertNotContains(response, 'data-key="menu.tareas.masters"')
+        self.assertNotContains(response, 'data-key="menu.tareas.masters.suppliers"')
+        self.assertNotContains(response, 'href="/proveedores/listado/"')
+        self.assertNotContains(response, 'data-key="menu.master_files.suppliers"')
 
     def test_suppliers_master_without_v_is_hidden_from_sidebar(self):
         self._permission(self.empresa_a, self.suppliers_master, ver=False)
@@ -834,11 +840,68 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertNotIn("suppliers_master", visible)
-        self.assertNotIn("master_files", visible)
+        self.assertNotIn("tasks", visible)
 
         self._activate(self.empresa_a)
         response = self.client.get(reverse("dashboard:dashboard_general"))
         self.assertNotContains(response, "Proveedores")
+
+    def test_suppliers_master_is_nested_under_tasks_and_active_on_provider_routes(self):
+        task_provider_view = Vista.objects.create(
+            nombre="Proveedores - Maestro",
+            route_name="tareas:maestros_proveedores_listado",
+        )
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+        self._permission(self.empresa_a, task_provider_view, ver=True, ingresar=True)
+        self._activate(self.empresa_a)
+
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="sidebarTareas"')
+        self.assertContains(response, 'id="sidebarTareasMaestros"')
+        self.assertContains(response, 'data-key="menu.tareas.masters.suppliers"')
+        self.assertEqual(
+            response.content.decode("utf-8").count(
+                f'href="{reverse("tareas:maestros_proveedores_listado")}"'
+            ),
+            1,
+        )
+        self.assertNotContains(response, 'data-key="menu.master_files.suppliers"')
+
+    def test_masters_container_is_hidden_without_visible_supplier(self):
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+        self._activate(self.empresa_a)
+
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-key="menu.tareas"')
+        self.assertNotContains(response, 'data-key="menu.tareas.masters"')
+        self.assertNotContains(response, 'data-key="menu.tareas.masters.suppliers"')
+
+    def test_task_masters_use_independent_visibility_and_hierarchical_urls(self):
+        locals_view = Vista.objects.create(
+            nombre="Tareas - Maestro de locales",
+            route_name="tareas:maestros_locales_listado",
+        )
+        departments_view = Vista.objects.create(
+            nombre="Tareas - Maestro de departamentos",
+            route_name="tareas:maestros_departamentos_listado",
+        )
+        self._permission(self.empresa_a, self.suppliers_master, ver=False)
+        self._permission(self.empresa_a, self.tasks_core, ver=True)
+        self._permission(self.empresa_a, locals_view, ver=True)
+        self._permission(self.empresa_a, departments_view, ver=True)
+        self._activate(self.empresa_a)
+
+        response = self.client.get(reverse("dashboard:dashboard_general"))
+
+        self.assertContains(response, 'data-key="menu.tareas.masters"')
+        self.assertNotContains(response, 'data-key="menu.tareas.masters.suppliers"')
+        self.assertContains(response, 'href="/tareas/maestros/locales/listado/"')
+        self.assertContains(response, 'href="/tareas/maestros/departamentos/listado/"')
+        self.assertNotContains(response, 'href="/proveedores/listado/"')
 
     def test_superuser_without_permission_hides_vicmeas_leaf(self):
         self.user.is_superuser = True

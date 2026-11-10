@@ -33,7 +33,10 @@ class BaseTareasSchemaInstallError(RuntimeError):
     """Error seguro al preparar la estructura operacional de Tareas."""
 
 
-_FORBIDDEN_SQL = re.compile(r"\b(?:DROP|TRUNCATE|DELETE)\b", re.IGNORECASE)
+_FORBIDDEN_SQL = re.compile(
+    r"^\s*(?:DROP|TRUNCATE|DELETE)\b",
+    re.IGNORECASE,
+)
 _DESTRUCTIVE_ALTER = re.compile(
     r"\bALTER\s+TABLE\b.*\b(?:DROP|MODIFY|CHANGE|RENAME)\b",
     re.IGNORECASE,
@@ -56,6 +59,14 @@ _CREATE_INDEX = re.compile(
     re.IGNORECASE,
 )
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "sql" / "base_tareas_schema.sql"
+MASTER_CATALOG_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "sql" / "base_tareas_maestros_v001.sql"
+)
+MASTER_OPERATION_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "sql"
+    / "base_tareas_master_operations_v001.sql"
+)
 DELETION_LEDGER_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "sql" / "deletion_ledger_schema.sql"
 )
@@ -592,20 +603,28 @@ def build_base_tareas_schema_statements(connection) -> list[str]:
 
 
 def _read_frozen_schema_statements() -> list[str]:
-    try:
-        content = SCHEMA_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise BaseTareasSchemaInstallError(
-            "No se pudo leer la estructura congelada de Base Tareas."
-        ) from exc
-    content = "\n".join(
-        line for line in content.splitlines() if not line.lstrip().startswith("--")
-    )
-    statements = [item.strip() for item in content.split(";") if item.strip()]
-    if not statements:
-        raise BaseTareasSchemaInstallError(
-            "La estructura congelada de Base Tareas está vacía."
+    statements = []
+    for path in (
+        SCHEMA_PATH,
+        MASTER_CATALOG_SCHEMA_PATH,
+        MASTER_OPERATION_SCHEMA_PATH,
+    ):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise BaseTareasSchemaInstallError(
+                f"No se pudo leer el contrato de esquema {path.name}."
+            ) from exc
+        content = "\n".join(
+            line
+            for line in content.splitlines()
+            if not line.lstrip().startswith("--")
         )
+        statements.extend(
+            item.strip() for item in content.split(";") if item.strip()
+        )
+    if not statements:
+        raise BaseTareasSchemaInstallError("Los contratos de Base Tareas están vacíos.")
     for statement in statements:
         _normalize_statement(statement)
     return statements
@@ -660,11 +679,33 @@ def _is_json_valid_check(check_clause: str) -> str | None:
 
 
 def _column_names(value: str) -> tuple[str, ...]:
-    return tuple(
-        item.strip().strip("` ")
-        for item in value.split(",")
-        if item.strip()
-    )
+    columns = []
+    for item in value.split(","):
+        normalized = item.strip().replace("`", "")
+        normalized = re.sub(r"\s*\(\d+\)\s*$", "", normalized)
+        if normalized:
+            columns.append(normalized)
+    return tuple(columns)
+
+
+def _matching_parenthesis_end(statement: str, opening: int) -> int:
+    depth = 0
+    quote = None
+    for index in range(opening, len(statement)):
+        char = statement[index]
+        if quote:
+            if char == quote and (index == 0 or statement[index - 1] != "\\"):
+                quote = None
+            continue
+        if char in {"`", "'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return -1
 
 
 def _parse_foreign_key(statement: str) -> tuple[tuple[str, ...], str, tuple[str, ...]] | None:
@@ -694,7 +735,11 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
         if table_match:
             table = table_match.group("table")
             opening = statement.find("(")
-            closing = statement.rfind(")")
+            if opening < 0:
+                continue
+            closing = _matching_parenthesis_end(statement, opening)
+            if closing < 0:
+                continue
             body = statement[opening + 1:closing]
             table_info = {
                 "columns": {},
@@ -715,12 +760,21 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
                     if foreign_key:
                         schema["foreign_keys"].add((table, *foreign_key))
                     continue
+                if upper.startswith(("UNIQUE ", "KEY ", "INDEX ")):
+                    match = re.search(r"\((.*)\)", item)
+                    if match:
+                        target = _column_names(match.group(1))
+                        if upper.startswith("UNIQUE "):
+                            table_info["unique"].add(target)
+                        else:
+                            table_info["ordinary"].add(target)
+                    continue
                 column_match = re.match(
                     r"`?(?P<column>[A-Za-z0-9_]+)`?\s+"
                     r"(?P<type>[A-Za-z]+(?:\s+unsigned)?(?:\s*\([^)]*\))?)"
                     r"(?P<rest>.*)$",
                     item,
-                    re.IGNORECASE,
+                    re.IGNORECASE | re.DOTALL,
                 )
                 if column_match:
                     rest = column_match.group("rest")
@@ -733,16 +787,6 @@ def _parse_expected_schema(statements: list[str]) -> dict[str, Any]:
                         "nullable": "NO" if re.search(r"\bNOT\s+NULL\b", rest, re.I) else "YES",
                         "auto_increment": bool(re.search(r"\bAUTO_INCREMENT\b", rest, re.I)),
                     }
-                    continue
-                if upper.startswith("UNIQUE") or " UNIQUE " in f" {upper} ":
-                    match = re.search(r"\(([^)]*)\)", item)
-                    if match:
-                        table_info["unique"].add(_column_names(match.group(1)))
-                    continue
-                if upper.startswith(("KEY ", "INDEX ")):
-                    match = re.search(r"\(([^)]*)\)", item)
-                    if match:
-                        table_info["ordinary"].add(_column_names(match.group(1)))
                     continue
                 if upper.startswith(("CONSTRAINT ", "CHECK ")):
                     continue
@@ -1134,6 +1178,11 @@ def preview_base_tareas_schema() -> dict[str, Any]:
         {
             "backend": "mysql",
             "database_name": database_name,
+            "schema_contracts": (
+                SCHEMA_PATH.name,
+                MASTER_CATALOG_SCHEMA_PATH.name,
+                MASTER_OPERATION_SCHEMA_PATH.name,
+            ),
             "connection_id": int(source["connection_id"]),
             "connection_updated_at": connection_config.updated_at.isoformat(),
             "fingerprint": _schema_fingerprint(

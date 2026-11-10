@@ -10,7 +10,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from access_control.services.permissions import get_valid_users_for_empresa
-from organizacion.models import Departamento, Local
+from organizacion.models import Departamento, Local, MembresiaDepartamental
 from tareas.services.reading import COMMENT_PAGE_SIZE
 from tareas.services.comment_storage import resolve_comment_storage
 from tareas.services.document_storage import resolve_document_storage
@@ -343,6 +343,71 @@ class ResponsableTareaForm(forms.Form):
             self.initial["responsable"] = responsable_id
             if estado != Tarea.Estado.BORRADOR:
                 self.fields["responsable"].required = True
+
+
+class DepartmentMembershipCommandForm(forms.Form):
+    user_id = forms.IntegerField(min_value=1)
+    department_id = forms.IntegerField(min_value=1)
+    reason = forms.CharField(strip=True)
+    operation_id = forms.UUIDField()
+    expected_organization_revision = forms.IntegerField(
+        min_value=1,
+        required=False,
+    )
+
+
+class DepartmentCatalogCreateForm(forms.Form):
+    codigo = forms.CharField(max_length=100, strip=True)
+    nombre = forms.CharField(max_length=255, strip=True)
+    motivo = forms.CharField(max_length=1000, strip=True)
+    operation_id = forms.UUIDField()
+
+
+class DepartmentCatalogUpdateForm(forms.Form):
+    nombre = forms.CharField(max_length=255, strip=True)
+    motivo = forms.CharField(max_length=1000, strip=True)
+    operation_id = forms.UUIDField()
+
+
+class ProviderCatalogForm(forms.Form):
+    rut = forms.CharField(max_length=12, required=False, strip=True)
+    nombre = forms.CharField(max_length=255, strip=True)
+    direccion = forms.CharField(max_length=255, required=False, strip=True)
+    comuna = forms.CharField(max_length=100, required=False, strip=True)
+    ciudad = forms.CharField(max_length=100, required=False, strip=True)
+    fono1 = forms.CharField(max_length=30, required=False, strip=True)
+    fono2 = forms.CharField(max_length=30, required=False, strip=True)
+    fax = forms.CharField(max_length=30, required=False, strip=True)
+    contacto = forms.CharField(max_length=150, required=False, strip=True)
+    email1 = forms.EmailField(max_length=254, required=False)
+    email2 = forms.EmailField(max_length=254, required=False)
+    motivo = forms.CharField(max_length=1000, strip=True)
+    operation_id = forms.UUIDField()
+
+
+class LocalCatalogForm(forms.Form):
+    codigo = forms.CharField(max_length=100, strip=True)
+    nombre = forms.CharField(max_length=255, strip=True)
+    legacy_code = forms.CharField(max_length=100, required=False, strip=True)
+    motivo = forms.CharField(max_length=1000, strip=True)
+    operation_id = forms.UUIDField()
+
+
+class DepartmentMembershipCreateForm(DepartmentMembershipCommandForm):
+    target_role = forms.ChoiceField(
+        choices=MembresiaDepartamental.Rol.choices,
+    )
+
+
+class DepartmentMembershipRoleForm(DepartmentMembershipCommandForm):
+    target_role = forms.ChoiceField(
+        choices=MembresiaDepartamental.Rol.choices,
+    )
+    expected_membership_version = forms.IntegerField(min_value=1)
+
+
+class DepartmentMembershipStateForm(DepartmentMembershipCommandForm):
+    expected_membership_version = forms.IntegerField(min_value=1)
 
 
 class MiniTareaCreateForm(forms.ModelForm):

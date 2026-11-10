@@ -1,0 +1,236 @@
+{% extends "partials/base.html" %}
+{% load static %}
+
+{% block title %}Maestro de Departamentos{% endblock title %}
+{% block pagetitle %}{% include "partials/page-title.html" with title="Maestro de Departamentos" pagetitle="Tareas" title_key="tareas.master_catalog.department.title" pagetitle_key="menu.tareas" %}{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <h4 class="mb-0 fw-semibold" data-key="tareas.master_catalog.department.title">Maestro de Departamentos</h4>
+                <button type="button" class="btn btn-primary" disabled aria-disabled="true"
+                    data-key="tareas.master_catalog.department.blocked">
+                    <i class="ri-add-line align-bottom me-1" aria-hidden="true"></i>
+                    <span data-key="tareas.master_catalog.department.new">Nuevo Departamento</span>
+                </button>
+            </div>
+
+            <div id="department-catalog-message" class="alert d-none" role="status" aria-live="polite"></div>
+
+            {% if storage_error %}
+            <div class="alert alert-warning" role="alert">
+                <span data-key="{{ catalog_error_key }}">El catálogo de Departamentos no está disponible.</span>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-header border-0">
+                    <h5 class="card-title mb-0" data-key="tareas.master_catalog.department.list">Departamentos</h5>
+                </div>
+                <div class="card-body border-top">
+                    <form method="get" class="row g-3 align-items-end mb-3">
+                        <div class="col-12 col-xl-7">
+                            <label class="form-label" for="department-search" data-key="tareas.master_catalog.department.search">Buscar</label>
+                            <input id="department-search" name="q" type="search" class="form-control" value="{{ search }}" maxlength="255">
+                        </div>
+                        <div class="col-12 col-md-6 col-xl-3">
+                            <label class="form-label" for="department-state" data-key="tareas.master_catalog.department.filter_state">Estado</label>
+                            <select id="department-state" name="estado" class="form-select">
+                                <option value="todos"{% if state == "todos" %} selected{% endif %} data-key="tareas.master_catalog.department.all">Todos</option>
+                                <option value="activos"{% if state == "activos" %} selected{% endif %} data-key="tareas.master_catalog.department.active_filter">Activos</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6 col-xl-2 d-grid">
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="ri-search-line me-1" aria-hidden="true"></i>
+                                <span data-key="tareas.master_catalog.department.search_action">Buscar</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table align-middle table-hover mb-0" id="department-catalog-table"
+                            data-edit-url-template="{% url 'tareas:departamentos_maestro_editar' 999999999 %}">
+                            <thead class="table-light">
+                                <tr>
+                                    <th data-key="tareas.master_catalog.department.code">Código</th>
+                                    <th data-key="tareas.master_catalog.department.name">Nombre</th>
+                                    <th data-key="tareas.master_catalog.department.source">Origen</th>
+                                    <th data-key="tareas.master_catalog.department.status">Estado</th>
+                                    <th data-key="tareas.master_catalog.department.actions">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="department-catalog-body">
+                                {% for department in departments %}
+                                <tr data-department-id="{{ department.id }}">
+                                    <td data-department-code>{{ department.codigo }}</td>
+                                    <td data-department-name>{{ department.nombre }}</td>
+                                    <td data-department-source>{{ department.source }}</td>
+                                    <td>
+                                        {% if department.activo %}
+                                        <span class="badge bg-success-subtle text-success" data-key="tareas.master_catalog.department.active">Activo</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary" data-key="tareas.master_catalog.department.inactive">Inactivo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary js-department-detail"
+                                            data-bs-toggle="modal" data-bs-target="#department-detail-modal"
+                                            data-code="{{ department.codigo }}" data-name="{{ department.nombre }}"
+                                            data-source="{{ department.source }}" data-active="{{ department.activo|yesno:'true,false' }}">
+                                            <span data-key="tareas.master_catalog.department.detail">Detalle</span>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-primary js-department-edit"
+                                            data-bs-toggle="modal" data-bs-target="#department-edit-modal"
+                                            data-url="{% url 'tareas:departamentos_maestro_editar' department.id %}"
+                                            data-code="{{ department.codigo }}" data-name="{{ department.nombre }}"
+                                            disabled aria-disabled="true">
+                                            <span data-key="tareas.master_catalog.department.edit">Editar</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr id="department-empty-row">
+                                    <td colspan="5" class="text-center text-muted py-4" data-key="tareas.master_catalog.department.empty">No hay Departamentos para mostrar.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if page_obj and page_obj.has_other_pages %}
+                    <nav class="mt-3" aria-label="Paginación">
+                        <div class="d-flex justify-content-between align-items-center">
+                            {% if page_obj.has_previous %}
+                            <a class="btn btn-sm btn-outline-primary" href="?q={{ search|urlencode }}&amp;estado={{ state|urlencode }}&amp;page={{ page_obj.previous_page_number }}">
+                                <span data-key="tareas.master_catalog.department.previous">Anterior</span>
+                            </a>
+                            {% else %}<span></span>{% endif %}
+                            <span><span data-key="tareas.master_catalog.department.page">Página</span> {{ page_obj.number }} <span data-key="tareas.master_catalog.department.of">de</span> {{ page_obj.paginator.num_pages }}</span>
+                            {% if page_obj.has_next %}
+                            <a class="btn btn-sm btn-outline-primary" href="?q={{ search|urlencode }}&amp;estado={{ state|urlencode }}&amp;page={{ page_obj.next_page_number }}">
+                                <span data-key="tareas.master_catalog.department.next">Siguiente</span>
+                            </a>
+                            {% else %}<span></span>{% endif %}
+                        </div>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="department-create-modal" tabindex="-1" aria-labelledby="department-create-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form class="js-department-mutation" method="post" action="{% url 'tareas:departamentos_maestro_crear' %}" data-kind="create">
+                {% csrf_token %}
+                <input type="hidden" name="operation_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="department-create-title" data-key="tareas.master_catalog.department.create_title">Nuevo Departamento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="department-create-code" data-key="tareas.master_catalog.department.code">Código</label>
+                        <input id="department-create-code" class="form-control" name="codigo" maxlength="100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-create-name" data-key="tareas.master_catalog.department.name">Nombre</label>
+                        <input id="department-create-name" class="form-control" name="nombre" maxlength="255" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-create-reason" data-key="tareas.master_catalog.department.reason">Motivo</label>
+                        <textarea id="department-create-reason" class="form-control" name="motivo" maxlength="1000" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-key="tareas.master_catalog.department.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="js-submit-label" data-key="tareas.master_catalog.department.save">Guardar</span>
+                        <span class="spinner-border spinner-border-sm d-none js-submit-spinner" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="department-edit-modal" tabindex="-1" aria-labelledby="department-edit-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form class="js-department-mutation" method="post" data-kind="edit">
+                {% csrf_token %}
+                <input type="hidden" name="operation_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="department-edit-title" data-key="tareas.master_catalog.department.edit_title">Editar Departamento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="department-edit-code" data-key="tareas.master_catalog.department.code">Código</label>
+                        <input id="department-edit-code" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-edit-name" data-key="tareas.master_catalog.department.name">Nombre</label>
+                        <input id="department-edit-name" class="form-control" name="nombre" maxlength="255" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="department-edit-reason" data-key="tareas.master_catalog.department.reason">Motivo</label>
+                        <textarea id="department-edit-reason" class="form-control" name="motivo" maxlength="1000" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-key="tareas.master_catalog.department.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="js-submit-label" data-key="tareas.master_catalog.department.save">Guardar</span>
+                        <span class="spinner-border spinner-border-sm d-none js-submit-spinner" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="department-detail-modal" tabindex="-1" aria-labelledby="department-detail-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="department-detail-title" data-key="tareas.master_catalog.department.detail_title">Detalle del Departamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4" data-key="tareas.master_catalog.department.code">Código</dt><dd class="col-sm-8" id="department-detail-code"></dd>
+                    <dt class="col-sm-4" data-key="tareas.master_catalog.department.name">Nombre</dt><dd class="col-sm-8" id="department-detail-name"></dd>
+                    <dt class="col-sm-4" data-key="tareas.master_catalog.department.source">Origen</dt><dd class="col-sm-8" id="department-detail-source"></dd>
+                    <dt class="col-sm-4" data-key="tareas.master_catalog.department.status">Estado</dt><dd class="col-sm-8" id="department-detail-status"></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-none" aria-hidden="true">
+    <span data-message-key="{{ catalog_keys.created }}" data-key="{{ catalog_keys.created }}">Departamento creado.</span>
+    <span data-message-key="{{ catalog_keys.updated }}" data-key="{{ catalog_keys.updated }}">Departamento actualizado.</span>
+    <span data-message-key="{{ catalog_keys.audit_pending }}" data-key="{{ catalog_keys.audit_pending }}">El cambio fue guardado; la auditoría está pendiente de reconciliación.</span>
+    <span data-message-key="{{ catalog_keys.audit_error }}" data-key="{{ catalog_keys.audit_error }}">El cambio fue guardado, pero la auditoría requiere revisión manual.</span>
+    <span data-message-key="{{ catalog_keys.invalid_request }}" data-key="{{ catalog_keys.invalid_request }}">Revise los datos ingresados.</span>
+    <span data-message-key="{{ catalog_keys.not_found }}" data-key="{{ catalog_keys.not_found }}">El Departamento no está disponible en la Empresa activa.</span>
+    <span data-message-key="{{ catalog_keys.conflict }}" data-key="{{ catalog_keys.conflict }}">El cambio entra en conflicto con el catálogo.</span>
+    <span data-message-key="{{ catalog_keys.operation_conflict }}" data-key="{{ catalog_keys.operation_conflict }}">El identificador de operación ya fue usado con otros datos.</span>
+    <span data-message-key="{{ catalog_keys.operation_uncertain }}" data-key="{{ catalog_keys.operation_uncertain }}">El resultado no está confirmado. Reintente la misma operación sin cambiar sus datos.</span>
+    <span data-message-key="{{ catalog_keys.blocked }}" data-key="{{ catalog_keys.blocked }}">La operación está bloqueada por el contrato vigente.</span>
+    <span data-message-key="{{ catalog_keys.unavailable }}" data-key="{{ catalog_keys.unavailable }}">El catálogo no está disponible temporalmente.</span>
+    <span data-message-key="tareas.master_catalog.department.active" data-key="tareas.master_catalog.department.active">Activo</span>
+    <span data-message-key="tareas.master_catalog.department.inactive" data-key="tareas.master_catalog.department.inactive">Inactivo</span>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script src="{% static 'tareas/js/master_departments.js' %}"></script>
+{% endblock extra_js %}

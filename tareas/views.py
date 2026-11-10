@@ -20,6 +20,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core import signing
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
@@ -42,6 +43,16 @@ from access_control.services.permissions import (
     user_has_permission_for_empresa,
 )
 from access_control.views import VerificarPermisoMixin
+from organizacion.services.memberships import (
+    MembershipCommand,
+    MembershipConflict,
+    MembershipOperation,
+    MembershipPermissionDenied,
+    OrganizationInputError,
+    OrganizationNotFoundError,
+    OrganizationUnavailableError,
+    change_membership,
+)
 
 _MENSAJE_EMPRESA_BASE_00 = (
     "La planificación de tareas solo funciona en la Empresa Base 00. "
@@ -126,6 +137,8 @@ def _can_logically_delete_task(user, empresa):
 
 class EmpresaBase00GuardMixin:
     def dispatch(self, request, *args, **kwargs):
+        if not getattr(self, "requires_empresa_base00", True):
+            return super().dispatch(request, *args, **kwargs)
         response = _guard_empresa_base_00(request)
         if response is not None:
             return response
@@ -160,6 +173,11 @@ from .forms import (
     CompletarHitoForm,
     ComentarioForm,
     DocumentoForm,
+    DepartmentCatalogCreateForm,
+    DepartmentCatalogUpdateForm,
+    DepartmentMembershipCreateForm,
+    DepartmentMembershipRoleForm,
+    DepartmentMembershipStateForm,
     EvidenciaConfigForm,
     EvidenciaRegistroForm,
     HitoCumplimientoForm,
@@ -181,6 +199,8 @@ from .forms import (
     TareaForm,
     TaskEditForm,
     ReprogramTaskForm,
+    LocalCatalogForm,
+    ProviderCatalogForm,
     TareaConnectionRoleForm,
 )
 from .models import (
@@ -199,6 +219,32 @@ from .models import (
 )
 from .services.context import get_active_company_id
 from .services.audit import log_task_operation, task_audit_snapshot
+from .services.department_catalog import (
+    DepartmentInput,
+    get_department,
+    create_department,
+    list_departments,
+    update_department_name,
+)
+from .services.locals import LocalInput, get_local, list_locals
+from .services.providers import get_provider, list_providers
+from .services.master_catalog_common import (
+    CompanyContext,
+    MasterCatalogBackendError,
+    MasterCatalogCapabilityBlocked,
+    MasterCatalogCommitUnknown,
+    MasterCatalogConflict,
+    MasterCatalogError,
+    MasterCatalogNotFound,
+    MasterCatalogValidationError,
+    MutationMetadata,
+)
+from .services.master_operation_store import (
+    MasterOperationConflict,
+    MasterOperationOutcomeUnknown,
+    MasterOperationPreviouslyFailed,
+    MasterOperationValidationError,
+)
 from .services.participant_storage import (
     AddParticipantCommand,
     ChangeParticipantRoleCommand,
@@ -386,6 +432,22 @@ _BASE_TAREAS_SCHEMA_PREVIEW_MAX_AGE = 600
 def _get_empresa_id(request):
     """Empresa activa desde la sesión (patrón vigente)."""
     return get_active_company_id(request)
+
+
+def _department_master_company_id(request):
+    empresa_id = _get_empresa_id(request)
+    if not empresa_id or not getattr(request.user, "is_active", False):
+        return None
+
+    empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
+    if empresa is None:
+        return None
+    if not get_valid_users_for_empresa(
+        empresa,
+        active_only=True,
+    ).filter(pk=request.user.pk).exists():
+        return None
+    return empresa.pk
 
 
 def _comment_error_response(status=400):
@@ -834,6 +896,646 @@ def _get_operational_similarity_task(task_id, empresa_id):
         raise TaskStorageError(
             "No se pudo leer el almacenamiento de tareas configurado."
         ) from exc
+
+
+_DEPARTMENT_MASTER_VIEW_NAME = "Tareas - Maestro de departamentos"
+_DEPARTMENT_MEMBERSHIP_SUCCESS_KEYS = {
+    MembershipOperation.CREATE: "organizacion.memberships.created",
+    MembershipOperation.CHANGE_ROLE: "organizacion.memberships.role_changed",
+    MembershipOperation.SUSPEND: "organizacion.memberships.suspended",
+    MembershipOperation.REACTIVATE: "organizacion.memberships.reactivated",
+    MembershipOperation.LOGICAL_DELETE: "organizacion.memberships.deleted",
+}
+_DEPARTMENT_CATALOG_KEYS = {
+    "created": "tareas.master_catalog.department.created",
+    "updated": "tareas.master_catalog.department.updated",
+    "audit_pending": "tareas.master_catalog.department.audit_pending",
+    "audit_error": "tareas.master_catalog.department.audit_error",
+    "invalid_request": "tareas.master_catalog.department.invalid_request",
+    "not_found": "tareas.master_catalog.department.not_found",
+    "conflict": "tareas.master_catalog.department.conflict",
+    "operation_conflict": "tareas.master_catalog.department.operation_conflict",
+    "operation_uncertain": "tareas.master_catalog.department.operation_uncertain",
+    "blocked": "tareas.master_catalog.department.blocked",
+    "unavailable": "tareas.master_catalog.department.unavailable",
+}
+
+
+_PROVIDER_MASTER_VIEW_NAME = "Proveedores - Maestro"
+_LOCAL_MASTER_VIEW_NAME = "Tareas - Maestro de locales"
+_GENERIC_MASTER_KEYS = {
+    "blocked": "tareas.master_catalog.common.blocked",
+    "invalid_request": "tareas.master_catalog.common.invalid_request",
+    "not_found": "tareas.master_catalog.common.not_found",
+    "unavailable": "tareas.master_catalog.common.unavailable",
+    "detail": "tareas.master_catalog.common.detail",
+}
+_GENERIC_MASTER_LABELS = {
+    "create_blocked": "tareas.master_catalog.common.create_blocked",
+    "search": "tareas.master_catalog.common.search",
+    "search_action": "tareas.master_catalog.common.search_action",
+    "name": "tareas.master_catalog.common.name",
+    "rut": "tareas.master_catalog.provider.rut",
+    "code": "tareas.master_catalog.local.code",
+    "source": "tareas.master_catalog.local.source",
+    "status": "tareas.master_catalog.common.status",
+    "actions": "tareas.master_catalog.common.actions",
+    "active": "tareas.master_catalog.common.active",
+    "inactive": "tareas.master_catalog.common.inactive",
+    "detail": "tareas.master_catalog.common.detail",
+    "edit_blocked": "tareas.master_catalog.common.edit_blocked",
+    "previous": "tareas.master_catalog.common.previous",
+    "next": "tareas.master_catalog.common.next",
+    "of": "tareas.master_catalog.common.of",
+}
+
+
+def _master_catalog_company_id(request):
+    empresa_id = _get_empresa_id(request)
+    if not empresa_id or not getattr(request.user, "is_active", False):
+        return None
+    empresa = Empresa.objects.using("default").filter(pk=empresa_id).first()
+    if empresa is None:
+        return None
+    if not get_valid_users_for_empresa(
+        empresa,
+        active_only=True,
+    ).filter(pk=request.user.pk).exists():
+        return None
+    return empresa.pk
+
+
+def _generic_master_error_response(error):
+    if isinstance(error, (MasterCatalogValidationError, MasterOperationValidationError)):
+        status = 400
+        message_key = _GENERIC_MASTER_KEYS["invalid_request"]
+    elif isinstance(error, MasterCatalogNotFound):
+        status = 404
+        message_key = _GENERIC_MASTER_KEYS["not_found"]
+    elif isinstance(error, MasterCatalogCapabilityBlocked):
+        status = 409
+        message_key = _GENERIC_MASTER_KEYS["blocked"]
+    else:
+        status = 503 if isinstance(error, MasterCatalogBackendError) else 500
+        message_key = _GENERIC_MASTER_KEYS["unavailable"]
+    logger.warning(
+        "Master catalog request failed error_type=%s status=%s",
+        type(error).__name__,
+        status,
+    )
+    return JsonResponse({"success": False, "message_key": message_key}, status=status)
+
+
+def _provider_detail_data(record):
+    return {
+        "id": record.id,
+        "rut": record.rut,
+        "nombre": record.nombre,
+        "direccion": record.direccion,
+        "comuna": record.comuna,
+        "ciudad": record.ciudad,
+        "fono1": record.fono1,
+        "fono2": record.fono2,
+        "fax": record.fax,
+        "contacto": record.contacto,
+        "email1": record.email1,
+        "email2": record.email2,
+        "activo": record.activo,
+    }
+
+
+def _local_detail_data(record):
+    return {
+        "id": record.id,
+        "empresa_id": record.empresa_id,
+        "codigo": record.codigo,
+        "nombre": record.nombre,
+        "legacy_code": record.legacy_code,
+        "activo": record.activo,
+        "source": record.source,
+    }
+
+
+def _department_detail_data(record):
+    return {
+        "id": record.id,
+        "empresa_id": record.empresa_id,
+        "codigo": record.codigo,
+        "nombre": record.nombre,
+        "activo": record.activo,
+        "source": record.source,
+    }
+
+
+class ProviderMasterView(TareasLoginVerificarPermisoMixin, View):
+    vista_nombre = _PROVIDER_MASTER_VIEW_NAME
+    permiso_requerido = "ingresar"
+    crear_permiso_faltante = False
+    requires_empresa_base00 = False
+    template_name = "tareas/maestros/catalogo.html"
+    catalog_type = "provider"
+
+    def get(self, request, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        search = request.GET.get("q", "").strip()
+        try:
+            records = list_providers(
+                active_only=request.GET.get("estado") == "activos",
+                search=search,
+            )
+        except MasterCatalogError as exc:
+            return _generic_master_error_response(exc)
+        page_obj = Paginator(records, 25).get_page(request.GET.get("page"))
+        return render(
+            request,
+            self.template_name,
+            {
+                "catalog_type": self.catalog_type,
+                "catalog_title_key": "tareas.master_catalog.provider.title",
+                "catalog_title": "Maestro de Proveedores",
+                "catalog_list_key": "tareas.master_catalog.provider.list",
+                "catalog_empty_key": "tareas.master_catalog.provider.empty",
+                "records": page_obj.object_list,
+                "page_obj": page_obj,
+                "search": search,
+                "state": request.GET.get("estado", "todos"),
+                "write_blocked": True,
+                "catalog_labels": _GENERIC_MASTER_LABELS,
+            },
+        )
+
+
+class ProviderDetailView(ProviderMasterView):
+    def get(self, request, provider_id, *args, **kwargs):
+        if _master_catalog_company_id(request) is None:
+            return self.handle_no_permission(request)
+        try:
+            record = get_provider(provider_id)
+        except MasterCatalogError as exc:
+            return _generic_master_error_response(exc)
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": _GENERIC_MASTER_KEYS["detail"],
+                "data": _provider_detail_data(record),
+            }
+        )
+
+
+class ProviderCatalogMutationView(ProviderMasterView):
+    permiso_requerido = "crear"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, *args, **kwargs):
+        if _master_catalog_company_id(request) is None:
+            return self.handle_no_permission(request)
+        return _generic_master_error_response(
+            MasterCatalogCapabilityBlocked(
+                "La escritura de Proveedores requiere el cierre del gate G17."
+            )
+        )
+
+
+class ProviderCatalogUpdateView(ProviderCatalogMutationView):
+    permiso_requerido = "modificar"
+
+
+class ProviderCatalogLifecycleView(ProviderCatalogMutationView):
+    permiso_requerido = "eliminar"
+
+
+class LocalMasterView(ProviderMasterView):
+    vista_nombre = _LOCAL_MASTER_VIEW_NAME
+    catalog_type = "local"
+
+    def get(self, request, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        search = request.GET.get("q", "").strip()
+        context = CompanyContext(company_id, request.user.pk)
+        try:
+            records = list_locals(
+                context,
+                active_only=request.GET.get("estado") == "activos",
+                search=search,
+            )
+        except MasterCatalogError as exc:
+            return _generic_master_error_response(exc)
+        page_obj = Paginator(records, 25).get_page(request.GET.get("page"))
+        return render(
+            request,
+            self.template_name,
+            {
+                "catalog_type": self.catalog_type,
+                "catalog_title_key": "tareas.master_catalog.local.title",
+                "catalog_title": "Maestro de Locales",
+                "catalog_list_key": "tareas.master_catalog.local.list",
+                "catalog_empty_key": "tareas.master_catalog.local.empty",
+                "records": page_obj.object_list,
+                "page_obj": page_obj,
+                "search": search,
+                "state": request.GET.get("estado", "todos"),
+                "write_blocked": True,
+                "catalog_labels": _GENERIC_MASTER_LABELS,
+            },
+        )
+
+
+class LocalDetailView(LocalMasterView):
+    def get(self, request, local_id, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            record = get_local(CompanyContext(company_id, request.user.pk), local_id)
+        except MasterCatalogError as exc:
+            return _generic_master_error_response(exc)
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": _GENERIC_MASTER_KEYS["detail"],
+                "data": _local_detail_data(record),
+            }
+        )
+
+
+class LocalCatalogMutationView(LocalMasterView):
+    permiso_requerido = "crear"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, *args, **kwargs):
+        if _master_catalog_company_id(request) is None:
+            return self.handle_no_permission(request)
+        return _generic_master_error_response(
+            MasterCatalogCapabilityBlocked(
+                "La escritura de Locales requiere el cierre del gate G18."
+            )
+        )
+
+
+class LocalCatalogUpdateView(LocalCatalogMutationView):
+    permiso_requerido = "modificar"
+
+
+class LocalCatalogLifecycleView(LocalCatalogMutationView):
+    permiso_requerido = "eliminar"
+
+
+def _department_write_gate_error():
+    return MasterCatalogCapabilityBlocked(
+        "La escritura del maestro requiere certificación de G02/G19/T226."
+    )
+
+
+def _department_catalog_error_response(error):
+    if isinstance(error, (MasterCatalogValidationError, MasterOperationValidationError)):
+        status = 400
+        message_key = _DEPARTMENT_CATALOG_KEYS["invalid_request"]
+    elif isinstance(error, MasterCatalogNotFound):
+        status = 404
+        message_key = _DEPARTMENT_CATALOG_KEYS["not_found"]
+    elif isinstance(error, MasterOperationConflict):
+        status = 409
+        message_key = _DEPARTMENT_CATALOG_KEYS["operation_conflict"]
+    elif isinstance(error, MasterCatalogConflict):
+        status = 409
+        message_key = _DEPARTMENT_CATALOG_KEYS["conflict"]
+    elif isinstance(
+        error,
+        (
+            MasterCatalogCommitUnknown,
+            MasterOperationOutcomeUnknown,
+            MasterOperationPreviouslyFailed,
+        ),
+    ):
+        status = 409
+        message_key = _DEPARTMENT_CATALOG_KEYS["operation_uncertain"]
+    elif isinstance(error, MasterCatalogCapabilityBlocked):
+        status = 409
+        message_key = _DEPARTMENT_CATALOG_KEYS["blocked"]
+    else:
+        status = 503 if isinstance(error, MasterCatalogBackendError) else 500
+        message_key = _DEPARTMENT_CATALOG_KEYS["unavailable"]
+
+    logger.warning(
+        "Department catalog request failed error_type=%s status=%s",
+        type(error).__name__,
+        status,
+    )
+    return JsonResponse(
+        {"success": False, "message_key": message_key},
+        status=status,
+    )
+
+
+def _department_catalog_result_message(result, success_key):
+    if result.audit_status == "CONFIRMED":
+        return success_key
+    if (
+        result.audit_status == "ERROR"
+        and result.audit_error_code.startswith("PERMANENT_")
+    ):
+        return _DEPARTMENT_CATALOG_KEYS["audit_error"]
+    return _DEPARTMENT_CATALOG_KEYS["audit_pending"]
+
+
+class DepartmentMasterView(TareasLoginVerificarPermisoMixin, View):
+    vista_nombre = _DEPARTMENT_MASTER_VIEW_NAME
+    permiso_requerido = "ingresar"
+    crear_permiso_faltante = False
+    requires_empresa_base00 = False
+    template_name = "tareas/departamentos/maestro.html"
+
+    def get(self, request, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+
+        search = request.GET.get("q", "").strip()
+        state = request.GET.get("estado", "todos").strip() or "todos"
+        context = {
+            "departments": (),
+            "page_obj": None,
+            "search": search,
+            "state": state,
+            "storage_error": False,
+            "catalog_keys": _DEPARTMENT_CATALOG_KEYS,
+        }
+        if state not in {"todos", "activos"}:
+            context["storage_error"] = True
+            context["catalog_error_key"] = _DEPARTMENT_CATALOG_KEYS["invalid_request"]
+            return render(request, self.template_name, context, status=400)
+
+        try:
+            departments = list_departments(
+                CompanyContext(company_id, request.user.pk),
+                active_only=state == "activos",
+                search=search,
+            )
+        except MasterCatalogError as exc:
+            logger.warning(
+                "Department catalog read unavailable error_type=%s",
+                type(exc).__name__,
+            )
+            context["storage_error"] = True
+            context["catalog_error_key"] = _DEPARTMENT_CATALOG_KEYS["unavailable"]
+            return render(request, self.template_name, context, status=503)
+
+        page_obj = Paginator(departments, 25).get_page(request.GET.get("page"))
+        context["departments"] = page_obj.object_list
+        context["page_obj"] = page_obj
+        return render(request, self.template_name, context)
+
+
+class DepartmentCatalogDetailView(DepartmentMasterView):
+    def get(self, request, department_id, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            record = get_department(
+                CompanyContext(company_id, request.user.pk),
+                department_id,
+            )
+        except MasterCatalogError as exc:
+            return _department_catalog_error_response(exc)
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": "tareas.master_catalog.department.detail",
+                "data": _department_detail_data(record),
+            }
+        )
+
+
+class DepartmentCatalogLifecycleView(DepartmentMasterView):
+    permiso_requerido = "eliminar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, department_id, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        return _department_catalog_error_response(_department_write_gate_error())
+
+
+class DepartmentCatalogCreateView(DepartmentMasterView):
+    permiso_requerido = "crear"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        return _department_catalog_error_response(_department_write_gate_error())
+
+        form = DepartmentCatalogCreateForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message_key": _DEPARTMENT_CATALOG_KEYS["invalid_request"],
+                },
+                status=400,
+            )
+
+        values = form.cleaned_data
+        context = CompanyContext(company_id, request.user.pk)
+        metadata = MutationMetadata(
+            operation_id=str(values["operation_id"]),
+            actor_id=request.user.pk,
+            motivo=values["motivo"],
+        )
+        try:
+            result = create_department(
+                context,
+                DepartmentInput(values["codigo"], values["nombre"]),
+                metadata=metadata,
+            )
+        except MasterCatalogError as exc:
+            return _department_catalog_error_response(exc)
+
+        audit_pending = result.audit_status != "CONFIRMED"
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": _department_catalog_result_message(
+                    result,
+                    _DEPARTMENT_CATALOG_KEYS["created"],
+                ),
+                "data": {
+                    "id": result.id,
+                    "codigo": values["codigo"],
+                    "nombre": values["nombre"],
+                    "source": "LOCAL",
+                    "activo": True,
+                    "operation_id": result.operation_id,
+                    "audit_status": result.audit_status,
+                    "replayed": result.replayed,
+                },
+            },
+            status=202 if audit_pending else 201,
+        )
+
+
+class DepartmentCatalogUpdateView(DepartmentMasterView):
+    permiso_requerido = "modificar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, department_id, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        return _department_catalog_error_response(_department_write_gate_error())
+
+        form = DepartmentCatalogUpdateForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message_key": _DEPARTMENT_CATALOG_KEYS["invalid_request"],
+                },
+                status=400,
+            )
+
+        values = form.cleaned_data
+        context = CompanyContext(company_id, request.user.pk)
+        metadata = MutationMetadata(
+            operation_id=str(values["operation_id"]),
+            actor_id=request.user.pk,
+            motivo=values["motivo"],
+        )
+        try:
+            result = update_department_name(
+                context,
+                department_id,
+                values["nombre"],
+                metadata=metadata,
+            )
+        except MasterCatalogError as exc:
+            return _department_catalog_error_response(exc)
+
+        audit_pending = result.audit_status != "CONFIRMED"
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": _department_catalog_result_message(
+                    result,
+                    _DEPARTMENT_CATALOG_KEYS["updated"],
+                ),
+                "data": {
+                    "id": result.id,
+                    "nombre": values["nombre"],
+                    "operation_id": result.operation_id,
+                    "audit_status": result.audit_status,
+                    "replayed": result.replayed,
+                },
+            },
+            status=202 if audit_pending else 200,
+        )
+
+
+class DepartmentMembershipCommandView(DepartmentMasterView):
+    form_class = None
+    operation = None
+
+    def post(self, request, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+
+        form = self.form_class(request.POST)
+        if not form.is_valid():
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.messages.generic_error"},
+                status=400,
+            )
+
+        values = form.cleaned_data
+        command = MembershipCommand(
+            company_id=company_id,
+            actor_id=request.user.pk,
+            user_id=values["user_id"],
+            department_id=values["department_id"],
+            operation_id=values["operation_id"],
+            action=self.operation,
+            reason=values["reason"],
+            target_role=values.get("target_role"),
+            expected_membership_version=values.get("expected_membership_version"),
+            expected_organization_revision=values.get(
+                "expected_organization_revision"
+            ),
+        )
+        try:
+            result = change_membership(command)
+        except MembershipPermissionDenied:
+            return self.handle_no_permission(request)
+        except OrganizationInputError:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.messages.generic_error"},
+                status=400,
+            )
+        except OrganizationNotFoundError:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.messages.generic_error"},
+                status=404,
+            )
+        except MembershipConflict:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.messages.generic_error"},
+                status=409,
+            )
+        except OrganizationUnavailableError:
+            return JsonResponse(
+                {"success": False, "message_key": "tareas.messages.generic_error"},
+                status=503,
+            )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message_key": _DEPARTMENT_MEMBERSHIP_SUCCESS_KEYS[self.operation],
+                "data": {
+                    "membership_id": result.membership_id,
+                    "membership_version": result.membership_version,
+                    "organization_revision": result.organization_revision,
+                    "operation_id": str(result.operation_id),
+                },
+            }
+        )
+
+
+class DepartmentMembershipCreateView(DepartmentMembershipCommandView):
+    permiso_requerido = "crear"
+    form_class = DepartmentMembershipCreateForm
+    operation = MembershipOperation.CREATE
+
+
+class DepartmentMembershipRoleView(DepartmentMembershipCommandView):
+    permiso_requerido = "modificar"
+    form_class = DepartmentMembershipRoleForm
+    operation = MembershipOperation.CHANGE_ROLE
+
+
+class DepartmentMembershipSuspendView(DepartmentMembershipCommandView):
+    permiso_requerido = "modificar"
+    form_class = DepartmentMembershipStateForm
+    operation = MembershipOperation.SUSPEND
+
+
+class DepartmentMembershipReactivateView(DepartmentMembershipCommandView):
+    permiso_requerido = "modificar"
+    form_class = DepartmentMembershipStateForm
+    operation = MembershipOperation.REACTIVATE
+
+
+class DepartmentMembershipDeleteView(DepartmentMembershipCommandView):
+    permiso_requerido = "eliminar"
+    form_class = DepartmentMembershipStateForm
+    operation = MembershipOperation.LOGICAL_DELETE
 
 
 class ListarTareasView(TareasLoginVerificarPermisoMixin, ListView):

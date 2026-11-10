@@ -6,15 +6,130 @@ from datetime import date, datetime
 from decimal import Decimal
 from html import escape
 from urllib.parse import parse_qsl, quote, urlencode
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+from django.contrib.auth import get_user_model
+from django.db import DatabaseError
 
 from common.http import get_client_ip
-from auditoria.services import AuditoriaService
+from auditoria.services import (
+    AuditIdempotencyConflict,
+    AuditIdempotencyInputError,
+    AuditIdempotencyStorageError,
+    AuditoriaService,
+)
 
 
 logger = logging.getLogger(__name__)
 _SENSITIVE_KEY_PARTS = ("password", "token", "secret", "credential", "api_key", "csrf", "archivo")
 _ALLOWED_ACTIONS = frozenset({"CREATE", "UPDATE", "DELETE", "SHARE"})
+
+
+class MasterCatalogAuditRetryableError(RuntimeError):
+    """The central audit service may be retried with the same operation UUID."""
+
+
+class MasterCatalogAuditPermanentError(RuntimeError):
+    """The central audit payload or UUID conflicts with an existing event."""
+
+    def __init__(self, code):
+        self.code = code
+        super().__init__("La proyección de auditoría tiene un conflicto permanente.")
+
+
+def _resolve_audit_user(actor_id):
+    try:
+        user_model = get_user_model()
+        return user_model._default_manager.filter(
+            pk=actor_id,
+            is_active=True,
+        ).first()
+    except DatabaseError as exc:
+        raise MasterCatalogAuditRetryableError(
+            "No se pudo consultar el usuario de auditoría."
+        ) from exc
+
+
+def log_master_catalog_operation(
+    *,
+    operation_id,
+    entity_type,
+    action,
+    empresa_id,
+    actor_id,
+    result_id,
+    payload_hash,
+    result_payload,
+):
+    """Project one committed catalog operation through the public audit API."""
+    audit_action = "UPDATE" if action == "RESTORE" else action
+    object_type = {
+        "PROVEEDOR": "Proveedor",
+        "LOCAL": "Local",
+        "DEPARTAMENTO": "Departamento",
+    }.get(entity_type)
+    if object_type is None or audit_action not in {"CREATE", "UPDATE", "DELETE"}:
+        raise MasterCatalogAuditPermanentError("PERMANENT_AUDIT_INPUT")
+
+    try:
+        operation_uuid = UUID(str(operation_id))
+        audit_user = _resolve_audit_user(actor_id)
+        result = AuditoriaService.log_event_idempotent(
+            app_label="tareas",
+            idempotency_key=operation_uuid,
+            action=audit_action,
+            user=audit_user,
+            empresa_id=empresa_id,
+            object_type=object_type,
+            object_id=str(result_id),
+            ip_address=None,
+            user_agent="",
+            method="INTERNAL",
+            path="internal/tareas/master-catalog",
+            querystring="",
+            status_code=200,
+            duration_ms=None,
+            vista_nombre=None,
+            meta={
+                "operation": "master_catalog_mutation",
+                "operation_id": operation_uuid.hex,
+                "entity_type": entity_type,
+                "action": action,
+                "actor_id": actor_id,
+                "empresa_id": empresa_id,
+                "result": "COMMITTED",
+                "result_id": result_id,
+                "payload_hash": payload_hash,
+                "changed_fields": result_payload.get("changed_fields", []),
+                "motivo": result_payload.get("motivo", ""),
+            },
+            before=result_payload.get("before"),
+            after=result_payload.get("after"),
+        )
+    except AuditIdempotencyStorageError as exc:
+        raise MasterCatalogAuditRetryableError(
+            "La auditoría central no está disponible temporalmente."
+        ) from exc
+    except AuditIdempotencyConflict as exc:
+        raise MasterCatalogAuditPermanentError(
+            "PERMANENT_AUDIT_CONFLICT"
+        ) from exc
+    except AuditIdempotencyInputError as exc:
+        raise MasterCatalogAuditPermanentError(
+            "PERMANENT_AUDIT_INPUT"
+        ) from exc
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise MasterCatalogAuditPermanentError(
+            "PERMANENT_AUDIT_INPUT"
+        ) from exc
+
+    event = getattr(result, "event", None)
+    event_id = getattr(event, "pk", None)
+    if isinstance(event_id, bool) or not isinstance(event_id, int) or event_id <= 0:
+        raise MasterCatalogAuditRetryableError(
+            "La auditoría central no devolvió un identificador de evento."
+        )
+    return event
 
 
 def _sanitize_value(value):

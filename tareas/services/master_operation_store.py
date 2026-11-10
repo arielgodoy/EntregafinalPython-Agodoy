@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator, Mapping
 from uuid import UUID
 
-from .master_catalog_common import verified_base_tareas_connection
+from .master_catalog_common import MasterCatalogError, verified_base_tareas_connection
 from .task_mutation_locks import bounded_mysql_lock_wait, mysql_mutation_transaction
 
 
@@ -21,7 +21,7 @@ AUDIT_STATUSES = frozenset({"PENDING", "CONFIRMED", "ERROR"})
 _ERROR_CODE_PATTERN = re.compile(r"^[A-Z0-9_.-]{1,64}$")
 
 
-class MasterOperationError(RuntimeError):
+class MasterOperationError(MasterCatalogError):
     """Base error for the technical operation register."""
 
 
@@ -39,6 +39,14 @@ class MasterOperationStorageError(MasterOperationError):
 
 class MasterOperationNotFound(MasterOperationError):
     """The requested operation does not exist."""
+
+
+class MasterOperationOutcomeUnknown(MasterOperationError):
+    """A prior attempt has no confirmed result and must not be executed again."""
+
+
+class MasterOperationPreviouslyFailed(MasterOperationError):
+    """A prior operation with this UUID was recorded as failed."""
 
 
 @dataclass(frozen=True)
@@ -389,14 +397,29 @@ def mark_audit_status(
         )
     if audit_event_id is not None:
         _positive_id(audit_event_id, "audit_event_id")
-    get_operation(cursor, operation_id, lock=True)
+    record = get_operation(cursor, operation_id, lock=True)
+    if record.audit_status == "CONFIRMED":
+        if audit_status != "CONFIRMED" or audit_event_id != record.audit_event_id:
+            raise MasterOperationValidationError(
+                "Una auditoría confirmada no puede retroceder ni reemplazarse."
+            )
+        return record
+    if audit_status == "PENDING" and record.audit_status == "ERROR":
+        raise MasterOperationValidationError(
+            "Una auditoría con error no puede volver a estado pendiente."
+        )
     cursor.execute(
         "UPDATE tareas_master_operation "
         "SET audit_status = %s, audit_event_id = %s, audit_error_code = %s "
-        "WHERE operation_id = %s",
+        "WHERE operation_id = %s AND audit_status <> 'CONFIRMED'",
         (audit_status, audit_event_id, audit_error_code, str(operation_id)),
     )
-    return get_operation(cursor, operation_id, lock=True)
+    updated = get_operation(cursor, operation_id, lock=True)
+    if updated.audit_status == "CONFIRMED" and audit_status != "CONFIRMED":
+        raise MasterOperationValidationError(
+            "La auditoría fue confirmada concurrentemente y no puede retroceder."
+        )
+    return updated
 
 
 def list_pending_reconciliation(cursor, *, limit: int = 100) -> tuple[MasterOperationRecord, ...]:
@@ -404,7 +427,7 @@ def list_pending_reconciliation(cursor, *, limit: int = 100) -> tuple[MasterOper
         raise MasterOperationValidationError("El límite de reconciliación no es válido.")
     cursor.execute(
         f"SELECT {_SELECT_COLUMNS} FROM tareas_master_operation "
-        "WHERE status IN ('COMMITTED', 'UNKNOWN') "
+        "WHERE status IN ('PENDING', 'COMMITTED', 'UNKNOWN') "
         "AND audit_status <> 'CONFIRMED' "
         "ORDER BY updated_at, operation_id LIMIT %s",
         (limit,),
@@ -436,6 +459,8 @@ __all__ = [
     "MasterOperationConflict",
     "MasterOperationError",
     "MasterOperationNotFound",
+    "MasterOperationOutcomeUnknown",
+    "MasterOperationPreviouslyFailed",
     "MasterOperationRecord",
     "MasterOperationStorageError",
     "MasterOperationValidationError",
