@@ -1,5 +1,139 @@
 # Research y registro de decisiones Fase 1.6
 
+## Corrección de internacionalización de maestros — 2026-11-10
+
+Se autorizaron y agregaron en `static/lang/sp.json` y
+`static/lang/en.json` las claves compartidas y específicas de Proveedores y
+Locales usadas por la plantilla `tareas/maestros/catalogo.html`. El registro
+explícito `_GENERIC_MASTER_KEYS`/`_GENERIC_MASTER_LABELS` de `tareas.views` se
+verifica mediante `tareas/tests/test_i18n.py`; las claves dinámicas no pueden
+ocultar identificadores sin traducción. No se modificó el motor i18n,
+`static/js/app.js`, vendor, themes ni navegación global.
+
+La paridad de los 26 identificadores de esta superficie quedó cubierta en
+ambos idiomas. Las 39 claves de Departamentos existentes mantienen su paridad.
+La autorización de las claves no implica cierre de G05 ni registro automático
+de identidades VICMEAS.
+
+La auditoría completa detectó además que las rutas nuevas no pertenecían a la
+jerarquía de mixins que el guard de `tareas` exige en dispatch. Proveedores,
+Locales y Departamentos ahora usan `TareasLoginVerificarPermisoMixin` y
+declaran explícitamente que su catálogo multiempresa no requiere Empresa Base
+00; la Empresa activa y VICMEAS siguen siendo obligatorios. La regresión quedó
+cubierta por `test_empresa_base00_guard`.
+
+## Implementación integral de superficies HTTP — 2026-11-10
+
+Se añadieron superficies protegidas en `tareas` para listar y consultar
+Proveedores y Locales, detalle JSON controlado para los tres maestros y rutas
+POST preparadas para crear, editar y cambiar estado. Las rutas mutantes de
+Proveedores, Locales y Departamentos permanecen bloqueadas explícitamente por
+G17, G18 y G19/T201; ningún botón de escritura se presenta habilitado mientras
+esos gates sigan abiertos. Los formularios de Proveedores y Locales validan la
+forma contractual, pero no se ejecutan mientras la certificación de fuente
+única no exista.
+
+La nueva plantilla de Proveedores/Locales usa un registro explícito de claves
+`data-key` compartidas y específicas, ya incorporadas con paridad en los
+catálogos globales. La integración VICMEAS global y el registro de identidades
+siguen condicionados por G05.
+
+La certificación de lectura de `BASE_TAREAS` posterior a la corrección del
+parser confirmó como `COMPATIBLE` las tablas `proveedores_proveedor`,
+`organizacion_local`, `organizacion_departamento` y
+`tareas_master_operation`. No se ejecutaron DDL, DML, migraciones, bootstrap
+real, reconciliación real, commit ni push.
+
+## Implementación postauditoría autorizada — 2026-11-10
+
+Se aplicaron las decisiones A, B y C sin ejecutar DDL, migraciones,
+reconciliación real, bootstrap real, pruebas opt-in de MariaDB, commit ni push.
+
+- **F-01/F-02:** un commit incierto descarta la conexión original y consulta el
+  registro T229 con una conexión nueva. Solo un registro durable `COMMITTED` se
+  recupera automáticamente; `PENDING`, `UNKNOWN`, ausencia de fila o evidencia
+  contradictoria se mantienen para revisión manual. Un `PENDING` durable puede
+  pasar a `UNKNOWN` para hacer visible la incertidumbre, nunca a `FAILED` por
+  antigüedad. No se repite la mutación ni se sustituye el UUID.
+- **F-03:** las rutas propias conservan `CONFIRMED` como terminal mediante
+  bloqueo y actualización SQL condicional. Esto no protege a escritores SQL con
+  privilegios equivalentes que ignoren el servicio; la certificación de
+  privilegios queda pendiente.
+- **F-05:** el preflight lee, parsea y compara también
+  `base_tareas_maestros_v001.sql` y `base_tareas_master_operations_v001.sql`.
+  La lectura no ejecuta DDL; la instalación explícita conserva su flujo
+  existente y no se ejecutó en esta intervención. El comparador existente no
+  inspecciona todavía `SHOW GRANTS` ni valida todas las expresiones `CHECK`;
+  esos límites quedan reportados para una ampliación posterior antes de
+  certificación.
+- **F-04:** se incorporaron exactamente 39 claves
+  `tareas.master_catalog.department.*` en `en.json` y `sp.json`, con paridad
+  verificada. No se modificó el motor i18n ni `app.js`.
+- **F-06:** se preparó `bootstrap_master_catalog_views`, de inspección por
+  defecto y con `--apply` explícito. Registra solo las tres identidades
+  aprobadas, no asigna permisos ni crea Empresas, y no fue ejecutado contra
+  datos reales.
+
+El reconciliador ahora enumera `COMMITTED` para proyección, `ERROR` recuperable,
+`UNKNOWN` y `PENDING`; los dos últimos producen una salida administrativa
+sanitizada de revisión y nunca ejecutan nuevamente la mutación. La evidencia
+aislada de una entidad de catálogo o la antigüedad de una fila no confirma el
+resultado.
+
+Pruebas aisladas añadidas: recuperación de `COMMITTED` durable sin replay,
+revisión de `PENDING/UNKNOWN`, contrato de manifiestos, paridad de traducciones y
+bootstrap idempotente simulado. Los gates G02/G05/G07/G17/G18/G19 permanecen
+abiertos.
+
+## Implementación correctiva controlada — 2026-11-10
+
+El precheck de esta intervención fue `main`, HEAD `918ffd4c52c1adc2ce7538bf8fe56e14ddc5100f`.
+El worktree ya contenía cambios locales dentro y fuera de `tareas`; todos se
+preservaron. Las correcciones de esta intervención se limitaron a `tareas/` y
+a los artefactos de Fase 1.6 indicados en el informe. No se modificaron
+SYSTEM/APPLICATION_APPS ajenas, traducciones globales, navegación ni vendor.
+
+Decisiones formalizadas: D01 fija `Tareas - Maestro de locales`; D02 vincula
+el usuario Django activo a la auditoría central cuando existe y conserva
+`actor_id` en `meta`; D03 mantiene las operaciones `UNKNOWN` bloqueadas salvo
+evidencia durable concluyente y no repite mutaciones por heurística.
+
+Se integró el registro existente T229 con mutaciones SQL mediante un coordinador
+que reserva UUID/hash, ejecuta la mutación y persiste el resultado usando una sola
+conexión/transacción `BASE_TAREAS`. La proyección posterior utiliza el adaptador
+de `AuditoriaService.log_event_idempotent()`. Los errores de auditoría quedan
+marcados como reintentables o permanentes; `reconcile_master_operations()` procesa
+un lote acotado y el comando propio `reconcile_master_catalog_audit` no programa
+reintentos automáticos. Los errores de commit/rollback inciertos requieren el
+mismo UUID; no se repite una escritura en la misma solicitud.
+
+Los servicios SQL de Proveedores, Locales y Departamentos consumen el coordinador.
+El catálogo de Departamentos tiene además listado, detalle, alta y edición de
+nombre con ICMEAS y fetch/CSRF. No se habilitaron bajas/reactivaciones de Local o
+Departamento. No se crearon vistas/menús de Proveedores o Locales: T221 conserva
+el literal aprobado `Proveedores - Maestro`, pero G17/fuente única sigue abierta.
+La identidad aprobada de Locales es `Tareas - Maestro de locales`; G05 continúa
+abierto hasta verificar su integración. La identidad aprobada de Departamento se
+reutiliza, pero el registro global, navegación e i18n siguen fuera del scope
+autorizado.
+
+La normalización RUT conserva los ceros iniciales conforme al contrato T228. Por
+ejemplo, `1-9` y `01-9` son RUT matemáticamente válidos y permanecen como cadenas
+canónicas distintas; el índice UNIQUE global solo impide repetir la misma cadena
+normalizada. No se colapsan cuerpos numéricamente equivalentes sin una decisión
+contractual expresa.
+
+Validación ejecutada: 46 pruebas focalizadas PASS, `manage.py check` PASS con el
+warning preexistente `ckeditor.W001`, compilación Python y `node --check` PASS.
+No se ejecutaron DDL/DML contra bases persistentes, pruebas opt-in MySQL ni
+validación visual en navegador; por tanto no se certifican T218-T220/T230 ni se
+cierran G02/G17/G18/G19.
+
+**Estado contractual actualizado**: T216/T229 seleccionan el registro técnico
+SQL de operaciones en `BASE_TAREAS`; no es un ledger de negocio ni una segunda
+auditoría. G02 continúa abierto por falta de certificación real de la proyección
+desde `BASE_TAREAS`, y T230 permanece abierta hasta certificar el flujo.
+
 ## Precheck y metodo
 
 Fecha 2026-10-30; rama `main`; HEAD `196658dfb4d77b3942bde1603e1affa00fc112d2`.
@@ -138,8 +272,8 @@ Decisiones consolidadas y preservadas:
 | ID | Decision |
 |---|---|
 | F16-D13 | `BASE_TAREAS` sigue siendo el rol objetivo, no un alias fijo; el resolver de `tareas` existente es el unico a reutilizar para la nueva funcionalidad. |
-| F16-D14 | Proveedores es global, sin Empresa, con RUT normalizado/unico e identidad `Maestros - Proveedores`; una pantalla modal/AJAX bajo `tareas`. |
-| F16-D15 | Locales por Empresa; ERP protegido y LOCAL editable autorizado; campos/IDs preservados; baja/reactivacion condicionada por T227; pantalla nueva en `tareas`. |
+| F16-D14 | Proveedores es global, sin Empresa, con RUT normalizado/unico e identidad `Proveedores - Maestro`; una pantalla modal/AJAX bajo `tareas`. |
+| F16-D15 | Locales por Empresa; ERP protegido y LOCAL editable autorizado; identidad `Tareas - Maestro de locales`; campos/IDs preservados; baja/reactivacion condicionada por T227; pantalla nueva en `tareas`. |
 | F16-D16 | Departamentos por Empresa; codigo/Empresa/source inmutables, nombre editable; baja T183 tras T201/G07; membresias T176 y JEFE T182; pantalla `Tareas - Maestro de departamentos`. |
 | F16-D17 | APIs publicas e IDs estables, sin FK/JOIN cross-database ni catalogos/modelos espejo. |
 | F16-D18 | Registro técnico de operaciones en `BASE_TAREAS`, combinado con idempotencia durable y estado de proyección de auditoría; no asumir atomicidad distribuida. |
@@ -232,10 +366,10 @@ infraestructura para suplir G17-G19.
 | ID | Nivel/tipo | Evidencia, impacto y condicion de salida |
 |---|---|---|
 | F16-G01 | Alto, tecnico | Fence entre default y BASE_TAREAS no existe. Certificar exclusión de escrituras de membresia/Departamento, incluso admin/commands, y orden global de locks; bloquear lote si backend no puede garantizarlo |
-| F16-G02 | Bloqueante para mutaciones auditadas multi-base, dependencia externa | El worktree actual incorpora soporte central para `organizacion` en el alcance G02 local; esto no acredita migraciones persistentes ni atomicidad con BASE_TAREAS. Proveedores sigue sin capacidad central identificada. T216 debe definir proyeccion/reconciliacion y solicitar autorizacion separada si requiere CORE; no crear auditoria shadow |
+| F16-G02 | Bloqueante para mutaciones auditadas multi-base, dependencia externa | T216 selecciona el registro técnico y el worktree integra T230 con la API central idempotente; las pruebas unitarias no certifican el flujo físico `BASE_TAREAS` → auditoría central. Se requiere evidencia MySQL/auditoría autorizada antes de habilitar o cerrar G02; no modificar CORE ni crear auditoría shadow |
 | F16-G03 | Bloqueante para roles no soportados, funcional | FR-D15 solo permite alta/cambio publico PARTICIPANTE/INVITADO_OBSERVADOR; responsable usa su campo. No consta autorizacion de sustitucion publica SUPERVISOR/AUTORIZADOR ni reemplazo CREADOR. Mantener bloqueo explicito por rol; cerrar politica antes de habilitarlos, sin redisenar roles |
 | F16-G04 | Bloqueante para notificaciones organizacionales completas, funcional | El prompt exige notificar perdida/recuperacion, pero T054 solo detalla eventos de tareas. Falta precisar destinatarios/canal de traslado/suspension/perdida y si recuperacion notifica al propio actor. Recuperacion incluye al afectado por mandato expreso; no inventar alertas a todos los jefes o correos masivos |
-| F16-G05 | Alto, autorizacion externa | Las tres pantallas requieren una identidad VICMEAS cada una, navegacion y claves i18n. Proveedor y Departamento conservan literales aprobados; el literal Local debe confirmarse. Cualquier registro/cambio global requiere autorizacion separada |
+| F16-G05 | Alto, autorizacion externa | Departamento reutiliza `Tareas - Maestro de departamentos`; su alta global/menu y sus 39 claves nuevas de traducción siguen pendientes. `Proveedores - Maestro` quedó seleccionado para T221 por el propietario, pero G17 bloquea habilitar su CRUD; Local permanece bloqueado hasta aprobar su literal. No se registraron Vistas ni se modificaron menús/SYSTEM |
 | F16-G06 | Alto, tecnico | Schema incremental MySQL no se resuelve con migracion Django; disenar extension operacional/adapters y preflight sin ejecutar DDL ahora |
 | F16-G07 | Alto, tecnico | Baja de Departamento cruza bases; no es una transaccion distribuida. Fence, protocolo reiniciable y revalidacion final; no finalizar ante bloqueo o estado incierto |
 | F16-G08 | Alto, despliegue | Usuarios existentes sin membresias perderan operacion al activar Opcion B. Inventario/alta autorizada previa, sin inferir membresias de participaciones |

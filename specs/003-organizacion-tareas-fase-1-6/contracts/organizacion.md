@@ -153,7 +153,9 @@ aprobada en una pantalla solo-superuser.
   Publicacion central de auditoria necesita F16-G02; no tratar `None` como evento.
 - Respuestas HTTP controladas `success` y `message_key`; errores de validacion,
   permiso o conflicto diferenciados conforme al patron existente, sin excepciones
-  crudas. Nuevas claves quedan inventariadas para autorizacion i18n posterior.
+  crudas. Las claves de esta superficie deben existir con paridad en `sp` y
+  `en`; las nuevas claves autorizadas se mantienen limitadas a los catálogos
+  propios de los maestros.
 - Los eventos organizacionales entregan ids/revisiones al consumidor; no llaman
   automaticamente a tareas para reasignar personas ni borran participaciones.
   La lista de revision de tareas debe poder reconstruirse por consulta, aunque

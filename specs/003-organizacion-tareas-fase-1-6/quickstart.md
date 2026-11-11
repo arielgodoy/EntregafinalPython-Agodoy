@@ -117,3 +117,29 @@ Para rollout: inventario por Empresa de usuarios sin membresia, aprobacion de al
 schema y capabilities, activacion controlada, responsable de reconciliacion y
 restauracion del servicio sin borrar historial ni deshacer reasignaciones aprobadas.
 No ejecutar ese inventario contra datos reales en esta entrega.
+
+## Validación de CRUD e idempotencia — 2026-11-10
+
+Comandos focalizados ejecutados en el entorno local:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py test --settings=AppDocs.settings_test tareas.tests.test_department_views tareas.tests.test_master_catalog_services tareas.tests.test_master_operation_service tareas.tests.test_master_operation_store tareas.tests.test_task_mutation_locks
+.\.venv\Scripts\python.exe manage.py check --settings=AppDocs.settings_test
+node --check tareas\static\tareas\js\master_departments.js
+```
+
+Resultado: 46 pruebas PASS; `check` PASS con el warning preexistente `ckeditor.W001`;
+compilación Python y sintaxis JavaScript PASS. Las pruebas Django usaron una base
+temporal que se eliminó al terminar.
+
+No ejecutar `RUN_TAREAS_MYSQL_TESTS=1` sin autorización específica y verificación
+operativa de `SELECT DATABASE() = 'tareas'`. Esta intervención no aplicó DDL ni
+DML persistente, no ejecutó la reconciliación real y no certificó visualmente las
+pantallas en navegador. El comando
+`py manage.py reconcile_master_catalog_audit --limit 100` está implementado para
+una ejecución manual autorizada; hace escrituras de estado/proyección y debe
+usarse solo después de cerrar G02.
+
+El listado y alta/edición de Departamentos existen parcialmente en Tareas. La
+navegación VICMEAS y las claves de traducción faltantes siguen pendientes; las
+interfaces HTTP/UI de Proveedores y Locales no se habilitan hasta resolver G05.

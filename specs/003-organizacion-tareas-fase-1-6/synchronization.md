@@ -1,5 +1,44 @@
 # Sincronizacion de la SPEC MAESTRA con Fase 1.6
 
+## Internacionalización autorizada — 2026-11-10
+
+La plantilla compartida de Proveedores y Locales conserva claves dinámicas por
+reutilización, pero el conjunto está registrado explícitamente en
+`tareas.views` y cubierto por paridad `sp`/`en` en `tareas/tests/test_i18n.py`.
+Las 26 claves `tareas.master_catalog.common.*`, `provider.*` y `local.*`
+fueron agregadas únicamente a los dos catálogos globales autorizados. Esto
+resuelve la cobertura i18n de la pantalla sin modificar el motor, vendor,
+themes ni navegación; G05 continúa abierto para el bootstrap VICMEAS.
+
+## Sincronización de implementación CRUD — 2026-11-10
+
+Las superficies HTTP de los tres maestros ahora viven exclusivamente en
+`tareas`. Proveedores y Locales tienen listado company-scoped/seguro según su
+contrato, detalles controlados y rutas mutantes preparadas; Departamentos tiene
+listado, detalle y rutas de ciclo de vida protegidas. Los gates G17, G18 y
+G19/T201 mantienen las mutaciones bloqueadas y los controles visuales
+deshabilitados. Las nuevas claves de traducción fueron agregadas con
+autorización específica; G05 continúa abierto únicamente para el
+registro/navegación VICMEAS y no se cierra por la paridad i18n.
+
+## Sincronización postauditoría — 2026-11-10
+
+Las decisiones A/B/C del propietario quedan reflejadas así:
+
+1. Las 39 claves de Departamentos se mantienen en ambos catálogos globales,
+   sin alterar el motor i18n, navegación ni vendor.
+2. Las identidades VICMEAS se preparan mediante un management command explícito
+   de `tareas`; la inspección no escribe y la aplicación requiere `--apply`.
+   No se asignan permisos, no se crean Empresas y no se ejecuta durante HTTP,
+   importación, `ready()` o señales.
+3. La recuperación de operaciones usa únicamente evidencia durable de T229.
+   `COMMITTED` es recuperable; `PENDING`/`UNKNOWN`, ausencia y contradicción
+   quedan en revisión manual. No se cierra ninguna puerta de certificación.
+
+Los cambios de código y pruebas están limitados a `tareas/` y a las dos
+traducciones expresamente autorizadas. La certificación MariaDB y la eventual
+ejecución del bootstrap permanecen pendientes.
+
 ## Rectificación arquitectónica — 2026-11-09
 
 La correspondencia distingue ahora dos capas: DDL y servicios SQL target en
@@ -12,6 +51,12 @@ La actualización del 2026-11-09 agrega F16-FR34/F16-FR35/F16-FR36: autonomía
 de `tareas`, validación Python interna de RUT y registro técnico durable de
 operaciones. T216 queda cerrada como decisión documental; su implementación,
 certificación y reconciliación permanecen pendientes.
+
+Decisiones de identidad sincronizadas el 2026-11-10:
+`Proveedores - Maestro` para Proveedores y `Tareas - Maestro de locales` para
+Locales. La identidad de Departamentos permanece `Tareas - Maestro de
+departamentos`. Estas decisiones no crean Vistas, permisos ni navegación y no
+cierran G05, G17 ni G18.
 
 Fecha: 2026-10-30. Baseline documental: rama `main`, HEAD
 `196658dfb4d77b3942bde1603e1affa00fc112d2`, diez documentos complementarios

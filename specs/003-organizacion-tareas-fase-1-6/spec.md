@@ -38,6 +38,20 @@ declarando que una funcionalidad ausente ya existe.
 
 ## Addendum de autonomía de `tareas` — 2026-11-09
 
+## Addendum de cierre postauditoría — 2026-11-10
+
+La operación durable de los maestros distingue confirmación recuperable de
+incertidumbre: solo `COMMITTED` con resultado válido puede proyectarse
+automáticamente después de un commit incierto. `PENDING`, `UNKNOWN`, ausencia
+de fila y evidencia contradictoria no autorizan replay ni rollback inferido.
+La salida de reconciliación es administrativa y no fuerza estados.
+
+El preflight de `BASE_TAREAS` incluye los dos manifiestos SQL versionados de
+maestros y operaciones sin ejecutar DDL en esta entrega. Las traducciones
+aprobadas y el bootstrap VICMEAS explícito fueron preparados; el bootstrap no
+se ejecutó contra ninguna base real. G02, G05, G07, G17, G18 y G19 permanecen
+abiertos.
+
 **F16-FR34 — Autonomía de aplicación.** La aplicación `tareas` es la propietaria de la nueva gestión de Proveedores,
 Locales y Departamentos para su dominio. Puede consumir interfaces públicas de
 SYSTEM/CORE, pero no puede depender directamente de modelos, servicios,
@@ -221,7 +235,7 @@ distinta. Ninguna de estas dimensiones se convierte automaticamente en otra.
   a Empresa. Conservar RUT normalizado y unicidad global. Una sola pantalla con CRUD
   por modales Bootstrap/AJAX, incluida baja logica/reactivacion, CSRF y respuestas
   controladas sobre SQL `BASE_TAREAS`; conservar la identidad VICMEAS existente
-  `Maestros - Proveedores` y permisos ICMEAS segun accion. G17 solo bloquea corte
+  `Proveedores - Maestro` y permisos ICMEAS segun accion. G17 solo bloquea corte
   y writer único mientras no se adapten callers y writers antiguos.
 - **F16-FR32**: Locales se aislan por Empresa y conservan codigo, `legacy_code`,
   origen e identificadores en SQL `BASE_TAREAS`. Los registros `source=ERP` son protegidos contra edicion

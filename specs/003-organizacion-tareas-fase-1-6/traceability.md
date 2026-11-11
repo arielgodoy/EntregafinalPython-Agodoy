@@ -1,5 +1,32 @@
 # Trazabilidad y cierre documental Fase 1.6
 
+## Addendum de superficies CRUD — 2026-11-10
+
+| Superficie | Implementación | Pruebas | Estado operativo |
+|---|---|---|---|
+| Proveedores | Listado, detalle, formularios y rutas HTTP protegidas en `tareas` | `test_master_catalog_views.py` y servicios existentes | Lectura preparada; mutaciones bloqueadas por G17 |
+| Locales | Listado company-scoped, detalle, formularios y rutas HTTP protegidas | `test_master_catalog_views.py` y servicios existentes | Lectura preparada; mutaciones bloqueadas por G18 |
+| Departamentos | Listado, detalle y rutas de alta/edición/estado existentes/protegidas | `test_department_views.py`, `test_master_catalog_views.py` | Lectura preparada; mutaciones bloqueadas por G19/T201 |
+
+Las plantillas nuevas incluyen `data-key`, pero sus claves de Proveedores,
+Locales y comunes aún requieren autorización de i18n G05; no se alteraron los
+catálogos globales. La certificación de lectura MariaDB confirmó compatibilidad
+de las cuatro tablas target, sin ejecutar escrituras. Ninguna superficie se
+declara habilitada mientras permanezcan abiertos los gates indicados.
+
+## Addendum postauditoría — 2026-11-10
+
+| Hallazgo | Implementación | Prueba aislada | Estado |
+|---|---|---|---|
+| F-01/F-02 commit incierto y recuperación | `master_operation_service.py`, reconciliador y salida de revisión | Recuperación de `COMMITTED`; `PENDING/UNKNOWN` sin replay | Implementado; MariaDB pendiente |
+| F-03 estado terminal | `mark_audit_status()` con lock y condición SQL | Regresión desde `CONFIRMED` rechazada | Implementado para writers propios |
+| F-04 traducciones | `static/lang/en.json`, `static/lang/sp.json` | Paridad exacta de 39 claves | Implementado |
+| F-05 preflight | `base_tareas_schema.py` y dos manifiestos | Contrato combinado sin ejecución DDL | Implementado; servidor pendiente |
+| F-06 identidades VICMEAS | `bootstrap_master_catalog_views` | Inspección y aplicación idempotente simuladas | Preparado; no ejecutado |
+
+La evidencia no cierra G02/G05/G07/G17/G18/G19 ni convierte los servicios en
+writer productivo.
+
 Fecha: 2026-10-30. Baseline: `main`,
 `196658dfb4d77b3942bde1603e1affa00fc112d2`.
 **Resultado**: SI, CON CONDICIONES para iniciar bloques independientes autorizados;
@@ -59,14 +86,14 @@ Estado "nuevo" = documentado, NO implementado. "Base" = solo la parte preexisten
 | F16-FR26 | Compatibilidad y arranque | F16-D12; prompt 5.2/6/11 | S,D,P,Q | organizacion + tareas | Nuevo gate despliegue | T174,T193,T208,T210; F16-AC11/28/35 |
 | F16-FR27 | Errores/replay seguros | F16-D08/D11; prompt 7.5/10 y reglas base | S,T,C | tareas | Extension | T199,T203-T205; F16-AC21/23/25/27/30 |
 | F16-FR28 | Canales oficiales | F16-D11; prompt 9; T054 | S,T | tareas -> SYSTEM | Base preservada; G04 organizacional | T171,T192,T204; F16-AC06/24/25 |
-| F16-FR29 | UX, i18n y 403 oficiales | F16-D12; instrucciones y prompt 3/4.4 | S,O,T,P | tareas + dependencia externa | Nuevo UI; G05 | T180-T186,T202,T209; F16-AC29/36 |
-| F16-FR30 | Trazabilidad/validacion | F16-D12/D18; prompt 12/13/14 | P,Q,Tasks,R | entrega documental + owners futuros | Documento; tests no ejecutados | T170,T206-T211,T225-T227; F16-AC01 a F16-AC42 |
-| F16-FR31 | Proveedores globales, RUT e identidad unica | F16-D13/D14/D19/D20; decision 2026-11-03 | S,D,T,R | tareas; API Proveedores faltante | G17 bloquea; no duplicar modelo | T213-T218,T221,T224-T226; F16-AC37/40-42 |
-| F16-FR32 | Locales por Empresa y proteccion ERP | F16-D13/D15/D19/D20; decision 2026-11-03 | S,D,O,T,R | tareas; API Local faltante | G18/T227 bloquean; owner legado intacto | T213-T215,T216-T219,T222,T224-T227; F16-AC38/40-42 |
-| F16-FR33 | Departamentos por Empresa y lifecycle T183 | F16-D13/D16/D19/D20; decision 2026-11-03 | S,D,O,T,C,R | tareas consume API organizacional | G19/T201/G07 bloquean lifecycle | T212,T213-T220,T223-T226; F16-AC39-42 |
+| F16-FR29 | UX, i18n y 403 oficiales | F16-D12; instrucciones y prompt 3/4.4 | S,O,T,P | tareas + dependencia externa | Departamento parcialmente implementado; G05, navegación e i18n pendientes | T180-T186,T202,T209,T223; F16-AC29/36 |
+| F16-FR30 | Trazabilidad/validacion | F16-D12/D18; prompt 12/13/14 | P,Q,Tasks,R | entrega documental + owners futuros | 46 pruebas focalizadas PASS; MySQL y browser no ejecutados | T170,T206-T211,T225-T227; F16-AC01 a F16-AC42 |
+| F16-FR31 | Proveedores globales, RUT e identidad unica | F16-D13/D14/D19/D20; decision 2026-11-03 | S,D,T,R | tareas; API Proveedores faltante | Servicio SQL/RUT en worktree; literal `Proveedores - Maestro` seleccionado; G17/G02, HTTP y certificación pendientes | T213-T218,T221,T224-T226; F16-AC37/40-42 |
+| F16-FR32 | Locales por Empresa y proteccion ERP | F16-D13/D15/D19/D20; decision 2026-11-10 | S,D,O,T,R | tareas; API Local faltante | Servicio SQL parcial; identidad `Tareas - Maestro de locales`; G05/G18/T227, HTTP y certificación pendientes | T213-T215,T216-T219,T222,T224-T227; F16-AC38/40-42 |
+| F16-FR33 | Departamentos por Empresa y lifecycle T183 | F16-D13/D16/D19/D20; decision 2026-11-03 | S,D,O,T,C,R | tareas consume API organizacional | CRUD/vista básica parcial; G19/T201/G07 y membresías/lifecycle pendientes | T212,T213-T220,T223-T226; F16-AC39-42 |
 | F16-FR34 | Autonomía de `tareas` frente a otras APPLICATION APPS | Addendum de autonomía 2026-11-09; F16-D19/D20 | S,P,O,T,C,R | tareas | Diseño aprobado; certificación de imports pendiente | T214,T224,T225; F16-AC40-42 |
-| F16-FR35 | Validación Python interna de RUT | Addendum 2026-11-09; F16-D21 | S,D,T,R | tareas | Implementación certificada; mutaciones aún bloqueadas | T218,T228,T225; F16-AC37/40-42 |
-| F16-FR36 | Registro técnico durable e idempotencia de mutaciones | Addendum 2026-11-09; F16-D18/D22 | S,D,T,C,R | tareas/BASE_TAREAS + auditoría central | Registro SQL e idempotencia certificadas; integración/auditoría central pendiente | T216,T229,T230,T225; F16-AC23/27/30/40-42 |
+| F16-FR35 | Validación Python interna de RUT | Addendum 2026-11-09; F16-D21 | S,D,T,R | tareas | T228 certificada previamente; servicio Proveedores la consume; MySQL/G17 siguen pendientes | T218,T228,T225; F16-AC37/40-42 |
+| F16-FR36 | Registro técnico durable e idempotencia de mutaciones | Addendum 2026-11-09; F16-D18/D22 | S,D,T,C,R | tareas/BASE_TAREAS + auditoría central | T229 certificada previamente; T230 parcial con pruebas unitarias; MySQL/G02 y consistencia contractual pendientes | T216,T229,T230,T225; F16-AC23/27/30/40-42 |
 
 ## Estado de calidad documental
 

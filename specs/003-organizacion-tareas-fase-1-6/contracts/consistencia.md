@@ -1,5 +1,37 @@
 # Consistencia, concurrencia y recuperacion
 
+## Addendum de recuperación postauditoría — 2026-11-10
+
+La excepción de commit incierto no se resuelve escribiendo `UNKNOWN` en la
+transacción cuyo commit está en duda. El servicio cierra/descarta esa conexión
+y consulta el UUID con una conexión `BASE_TAREAS` nueva:
+
+| Evidencia durable | Tratamiento |
+|---|---|
+| Misma Empresa, entidad, acción, UUID y hash con estado `COMMITTED` y resultado válido | Recuperar resultado y proyectar auditoría idempotente |
+| Fila `PENDING` durable | Marcar `UNKNOWN` mediante una transacción nueva si es seguro; revisión manual |
+| Fila `UNKNOWN` | Revisión manual; no replay |
+| Fila ausente | Ambiguo; la ausencia no prueba rollback |
+| Evidencia contradictoria | Escalar a revisión manual |
+
+El resultado incierto nunca dispara una segunda mutación ni permite sustituir el
+UUID. El reconciliador es acotado y reanudable: proyecta únicamente operaciones
+`COMMITTED` no confirmadas, informa errores reintentables/permanentes y emite
+revisión para `PENDING`/`UNKNOWN`. No usa antigüedad ni existencia aislada de una
+entidad como prueba.
+
+La protección de `audit_status=CONFIRMED` se aplica en todas las escrituras
+propias de `tareas` con lock y condición SQL `audit_status <> 'CONFIRMED'`.
+Es una garantía del servicio, no una barrera absoluta frente a SQL externo con
+privilegios de escritura; esa dependencia queda para certificación.
+
+El preflight incluye los manifiestos SQL de maestros y operaciones, verificando
+tablas, columnas, tipos, PK, índices, unicidades, engine, collation y FK
+externas prohibidas del contrato. El comparador heredado aún no valida
+`SHOW GRANTS` ni todas las expresiones `CHECK`; esa ampliación mínima queda
+pendiente de certificación. Solo inspecciona; no ejecuta DDL durante esta
+implementación.
+
 **Estado**: diseno tecnico pendiente de implementacion y certificacion.
 No se cambia router, DATABASES ni infrastructure SYSTEM.
 
@@ -202,9 +234,10 @@ Un UUID ausente tras error no demuestra rollback si la primera conexion aun pued
 confirmar: esperar resolucion del backend/locks y verificar otra vez antes de
 autorizar reejecucion. No cambiar backend entre ejecucion y reconciliacion.
 
-No se selecciona todavia un ledger/outbox para los maestros. T216 debe comparar
-alternativas de idempotencia, auditoria y reconciliacion, y obtener autorizacion de
-owner antes de cualquier modelo/migracion o cambio CORE. No asumir que la API de
-auditoria existente haga atomicos los stores. Usar APIs idempotentes existentes
-donde el contrato las admite; no crear otra cola global ni infraestructura shadow.
+T216 selecciona el registro técnico SQL de operaciones implementado por T229 en
+`BASE_TAREAS`; no es un ledger de negocio, outbox ni segunda auditoría central.
+T230 utiliza ese registro para idempotencia, replay y reconciliación, y proyecta
+la auditoría por la API pública existente después del commit. No asumir que la
+API de auditoría haga atómicos los stores ni crear otra cola global o
+infraestructura shadow.
 No se promete exactamente-una-vez para email ni atomicidad con filesystem.
