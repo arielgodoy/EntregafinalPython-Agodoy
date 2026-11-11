@@ -11,12 +11,11 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.files.storage import default_storage
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Max
 from django.utils import timezone
 
 from access_control.models import Empresa
-from proveedores.models import Proveedor
 from settings.services.mysql_connections import open_mysql_connection
 from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion, Tarea
 from tareas.services.connection_roles import (
@@ -24,8 +23,14 @@ from tareas.services.connection_roles import (
     resolve_operational_backend,
 )
 from tareas.services.image_processing import optimize_uploaded_image
+from tareas.services.master_catalog_common import (
+    MasterCatalogBackendError,
+    MasterCatalogNotFound,
+    MasterCatalogValidationError,
+    verify_base_tareas_database,
+)
+from tareas.services.providers import get_provider_from_cursor
 from tareas.services.task_mutation_locks import (
-    TaskMutationScopeError,
     TaskMutationLockError,
     TaskMutationScopeError,
     bounded_django_lock_wait,
@@ -92,11 +97,25 @@ def _field_clean(model, values, excluded=()):
     return instance
 
 
-def _provider_id(provider_id):
+def _validate_provider_id(provider_id):
     if provider_id is None:
         raise ValidationError("PROVIDER_REQUIRED: La cotización requiere un proveedor.")
-    if not Proveedor.objects.using("default").filter(pk=provider_id).exists():
-        raise ValidationError("PROVIDER_INVALID: Debe indicar un proveedor local válido.")
+    if isinstance(provider_id, bool) or not isinstance(provider_id, int) or provider_id <= 0:
+        raise ValidationError(
+            "PROVIDER_INVALID: Debe indicar un proveedor válido de BASE_TAREAS."
+        )
+    return provider_id
+
+
+def _validate_provider_record(provider_id, record):
+    if record.id != provider_id:
+        raise ValidationError(
+            "PROVIDER_INVALID: El proveedor no coincide con la referencia solicitada."
+        )
+    if not record.activo:
+        raise ValidationError(
+            "PROVIDER_INACTIVE: El proveedor no está activo para nuevas cotizaciones."
+        )
     return provider_id
 
 
@@ -143,6 +162,28 @@ class DjangoQuotationStorage:
             return queryset.get(**filters)
         except Tarea.DoesNotExist as exc:
             raise QuotationNotFound("La tarea no existe en BASE_TAREAS.") from exc
+
+    def _provider(self, provider_id, *, lock=False):
+        provider_id = _validate_provider_id(provider_id)
+        connection = connections[self.alias]
+        if connection.vendor == "mysql":
+            verify_base_tareas_database(connection)
+        cursor = connection.cursor()
+        try:
+            try:
+                record = get_provider_from_cursor(
+                    cursor,
+                    provider_id,
+                    include_inactive=True,
+                    lock=lock,
+                )
+            except (MasterCatalogNotFound, MasterCatalogValidationError) as exc:
+                raise ValidationError(
+                    "PROVIDER_INVALID: El proveedor no existe en BASE_TAREAS."
+                ) from exc
+            return _validate_provider_record(provider_id, record)
+        finally:
+            cursor.close()
 
     def _round(self, round_id, *, lock=False):
         queryset = RondaCotizacion.objects.using(self.alias)
@@ -357,7 +398,7 @@ class DjangoQuotationStorage:
         self, *, round_id, provider_id, version, amount, current, state,
         quote_date, notes="",
     ):
-        _provider_id(provider_id)
+        provider_id = _validate_provider_id(provider_id)
         if version < 1 or version > 3:
             raise ValidationError("QUOTATION_VERSION_OUT_OF_RANGE: La versión debe estar entre 1 y 3.")
         initial = self.round_data(round_id)
@@ -365,6 +406,11 @@ class DjangoQuotationStorage:
             raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
         with transaction.atomic(using=self.alias):
             with bounded_django_lock_wait(self.alias):
+                connection = connections[self.alias]
+                self._provider(
+                    provider_id,
+                    lock=connection.features.has_select_for_update,
+                )
                 try:
                     lock_orm_task_rows(
                         self.alias,
@@ -404,7 +450,7 @@ class DjangoQuotationStorage:
                         "fecha_cotizacion": quote_date,
                         "observaciones": notes,
                     },
-                    excluded=("ronda", "proveedor"),
+                    excluded=("ronda",),
                 )
                 quotation.save(using=self.alias)
                 return self.quotation_data(quotation.pk)
@@ -462,7 +508,7 @@ class DjangoQuotationStorage:
                     "fecha_cotizacion": quotation.fecha_cotizacion,
                     "observaciones": quotation.observaciones,
                 }
-                _field_clean(Cotizacion, clean, excluded=("ronda", "proveedor"))
+                _field_clean(Cotizacion, clean, excluded=("ronda",))
                 quotation.save(using=self.alias, update_fields=["estado"])
                 return self.quotation_data(quotation.pk)
 
@@ -550,10 +596,21 @@ class MySQLQuotationStorage:
         self.database_name = database_name
 
     def _connection(self):
-        return open_mysql_connection(
-            self.connection_config,
-            database_name=self.database_name,
-        )
+        @contextmanager
+        def verified_connection():
+            with open_mysql_connection(
+                self.connection_config,
+                database_name=self.database_name,
+            ) as connection:
+                try:
+                    verify_base_tareas_database(connection)
+                except MasterCatalogBackendError as exc:
+                    raise QuotationStorageError(
+                        "La conexión de cotizaciones no apunta a la base tareas."
+                    ) from exc
+                yield connection
+
+        return verified_connection()
 
     @contextmanager
     def _mutation(self, connection, *, company_id=None, task_ids=None):
@@ -866,7 +923,7 @@ class MySQLQuotationStorage:
         self, *, round_id, provider_id, version, amount, current, state,
         quote_date, notes="",
     ):
-        _provider_id(provider_id)
+        provider_id = _validate_provider_id(provider_id)
         if version < 1 or version > 3:
             raise ValidationError("QUOTATION_VERSION_OUT_OF_RANGE: La versión debe estar entre 1 y 3.")
         _field_clean(
@@ -881,10 +938,22 @@ class MySQLQuotationStorage:
                 "fecha_cotizacion": quote_date,
                 "observaciones": notes,
             },
-            excluded=("ronda", "proveedor"),
+            excluded=("ronda",),
         )
         with self._connection() as connection:
             with self._mutation(connection) as cursor:
+                try:
+                    provider = get_provider_from_cursor(
+                        cursor,
+                        provider_id,
+                        include_inactive=True,
+                        lock=True,
+                    )
+                except (MasterCatalogNotFound, MasterCatalogValidationError) as exc:
+                    raise ValidationError(
+                        "PROVIDER_INVALID: El proveedor no existe en BASE_TAREAS."
+                    ) from exc
+                _validate_provider_record(provider_id, provider)
                 initial = self._round(cursor, round_id)
                 if initial is None:
                     raise QuotationNotFound("La ronda no existe en BASE_TAREAS.")
@@ -994,7 +1063,7 @@ class MySQLQuotationStorage:
                     "fecha_cotizacion": quotation.quote_date,
                     "observaciones": quotation.notes,
                 }
-                _field_clean(Cotizacion, clean, excluded=("ronda", "proveedor"))
+                _field_clean(Cotizacion, clean, excluded=("ronda",))
                 cursor.execute(
                     "UPDATE tareas_cotizacion SET estado=%s WHERE id=%s AND ronda_id=%s",
                     (state, quotation_id, quotation.round_id),

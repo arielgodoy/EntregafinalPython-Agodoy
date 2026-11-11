@@ -6,7 +6,6 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from access_control.models import Empresa
-from proveedores.models import Proveedor
 from tareas.models import Cotizacion, EvidenciaCierre, MiniTarea, Tarea
 from tareas.services.closure import (
     create_mini_task,
@@ -22,7 +21,12 @@ from tareas.services.quotations import (
     open_next_quotation_round,
     update_quotation_status,
 )
-from tareas.tests.factories import assign_permission, configure_task_storage, create_user
+from tareas.tests.factories import (
+    assign_permission,
+    configure_task_storage,
+    create_tareas_provider,
+    create_user,
+)
 
 
 class MiniTaskClosureTests(TestCase):
@@ -32,7 +36,7 @@ class MiniTaskClosureTests(TestCase):
         cls.empresa = Empresa.objects.create(codigo="T31", descripcion="T031")
         cls.creador = create_user("t31_creador")
         cls.responsable = create_user("t31_responsable")
-        cls.proveedor = Proveedor.objects.create(nombre="Proveedor de cierre")
+        cls.proveedor = create_tareas_provider("Proveedor de cierre")
         assign_permission(cls.creador, cls.empresa, "Tareas", ingresar=True)
         assign_permission(cls.responsable, cls.empresa, "Tareas", ingresar=True)
 
@@ -205,14 +209,14 @@ class MiniTaskClosureTests(TestCase):
             version=99,
             monto="10",
             fecha_cotizacion=date.today(),
-            proveedor=None,
+            proveedor_id=None,
             vigente=True,
         )
 
         with self.assertRaisesMessage(ValidationError, "QUOTATION_MINIMUM_NOT_MET"):
             close_quotation_round(ronda)
 
-        otro_proveedor = Proveedor.objects.create(nombre="Proveedor E11 adicional")
+        otro_proveedor = create_tareas_provider("Proveedor E11 adicional")
         seleccionada = create_quotation(
             ronda=ronda,
             version=1,
@@ -228,7 +232,7 @@ class MiniTaskClosureTests(TestCase):
         approve_closure(tarea, self.creador)
 
         seleccionada.refresh_from_db()
-        self.assertEqual(seleccionada.proveedor, otro_proveedor)
+        self.assertEqual(seleccionada.proveedor_id, otro_proveedor)
         self.assertEqual(ronda.estado, ronda.Estado.CERRADA)
         self.assertEqual(Tarea.objects.get(pk=tarea.pk).estado, Tarea.Estado.CERRADA)
         self.assertFalse(
@@ -251,7 +255,7 @@ class MiniTaskClosureTests(TestCase):
             approve_closure(tarea, self.creador)
 
         providers = [
-            Proveedor.objects.create(nombre=f"Proveedor cierre distinto {index}")
+            create_tareas_provider(f"Proveedor cierre distinto {index}")
             for index in (1, 2)
         ]
         for provider in providers:

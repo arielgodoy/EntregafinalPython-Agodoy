@@ -4,7 +4,9 @@ from io import BytesIO
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from PIL import Image
+from django.utils import timezone
 
 from access_control.models import Empresa, Permiso, Vista
 from tareas.models import Tarea, TareaConnectionRole
@@ -64,3 +66,16 @@ def create_tarea(empresa, creada_por, **kwargs):
     }
     defaults.update(kwargs)
     return Tarea.objects.create(**defaults)
+
+
+def create_tareas_provider(nombre="Proveedor de prueba", *, activo=True):
+    now = timezone.now()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO proveedores_proveedor "
+            "(rut, nombre, direccion, comuna, ciudad, fono1, fono2, fax, "
+            "contacto, email1, email2, activo, created_at, updated_at) "
+            "VALUES (%s, %s, '', '', '', '', '', '', '', '', '', %s, %s, %s)",
+            (None, nombre, int(activo), now, now),
+        )
+        return cursor.lastrowid

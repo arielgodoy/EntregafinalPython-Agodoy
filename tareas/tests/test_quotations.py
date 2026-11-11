@@ -4,10 +4,11 @@ from decimal import Decimal
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
 
-from proveedores.models import Proveedor
 from tareas.models import Cotizacion, DocumentoCotizacion, RondaCotizacion, TareaConnectionRole
+from tareas.services.providers import get_provider_for_quotation
 from tareas.services.quotations import (
     add_quotation_document,
     close_quotation_round,
@@ -19,7 +20,13 @@ from tareas.services.quotations import (
     quotation_minimum_met,
     update_quotation_status,
 )
-from tareas.tests.factories import create_empresa, create_tarea, create_user, simple_jpeg_upload
+from tareas.tests.factories import (
+    create_empresa,
+    create_tarea,
+    create_tareas_provider,
+    create_user,
+    simple_jpeg_upload,
+)
 
 
 class QuotationRoundTests(TestCase):
@@ -109,7 +116,7 @@ class QuotationTests(TestCase):
         )
         cls.empresa = create_empresa(codigo="Q45")
         cls.usuario = create_user(username="quotation-user")
-        cls.proveedor = Proveedor.objects.create(nombre="Proveedor de prueba")
+        cls.proveedor = create_tareas_provider()
         cls.ronda = create_quotation_round(
             tarea=create_tarea(cls.empresa, cls.usuario),
         )
@@ -124,6 +131,11 @@ class QuotationTests(TestCase):
         }
         defaults.update(kwargs)
         return create_quotation(**defaults)
+
+    def _provider_count(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM proveedores_proveedor")
+            return cursor.fetchone()[0]
 
     def test_create_received_quotation_and_derive_task_company(self):
         cotizacion = self._create(observaciones="Oferta inicial")
@@ -160,12 +172,15 @@ class QuotationTests(TestCase):
         self.assertEqual(cotizacion.estado, Cotizacion.Estado.SELECCIONADA)
         self.assertTrue(cotizacion.vigente)
 
-    def test_selected_quotation_exposes_local_provider_without_adjudication(self):
+    def test_selected_quotation_exposes_provider_id_without_adjudication(self):
         cotizacion = self._create(estado=Cotizacion.Estado.SELECCIONADA)
 
         cotizacion.refresh_from_db()
-        self.assertEqual(cotizacion.proveedor, self.proveedor)
-        self.assertEqual(cotizacion.proveedor.nombre, "Proveedor de prueba")
+        self.assertEqual(cotizacion.proveedor_id, self.proveedor)
+        self.assertEqual(
+            get_provider_for_quotation(self.proveedor).nombre,
+            "Proveedor de prueba",
+        )
         self.assertFalse(
             any(model.__name__ == "Adjudicacion" for model in apps.get_models())
         )
@@ -256,12 +271,8 @@ class QuotationTests(TestCase):
 
         self.assertNotIn("empresa", quotation_fields | document_fields)
         self.assertNotIn("tarea", quotation_fields | document_fields)
-        self.assertIn("proveedor", quotation_fields)
-        self.assertTrue(Cotizacion._meta.get_field("proveedor").null)
-        self.assertIs(
-            Cotizacion._meta.get_field("proveedor").remote_field.model,
-            Proveedor,
-        )
+        self.assertIn("proveedor_id", quotation_fields)
+        self.assertTrue(Cotizacion._meta.get_field("proveedor_id").null)
         self.assertFalse(any(name in quotation_fields | document_fields for name in {
             "proveedor_nombre",
             "rut",
@@ -269,7 +280,7 @@ class QuotationTests(TestCase):
         }))
 
     def test_quotation_can_have_provider_or_remain_pre_p2_null(self):
-        provider = Proveedor.objects.create(nombre="Proveedor local")
+        provider = create_tareas_provider("Proveedor local")
 
         without_provider = Cotizacion.objects.create(
             ronda=self.ronda,
@@ -279,27 +290,30 @@ class QuotationTests(TestCase):
         )
         with_provider = self._create(version=2, proveedor=provider)
 
-        self.assertIsNone(without_provider.proveedor)
-        self.assertEqual(with_provider.proveedor, provider)
+        self.assertIsNone(without_provider.proveedor_id)
+        self.assertEqual(with_provider.proveedor_id, provider)
 
-    def test_multiple_quotations_can_share_active_or_inactive_provider(self):
-        provider = Proveedor.objects.create(nombre="Proveedor historico")
+    def test_historical_quotation_survives_provider_deactivation(self):
+        provider = create_tareas_provider("Proveedor historico")
         first = self._create(proveedor=provider)
-        second = self._create(version=2, proveedor=provider)
 
-        provider.activo = False
-        provider.save(update_fields=["activo", "updated_at"])
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE proveedores_proveedor SET activo=0 WHERE id=%s",
+                (provider,),
+            )
         first.refresh_from_db()
-        second.refresh_from_db()
 
-        self.assertEqual(first.proveedor_id, provider.pk)
-        self.assertEqual(second.proveedor_id, provider.pk)
+        self.assertEqual(first.proveedor_id, provider)
+        self.assertEqual(count_available_quotations(self.ronda), 1)
+        with self.assertRaisesMessage(ValidationError, "PROVIDER_INACTIVE"):
+            self._create(version=2, proveedor=provider)
 
     def test_create_quotation_remains_compatible_without_provider_and_persists_it_when_given(self):
-        provider = Proveedor.objects.create(nombre="Proveedor opcional")
+        provider = create_tareas_provider("Proveedor opcional")
         with_provider = self._create(version=2, proveedor=provider)
 
-        self.assertEqual(with_provider.proveedor_id, provider.pk)
+        self.assertEqual(with_provider.proveedor_id, provider)
 
     def test_create_quotation_requires_provider_and_does_not_insert_without_one(self):
         before = Cotizacion.objects.count()
@@ -307,7 +321,7 @@ class QuotationTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "PROVIDER_REQUIRED"):
             create_quotation(
                 ronda=self.ronda,
-                version=20,
+                version=1,
                 monto=Decimal("1250.50"),
                 fecha_cotizacion=date(2026, 9, 14),
             )
@@ -321,7 +335,7 @@ class QuotationTests(TestCase):
                 version=20,
                 monto=Decimal("1250.50"),
                 fecha_cotizacion=date(2026, 9, 14),
-                proveedor=self.proveedor.pk,
+                proveedor="proveedor-global",
             )
 
     def test_provider_round_allows_versions_one_to_three_but_rejects_fourth(self):
@@ -338,7 +352,7 @@ class QuotationTests(TestCase):
             self._create(version=1)
 
     def test_provider_and_round_scopes_are_independent(self):
-        provider_b = Proveedor.objects.create(nombre="Proveedor B")
+        provider_b = create_tareas_provider("Proveedor B")
         for version in (1, 2, 3):
             self._create(version=version)
             self._create(version=version, proveedor=provider_b)
@@ -347,7 +361,7 @@ class QuotationTests(TestCase):
         quotation = self._create_on_round(otra_ronda, version=1)
 
         self.assertEqual(quotation.ronda, otra_ronda)
-        self.assertEqual(quotation.proveedor, self.proveedor)
+        self.assertEqual(quotation.proveedor_id, self.proveedor)
 
     def test_version_limit_ignores_status_and_vigente(self):
         for version, estado, vigente in (
@@ -361,27 +375,33 @@ class QuotationTests(TestCase):
             self._create(version=4)
 
     def test_multiple_vigente_quotations_for_same_provider_count_as_one(self):
-        provider = Proveedor.objects.create(nombre="Proveedor repetido")
+        provider = create_tareas_provider("Proveedor repetido")
         self._create(proveedor=provider)
         self._create(version=2, proveedor=provider)
 
         self.assertEqual(count_available_quotations(self.ronda), 1)
 
-    def test_pre_p2_creation_does_not_create_provider_automatically(self):
-        before = Proveedor.objects.count()
-        quotation = Cotizacion.objects.create(
-            ronda=self.ronda,
-            version=20,
-            monto=Decimal("1250.50"),
-            fecha_cotizacion=date(2026, 9, 14),
-        )
+    def test_create_quotation_does_not_create_provider_automatically(self):
+        provider = create_tareas_provider("Proveedor sin alta automática")
+        before = self._provider_count()
 
-        self.assertIsNone(quotation.proveedor_id)
-        self.assertEqual(Proveedor.objects.count(), before)
+        with self.assertRaisesMessage(ValidationError, "PROVIDER_REQUIRED"):
+            create_quotation(
+                ronda=self.ronda,
+                version=1,
+                monto=Decimal("1250.50"),
+                fecha_cotizacion=date(2026, 9, 14),
+            )
+
+        self.assertEqual(self._provider_count(), before)
+        quotation = self._create(version=2, proveedor=provider)
+
+        self.assertEqual(self._provider_count(), before)
+        self.assertEqual(quotation.proveedor_id, provider)
 
     def test_only_vigente_quotations_count_for_the_round_minimum(self):
         for index, vigente in enumerate((False, False, True, True, True, True), start=1):
-            proveedor = Proveedor.objects.create(nombre=f"Proveedor conteo {index}")
+            proveedor = create_tareas_provider(f"Proveedor conteo {index}")
             self._create(version=1, proveedor=proveedor, vigente=vigente)
 
         self.assertEqual(count_available_quotations(self.ronda), 4)
@@ -389,7 +409,7 @@ class QuotationTests(TestCase):
 
     def test_all_quotation_states_count_when_vigente(self):
         for index, estado in enumerate(Cotizacion.Estado, start=1):
-            provider = Proveedor.objects.create(nombre=f"Proveedor estado {index}")
+            provider = create_tareas_provider(f"Proveedor estado {index}")
             self._create(version=1, proveedor=provider, estado=estado, vigente=True)
 
         self.assertEqual(count_available_quotations(self.ronda), 3)
@@ -399,8 +419,8 @@ class QuotationTests(TestCase):
         self._create(version=2)
         self.assertFalse(quotation_minimum_met(self.ronda))
 
-        provider_b = Proveedor.objects.create(nombre="Proveedor mínimo B")
-        provider_c = Proveedor.objects.create(nombre="Proveedor mínimo C")
+        provider_b = create_tareas_provider("Proveedor mínimo B")
+        provider_c = create_tareas_provider("Proveedor mínimo C")
         self._create(version=1, proveedor=provider_b)
         self._create(version=1, proveedor=provider_c)
         self.assertTrue(quotation_minimum_met(self.ronda))
@@ -413,13 +433,15 @@ class QuotationTests(TestCase):
             fecha_cotizacion=date(2026, 9, 14),
             vigente=True,
         )
-        inactive_provider = Proveedor.objects.create(nombre="Proveedor inactivo")
-        inactive_provider.activo = False
-        inactive_provider.save(update_fields=["activo", "updated_at"])
-        self._create(proveedor=inactive_provider, vigente=True)
+        inactive_provider = create_tareas_provider(
+            "Proveedor inactivo",
+            activo=False,
+        )
+        with self.assertRaisesMessage(ValidationError, "PROVIDER_INACTIVE"):
+            self._create(proveedor=inactive_provider, vigente=True)
 
         self.assertIsNone(null_quotation.proveedor_id)
-        self.assertEqual(count_available_quotations(self.ronda), 1)
+        self.assertEqual(count_available_quotations(self.ronda), 0)
 
     def test_configurable_minimum_one_and_non_default_minimum(self):
         ronda = create_quotation_round(tarea=self.ronda.tarea, minimo_cotizaciones=1)
@@ -439,8 +461,8 @@ class QuotationTests(TestCase):
 
         for version in (1, 2, 3):
             self._create(version=version)
-        provider_b = Proveedor.objects.create(nombre="Proveedor cierre B")
-        provider_c = Proveedor.objects.create(nombre="Proveedor cierre C")
+        provider_b = create_tareas_provider("Proveedor cierre B")
+        provider_c = create_tareas_provider("Proveedor cierre C")
         self._create(version=1, proveedor=provider_b)
         self._create(version=1, proveedor=provider_c)
         cerrada = close_quotation_round(self.ronda)

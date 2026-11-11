@@ -3,7 +3,7 @@
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
-from proveedores.models import Proveedor
+from tareas.services.providers import ProviderRecord
 from tareas.services.quotation_storage import (
     DjangoQuotationStorage,
     execute_storage,
@@ -13,6 +13,20 @@ from tareas.services.quotation_storage import (
 
 def _pk(value):
     return getattr(value, "pk", getattr(value, "id", value))
+
+
+def _provider_id(value):
+    if value is None:
+        raise ValidationError(
+            "PROVIDER_REQUIRED: La cotización requiere un proveedor."
+        )
+    if isinstance(value, ProviderRecord):
+        return value.id
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValidationError(
+            "PROVIDER_INVALID: Debe indicar un proveedor válido de BASE_TAREAS."
+        )
+    return value
 
 
 def _task_scope(task):
@@ -139,16 +153,13 @@ def create_quotation(
     vigente=True,
     estado="RECIBIDA",
 ):
-    if not isinstance(proveedor, Proveedor):
-        if proveedor is None:
-            raise ValidationError("PROVIDER_REQUIRED: La cotización requiere un proveedor.")
-        raise ValidationError("PROVIDER_INVALID: Debe indicar un proveedor local válido.")
+    provider_id = _provider_id(proveedor)
     storage = resolve_quotation_storage()
     result = execute_storage(
         storage,
         "create_quotation",
         round_id=_pk(ronda),
-        provider_id=proveedor.pk,
+        provider_id=provider_id,
         version=version,
         amount=monto,
         current=vigente,

@@ -1,4 +1,4 @@
-"""SQL service for the global Proveedores catalog."""
+"""SQL service for the Tareas Proveedores catalog."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import connections
 from django.utils import timezone
 
 from tareas.utils.rut import RutValidationError, normalizar_rut
@@ -13,6 +14,7 @@ from tareas.utils.rut import RutValidationError, normalizar_rut
 from .master_catalog_common import (
     CompanyContext,
     MasterCatalogNotFound,
+    MasterCatalogBackendError,
     MasterCatalogValidationError,
     MutationMetadata,
     MutationResult,
@@ -22,8 +24,10 @@ from .master_catalog_common import (
     normalize_required_text,
     require_metadata,
     require_company_context,
+    verify_base_tareas_database,
     verified_base_tareas_connection,
 )
+from .connection_roles import TareaConnectionError, resolve_operational_backend
 from .master_operation_service import MasterMutationChange, execute_master_mutation
 
 
@@ -155,6 +159,83 @@ def _read_provider(cursor, provider_id: int, *, lock: bool = False) -> ProviderR
     return _record(row)
 
 
+def get_provider_from_cursor(
+    cursor,
+    provider_id: int,
+    *,
+    include_inactive: bool = True,
+    lock: bool = False,
+) -> ProviderRecord:
+    """Read a Tareas provider using the caller's already-resolved connection."""
+    if (
+        not isinstance(provider_id, int)
+        or isinstance(provider_id, bool)
+        or provider_id <= 0
+    ):
+        raise MasterCatalogValidationError("El ID del Proveedor no es válido.")
+    predicate = "" if include_inactive else " AND activo = 1"
+    execute_or_raise_database(
+        cursor,
+        f"SELECT {_PROVIDER_COLUMNS} FROM proveedores_proveedor "
+        f"WHERE id = %s{predicate}" + (" FOR UPDATE" if lock else ""),
+        (provider_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise MasterCatalogNotFound("El Proveedor no existe.")
+    return _record(row)
+
+
+def get_provider_for_quotation(provider_id: int) -> ProviderRecord:
+    """Resolve an active provider exclusively from the BASE_TAREAS role."""
+    try:
+        backend = resolve_operational_backend("BASE_TAREAS")
+    except TareaConnectionError as exc:
+        raise MasterCatalogBackendError(
+            "No se pudo resolver el rol BASE_TAREAS."
+        ) from exc
+
+    if backend.backend_type == "MYSQL_CONFIG":
+        with verified_base_tareas_connection() as connection:
+            cursor = connection.cursor()
+            try:
+                record = get_provider_from_cursor(
+                    cursor,
+                    provider_id,
+                    include_inactive=True,
+                )
+                if not record.activo:
+                    raise MasterCatalogValidationError(
+                        "El Proveedor está inactivo para nuevas cotizaciones."
+                    )
+                return record
+            finally:
+                cursor.close()
+
+    if backend.backend_type != "DJANGO" or not backend.django_alias:
+        raise MasterCatalogBackendError(
+            "El backend de BASE_TAREAS no es compatible con Proveedores."
+        )
+
+    connection = connections[backend.django_alias]
+    if connection.vendor == "mysql":
+        verify_base_tareas_database(connection)
+    cursor = connection.cursor()
+    try:
+        record = get_provider_from_cursor(
+            cursor,
+            provider_id,
+            include_inactive=True,
+        )
+        if not record.activo:
+            raise MasterCatalogValidationError(
+                "El Proveedor está inactivo para nuevas cotizaciones."
+            )
+        return record
+    finally:
+        cursor.close()
+
+
 def _audit_snapshot(record: ProviderRecord) -> dict[str, object]:
     return {
         "id": record.id,
@@ -196,22 +277,16 @@ def get_provider(provider_id: int, *, include_inactive: bool = True) -> Provider
         or provider_id <= 0
     ):
         raise MasterCatalogValidationError("El ID del Proveedor no es válido.")
-    predicate = "" if include_inactive else " AND activo = 1"
     with verified_base_tareas_connection() as connection:
         cursor = connection.cursor()
         try:
-            execute_or_raise_database(
+            return get_provider_from_cursor(
                 cursor,
-                f"SELECT {_PROVIDER_COLUMNS} FROM proveedores_proveedor "
-                f"WHERE id = %s{predicate}",
-                (provider_id,),
+                provider_id,
+                include_inactive=include_inactive,
             )
-            row = cursor.fetchone()
         finally:
             cursor.close()
-    if row is None:
-        raise MasterCatalogNotFound("El Proveedor no existe.")
-    return _record(row)
 
 
 def create_provider(

@@ -134,6 +134,29 @@ def require_company_context(context: CompanyContext) -> None:
     context.validate()
 
 
+def verify_base_tareas_database(connection) -> None:
+    """Verify that a MySQL connection points to the authorized physical database."""
+    cursor = connection.cursor()
+    try:
+        try:
+            cursor.execute("SELECT DATABASE()")
+            row = cursor.fetchone()
+        except Exception as exc:
+            raise MasterCatalogBackendError(
+                "No se pudo verificar la base física de BASE_TAREAS."
+            ) from exc
+    finally:
+        cursor.close()
+    if not row:
+        raise MasterCatalogBackendError(
+            "La verificación de BASE_TAREAS no devolvió una base."
+        )
+    if row[0] != "tareas":
+        raise MasterCatalogBackendError(
+            "La conexión de BASE_TAREAS no apunta a la base autorizada."
+        )
+
+
 @contextmanager
 def verified_base_tareas_connection() -> Iterator[object]:
     """Yield the single verified BASE_TAREAS connection for one operation."""
@@ -152,26 +175,7 @@ def verified_base_tareas_connection() -> Iterator[object]:
             backend.mysql_connection,
             database_name=backend.database_name,
         ) as connection:
-            cursor = connection.cursor()
-            try:
-                try:
-                    cursor.execute("SELECT DATABASE()")
-                except Exception as exc:
-                    raise MasterCatalogBackendError(
-                        "No se pudo verificar la base física de BASE_TAREAS."
-                    ) from exc
-                row = cursor.fetchone()
-                if not row:
-                    raise MasterCatalogBackendError(
-                        "La verificación de BASE_TAREAS no devolvió una base."
-                    )
-                database_name = row[0]
-                if database_name != "tareas":
-                    raise MasterCatalogBackendError(
-                        "La conexión de BASE_TAREAS no apunta a la base autorizada."
-                    )
-            finally:
-                cursor.close()
+            verify_base_tareas_database(connection)
             yield connection
     except MySQLConnectionOpenError as exc:
         raise MasterCatalogBackendError(

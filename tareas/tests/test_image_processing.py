@@ -10,7 +10,6 @@ from django.utils import timezone
 from PIL import Image
 from PIL import TiffImagePlugin
 
-from proveedores.models import Proveedor
 from tareas.models import (
     Cotizacion,
     DocumentoCotizacion,
@@ -26,7 +25,14 @@ from tareas.services.documents import create_document, register_closure_evidence
 from tareas.services.image_processing import optimize_uploaded_image
 from tareas.services.progress import complete_milestone
 from tareas.services.quotations import add_quotation_document, create_quotation, create_quotation_round
-from tareas.tests.factories import assign_permission, configure_task_storage, create_empresa, create_tarea, create_user
+from tareas.tests.factories import (
+    assign_permission,
+    configure_task_storage,
+    create_empresa,
+    create_tarea,
+    create_tareas_provider,
+    create_user,
+)
 
 
 def upload_image(name, image_format, image, **save_kwargs):
@@ -167,7 +173,7 @@ class ImagePersistenceIntegrationTests(TestCase):
         cls.tarea.estado = Tarea.Estado.ACTIVA
         cls.tarea.fecha_publicacion = timezone.now()
         cls.tarea.save(update_fields=["estado", "fecha_publicacion"])
-        cls.proveedor = Proveedor.objects.create(nombre="Image provider")
+        cls.proveedor = create_tareas_provider("Image provider")
         assign_permission(
             cls.usuario,
             cls.empresa,

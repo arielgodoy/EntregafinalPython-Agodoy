@@ -2,17 +2,18 @@ from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
 import sqlite3
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connections
 from django.test import TestCase
 
-from proveedores.models import Proveedor
 from tareas.models import Cotizacion, RondaCotizacion, Tarea, TareaConnectionRole
 from tareas.services import quotation_storage
 from tareas.services.connection_roles import BackendContext
+from tareas.services.master_catalog_common import MasterCatalogBackendError
 from tareas.services.quotation_storage import (
     DjangoQuotationStorage,
     MySQLQuotationStorage,
@@ -26,11 +27,16 @@ from tareas.services.quotations import (
     has_quotation_process,
     update_quotation_status,
 )
-from tareas.tests.factories import create_empresa, create_tarea, create_user
+from tareas.tests.factories import (
+    create_empresa,
+    create_tarea,
+    create_tareas_provider,
+    create_user,
+)
 
 
 class ControlledMySQL:
-    def __init__(self, task, round_row=None, quotation_row=None):
+    def __init__(self, task, provider_id=None, round_row=None, quotation_row=None):
         self.db = sqlite3.connect(":memory:", isolation_level=None)
         self.commands = []
         self.db.executescript(
@@ -54,12 +60,53 @@ class ControlledMySQL:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, cotizacion_id INTEGER,
                 formato_archivo TEXT, archivo TEXT, url TEXT, usuario_id INTEGER,
                 fecha TEXT);
+            CREATE TABLE proveedores_proveedor (
+                id INTEGER PRIMARY KEY,
+                rut TEXT,
+                nombre TEXT NOT NULL,
+                direccion TEXT NOT NULL,
+                comuna TEXT NOT NULL,
+                ciudad TEXT NOT NULL,
+                fono1 TEXT NOT NULL,
+                fono2 TEXT NOT NULL,
+                fax TEXT NOT NULL,
+                contacto TEXT NOT NULL,
+                email1 TEXT NOT NULL,
+                email2 TEXT NOT NULL,
+                activo INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         self.db.execute(
             "INSERT INTO tareas_tarea (id,empresa_id) VALUES (?,?)",
             (task.pk, task.empresa_id),
         )
+        if provider_id is not None:
+            self.db.execute(
+                "INSERT INTO proveedores_proveedor "
+                "(id,rut,nombre,direccion,comuna,ciudad,fono1,fono2,fax,"
+                "contacto,email1,email2,activo,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    provider_id,
+                    None,
+                    "Canonical provider",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    1,
+                    "",
+                    "",
+                ),
+            )
         if round_row:
             self.db.execute(
                 "INSERT INTO tareas_rondacotizacion "
@@ -75,6 +122,31 @@ class ControlledMySQL:
                 quotation_row,
             )
 
+    def add_provider(self, provider_id, *, active=True, name="Operational provider"):
+        self.db.execute(
+            "INSERT INTO proveedores_proveedor "
+            "(id,rut,nombre,direccion,comuna,ciudad,fono1,fono2,fax,"
+            "contacto,email1,email2,activo,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                provider_id,
+                None,
+                name,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                int(active),
+                "",
+                "",
+            ),
+        )
+
     def cursor(self):
         return self
 
@@ -86,6 +158,9 @@ class ControlledMySQL:
 
     def execute(self, sql, params=()):
         self.commands.append((sql, tuple(params)))
+        if sql == "SELECT DATABASE()":
+            self._rows = [("tareas",)]
+            return
         if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
             self._rows = [(30,)]
             return
@@ -133,11 +208,11 @@ class QuotationBackendParityTests(TestCase):
         )
         cls.company = create_empresa(codigo="Q135D")
         cls.user = create_user(username="quotation-parity-user")
-        cls.provider = Proveedor.objects.create(nombre="Canonical provider")
+        cls.provider = create_tareas_provider("Canonical provider")
         cls.task = create_tarea(cls.company, cls.user, titulo="Quotation parity")
 
     def setUp(self):
-        self.mysql = ControlledMySQL(self.task)
+        self.mysql = ControlledMySQL(self.task, self.provider)
         self.addCleanup(self.mysql.db.close)
         self.mysql_patch = patch.object(
             quotation_storage,
@@ -166,6 +241,52 @@ class QuotationBackendParityTests(TestCase):
         )):
             self.assertIsInstance(quotation_storage.resolve_quotation_storage(), DjangoQuotationStorage)
 
+    def test_django_storage_requests_provider_lock_when_backend_supports_it(self):
+        round_data = create_quotation_round(
+            tarea=self.task,
+            minimo_cotizaciones=1,
+        )
+        with patch.object(
+            connections["default"].features,
+            "has_select_for_update",
+            True,
+        ):
+            with patch.object(
+                DjangoQuotationStorage,
+                "_provider",
+                autospec=True,
+                return_value=self.provider,
+            ) as provider:
+                with patch.object(
+                    quotation_storage,
+                    "lock_orm_task_rows",
+                ):
+                    with patch.object(
+                        DjangoQuotationStorage,
+                        "_task",
+                        autospec=True,
+                        return_value=self.task,
+                    ):
+                        with patch.object(
+                            DjangoQuotationStorage,
+                            "_round",
+                            autospec=True,
+                            return_value=round_data,
+                        ):
+                            create_quotation(
+                                ronda=round_data,
+                                version=1,
+                                monto=Decimal("10"),
+                                fecha_cotizacion=date(2026, 10, 1),
+                                proveedor=self.provider,
+                            )
+
+        provider.assert_called_once_with(
+            ANY,
+            self.provider,
+            lock=True,
+        )
+
     def test_mysql_round_quotation_status_and_document_operations(self):
         with self.configured_mysql():
             self.assertFalse(has_quotation_process(self.task))
@@ -181,7 +302,7 @@ class QuotationBackendParityTests(TestCase):
                 fecha_cotizacion=date(2026, 10, 1),
                 proveedor=self.provider,
             )
-            self.assertEqual(quote.provider_id, self.provider.pk)
+            self.assertEqual(quote.provider_id, self.provider)
             self.assertEqual(quote.amount, Decimal("125.50"))
 
             updated = update_quotation_status(
@@ -233,10 +354,69 @@ class QuotationBackendParityTests(TestCase):
                 url="https://example.test/external.pdf",
             )
         operational_sql = "\n".join(sql for sql, _ in self.mysql.commands)
-        self.assertNotIn("proveedores_proveedor", operational_sql)
+        self.assertIn("proveedores_proveedor", operational_sql)
         self.assertNotIn("auth_user", operational_sql)
-        self.assertEqual(Proveedor.objects.count(), 1)
         self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_mysql_accepts_provider_only_in_operational_target(self):
+        target_only_id = 9001
+        self.mysql.add_provider(target_only_id)
+        with self.configured_mysql():
+            round_data = create_quotation_round(tarea=self.task, minimo_cotizaciones=1)
+            quote = create_quotation(
+                ronda=round_data,
+                version=1,
+                monto=Decimal("10"),
+                fecha_cotizacion=date(2026, 10, 1),
+                proveedor=target_only_id,
+            )
+
+        self.assertEqual(quote.provider_id, target_only_id)
+
+    def test_mysql_rejects_provider_only_in_default(self):
+        default_only_id = create_tareas_provider("Default-only provider")
+        with self.configured_mysql():
+            round_data = create_quotation_round(tarea=self.task)
+            with self.assertRaisesMessage(ValidationError, "PROVIDER_INVALID"):
+                create_quotation(
+                    ronda=round_data,
+                    version=1,
+                    monto=Decimal("10"),
+                    fecha_cotizacion=date(2026, 10, 1),
+                    proveedor=default_only_id,
+                )
+
+    def test_mysql_provider_id_collision_uses_operational_row(self):
+        self.mysql.db.execute(
+            "UPDATE proveedores_proveedor SET nombre=? WHERE id=?",
+            ("Operational identity", self.provider),
+        )
+        with self.configured_mysql():
+            round_data = create_quotation_round(tarea=self.task, minimo_cotizaciones=1)
+            quote = create_quotation(
+                ronda=round_data,
+                version=1,
+                monto=Decimal("10"),
+                fecha_cotizacion=date(2026, 10, 1),
+                proveedor=self.provider,
+            )
+
+        self.assertEqual(quote.provider_id, self.provider)
+        row = self.mysql.db.execute(
+            "SELECT nombre FROM proveedores_proveedor WHERE id=?",
+            (self.provider,),
+        ).fetchone()
+        self.assertEqual(row[0], "Operational identity")
+
+    def test_mysql_storage_rejects_wrong_physical_database(self):
+        with patch.object(
+            quotation_storage,
+            "verify_base_tareas_database",
+            side_effect=MasterCatalogBackendError("wrong database"),
+        ):
+            with self.configured_mysql():
+                with self.assertRaises(QuotationStorageError):
+                    create_quotation_round(tarea=self.task)
 
     def test_mysql_same_pk_reads_and_updates_operational_quote_only(self):
         default_round = create_quotation_round(tarea=self.task)
@@ -262,7 +442,7 @@ class QuotationBackendParityTests(TestCase):
             "(id,ronda_id,proveedor_id,version,monto,vigente,estado,fecha_cotizacion,observaciones) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (
-                default_quote.pk, default_round.pk, self.provider.pk, 1,
+                default_quote.pk, default_round.pk, self.provider, 1,
                 "99.00", 1, Cotizacion.Estado.RECIBIDA, "2026-10-01", "MYSQL B",
             ),
         )

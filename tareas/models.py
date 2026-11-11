@@ -1833,12 +1833,10 @@ class Cotizacion(models.Model):
         on_delete=models.PROTECT,
         related_name="cotizaciones",
     )
-    proveedor = models.ForeignKey(
-        "proveedores.Proveedor",
-        on_delete=models.PROTECT,
-        related_name="cotizaciones",
+    proveedor_id = models.BigIntegerField(
         null=True,
         blank=True,
+        db_index=True,
     )
     version = models.PositiveIntegerField()
     monto = models.DecimalField(max_digits=12, decimal_places=2)
