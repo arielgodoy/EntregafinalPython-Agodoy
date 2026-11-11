@@ -1,0 +1,48 @@
+{% extends "partials/base.html" %}
+
+{% block title %}{{ catalog_title }}{% endblock title %}
+{% block pagetitle %}
+<span data-key="{{ catalog_title_key }}">{{ catalog_title }}</span>
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0 fw-semibold" data-key="{{ catalog_title_key }}">{{ catalog_title }}</h4>
+                <a class="btn btn-outline-secondary" href="{{ cancel_url }}"
+                    data-key="tareas.master_catalog.provider.cancel">Volver</a>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    {% if edit_available %}
+                    <div class="d-flex justify-content-end mb-3">
+                        <a class="btn btn-primary" href="{{ edit_url }}"
+                            data-key="tareas.master_catalog.provider.edit">Editar</a>
+                    </div>
+                    {% endif %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4" data-key="tareas.master_catalog.common.name">Nombre</dt>
+                        <dd class="col-sm-8">{{ record.nombre }}</dd>
+                        <dt class="col-sm-4" data-key="tareas.master_catalog.provider.rut">RUT</dt>
+                        <dd class="col-sm-8">{{ record.rut|default:"-" }}</dd>
+                        <dt class="col-sm-4" data-key="tareas.master_catalog.common.status">Estado</dt>
+                        <dd class="col-sm-8">
+                            {% if record.activo %}
+                            <span data-key="tareas.master_catalog.common.active">Activo</span>
+                            {% else %}
+                            <span data-key="tareas.master_catalog.common.inactive">Inactivo</span>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-sm-4" data-key="tareas.master_catalog.provider.address">Dirección</dt>
+                        <dd class="col-sm-8">{{ record.direccion|default:"-" }}</dd>
+                        <dt class="col-sm-4" data-key="tareas.master_catalog.provider.email1">Email</dt>
+                        <dd class="col-sm-8">{{ record.email1|default:"-" }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

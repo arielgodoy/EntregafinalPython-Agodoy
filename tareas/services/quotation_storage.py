@@ -167,7 +167,10 @@ class DjangoQuotationStorage:
         provider_id = _validate_provider_id(provider_id)
         connection = connections[self.alias]
         if connection.vendor == "mysql":
-            verify_base_tareas_database(connection)
+            verify_base_tareas_database(
+                connection,
+                expected_database=connection.settings_dict["NAME"],
+            )
         cursor = connection.cursor()
         try:
             try:
@@ -603,10 +606,14 @@ class MySQLQuotationStorage:
                 database_name=self.database_name,
             ) as connection:
                 try:
-                    verify_base_tareas_database(connection)
+                    verify_base_tareas_database(
+                        connection,
+                        expected_database=self.database_name,
+                    )
                 except MasterCatalogBackendError as exc:
                     raise QuotationStorageError(
-                        "La conexión de cotizaciones no apunta a la base tareas."
+                        "La conexión de cotizaciones no apunta a la base "
+                        "configurada de Tareas."
                     ) from exc
                 yield connection
 

@@ -33,6 +33,7 @@ from .services.connection_roles import (
     get_system_database_catalog,
     is_allowed_mysql_connection,
 )
+from .utils.rut import RutValidationError, normalizar_rut
 
 
 class HitoForm(forms.Form):
@@ -372,17 +373,80 @@ class DepartmentCatalogUpdateForm(forms.Form):
 class ProviderCatalogForm(forms.Form):
     rut = forms.CharField(max_length=12, required=False, strip=True)
     nombre = forms.CharField(max_length=255, strip=True)
-    direccion = forms.CharField(max_length=255, required=False, strip=True)
+    direccion = forms.CharField(
+        label="Dirección",
+        max_length=255,
+        required=False,
+        strip=True,
+    )
     comuna = forms.CharField(max_length=100, required=False, strip=True)
     ciudad = forms.CharField(max_length=100, required=False, strip=True)
-    fono1 = forms.CharField(max_length=30, required=False, strip=True)
-    fono2 = forms.CharField(max_length=30, required=False, strip=True)
-    fax = forms.CharField(max_length=30, required=False, strip=True)
+    fono1 = forms.CharField(
+        label="Teléfono 1",
+        max_length=30,
+        required=False,
+        strip=True,
+    )
+    fono2 = forms.CharField(
+        label="Teléfono 2",
+        max_length=30,
+        required=False,
+        strip=True,
+    )
+    fax = forms.CharField(label="Fax", max_length=30, required=False, strip=True)
     contacto = forms.CharField(max_length=150, required=False, strip=True)
-    email1 = forms.EmailField(max_length=254, required=False)
-    email2 = forms.EmailField(max_length=254, required=False)
-    motivo = forms.CharField(max_length=1000, strip=True)
-    operation_id = forms.UUIDField()
+    email1 = forms.EmailField(
+        label="Email principal",
+        max_length=254,
+        required=False,
+    )
+    email2 = forms.EmailField(
+        label="Email secundario",
+        max_length=254,
+        required=False,
+    )
+    motivo = forms.CharField(
+        label="Motivo",
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    operation_id = forms.UUIDField(widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if name != "operation_id":
+                field.widget.attrs.setdefault("class", "form-control")
+            field.error_messages["required"] = (
+                "tareas.master_catalog.common.field_required"
+            )
+            if "max_length" in field.error_messages:
+                field.error_messages["max_length"] = (
+                    "tareas.master_catalog.common.field_too_long"
+                )
+            if "invalid" in field.error_messages:
+                field.error_messages["invalid"] = (
+                    "tareas.master_catalog.common.invalid_value"
+                )
+        self.fields["email1"].error_messages["invalid"] = (
+            "tareas.master_catalog.provider.invalid_email"
+        )
+        self.fields["email2"].error_messages["invalid"] = (
+            "tareas.master_catalog.provider.invalid_email"
+        )
+
+    def clean_rut(self):
+        rut = self.cleaned_data.get("rut") or ""
+        if not rut:
+            return ""
+        try:
+            return normalizar_rut(rut)
+        except (RutValidationError, TypeError) as exc:
+            raise ValidationError(
+                "tareas.master_catalog.provider.invalid_rut",
+                code="tareas.master_catalog.provider.invalid_rut",
+            ) from exc
 
 
 class LocalCatalogForm(forms.Form):

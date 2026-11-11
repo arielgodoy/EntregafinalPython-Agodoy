@@ -227,7 +227,14 @@ from .services.department_catalog import (
     update_department_name,
 )
 from .services.locals import LocalInput, get_local, list_locals
-from .services.providers import get_provider, list_providers
+from .services.providers import (
+    ProviderInput,
+    create_provider,
+    get_provider,
+    list_providers,
+    set_provider_active,
+    update_provider,
+)
 from .services.master_catalog_common import (
     CompanyContext,
     MasterCatalogBackendError,
@@ -921,8 +928,47 @@ _DEPARTMENT_CATALOG_KEYS = {
 }
 
 
-_PROVIDER_MASTER_VIEW_NAME = "Proveedores - Maestro"
+_PROVIDER_MASTER_VIEW_NAME = "Maestros - Proveedores"
 _LOCAL_MASTER_VIEW_NAME = "Tareas - Maestro de locales"
+_PROVIDER_FLASH_SESSION_KEY = "tareas_provider_flash"
+_PROVIDER_FEEDBACK = {
+    "tareas.master_catalog.provider.created": {
+        "level": "success",
+        "text": "Proveedor creado correctamente.",
+    },
+    "tareas.master_catalog.provider.updated": {
+        "level": "success",
+        "text": "Proveedor actualizado correctamente.",
+    },
+    "tareas.master_catalog.provider.activated": {
+        "level": "success",
+        "text": "Proveedor activado correctamente.",
+    },
+    "tareas.master_catalog.provider.deactivated": {
+        "level": "success",
+        "text": "Proveedor desactivado correctamente.",
+    },
+    "tareas.master_catalog.provider.conflict": {
+        "level": "danger",
+        "text": "Ya existe un Proveedor con los datos ingresados.",
+    },
+    "tareas.master_catalog.common.invalid_request": {
+        "level": "danger",
+        "text": "La solicitud no es válida.",
+    },
+    "tareas.master_catalog.common.not_found": {
+        "level": "danger",
+        "text": "El registro no está disponible.",
+    },
+    "tareas.master_catalog.common.blocked": {
+        "level": "danger",
+        "text": "La operación está bloqueada.",
+    },
+    "tareas.master_catalog.common.unavailable": {
+        "level": "danger",
+        "text": "El catálogo no está disponible temporalmente.",
+    },
+}
 _GENERIC_MASTER_KEYS = {
     "blocked": "tareas.master_catalog.common.blocked",
     "invalid_request": "tareas.master_catalog.common.invalid_request",
@@ -950,6 +996,46 @@ _GENERIC_MASTER_LABELS = {
 }
 
 
+def _provider_flash_context(request):
+    message_key = request.session.pop(_PROVIDER_FLASH_SESSION_KEY, None)
+    if message_key is None:
+        return None
+    feedback = _PROVIDER_FEEDBACK.get(message_key)
+    if feedback is None:
+        return None
+    return {"key": message_key, **feedback}
+
+
+def _set_provider_flash(request, message_key):
+    if message_key not in _PROVIDER_FEEDBACK:
+        raise ValueError("La clave de mensaje del catálogo no está registrada.")
+    request.session[_PROVIDER_FLASH_SESSION_KEY] = message_key
+
+
+def _provider_error_key(error):
+    if isinstance(error, (MasterCatalogValidationError, ValueError, TypeError)):
+        return "tareas.master_catalog.common.invalid_request"
+    if isinstance(error, MasterCatalogConflict):
+        return "tareas.master_catalog.provider.conflict"
+    if isinstance(error, MasterCatalogNotFound):
+        return "tareas.master_catalog.common.not_found"
+    if isinstance(error, MasterCatalogCapabilityBlocked):
+        return "tareas.master_catalog.common.blocked"
+    return "tareas.master_catalog.common.unavailable"
+
+
+def _provider_error_status(error):
+    if isinstance(error, (MasterCatalogValidationError, ValueError, TypeError)):
+        return 400
+    if isinstance(error, (MasterCatalogConflict, MasterCatalogCapabilityBlocked)):
+        return 409
+    if isinstance(error, MasterCatalogNotFound):
+        return 404
+    if isinstance(error, MasterCatalogBackendError):
+        return 503
+    return 500
+
+
 def _master_catalog_company_id(request):
     empresa_id = _get_empresa_id(request)
     if not empresa_id or not getattr(request.user, "is_active", False):
@@ -968,6 +1054,9 @@ def _master_catalog_company_id(request):
 def _generic_master_error_response(error):
     if isinstance(error, (MasterCatalogValidationError, MasterOperationValidationError)):
         status = 400
+        message_key = _GENERIC_MASTER_KEYS["invalid_request"]
+    elif isinstance(error, MasterCatalogConflict):
+        status = 409
         message_key = _GENERIC_MASTER_KEYS["invalid_request"]
     elif isinstance(error, MasterCatalogNotFound):
         status = 404
@@ -1048,6 +1137,38 @@ class ProviderMasterView(TareasLoginVerificarPermisoMixin, View):
         except MasterCatalogError as exc:
             return _generic_master_error_response(exc)
         page_obj = Paginator(records, 25).get_page(request.GET.get("page"))
+        provider_flash = _provider_flash_context(request)
+        active_company = (
+            Empresa.objects.using("default").filter(pk=company_id).first()
+        )
+        can_create = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user,
+                empresa=active_company,
+                vista_nombre=self.vista_nombre,
+                accion="crear",
+            )
+        )
+        can_edit = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user,
+                empresa=active_company,
+                vista_nombre=self.vista_nombre,
+                accion="modificar",
+            )
+        )
+        can_change_state = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user,
+                empresa=active_company,
+                vista_nombre=self.vista_nombre,
+                accion="eliminar",
+            )
+        )
+        can_activate = can_edit
         return render(
             request,
             self.template_name,
@@ -1058,10 +1179,25 @@ class ProviderMasterView(TareasLoginVerificarPermisoMixin, View):
                 "catalog_list_key": "tareas.master_catalog.provider.list",
                 "catalog_empty_key": "tareas.master_catalog.provider.empty",
                 "records": page_obj.object_list,
+                "catalog_rows": tuple(
+                    {
+                        "record": record,
+                        "operation_id": str(uuid4()),
+                    }
+                    for record in page_obj.object_list
+                ),
                 "page_obj": page_obj,
                 "search": search,
                 "state": request.GET.get("estado", "todos"),
-                "write_blocked": True,
+                "write_blocked": False,
+                "create_available": can_create,
+                "edit_available": can_edit,
+                "deactivate_available": can_change_state,
+                "activate_available": can_activate,
+                "provider_flash": provider_flash,
+                "create_url": reverse("tareas:proveedores_maestro_crear"),
+                "edit_url_name": "tareas:proveedores_maestro_editar",
+                "lifecycle_url_name": "tareas:proveedores_maestro_estado",
                 "catalog_labels": _GENERIC_MASTER_LABELS,
             },
         )
@@ -1075,6 +1211,37 @@ class ProviderDetailView(ProviderMasterView):
             record = get_provider(provider_id)
         except MasterCatalogError as exc:
             return _generic_master_error_response(exc)
+        if (
+            "text/html" in request.headers.get("accept", "")
+            and "application/json" not in request.headers.get("accept", "")
+        ):
+            active_company = (
+                Empresa.objects.using("default").filter(pk=_get_empresa_id(request)).first()
+            )
+            edit_available = bool(
+                active_company
+                and user_has_permission_for_empresa(
+                    user=request.user,
+                    empresa=active_company,
+                    vista_nombre=self.vista_nombre,
+                    accion="modificar",
+                )
+            )
+            return render(
+                request,
+                "tareas/maestros/proveedor_detalle.html",
+                {
+                    "record": record,
+                    "catalog_title": "Detalle de Proveedor",
+                    "catalog_title_key": "tareas.master_catalog.provider.title",
+                    "edit_available": edit_available,
+                    "edit_url": reverse(
+                        "tareas:proveedores_maestro_editar",
+                        args=[provider_id],
+                    ),
+                    "cancel_url": reverse("tareas:proveedores_maestro"),
+                },
+            )
         return JsonResponse(
             {
                 "success": True,
@@ -1086,16 +1253,136 @@ class ProviderDetailView(ProviderMasterView):
 
 class ProviderCatalogMutationView(ProviderMasterView):
     permiso_requerido = "crear"
-    http_method_names = ["post", "options"]
+    http_method_names = ["get", "post", "options"]
+
+    form_class = ProviderCatalogForm
+    form_template_name = "tareas/maestros/proveedor_form.html"
+
+    def _render_form(
+        self,
+        request,
+        form,
+        *,
+        provider_id=None,
+        form_error_key=None,
+        status=200,
+    ):
+        feedback = _PROVIDER_FEEDBACK.get(form_error_key)
+        return render(
+            request,
+            self.form_template_name,
+            {
+                "form": form,
+                "provider_id": provider_id,
+                "is_update": provider_id is not None,
+                "catalog_title": (
+                    "Editar Proveedor" if provider_id is not None
+                    else "Nuevo Proveedor"
+                ),
+                "catalog_title_key": "tareas.master_catalog.provider.title",
+                "submit_key": "tareas.master_catalog.provider.save",
+                "form_error": (
+                    {"key": form_error_key, **feedback}
+                    if feedback is not None
+                    else None
+                ),
+                "cancel_url": reverse("tareas:proveedores_maestro"),
+                "catalog_labels": _GENERIC_MASTER_LABELS,
+            },
+            status=status,
+        )
+
+    def get(self, request, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        provider_id = kwargs.get("provider_id")
+        initial = {"operation_id": uuid4()}
+        if provider_id is not None:
+            try:
+                record = get_provider(provider_id)
+            except MasterCatalogError as exc:
+                return _generic_master_error_response(exc)
+            initial.update(
+                {
+                    "rut": record.rut or "",
+                    "nombre": record.nombre,
+                    "direccion": record.direccion,
+                    "comuna": record.comuna,
+                    "ciudad": record.ciudad,
+                    "fono1": record.fono1,
+                    "fono2": record.fono2,
+                    "fax": record.fax,
+                    "contacto": record.contacto,
+                    "email1": record.email1,
+                    "email2": record.email2,
+                }
+            )
+        return self._render_form(
+            request,
+            self.form_class(initial=initial),
+            provider_id=provider_id,
+        )
 
     def post(self, request, *args, **kwargs):
-        if _master_catalog_company_id(request) is None:
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
             return self.handle_no_permission(request)
-        return _generic_master_error_response(
-            MasterCatalogCapabilityBlocked(
-                "La escritura de Proveedores requiere el cierre del gate G17."
+        provider_id = kwargs.get("provider_id")
+        form = self.form_class(request.POST)
+        if not form.is_valid():
+            return self._render_form(
+                request,
+                form,
+                provider_id=provider_id,
+                status=400,
             )
+        data = ProviderInput(
+            rut=form.cleaned_data["rut"] or None,
+            nombre=form.cleaned_data["nombre"],
+            direccion=form.cleaned_data["direccion"],
+            comuna=form.cleaned_data["comuna"],
+            ciudad=form.cleaned_data["ciudad"],
+            fono1=form.cleaned_data["fono1"],
+            fono2=form.cleaned_data["fono2"],
+            fax=form.cleaned_data["fax"],
+            contacto=form.cleaned_data["contacto"],
+            email1=form.cleaned_data["email1"],
+            email2=form.cleaned_data["email2"],
         )
+        context = CompanyContext(company_id, request.user.pk)
+        metadata = MutationMetadata(
+            str(form.cleaned_data["operation_id"]),
+            request.user.pk,
+            form.cleaned_data["motivo"],
+        )
+        try:
+            if provider_id is None:
+                create_provider(context, data, metadata=metadata)
+            else:
+                update_provider(
+                    context,
+                    provider_id,
+                    data,
+                    metadata=metadata,
+                )
+        except MasterCatalogError as exc:
+            return self._render_form(
+                request,
+                form,
+                provider_id=provider_id,
+                form_error_key=_provider_error_key(exc),
+                status=_provider_error_status(exc),
+            )
+        _set_provider_flash(
+            request,
+            (
+                "tareas.master_catalog.provider.created"
+                if provider_id is None
+                else "tareas.master_catalog.provider.updated"
+            ),
+        )
+        return redirect(reverse("tareas:proveedores_maestro"))
 
 
 class ProviderCatalogUpdateView(ProviderCatalogMutationView):
@@ -1104,6 +1391,52 @@ class ProviderCatalogUpdateView(ProviderCatalogMutationView):
 
 class ProviderCatalogLifecycleView(ProviderCatalogMutationView):
     permiso_requerido = "eliminar"
+    http_method_names = ["post", "options"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and request.POST.get("activo") == "1":
+            self.permiso_requerido = "modificar"
+        else:
+            self.permiso_requerido = "eliminar"
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, provider_id, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        operation_id = request.POST.get("operation_id")
+        motivo = (request.POST.get("motivo") or "").strip()
+        active_value = request.POST.get("activo")
+        try:
+            metadata = MutationMetadata(
+                operation_id,
+                request.user.pk,
+                motivo,
+            )
+            metadata.validate()
+            active = active_value == "1"
+            if active_value not in {"0", "1"}:
+                raise MasterCatalogValidationError(
+                    "El estado activo no es válido."
+                )
+            set_provider_active(
+                CompanyContext(company_id, request.user.pk),
+                provider_id,
+                active,
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            _set_provider_flash(request, _provider_error_key(exc))
+            return redirect(reverse("tareas:proveedores_maestro"))
+        _set_provider_flash(
+            request,
+            (
+                "tareas.master_catalog.provider.activated"
+                if active
+                else "tareas.master_catalog.provider.deactivated"
+            ),
+        )
+        return redirect(reverse("tareas:proveedores_maestro"))
 
 
 class LocalMasterView(ProviderMasterView):
@@ -1135,6 +1468,13 @@ class LocalMasterView(ProviderMasterView):
                 "catalog_list_key": "tareas.master_catalog.local.list",
                 "catalog_empty_key": "tareas.master_catalog.local.empty",
                 "records": page_obj.object_list,
+                "catalog_rows": tuple(
+                    {
+                        "record": record,
+                        "operation_id": str(uuid4()),
+                    }
+                    for record in page_obj.object_list
+                ),
                 "page_obj": page_obj,
                 "search": search,
                 "state": request.GET.get("estado", "todos"),

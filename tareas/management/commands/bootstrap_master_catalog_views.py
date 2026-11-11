@@ -15,12 +15,13 @@ class ViewBootstrapDefinition:
 
 MASTER_CATALOG_VIEWS = (
     ViewBootstrapDefinition(
-        name="Proveedores - Maestro",
+        name="Maestros - Proveedores",
         description="Identidad VICMEAS del maestro de proveedores.",
     ),
     ViewBootstrapDefinition(
         name="Tareas - Maestro de locales",
         description="Identidad VICMEAS del maestro de locales.",
+        route_name="tareas:locales_maestro",
     ),
     ViewBootstrapDefinition(
         name="Tareas - Maestro de departamentos",
@@ -38,7 +39,16 @@ def inspect_master_catalog_views():
         if len(matches) > 1:
             status = "conflict"
         elif matches:
-            status = "exists"
+            current_route_name = matches[0].route_name
+            if (
+                definition.route_name
+                and current_route_name not in (None, "", definition.route_name)
+            ):
+                status = "route_conflict"
+            elif definition.route_name and current_route_name != definition.route_name:
+                status = "route_missing"
+            else:
+                status = "exists"
         else:
             status = "missing"
         plan.append(
@@ -48,6 +58,8 @@ def inspect_master_catalog_views():
                 "count": len(matches),
                 "description": definition.description,
                 "route_name": definition.route_name,
+                "current_route_name": matches[0].route_name if matches else None,
+                "vista_id": matches[0].pk if matches else None,
             }
         )
     return tuple(plan)
@@ -56,7 +68,11 @@ def inspect_master_catalog_views():
 def bootstrap_master_catalog_views(*, apply: bool = False):
     """Create only the approved VICMEAS identities when explicitly requested."""
     plan = inspect_master_catalog_views()
-    conflicts = [item for item in plan if item["status"] == "conflict"]
+    conflicts = [
+        item
+        for item in plan
+        if item["status"] in {"conflict", "route_conflict"}
+    ]
     if conflicts:
         raise CommandError(
             "Existen identidades VICMEAS duplicadas para el bootstrap aprobado."
@@ -67,6 +83,16 @@ def bootstrap_master_catalog_views(*, apply: bool = False):
     with transaction.atomic():
         for definition, item in zip(MASTER_CATALOG_VIEWS, plan):
             if item["status"] == "exists":
+                continue
+            if item["status"] == "route_missing":
+                updated = Vista.objects.filter(
+                    pk=item["vista_id"],
+                    route_name=item["current_route_name"],
+                ).update(route_name=definition.route_name)
+                if updated != 1:
+                    raise CommandError(
+                        "La ruta VICMEAS cambió durante el bootstrap."
+                    )
                 continue
             defaults = {"descripcion": definition.description}
             if definition.route_name:

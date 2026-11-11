@@ -1,0 +1,104 @@
+{% extends "partials/base.html" %}
+
+{% block title %}{{ catalog_title }}{% endblock title %}
+{% block pagetitle %}
+<span data-key="{{ catalog_title_key }}">{{ catalog_title }}</span>
+{% endblock pagetitle %}
+
+{% block content %}
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0 fw-semibold" data-key="{{ catalog_title_key }}">{{ catalog_title }}</h4>
+                <a class="btn btn-outline-secondary" href="{{ cancel_url }}"
+                    data-key="tareas.master_catalog.provider.cancel">Cancelar</a>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% if form_error %}
+                        <div class="alert alert-{{ form_error.level }}" role="alert">
+                            <span data-key="{{ form_error.key }}">{{ form_error.text }}</span>
+                        </div>
+                        {% elif form.errors %}
+                        <div class="alert alert-danger" role="alert">
+                            <span data-key="tareas.master_catalog.common.validation_summary">
+                                Revise los campos señalados.
+                            </span>
+                        </div>
+                        {% endif %}
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger" role="alert">
+                            {% for error in form.non_field_errors %}
+                            <span data-key="{{ error }}">{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.nombre.id_for_label }}"
+                                    data-key="{{ catalog_labels.name|default:'tareas.master_catalog.common.name' }}">
+                                    Nombre
+                                </label>
+                                {{ form.nombre }}
+                                {% for error in form.nombre.errors %}
+                                <div class="invalid-feedback d-block">
+                                    <span data-key="{{ error }}">{{ error }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.rut.id_for_label }}"
+                                    data-key="tareas.master_catalog.provider.rut">RUT</label>
+                                {{ form.rut }}
+                                {% for error in form.rut.errors %}
+                                <div class="invalid-feedback d-block">
+                                    <span data-key="{{ error }}">{{ error }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% for field in form %}
+                            {% if field.name != "nombre" and field.name != "rut" and field.name != "motivo" and field.name != "operation_id" %}
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ field.id_for_label }}"
+                                    data-key="tareas.master_catalog.provider.{{ field.name }}">
+                                    {{ field.label }}
+                                </label>
+                                {{ field }}
+                                {% for error in field.errors %}
+                                <div class="invalid-feedback d-block">
+                                    <span data-key="{{ error }}">{{ error }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            <div class="col-12">
+                                <label class="form-label" for="{{ form.motivo.id_for_label }}"
+                                    data-key="tareas.master_catalog.provider.reason">Motivo</label>
+                                {{ form.motivo }}
+                                {% for error in form.motivo.errors %}
+                                <div class="invalid-feedback d-block">
+                                    <span data-key="{{ error }}">{{ error }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {{ form.operation_id }}
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a class="btn btn-outline-secondary" href="{{ cancel_url }}"
+                                data-key="tareas.master_catalog.provider.cancel">Cancelar</a>
+                            <button type="submit" class="btn btn-primary"
+                                data-key="{{ submit_key }}">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

@@ -39,6 +39,7 @@ class ControlledMySQL:
     def __init__(self, task, provider_id=None, round_row=None, quotation_row=None):
         self.db = sqlite3.connect(":memory:", isolation_level=None)
         self.commands = []
+        self.database_name = "tareas"
         self.db.executescript(
             """
             CREATE TABLE tareas_tarea (
@@ -159,7 +160,7 @@ class ControlledMySQL:
     def execute(self, sql, params=()):
         self.commands.append((sql, tuple(params)))
         if sql == "SELECT DATABASE()":
-            self._rows = [("tareas",)]
+            self._rows = [(self.database_name,)]
             return
         if "SELECT @@SESSION.innodb_lock_wait_timeout" in sql:
             self._rows = [(30,)]
@@ -224,6 +225,7 @@ class QuotationBackendParityTests(TestCase):
 
     @contextmanager
     def open_mysql(self, *args, **kwargs):
+        self.mysql.database_name = kwargs.get("database_name", "tareas")
         yield self.mysql
 
     @contextmanager

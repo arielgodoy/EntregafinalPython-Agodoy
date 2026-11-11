@@ -134,8 +134,16 @@ def require_company_context(context: CompanyContext) -> None:
     context.validate()
 
 
-def verify_base_tareas_database(connection) -> None:
-    """Verify that a MySQL connection points to the authorized physical database."""
+def verify_base_tareas_database(
+    connection,
+    *,
+    expected_database: str = "tareas",
+) -> None:
+    """Verify that a MySQL connection matches its server-side role configuration."""
+    if not isinstance(expected_database, str) or not expected_database.strip():
+        raise MasterCatalogBackendError(
+            "BASE_TAREAS no tiene una base física configurada."
+        )
     cursor = connection.cursor()
     try:
         try:
@@ -151,7 +159,7 @@ def verify_base_tareas_database(connection) -> None:
         raise MasterCatalogBackendError(
             "La verificación de BASE_TAREAS no devolvió una base."
         )
-    if row[0] != "tareas":
+    if row[0] != expected_database:
         raise MasterCatalogBackendError(
             "La conexión de BASE_TAREAS no apunta a la base autorizada."
         )
@@ -170,12 +178,19 @@ def verified_base_tareas_connection() -> Iterator[object]:
         raise MasterCatalogBackendError(
             "Los catálogos SQL requieren BASE_TAREAS como MYSQL_CONFIG."
         )
+    if not backend.database_name:
+        raise MasterCatalogBackendError(
+            "BASE_TAREAS no tiene una base física configurada."
+        )
     try:
         with open_mysql_connection(
             backend.mysql_connection,
             database_name=backend.database_name,
         ) as connection:
-            verify_base_tareas_database(connection)
+            verify_base_tareas_database(
+                connection,
+                expected_database=backend.database_name,
+            )
             yield connection
     except MySQLConnectionOpenError as exc:
         raise MasterCatalogBackendError(

@@ -824,13 +824,15 @@ class VicmeasSidebarTests(TestCase):
         visible = get_sidebar_visible_items(self.user, self.empresa_a.id)
 
         self.assertIn("suppliers_master", visible)
-        self.assertNotIn("tasks", visible)
+        self.assertIn("tasks", visible)
+        self.assertIn("tasks_masters_providers", visible)
         self.assertNotIn("library", visible)
 
         self._activate(self.empresa_a)
         response = self.client.get(reverse("dashboard:dashboard_general"))
-        self.assertNotContains(response, 'data-key="menu.tareas.masters"')
-        self.assertNotContains(response, 'data-key="menu.tareas.masters.suppliers"')
+        self.assertContains(response, 'data-key="menu.tareas.masters"')
+        self.assertContains(response, 'data-key="menu.tareas.masters.suppliers"')
+        self.assertContains(response, 'href="/tareas/maestros/proveedores/listado/"')
         self.assertNotContains(response, 'href="/proveedores/listado/"')
         self.assertNotContains(response, 'data-key="menu.master_files.suppliers"')
 
@@ -847,10 +849,7 @@ class VicmeasSidebarTests(TestCase):
         self.assertNotContains(response, "Proveedores")
 
     def test_suppliers_master_is_nested_under_tasks_and_active_on_provider_routes(self):
-        task_provider_view = Vista.objects.create(
-            nombre="Proveedores - Maestro",
-            route_name="tareas:maestros_proveedores_listado",
-        )
+        task_provider_view = self.suppliers_master
         self._permission(self.empresa_a, self.tasks_core, ver=True)
         self._permission(self.empresa_a, task_provider_view, ver=True, ingresar=True)
         self._activate(self.empresa_a)

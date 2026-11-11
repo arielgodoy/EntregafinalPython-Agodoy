@@ -185,7 +185,7 @@ SIDEBAR_VIEW_NAMES = {
     "tasks_meetings": "Tareas - Reuniones",
     "tasks_dashboard": "Tareas - Dashboard personal",
     "tasks_connections": "Tareas - Conexiones SQL",
-    "tasks_masters_providers": "Proveedores - Maestro",
+    "tasks_masters_providers": "Maestros - Proveedores",
     "tasks_masters_locals": "Tareas - Maestro de locales",
     "tasks_masters_departments": "Tareas - Maestro de departamentos",
     "account_profile": "Accounts - Editar Perfil",

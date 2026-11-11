@@ -9,11 +9,17 @@
         <div class="container-fluid">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
                 <h4 class="mb-0 fw-semibold" data-key="{{ catalog_title_key }}">{{ catalog_title }}</h4>
-                <button type="button" class="btn btn-primary" disabled aria-disabled="true"
-                    data-key="{{ catalog_labels.create_blocked }}">
-                    Nuevo registro
-                </button>
+                {% if catalog_type == "provider" and create_available %}
+                <a class="btn btn-primary" href="{{ create_url }}"
+                    data-key="tareas.master_catalog.provider.create">Nuevo Proveedor</a>
+                {% endif %}
             </div>
+
+            {% if provider_flash %}
+            <div class="alert alert-{{ provider_flash.level }} mb-3" role="status" aria-live="polite">
+                <span data-key="{{ provider_flash.key }}">{{ provider_flash.text }}</span>
+            </div>
+            {% endif %}
 
             <div class="card">
                 <div class="card-header border-0">
@@ -48,15 +54,18 @@
                                     <th data-key="{{ catalog_labels.source }}">Origen</th>
                                     {% endif %}
                                     <th data-key="{{ catalog_labels.status }}">Estado</th>
+                                    {% if catalog_type == "provider" %}
                                     <th data-key="{{ catalog_labels.actions }}">Acciones</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for record in records %}
+                                {% for row in catalog_rows %}
+                                {% with record=row.record %}
                                 <tr>
                                     {% if catalog_type == "provider" %}
                                     <td>{{ record.nombre }}</td>
-                                    <td>{{ record.rut|default:"-" }}</td>
+                                    <td class="text-nowrap">{{ record.rut|default:"-" }}</td>
                                     {% else %}
                                     <td>{{ record.codigo }}</td>
                                     <td>{{ record.nombre }}</td>
@@ -71,19 +80,43 @@
                                             data-key="{{ catalog_labels.inactive }}">Inactivo</span>
                                         {% endif %}
                                     </td>
+                                    {% if catalog_type == "provider" %}
                                     <td>
                                         <a class="btn btn-sm btn-outline-secondary"
-                                            href="{% if catalog_type == 'provider' %}{% url 'tareas:proveedores_maestro_detalle' record.id %}{% else %}{% url 'tareas:locales_maestro_detalle' record.id %}{% endif %}"
+                                            href="{% url 'tareas:proveedores_maestro_detalle' record.id %}"
                                             data-key="{{ catalog_labels.detail }}">Detalle</a>
-                                        <button type="button" class="btn btn-sm btn-outline-primary" disabled
-                                            aria-disabled="true" data-key="{{ catalog_labels.edit_blocked }}">
-                                            Editar
-                                        </button>
+                                        {% if edit_available %}
+                                        <a class="btn btn-sm btn-outline-primary"
+                                            href="{% url 'tareas:proveedores_maestro_editar' record.id %}"
+                                            data-key="tareas.master_catalog.provider.edit">Editar</a>
+                                        {% endif %}
+                                        {% if record.activo and deactivate_available or not record.activo and activate_available %}
+                                        <form method="post" class="d-inline"
+                                            action="{% url lifecycle_url_name record.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="operation_id" value="{{ row.operation_id }}">
+                                            <input type="hidden" name="activo"
+                                                value="{% if record.activo %}0{% else %}1{% endif %}">
+                                            <label class="form-label small mb-0 me-1"
+                                                for="provider-reason-{{ record.id }}"
+                                                data-key="tareas.master_catalog.provider.reason">Motivo</label>
+                                            <input id="provider-reason-{{ record.id }}" name="motivo"
+                                                class="form-control form-control-sm d-inline-block w-auto"
+                                                required maxlength="1000">
+                                            <button type="submit"
+                                                class="btn btn-sm btn-outline-warning"
+                                                data-key="{% if record.activo %}tareas.master_catalog.provider.deactivate{% else %}tareas.master_catalog.provider.activate{% endif %}">
+                                                {% if record.activo %}Desactivar{% else %}Activar{% endif %}
+                                            </button>
+                                        </form>
+                                        {% endif %}
                                     </td>
+                                    {% endif %}
                                 </tr>
+                                {% endwith %}
                                 {% empty %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4"
+                                    <td colspan="4" class="text-center text-muted py-4"
                                         data-key="{{ catalog_empty_key }}">No hay registros para mostrar.</td>
                                 </tr>
                                 {% endfor %}

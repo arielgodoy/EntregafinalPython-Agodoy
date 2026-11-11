@@ -11,6 +11,7 @@ from tareas.models import Tarea, TareaConnectionRole
 from tareas.views import (
     AbrirEnlaceTareaView,
     BaseTareasSchemaInstallView,
+    DeletedTasksHistoryAccessMixin,
     PrevisualizarEliminacionDefinitivaView,
     TareaConnectionRoleView,
     TareasDashboardDepartamentoView,
@@ -300,13 +301,17 @@ class TareasEmpresaBase00GuardTests(TestCase):
             TareasDashboardUsuarioView,
             AbrirEnlaceTareaView,
             PrevisualizarEliminacionDefinitivaView,
+            DeletedTasksHistoryAccessMixin,
         }
 
         unguarded_routes = [
             pattern.name
             for pattern in urls.urlpatterns
             if not issubclass(pattern.callback.view_class, TareasVerificarPermisoMixin)
-            and pattern.callback.view_class not in manual_guard_classes
+            and not any(
+                issubclass(pattern.callback.view_class, guard_class)
+                for guard_class in manual_guard_classes
+            )
         ]
 
         self.assertEqual(unguarded_routes, [])

@@ -14,12 +14,18 @@ class _FakeVistaManager:
     def __init__(self):
         self.rows = []
 
-    def filter(self, *, nombre):
-        return _FakeVistaQuerySet(
-            [row for row in self.rows if row.nombre == nombre]
-        )
+    def filter(self, **criteria):
+        rows = self.rows
+        for field, value in criteria.items():
+            rows = [
+                row
+                for row in rows
+                if getattr(row, field) == value
+            ]
+        return _FakeVistaQuerySet(rows)
 
     def create(self, **values):
+        values.setdefault("route_name", None)
         row = SimpleNamespace(pk=len(self.rows) + 1, **values)
         self.rows.append(row)
         return row
@@ -31,6 +37,12 @@ class _FakeVistaQuerySet:
 
     def order_by(self, *_fields):
         return self.rows
+
+    def update(self, **values):
+        for row in self.rows:
+            for field, value in values.items():
+                setattr(row, field, value)
+        return len(self.rows)
 
 
 class MasterCatalogBootstrapTests(SimpleTestCase):
@@ -66,8 +78,36 @@ class MasterCatalogBootstrapTests(SimpleTestCase):
         self.assertEqual(
             {row.nombre for row in self.manager.rows},
             {
-                "Proveedores - Maestro",
+                "Maestros - Proveedores",
                 "Tareas - Maestro de locales",
                 "Tareas - Maestro de departamentos",
             },
         )
+
+    def test_explicit_apply_fills_only_missing_master_routes(self):
+        self.manager.rows.append(
+            SimpleNamespace(
+                pk=17,
+                nombre="Tareas - Maestro de locales",
+                route_name=None,
+                descripcion="",
+            )
+        )
+        with patch(
+            "tareas.management.commands.bootstrap_master_catalog_views.Vista",
+            self.vista,
+        ), patch(
+            "tareas.management.commands.bootstrap_master_catalog_views.transaction.atomic",
+            return_value=nullcontext(),
+        ):
+            result = bootstrap_master_catalog_views(apply=True)
+
+        self.assertEqual(
+            next(
+                row.route_name
+                for row in self.manager.rows
+                if row.nombre == "Tareas - Maestro de locales"
+            ),
+            "tareas:locales_maestro",
+        )
+        self.assertTrue(all(item["status"] == "exists" for item in result))

@@ -13,12 +13,14 @@ from tareas.services.department_catalog import (
 from tareas.services.locals import LocalInput, create_local, set_local_active
 from tareas.services.master_catalog_common import (
     CompanyContext,
+    MasterCatalogBackendError,
     MasterCatalogCapabilityBlocked,
     MasterCatalogConflict,
     MasterCatalogValidationError,
     MutationMetadata,
     execute_or_raise_conflict,
     require_metadata,
+    verify_base_tareas_database,
 )
 from tareas.services.providers import (
     ProviderInput,
@@ -35,6 +37,31 @@ def _metadata():
 
 
 class MasterCatalogContractTests(SimpleTestCase):
+    def test_base_tareas_identity_uses_the_configured_database_name(self):
+        class Cursor:
+            def execute(self, _sql):
+                return None
+
+            def fetchone(self):
+                return ("django_lab",)
+
+            def close(self):
+                return None
+
+        class Connection:
+            def cursor(self):
+                return Cursor()
+
+        verify_base_tareas_database(
+            Connection(),
+            expected_database="django_lab",
+        )
+        with self.assertRaises(MasterCatalogBackendError):
+            verify_base_tareas_database(
+                Connection(),
+                expected_database="tareas",
+            )
+
     def test_company_context_rejects_non_integer_company(self):
         with self.assertRaises(MasterCatalogValidationError):
             CompanyContext("1").validate()

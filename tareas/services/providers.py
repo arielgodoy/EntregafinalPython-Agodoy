@@ -219,7 +219,10 @@ def get_provider_for_quotation(provider_id: int) -> ProviderRecord:
 
     connection = connections[backend.django_alias]
     if connection.vendor == "mysql":
-        verify_base_tareas_database(connection)
+        verify_base_tareas_database(
+            connection,
+            expected_database=backend.database_name or connection.settings_dict["NAME"],
+        )
     cursor = connection.cursor()
     try:
         record = get_provider_from_cursor(

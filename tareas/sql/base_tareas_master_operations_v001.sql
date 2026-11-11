@@ -1,6 +1,7 @@
 -- BASE_TAREAS MYSQL - REGISTRO TECNICO DE OPERACIONES V001
 -- Preparado para revision; no ejecutar directamente en produccion.
--- Requiere preflight SELECT DATABASE() = 'tareas'.
+-- Requiere preflight: SELECT DATABASE() coincide con el database_name
+-- configurado para el rol BASE_TAREAS.
 -- No contiene USE, credenciales, FK cross-database ni DDL destructivo.
 
 CREATE TABLE IF NOT EXISTS `tareas_master_operation` (
