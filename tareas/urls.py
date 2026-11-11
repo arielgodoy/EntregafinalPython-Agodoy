@@ -48,6 +48,11 @@ urlpatterns = [
         name='proveedores_maestro_estado',
     ),
     path(
+        'proveedores/maestro/<int:provider_id>/eliminar/',
+        views.ProviderCatalogDeleteView.as_view(),
+        name='proveedores_maestro_eliminar',
+    ),
+    path(
         'locales/maestro/',
         views.LocalMasterView.as_view(),
         name='locales_maestro',
@@ -73,6 +78,11 @@ urlpatterns = [
         name='locales_maestro_estado',
     ),
     path(
+        'locales/maestro/<int:local_id>/eliminar/',
+        views.LocalCatalogDeleteView.as_view(),
+        name='locales_maestro_eliminar',
+    ),
+    path(
         'departamentos/maestro/',
         views.DepartmentMasterView.as_view(),
         name='departamentos_maestro',
@@ -96,6 +106,11 @@ urlpatterns = [
         'departamentos/maestro/<int:department_id>/estado/',
         views.DepartmentCatalogLifecycleView.as_view(),
         name='departamentos_maestro_estado',
+    ),
+    path(
+        'departamentos/maestro/<int:department_id>/eliminar/',
+        views.DepartmentCatalogDeleteView.as_view(),
+        name='departamentos_maestro_eliminar',
     ),
     path(
         'departamentos/membresias/crear/',

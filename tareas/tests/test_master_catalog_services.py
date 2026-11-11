@@ -8,9 +8,15 @@ from django.utils import timezone
 from tareas.services.department_catalog import (
     DepartmentInput,
     create_department,
+    delete_department,
     set_department_active,
 )
-from tareas.services.locals import LocalInput, create_local, set_local_active
+from tareas.services.locals import (
+    LocalInput,
+    create_local,
+    delete_local,
+    set_local_active,
+)
 from tareas.services.master_catalog_common import (
     CompanyContext,
     MasterCatalogBackendError,
@@ -24,6 +30,7 @@ from tareas.services.master_catalog_common import (
 )
 from tareas.services.providers import (
     ProviderInput,
+    delete_provider,
     _normalize_input as normalize_provider_input,
 )
 
@@ -128,23 +135,65 @@ class MasterCatalogContractTests(SimpleTestCase):
                 metadata=_metadata(),
             )
 
-    def test_local_lifecycle_is_blocked_until_t227(self):
-        with self.assertRaises(MasterCatalogCapabilityBlocked):
-            set_local_active(
+    def test_local_lifecycle_updates_local_records(self):
+        before = SimpleNamespace(
+            id=4, empresa_id=1, codigo="L-4", nombre="Local",
+            legacy_code=None, source="LOCAL", activo=True,
+        )
+        after = SimpleNamespace(
+            id=4, empresa_id=1, codigo="L-4", nombre="Local",
+            legacy_code=None, source="LOCAL", activo=False,
+        )
+        with patch(
+            "tareas.services.locals._read_local",
+            side_effect=[before, after],
+        ), patch(
+            "tareas.services.locals.execute_master_mutation",
+            side_effect=lambda **kwargs: SimpleNamespace(
+                id=kwargs["mutate"](SimpleNamespace(
+                    execute=lambda *_args: None,
+                    fetchone=lambda: None,
+                )).result_id,
+                audit_status="CONFIRMED",
+            ),
+        ):
+            result = set_local_active(
                 CompanyContext(1),
                 4,
                 False,
                 metadata=_metadata(),
             )
+        self.assertEqual(result.id, 4)
 
-    def test_department_lifecycle_is_blocked_until_contracts(self):
-        with self.assertRaises(MasterCatalogCapabilityBlocked):
-            set_department_active(
+    def test_department_lifecycle_updates_local_records(self):
+        before = SimpleNamespace(
+            id=4, empresa_id=1, codigo="D-4", nombre="Departamento",
+            source="LOCAL", activo=True,
+        )
+        after = SimpleNamespace(
+            id=4, empresa_id=1, codigo="D-4", nombre="Departamento",
+            source="LOCAL", activo=False,
+        )
+        with patch(
+            "tareas.services.department_catalog._read_department",
+            side_effect=[before, after],
+        ), patch(
+            "tareas.services.department_catalog.execute_master_mutation",
+            side_effect=lambda **kwargs: SimpleNamespace(
+                id=kwargs["mutate"](SimpleNamespace(
+                    execute=lambda *_args: None,
+                    fetchone=lambda: None,
+                )).result_id,
+                audit_status="CONFIRMED",
+            ),
+        ):
+            result = set_department_active(
                 CompanyContext(1),
                 4,
                 False,
                 metadata=_metadata(),
             )
+        self.assertEqual(result.id, 4)
 
     def test_catalog_mutations_use_parameterized_sql_and_metadata(self):
         now = timezone.now()
@@ -181,6 +230,151 @@ class MasterCatalogContractTests(SimpleTestCase):
         self.assertEqual(result.id, 42)
         self.assertIn("%s", executed[0][0])
         self.assertEqual(executed[0][1][0], 1)
+
+    def test_provider_physical_delete_is_blocked_by_quotation_reference(self):
+        provider = SimpleNamespace(
+            id=9, nombre="Proveedor", activo=True, rut="76123456-0",
+        )
+        cursor = SimpleNamespace(
+            execute=lambda *_args: None,
+            fetchone=lambda: (1,),
+            rowcount=0,
+        )
+        with patch(
+            "tareas.services.providers._read_provider",
+            return_value=provider,
+        ), patch(
+            "tareas.services.providers.execute_master_mutation",
+            side_effect=lambda **kwargs: kwargs["mutate"](cursor),
+        ):
+            with self.assertRaises(MasterCatalogConflict):
+                delete_provider(
+                    CompanyContext(1),
+                    9,
+                    metadata=_metadata(),
+                )
+        self.assertEqual(cursor.rowcount, 0)
+
+    def test_provider_physical_delete_removes_unreferenced_row(self):
+        provider = SimpleNamespace(
+            id=9, nombre="Proveedor", activo=True, rut="76123456-0",
+        )
+        executed = []
+        cursor = SimpleNamespace(
+            execute=lambda sql, params=(): executed.append((sql, params)),
+            fetchone=lambda: (0,),
+            rowcount=1,
+        )
+        with patch(
+            "tareas.services.providers._read_provider",
+            return_value=provider,
+        ), patch(
+            "tareas.services.providers.execute_master_mutation",
+            side_effect=lambda **kwargs: SimpleNamespace(
+                id=kwargs["mutate"](cursor).result_id,
+                audit_status="CONFIRMED",
+            ),
+        ):
+            result = delete_provider(CompanyContext(1), 9, metadata=_metadata())
+        self.assertEqual(result.id, 9)
+        self.assertIn("DELETE FROM proveedores_proveedor", executed[-1][0])
+
+    def test_local_physical_delete_rejects_erp_source(self):
+        local = SimpleNamespace(id=9, source="ERP")
+        with patch(
+            "tareas.services.locals._read_local",
+            return_value=local,
+        ), patch(
+            "tareas.services.locals.execute_master_mutation",
+            side_effect=lambda **kwargs: kwargs["mutate"](
+                SimpleNamespace(execute=lambda *_args: None)
+            ),
+        ):
+            with self.assertRaises(MasterCatalogCapabilityBlocked):
+                delete_local(
+                    CompanyContext(1),
+                    9,
+                    metadata=_metadata(),
+                )
+
+    def test_local_physical_delete_removes_unreferenced_row(self):
+        local = SimpleNamespace(
+            id=9, empresa_id=1, codigo="L-9", nombre="Local",
+            legacy_code=None, activo=True, source="LOCAL",
+        )
+        cursor = SimpleNamespace(
+            execute=lambda *_args: None,
+            fetchone=lambda: (0,),
+            rowcount=1,
+        )
+        with patch(
+            "tareas.services.locals._read_local",
+            return_value=local,
+        ), patch(
+            "tareas.services.locals.execute_master_mutation",
+            side_effect=lambda **kwargs: SimpleNamespace(
+                id=kwargs["mutate"](cursor).result_id,
+                audit_status="CONFIRMED",
+            ),
+        ):
+            result = delete_local(CompanyContext(1), 9, metadata=_metadata())
+        self.assertEqual(result.id, 9)
+
+    def test_department_physical_delete_is_blocked_by_task_reference(self):
+        department = SimpleNamespace(
+            id=9,
+            empresa_id=1,
+            codigo="D-9",
+            nombre="Departamento",
+            activo=True,
+            source="LOCAL",
+        )
+        cursor = SimpleNamespace(
+            execute=lambda *_args: None,
+            fetchone=lambda: (1,),
+            rowcount=0,
+        )
+        with patch(
+            "tareas.services.department_catalog._read_department",
+            return_value=department,
+        ), patch(
+            "tareas.services.department_catalog.execute_master_mutation",
+            side_effect=lambda **kwargs: kwargs["mutate"](cursor),
+        ):
+            with self.assertRaises(MasterCatalogConflict):
+                delete_department(
+                    CompanyContext(1),
+                    9,
+                    metadata=_metadata(),
+                )
+        self.assertEqual(cursor.rowcount, 0)
+
+    def test_department_physical_delete_removes_unreferenced_row(self):
+        department = SimpleNamespace(
+            id=9, empresa_id=1, codigo="D-9", nombre="Departamento",
+            activo=True, source="LOCAL",
+        )
+        cursor = SimpleNamespace(
+            execute=lambda *_args: None,
+            fetchone=lambda: (0,),
+            rowcount=1,
+        )
+        with patch(
+            "tareas.services.department_catalog._read_department",
+            return_value=department,
+        ), patch(
+            "tareas.services.department_catalog.execute_master_mutation",
+            side_effect=lambda **kwargs: SimpleNamespace(
+                id=kwargs["mutate"](cursor).result_id,
+                audit_status="CONFIRMED",
+            ),
+        ):
+            result = delete_department(
+                CompanyContext(1),
+                9,
+                metadata=_metadata(),
+            )
+        self.assertEqual(result.id, 9)
 
     def test_duplicate_errors_are_domain_conflicts(self):
         class DuplicateError(Exception):

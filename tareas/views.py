@@ -223,13 +223,24 @@ from .services.department_catalog import (
     DepartmentInput,
     get_department,
     create_department,
+    delete_department,
     list_departments,
+    set_department_active,
     update_department_name,
 )
-from .services.locals import LocalInput, get_local, list_locals
+from .services.locals import (
+    LocalInput,
+    create_local,
+    delete_local,
+    get_local,
+    list_locals,
+    set_local_active,
+    update_local,
+)
 from .services.providers import (
     ProviderInput,
     create_provider,
+    delete_provider,
     get_provider,
     list_providers,
     set_provider_active,
@@ -1165,10 +1176,19 @@ class ProviderMasterView(TareasLoginVerificarPermisoMixin, View):
                 user=request.user,
                 empresa=active_company,
                 vista_nombre=self.vista_nombre,
-                accion="eliminar",
+                accion="modificar",
             )
         )
         can_activate = can_edit
+        can_delete = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user,
+                empresa=active_company,
+                vista_nombre=self.vista_nombre,
+                accion="eliminar",
+            )
+        )
         return render(
             request,
             self.template_name,
@@ -1194,10 +1214,13 @@ class ProviderMasterView(TareasLoginVerificarPermisoMixin, View):
                 "edit_available": can_edit,
                 "deactivate_available": can_change_state,
                 "activate_available": can_activate,
+                "delete_available": can_delete,
                 "provider_flash": provider_flash,
                 "create_url": reverse("tareas:proveedores_maestro_crear"),
                 "edit_url_name": "tareas:proveedores_maestro_editar",
                 "lifecycle_url_name": "tareas:proveedores_maestro_estado",
+                "detail_url_name": "tareas:proveedores_maestro_detalle",
+                "delete_url_name": "tareas:proveedores_maestro_eliminar",
                 "catalog_labels": _GENERIC_MASTER_LABELS,
             },
         )
@@ -1390,15 +1413,8 @@ class ProviderCatalogUpdateView(ProviderCatalogMutationView):
 
 
 class ProviderCatalogLifecycleView(ProviderCatalogMutationView):
-    permiso_requerido = "eliminar"
+    permiso_requerido = "modificar"
     http_method_names = ["post", "options"]
-
-    def dispatch(self, request, *args, **kwargs):
-        if request.method == "POST" and request.POST.get("activo") == "1":
-            self.permiso_requerido = "modificar"
-        else:
-            self.permiso_requerido = "eliminar"
-        return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, provider_id, *args, **kwargs):
         company_id = _master_catalog_company_id(request)
@@ -1439,6 +1455,34 @@ class ProviderCatalogLifecycleView(ProviderCatalogMutationView):
         return redirect(reverse("tareas:proveedores_maestro"))
 
 
+class ProviderCatalogDeleteView(ProviderMasterView):
+    permiso_requerido = "eliminar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, provider_id, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            metadata = MutationMetadata(
+                request.POST.get("operation_id"),
+                request.user.pk,
+                (request.POST.get("motivo") or "").strip(),
+            )
+            delete_provider(
+                CompanyContext(company_id, request.user.pk),
+                provider_id,
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            return _generic_master_error_response(exc)
+        return JsonResponse({
+            "success": True,
+            "message_key": "tareas.master_catalog.common.deleted",
+            "data": {"id": provider_id},
+        })
+
+
 class LocalMasterView(ProviderMasterView):
     vista_nombre = _LOCAL_MASTER_VIEW_NAME
     catalog_type = "local"
@@ -1458,6 +1502,35 @@ class LocalMasterView(ProviderMasterView):
         except MasterCatalogError as exc:
             return _generic_master_error_response(exc)
         page_obj = Paginator(records, 25).get_page(request.GET.get("page"))
+        active_company = Empresa.objects.using("default").filter(pk=company_id).first()
+        can_create = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="crear",
+            )
+        )
+        can_edit = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="modificar",
+            )
+        )
+        can_change_state = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="modificar",
+            )
+        )
+        can_delete = bool(
+            active_company
+            and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="eliminar",
+            )
+        )
         return render(
             request,
             self.template_name,
@@ -1478,7 +1551,17 @@ class LocalMasterView(ProviderMasterView):
                 "page_obj": page_obj,
                 "search": search,
                 "state": request.GET.get("estado", "todos"),
-                "write_blocked": True,
+                "write_blocked": False,
+                "create_available": can_create,
+                "edit_available": can_edit,
+                "deactivate_available": can_change_state,
+                "activate_available": can_edit,
+                "delete_available": can_delete,
+                "create_url": reverse("tareas:locales_maestro_crear"),
+                "edit_url_name": "tareas:locales_maestro_editar",
+                "lifecycle_url_name": "tareas:locales_maestro_estado",
+                "detail_url_name": "tareas:locales_maestro_detalle",
+                "delete_url_name": "tareas:locales_maestro_eliminar",
                 "catalog_labels": _GENERIC_MASTER_LABELS,
             },
         )
@@ -1504,16 +1587,65 @@ class LocalDetailView(LocalMasterView):
 
 class LocalCatalogMutationView(LocalMasterView):
     permiso_requerido = "crear"
-    http_method_names = ["post", "options"]
+    http_method_names = ["get", "post", "options"]
+    form_template_name = "tareas/maestros/local_form.html"
 
-    def post(self, request, *args, **kwargs):
+    def _render_form(self, request, form, *, local_id=None, status=200):
+        return render(
+            request,
+            self.form_template_name,
+            {
+                "form": form,
+                "is_update": local_id is not None,
+                "catalog_title": "Editar Local" if local_id else "Nuevo Local",
+                "catalog_title_key": "tareas.master_catalog.local.title",
+                "cancel_url": reverse("tareas:locales_maestro"),
+            },
+            status=status,
+        )
+
+    def get(self, request, *args, **kwargs):
         if _master_catalog_company_id(request) is None:
             return self.handle_no_permission(request)
-        return _generic_master_error_response(
-            MasterCatalogCapabilityBlocked(
-                "La escritura de Locales requiere el cierre del gate G18."
+        local_id = kwargs.get("local_id")
+        initial = {"operation_id": uuid4()}
+        if local_id is not None:
+            try:
+                record = get_local(
+                    CompanyContext(_get_empresa_id(request), request.user.pk),
+                    local_id,
+                )
+            except MasterCatalogError as exc:
+                return _generic_master_error_response(exc)
+            initial.update(
+                codigo=record.codigo,
+                nombre=record.nombre,
+                legacy_code=record.legacy_code or "",
             )
+        return self._render_form(request, LocalCatalogForm(initial=initial), local_id=local_id)
+
+    def post(self, request, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        local_id = kwargs.get("local_id")
+        form = LocalCatalogForm(request.POST)
+        if not form.is_valid():
+            return self._render_form(request, form, local_id=local_id, status=400)
+        values = form.cleaned_data
+        context = CompanyContext(company_id, request.user.pk)
+        metadata = MutationMetadata(
+            str(values["operation_id"]), request.user.pk, values["motivo"]
         )
+        data = LocalInput(values["codigo"], values["nombre"], values["legacy_code"] or None)
+        try:
+            if local_id is None:
+                create_local(context, data, metadata=metadata)
+            else:
+                update_local(context, local_id, data, metadata=metadata)
+        except MasterCatalogError as exc:
+            return self._render_form(request, form, local_id=local_id, status=_provider_error_status(exc))
+        return redirect(reverse("tareas:locales_maestro"))
 
 
 class LocalCatalogUpdateView(LocalCatalogMutationView):
@@ -1521,7 +1653,60 @@ class LocalCatalogUpdateView(LocalCatalogMutationView):
 
 
 class LocalCatalogLifecycleView(LocalCatalogMutationView):
+    permiso_requerido = "modificar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, local_id, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            metadata = MutationMetadata(
+                request.POST.get("operation_id"),
+                request.user.pk,
+                (request.POST.get("motivo") or "").strip(),
+            )
+            metadata.validate()
+            active_value = request.POST.get("activo")
+            if active_value not in {"0", "1"}:
+                raise MasterCatalogValidationError("El estado activo no es válido.")
+            set_local_active(
+                CompanyContext(company_id, request.user.pk),
+                local_id,
+                active_value == "1",
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            return _generic_master_error_response(exc)
+        return redirect(reverse("tareas:locales_maestro"))
+
+
+class LocalCatalogDeleteView(LocalMasterView):
     permiso_requerido = "eliminar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, local_id, *args, **kwargs):
+        company_id = _master_catalog_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            metadata = MutationMetadata(
+                request.POST.get("operation_id"),
+                request.user.pk,
+                (request.POST.get("motivo") or "").strip(),
+            )
+            delete_local(
+                CompanyContext(company_id, request.user.pk),
+                local_id,
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            return _generic_master_error_response(exc)
+        return JsonResponse({
+            "success": True,
+            "message_key": "tareas.master_catalog.common.deleted",
+            "data": {"id": local_id},
+        })
 
 
 def _department_write_gate_error():
@@ -1626,7 +1811,32 @@ class DepartmentMasterView(TareasLoginVerificarPermisoMixin, View):
 
         page_obj = Paginator(departments, 25).get_page(request.GET.get("page"))
         context["departments"] = page_obj.object_list
+        context["department_rows"] = tuple(
+            {"department": department, "operation_id": str(uuid4())}
+            for department in page_obj.object_list
+        )
         context["page_obj"] = page_obj
+        active_company = Empresa.objects.using("default").filter(pk=company_id).first()
+        context["create_available"] = bool(
+            active_company and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="crear",
+            )
+        )
+        context["edit_available"] = bool(
+            active_company and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="modificar",
+            )
+        )
+        context["deactivate_available"] = context["edit_available"]
+        context["delete_available"] = bool(
+            active_company and user_has_permission_for_empresa(
+                user=request.user, empresa=active_company,
+                vista_nombre=self.vista_nombre, accion="eliminar",
+            )
+        )
+        context["activate_available"] = context["edit_available"]
         return render(request, self.template_name, context)
 
 
@@ -1652,6 +1862,37 @@ class DepartmentCatalogDetailView(DepartmentMasterView):
 
 
 class DepartmentCatalogLifecycleView(DepartmentMasterView):
+    permiso_requerido = "modificar"
+    http_method_names = ["post", "options"]
+
+    def post(self, request, department_id, *args, **kwargs):
+        company_id = _department_master_company_id(request)
+        if company_id is None:
+            return self.handle_no_permission(request)
+        try:
+            metadata = MutationMetadata(
+                request.POST.get("operation_id"),
+                request.user.pk,
+                (request.POST.get("motivo") or "").strip(),
+            )
+            metadata.validate()
+            active_value = request.POST.get("activo")
+            if active_value not in {"0", "1"}:
+                raise MasterCatalogValidationError("El estado activo no es válido.")
+            set_department_active(
+                CompanyContext(company_id, request.user.pk),
+                department_id,
+                active_value == "1",
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            return _department_catalog_error_response(exc)
+        return JsonResponse(
+            {"success": True, "message_key": _DEPARTMENT_CATALOG_KEYS["updated"]}
+        )
+
+
+class DepartmentCatalogDeleteView(DepartmentMasterView):
     permiso_requerido = "eliminar"
     http_method_names = ["post", "options"]
 
@@ -1659,7 +1900,24 @@ class DepartmentCatalogLifecycleView(DepartmentMasterView):
         company_id = _department_master_company_id(request)
         if company_id is None:
             return self.handle_no_permission(request)
-        return _department_catalog_error_response(_department_write_gate_error())
+        try:
+            metadata = MutationMetadata(
+                request.POST.get("operation_id"),
+                request.user.pk,
+                (request.POST.get("motivo") or "").strip(),
+            )
+            delete_department(
+                CompanyContext(company_id, request.user.pk),
+                department_id,
+                metadata=metadata,
+            )
+        except (MasterCatalogError, ValueError, TypeError) as exc:
+            return _department_catalog_error_response(exc)
+        return JsonResponse({
+            "success": True,
+            "message_key": "tareas.master_catalog.common.deleted",
+            "data": {"id": department_id},
+        })
 
 
 class DepartmentCatalogCreateView(DepartmentMasterView):
@@ -1670,7 +1928,6 @@ class DepartmentCatalogCreateView(DepartmentMasterView):
         company_id = _department_master_company_id(request)
         if company_id is None:
             return self.handle_no_permission(request)
-        return _department_catalog_error_response(_department_write_gate_error())
 
         form = DepartmentCatalogCreateForm(request.POST)
         if not form.is_valid():
@@ -1729,7 +1986,6 @@ class DepartmentCatalogUpdateView(DepartmentMasterView):
         company_id = _department_master_company_id(request)
         if company_id is None:
             return self.handle_no_permission(request)
-        return _department_catalog_error_response(_department_write_gate_error())
 
         form = DepartmentCatalogUpdateForm(request.POST)
         if not form.is_valid():

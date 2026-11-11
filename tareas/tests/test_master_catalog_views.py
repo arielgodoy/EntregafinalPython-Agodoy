@@ -132,14 +132,25 @@ class MasterCatalogViewTests(SimpleTestCase):
                 provider_response = ProviderCatalogMutationView().post(
                     provider_request,
                 )
-            local_response = LocalCatalogMutationView().post(
-                self.request("post"), operation_id=uuid4()
+            local_request = self.factory.post(
+                "/tareas/locales/maestro/crear/",
+                data={
+                    "codigo": "L-1",
+                    "nombre": "Local nuevo",
+                    "legacy_code": "",
+                    "motivo": "Alta de prueba",
+                    "operation_id": str(uuid4()),
+                },
             )
+            local_request.user = self.user
+            local_request.session = {}
+            with patch("tareas.views.create_local") as create_local:
+                local_response = LocalCatalogMutationView().post(local_request)
 
         self.assertEqual(provider_response.status_code, 302)
         create_provider.assert_called_once()
-        self.assertEqual(local_response.status_code, 409)
-        self.assertEqual(json.loads(local_response.content)["success"], False)
+        self.assertEqual(local_response.status_code, 302)
+        create_local.assert_called_once()
 
     def test_provider_update_endpoint_uses_target_service(self):
         request = self.factory.post(
@@ -422,6 +433,14 @@ class ProviderHttpFlowTests(TestCase):
             dashboard,
             f'href="{reverse("tareas:maestros_proveedores_listado")}"',
         )
+        self.assertContains(
+            dashboard,
+            f'href="{reverse("tareas:maestros_locales_listado")}"',
+        )
+        self.assertContains(
+            dashboard,
+            f'href="{reverse("tareas:maestros_departamentos_listado")}"',
+        )
 
         response = self.client.get(reverse("tareas:maestros_proveedores_listado"))
         self.assertEqual(response.status_code, 403)
@@ -439,9 +458,9 @@ class ProviderHttpFlowTests(TestCase):
             'data-key="tareas.master_catalog.provider.create"',
         )
 
-    def test_lifecycle_uses_eliminar_to_deactivate_and_modificar_to_activate(self):
-        self.permission.eliminar = False
-        self.permission.save(update_fields=["eliminar"])
+    def test_lifecycle_uses_modificar_and_delete_uses_eliminar(self):
+        self.permission.modificar = False
+        self.permission.save(update_fields=["modificar"])
         provider_id = 17
         lifecycle_url = reverse(
             "tareas:proveedores_maestro_estado",
@@ -457,6 +476,8 @@ class ProviderHttpFlowTests(TestCase):
             'data-key="tareas.master_catalog.provider.deactivate"',
         )
 
+        self.permission.modificar = True
+        self.permission.save(update_fields=["modificar"])
         operation = {
             "activo": "1",
             "motivo": "Reactivación autorizada por modificar",
@@ -470,8 +491,11 @@ class ProviderHttpFlowTests(TestCase):
 
         operation["activo"] = "0"
         operation["operation_id"] = str(uuid4())
-        response = self.client.post(lifecycle_url, operation)
-        self.assertEqual(response.status_code, 403)
+        with patch("tareas.views.set_provider_active") as set_active:
+            response = self.client.post(lifecycle_url, operation)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(set_active.call_args.args[2])
 
     def test_provider_access_uses_the_active_company_not_a_request_parameter(self):
         other_company = Empresa.objects.create(

@@ -125,19 +125,21 @@
         detail.dataset.active = "true";
         actions.appendChild(detail);
 
-        const edit = makeActionButton(
-            "tareas.master_catalog.department.edit",
-            "Editar",
-            "btn btn-sm btn-outline-primary js-department-edit",
-            "#department-edit-modal"
-        );
-        edit.dataset.url = table.dataset.editUrlTemplate.replace(
-            "999999999",
-            encodeURIComponent(String(data.id))
-        );
-        edit.dataset.code = data.codigo;
-        edit.dataset.name = data.nombre;
-        actions.appendChild(edit);
+        if (table.dataset.canEdit === "true") {
+            const edit = makeActionButton(
+                "tareas.master_catalog.department.edit",
+                "Editar",
+                "btn btn-sm btn-outline-primary js-department-edit",
+                "#department-edit-modal"
+            );
+            edit.dataset.url = table.dataset.editUrlTemplate.replace(
+                "999999999",
+                encodeURIComponent(String(data.id))
+            );
+            edit.dataset.code = data.codigo;
+            edit.dataset.name = data.nombre;
+            actions.appendChild(edit);
+        }
         row.appendChild(actions);
 
         body.prepend(row);
@@ -241,9 +243,11 @@
                     if (row) {
                         row.querySelector("[data-department-name]").textContent = result.data.nombre;
                         const detailButton = row.querySelector(".js-department-detail");
-                        const editButton = row.querySelector(".js-department-edit");
                         detailButton.dataset.name = result.data.nombre;
-                        editButton.dataset.name = result.data.nombre;
+                        const editButton = row.querySelector(".js-department-edit");
+                        if (editButton) {
+                            editButton.dataset.name = result.data.nombre;
+                        }
                     }
                 }
 

@@ -10,6 +10,7 @@ from .master_catalog_common import (
     CompanyContext,
     MasterCatalogCapabilityBlocked,
     MasterCatalogConflict,
+    MasterCatalogDatabaseError,
     MasterCatalogNotFound,
     MasterCatalogValidationError,
     MutationMetadata,
@@ -278,6 +279,91 @@ def set_local_active(
     *,
     metadata: MutationMetadata,
 ) -> MutationResult:
-    raise MasterCatalogCapabilityBlocked(
-        "La baja/reactivación de Locales requiere el contrato T227."
+    require_company_context(context)
+    require_metadata(metadata)
+    if not isinstance(local_id, int) or isinstance(local_id, bool) or local_id <= 0:
+        raise MasterCatalogValidationError("El ID del Local no es válido.")
+    if not isinstance(active, bool):
+        raise MasterCatalogValidationError("El estado activo no es válido.")
+
+    def mutate(cursor):
+        before = _read_local(cursor, context, local_id, lock=True)
+        if before.source != "LOCAL":
+            raise MasterCatalogCapabilityBlocked(
+                "Los Locales ERP son inmutables desde este servicio."
+            )
+        execute_or_raise_database(
+            cursor,
+            "UPDATE organizacion_local SET activo=%s, updated_at=%s "
+            "WHERE id=%s AND empresa_id=%s",
+            (int(active), timezone.now(), local_id, context.empresa_id),
+        )
+        after = _read_local(cursor, context, local_id, lock=True)
+        return MasterMutationChange(
+            local_id,
+            _audit_snapshot(before),
+            _audit_snapshot(after),
+            ("activo",) if before.activo != after.activo else (),
+        )
+
+    return execute_master_mutation(
+        context=context,
+        metadata=metadata,
+        entity_type="LOCAL",
+        action="RESTORE" if active else "DELETE",
+        payload={
+            "local_id": local_id,
+            "active": active,
+            "motivo": metadata.motivo.strip(),
+        },
+        mutate=mutate,
+    )
+
+
+def delete_local(
+    context: CompanyContext,
+    local_id: int,
+    *,
+    metadata: MutationMetadata,
+) -> MutationResult:
+    require_company_context(context)
+    require_metadata(metadata)
+    if not isinstance(local_id, int) or isinstance(local_id, bool) or local_id <= 0:
+        raise MasterCatalogValidationError("El ID del Local no es válido.")
+
+    def mutate(cursor):
+        before = _read_local(cursor, context, local_id, lock=True)
+        if before.source != "LOCAL":
+            raise MasterCatalogCapabilityBlocked(
+                "Los Locales ERP no pueden eliminarse desde este servicio."
+            )
+        for table in ("tareas_tarea", "tareas_reunionrevision"):
+            execute_or_raise_database(
+                cursor,
+                f"SELECT COUNT(*) FROM {table} WHERE local_id=%s",
+                (local_id,),
+            )
+            if int(cursor.fetchone()[0]):
+                raise MasterCatalogConflict(
+                    "No es posible eliminar este registro porque está siendo "
+                    "utilizado por tareas o reuniones."
+                )
+        execute_or_raise_database(
+            cursor,
+            "DELETE FROM organizacion_local WHERE id=%s AND empresa_id=%s",
+            (local_id, context.empresa_id),
+        )
+        if cursor.rowcount != 1:
+            raise MasterCatalogDatabaseError(
+                "No se eliminó exactamente el Local solicitado."
+            )
+        return MasterMutationChange(local_id, _audit_snapshot(before), None, ("deleted",))
+
+    return execute_master_mutation(
+        context=context,
+        metadata=metadata,
+        entity_type="LOCAL",
+        action="DELETE",
+        payload={"local_id": local_id, "motivo": metadata.motivo.strip()},
+        mutate=mutate,
     )

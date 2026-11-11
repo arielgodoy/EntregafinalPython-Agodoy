@@ -9,6 +9,8 @@ from django.utils import timezone
 from .master_catalog_common import (
     CompanyContext,
     MasterCatalogCapabilityBlocked,
+    MasterCatalogConflict,
+    MasterCatalogDatabaseError,
     MasterCatalogNotFound,
     MasterCatalogValidationError,
     MutationMetadata,
@@ -327,6 +329,104 @@ def set_department_active(
     *,
     metadata: MutationMetadata,
 ) -> MutationResult:
-    raise MasterCatalogCapabilityBlocked(
-        "La baja/reactivación de Departamentos requiere T182/T183/T201/T212."
+    require_company_context(context)
+    require_metadata(metadata)
+    if (
+        not isinstance(department_id, int)
+        or isinstance(department_id, bool)
+        or department_id <= 0
+    ):
+        raise MasterCatalogValidationError("El ID del Departamento no es válido.")
+    if not isinstance(active, bool):
+        raise MasterCatalogValidationError("El estado activo no es válido.")
+
+    def mutate(cursor):
+        before = _read_department(cursor, context, department_id, lock=True)
+        if before.source != "LOCAL":
+            raise MasterCatalogCapabilityBlocked(
+                "Los Departamentos ERP son inmutables desde este servicio."
+            )
+        execute_or_raise_database(
+            cursor,
+            "UPDATE organizacion_departamento SET activo=%s, updated_at=%s "
+            "WHERE id=%s AND empresa_id=%s",
+            (int(active), timezone.now(), department_id, context.empresa_id),
+        )
+        after = _read_department(cursor, context, department_id, lock=True)
+        return MasterMutationChange(
+            department_id,
+            _audit_snapshot(before),
+            _audit_snapshot(after),
+            ("activo",) if before.activo != after.activo else (),
+        )
+
+    return execute_master_mutation(
+        context=context,
+        metadata=metadata,
+        entity_type="DEPARTAMENTO",
+        action="RESTORE" if active else "DELETE",
+        payload={
+            "department_id": department_id,
+            "active": active,
+            "motivo": metadata.motivo.strip(),
+        },
+        mutate=mutate,
+    )
+
+
+def delete_department(
+    context: CompanyContext,
+    department_id: int,
+    *,
+    metadata: MutationMetadata,
+) -> MutationResult:
+    require_company_context(context)
+    require_metadata(metadata)
+    if (
+        not isinstance(department_id, int)
+        or isinstance(department_id, bool)
+        or department_id <= 0
+    ):
+        raise MasterCatalogValidationError("El ID del Departamento no es válido.")
+
+    def mutate(cursor):
+        before = _read_department(cursor, context, department_id, lock=True)
+        if before.source != "LOCAL":
+            raise MasterCatalogCapabilityBlocked(
+                "Los Departamentos ERP no pueden eliminarse desde este servicio."
+            )
+        for table in ("tareas_tarea", "tareas_reunionrevision"):
+            execute_or_raise_database(
+                cursor,
+                f"SELECT COUNT(*) FROM {table} WHERE departamento_id=%s",
+                (department_id,),
+            )
+            if int(cursor.fetchone()[0]):
+                raise MasterCatalogConflict(
+                    "No es posible eliminar este registro porque está siendo "
+                    "utilizado por tareas o reuniones."
+                )
+        execute_or_raise_database(
+            cursor,
+            "DELETE FROM organizacion_departamento WHERE id=%s AND empresa_id=%s",
+            (department_id, context.empresa_id),
+        )
+        if cursor.rowcount != 1:
+            raise MasterCatalogDatabaseError(
+                "No se eliminó exactamente el Departamento solicitado."
+            )
+        return MasterMutationChange(
+            department_id,
+            _audit_snapshot(before),
+            None,
+            ("deleted",),
+        )
+
+    return execute_master_mutation(
+        context=context,
+        metadata=metadata,
+        entity_type="DEPARTAMENTO",
+        action="DELETE",
+        payload={"department_id": department_id, "motivo": metadata.motivo.strip()},
+        mutate=mutate,
     )

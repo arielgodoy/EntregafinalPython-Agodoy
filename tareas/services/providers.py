@@ -15,6 +15,8 @@ from .master_catalog_common import (
     CompanyContext,
     MasterCatalogNotFound,
     MasterCatalogBackendError,
+    MasterCatalogConflict,
+    MasterCatalogDatabaseError,
     MasterCatalogValidationError,
     MutationMetadata,
     MutationResult,
@@ -426,6 +428,59 @@ def set_provider_active(
         payload={
             "provider_id": provider_id,
             "active": active,
+            "motivo": metadata.motivo.strip(),
+        },
+        mutate=mutate,
+    )
+
+
+def delete_provider(
+    context: CompanyContext,
+    provider_id: int,
+    *,
+    metadata: MutationMetadata,
+) -> MutationResult:
+    require_company_context(context)
+    require_metadata(metadata)
+    if not isinstance(provider_id, int) or isinstance(provider_id, bool) or provider_id <= 0:
+        raise MasterCatalogValidationError("El ID del Proveedor no es válido.")
+
+    def mutate(cursor):
+        before = _read_provider(cursor, provider_id, lock=True)
+        execute_or_raise_database(
+            cursor,
+            "SELECT COUNT(*) FROM tareas_cotizacion WHERE proveedor_id=%s",
+            (provider_id,),
+        )
+        references = int(cursor.fetchone()[0])
+        if references:
+            raise MasterCatalogConflict(
+                "No es posible eliminar este registro porque está siendo utilizado "
+                "por cotizaciones."
+            )
+        execute_or_raise_database(
+            cursor,
+            "DELETE FROM proveedores_proveedor WHERE id=%s",
+            (provider_id,),
+        )
+        if cursor.rowcount != 1:
+            raise MasterCatalogDatabaseError(
+                "No se eliminó exactamente el Proveedor solicitado."
+            )
+        return MasterMutationChange(
+            provider_id,
+            _audit_snapshot(before),
+            None,
+            ("deleted",),
+        )
+
+    return execute_master_mutation(
+        context=context,
+        metadata=metadata,
+        entity_type="PROVEEDOR",
+        action="DELETE",
+        payload={
+            "provider_id": provider_id,
             "motivo": metadata.motivo.strip(),
         },
         mutate=mutate,

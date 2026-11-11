@@ -10,6 +10,11 @@
         <div class="container-fluid">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
                 <h4 class="mb-0 fw-semibold" data-key="tareas.master_catalog.department.title">Maestro de Departamentos</h4>
+                {% if create_available %}
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#department-create-modal">
+                    <span data-key="tareas.master_catalog.department.create_title">Nuevo Departamento</span>
+                </button>
+                {% endif %}
             </div>
 
             <div id="department-catalog-message" class="alert d-none" role="status" aria-live="polite"></div>
@@ -46,7 +51,8 @@
 
                     <div class="table-responsive">
                         <table class="table align-middle table-hover mb-0" id="department-catalog-table"
-                            data-edit-url-template="{% url 'tareas:departamentos_maestro_editar' 999999999 %}">
+                            data-edit-url-template="{% url 'tareas:departamentos_maestro_editar' 999999999 %}"
+                            data-can-edit="{{ edit_available|yesno:'true,false' }}">
                             <thead class="table-light">
                                 <tr>
                                     <th data-key="tareas.master_catalog.department.code">Código</th>
@@ -57,7 +63,8 @@
                                 </tr>
                             </thead>
                             <tbody id="department-catalog-body">
-                                {% for department in departments %}
+                                {% for row in department_rows %}
+                                {% with department=row.department %}
                                 <tr data-department-id="{{ department.id }}">
                                     <td data-department-code>{{ department.codigo }}</td>
                                     <td data-department-name>{{ department.nombre }}</td>
@@ -76,8 +83,37 @@
                                             data-source="{{ department.source }}" data-active="{{ department.activo|yesno:'true,false' }}">
                                             <span data-key="tareas.master_catalog.department.detail">Detalle</span>
                                         </button>
+                                        {% if edit_available %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary js-department-edit"
+                                            data-bs-toggle="modal" data-bs-target="#department-edit-modal"
+                                            data-url="{% url 'tareas:departamentos_maestro_editar' department.id %}"
+                                            data-code="{{ department.codigo }}" data-name="{{ department.nombre }}">
+                                            <span data-key="tareas.master_catalog.department.edit">Editar</span>
+                                        </button>
+                                        {% endif %}
+                                        {% if department.activo and deactivate_available %}
+                                        <form method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="operation_id" value="{{ row.operation_id }}">
+                                            <input type="hidden" name="activo" value="0">
+                                            <input type="hidden" name="motivo" value="Baja de catálogo">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                formaction="{% url 'tareas:departamentos_maestro_estado' department.id %}">
+                                                <span data-key="tareas.master_catalog.provider.deactivate">Desactivar</span>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        {% if delete_available %}
+                                        <button type="button" class="btn btn-sm btn-outline-danger js-master-delete"
+                                            data-bs-toggle="modal" data-bs-target="#master-delete-modal"
+                                            data-delete-url="{% url 'tareas:departamentos_maestro_eliminar' department.id %}"
+                                            data-record-label="{{ department.nombre }}">
+                                            <span data-key="tareas.master_catalog.common.delete_permanently">Eliminar definitivamente</span>
+                                        </button>
+                                        {% endif %}
                                     </td>
                                 </tr>
+                                {% endwith %}
                                 {% empty %}
                                 <tr id="department-empty-row">
                                     <td colspan="5" class="text-center text-muted py-4" data-key="tareas.master_catalog.department.empty">No hay Departamentos para mostrar.</td>
@@ -105,6 +141,11 @@
                     </nav>
                     {% endif %}
                 </div>
+            </div>
+            <div class="d-none" aria-hidden="true">
+                <span data-message-key="tareas.master_catalog.common.deleted" data-key="tareas.master_catalog.common.deleted">Registro eliminado correctamente.</span>
+                <span data-message-key="tareas.master_catalog.common.conflict" data-key="tareas.master_catalog.common.conflict">No es posible eliminar este registro porque está siendo utilizado por otros registros del sistema.</span>
+                <span data-message-key="tareas.master_catalog.common.unavailable" data-key="tareas.master_catalog.common.unavailable">El catálogo no está disponible temporalmente.</span>
             </div>
             {% endif %}
         </div>
@@ -219,6 +260,41 @@
 </div>
 {% endblock content %}
 
+{% if delete_available %}
+<div class="modal fade" id="master-delete-modal" tabindex="-1" aria-labelledby="master-delete-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" class="js-master-delete-form">
+                {% csrf_token %}
+                <input type="hidden" name="operation_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="master-delete-title"
+                        data-key="tareas.master_catalog.common.delete_permanently">Eliminar definitivamente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p><span data-key="tareas.master_catalog.common.delete_warning">Esta operación eliminará permanentemente el registro:</span>
+                        <strong class="js-master-delete-label"></strong></p>
+                    <label class="form-label" for="master-delete-reason"
+                        data-key="tareas.master_catalog.provider.reason">Motivo</label>
+                    <textarea id="master-delete-reason" class="form-control" name="motivo" maxlength="1000" required></textarea>
+                    <div class="alert alert-danger d-none mt-3 js-master-delete-error" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal"
+                        data-key="tareas.master_catalog.department.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-danger"
+                        data-key="tareas.master_catalog.common.delete_permanently">Eliminar definitivamente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% block extra_js %}
 <script src="{% static 'tareas/js/master_departments.js' %}"></script>
+{% if delete_available %}
+<script src="{% static 'tareas/js/master_catalog.js' %}"></script>
+{% endif %}
 {% endblock extra_js %}

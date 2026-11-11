@@ -1,4 +1,5 @@
 {% extends "partials/base.html" %}
+{% load static %}
 
 {% block title %}{{ catalog_title }}{% endblock title %}
 {% block pagetitle %}<span data-key="{{ catalog_title_key }}">{{ catalog_title }}</span>{% endblock pagetitle %}
@@ -9,9 +10,11 @@
         <div class="container-fluid">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
                 <h4 class="mb-0 fw-semibold" data-key="{{ catalog_title_key }}">{{ catalog_title }}</h4>
-                {% if catalog_type == "provider" and create_available %}
+                {% if create_available %}
                 <a class="btn btn-primary" href="{{ create_url }}"
-                    data-key="tareas.master_catalog.provider.create">Nuevo Proveedor</a>
+                    data-key="{% if catalog_type == 'provider' %}tareas.master_catalog.provider.create{% else %}tareas.master_catalog.local.create{% endif %}">
+                    {% if catalog_type == "provider" %}Nuevo Proveedor{% else %}Nuevo Local{% endif %}
+                </a>
                 {% endif %}
             </div>
 
@@ -44,7 +47,7 @@
                     <div class="table-responsive">
                         <table class="table align-middle table-hover mb-0">
                             <thead class="table-light">
-                                <tr>
+                                <tr data-master-row="{{ record.id }}">
                                     {% if catalog_type == "provider" %}
                                     <th data-key="{{ catalog_labels.name }}">Nombre</th>
                                     <th data-key="{{ catalog_labels.rut }}">RUT</th>
@@ -54,7 +57,7 @@
                                     <th data-key="{{ catalog_labels.source }}">Origen</th>
                                     {% endif %}
                                     <th data-key="{{ catalog_labels.status }}">Estado</th>
-                                    {% if catalog_type == "provider" %}
+                                    {% if catalog_type == "provider" or catalog_type == "local" %}
                                     <th data-key="{{ catalog_labels.actions }}">Acciones</th>
                                     {% endif %}
                                 </tr>
@@ -79,16 +82,24 @@
                                         <span class="badge bg-secondary-subtle text-secondary"
                                             data-key="{{ catalog_labels.inactive }}">Inactivo</span>
                                         {% endif %}
+                                        {% if delete_available %}
+                                        <button type="button" class="btn btn-sm btn-outline-danger js-master-delete"
+                                            data-bs-toggle="modal" data-bs-target="#master-delete-modal"
+                                            data-delete-url="{% url delete_url_name record.id %}"
+                                            data-record-label="{{ record.nombre }}">
+                                            <span data-key="tareas.master_catalog.common.delete_permanently">Eliminar definitivamente</span>
+                                        </button>
+                                        {% endif %}
                                     </td>
-                                    {% if catalog_type == "provider" %}
+                                    {% if catalog_type == "provider" or catalog_type == "local" %}
                                     <td>
                                         <a class="btn btn-sm btn-outline-secondary"
-                                            href="{% url 'tareas:proveedores_maestro_detalle' record.id %}"
+                                            href="{% url detail_url_name record.id %}"
                                             data-key="{{ catalog_labels.detail }}">Detalle</a>
                                         {% if edit_available %}
                                         <a class="btn btn-sm btn-outline-primary"
-                                            href="{% url 'tareas:proveedores_maestro_editar' record.id %}"
-                                            data-key="tareas.master_catalog.provider.edit">Editar</a>
+                                            href="{% url edit_url_name record.id %}"
+                                            data-key="{% if catalog_type == 'provider' %}tareas.master_catalog.provider.edit{% else %}tareas.master_catalog.local.edit{% endif %}">Editar</a>
                                         {% endif %}
                                         {% if record.activo and deactivate_available or not record.activo and activate_available %}
                                         <form method="post" class="d-inline"
@@ -98,14 +109,14 @@
                                             <input type="hidden" name="activo"
                                                 value="{% if record.activo %}0{% else %}1{% endif %}">
                                             <label class="form-label small mb-0 me-1"
-                                                for="provider-reason-{{ record.id }}"
+                                                for="master-reason-{{ catalog_type }}-{{ record.id }}"
                                                 data-key="tareas.master_catalog.provider.reason">Motivo</label>
-                                            <input id="provider-reason-{{ record.id }}" name="motivo"
+                                            <input id="master-reason-{{ catalog_type }}-{{ record.id }}" name="motivo"
                                                 class="form-control form-control-sm d-inline-block w-auto"
                                                 required maxlength="1000">
                                             <button type="submit"
                                                 class="btn btn-sm btn-outline-warning"
-                                                data-key="{% if record.activo %}tareas.master_catalog.provider.deactivate{% else %}tareas.master_catalog.provider.activate{% endif %}">
+                                                data-key="{% if catalog_type == 'provider' %}{% if record.activo %}tareas.master_catalog.provider.deactivate{% else %}tareas.master_catalog.provider.activate{% endif %}{% else %}{% if record.activo %}tareas.master_catalog.local.deactivate{% else %}tareas.master_catalog.local.activate{% endif %}{% endif %}">
                                                 {% if record.activo %}Desactivar{% else %}Activar{% endif %}
                                             </button>
                                         </form>
@@ -146,4 +157,52 @@
         </div>
     </div>
 </div>
+{% if delete_available %}
+<div class="modal fade" id="master-delete-modal" tabindex="-1" aria-labelledby="master-delete-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" class="js-master-delete-form">
+                {% csrf_token %}
+                <input type="hidden" name="operation_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="master-delete-title" data-key="tareas.master_catalog.common.delete_permanently">
+                        Eliminar definitivamente
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        <span data-key="tareas.master_catalog.common.delete_warning">
+                            Esta operación eliminará permanentemente el registro:
+                        </span>
+                        <strong class="js-master-delete-label"></strong>
+                    </p>
+                    <label class="form-label" for="master-delete-reason"
+                        data-key="tareas.master_catalog.provider.reason">Motivo</label>
+                    <textarea id="master-delete-reason" class="form-control" name="motivo"
+                        maxlength="1000" required></textarea>
+                    <div class="alert alert-danger d-none mt-3 js-master-delete-error" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal"
+                        data-key="tareas.master_catalog.provider.cancel">Cancelar</button>
+                    <button type="submit" class="btn btn-danger"
+                        data-key="tareas.master_catalog.common.delete_permanently">Eliminar definitivamente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="d-none" aria-hidden="true">
+    <span data-message-key="tareas.master_catalog.common.deleted" data-key="tareas.master_catalog.common.deleted">Registro eliminado correctamente.</span>
+    <span data-message-key="tareas.master_catalog.common.conflict" data-key="tareas.master_catalog.common.conflict">No es posible eliminar este registro porque está siendo utilizado por otros registros del sistema.</span>
+    <span data-message-key="tareas.master_catalog.common.unavailable" data-key="tareas.master_catalog.common.unavailable">El catálogo no está disponible temporalmente.</span>
+</div>
+{% endif %}
 {% endblock content %}
+
+{% block extra_js %}
+{% if delete_available %}
+<script src="{% static 'tareas/js/master_catalog.js' %}"></script>
+{% endif %}
+{% endblock extra_js %}

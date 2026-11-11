@@ -10,6 +10,7 @@ from django.test import SimpleTestCase
 
 from tareas.forms import CompletarHitoForm, DocumentoForm, EvidenciaRegistroForm
 from tareas.models import DocumentoTarea
+from tareas.views import _GENERIC_MASTER_KEYS, _GENERIC_MASTER_LABELS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,6 +72,58 @@ HIERARCHY_DETAIL_KEYS = {
 
 
 class TareasI18nTests(SimpleTestCase):
+    def test_provider_and_local_master_catalog_keys_have_parity(self):
+        keys = {
+            "tareas.master_catalog.common.actions",
+            "tareas.master_catalog.common.active",
+            "tareas.master_catalog.common.blocked",
+            "tareas.master_catalog.common.create_blocked",
+            "tareas.master_catalog.common.detail",
+            "tareas.master_catalog.common.edit_blocked",
+            "tareas.master_catalog.common.inactive",
+            "tareas.master_catalog.common.invalid_request",
+            "tareas.master_catalog.common.name",
+            "tareas.master_catalog.common.next",
+            "tareas.master_catalog.common.not_found",
+            "tareas.master_catalog.common.of",
+            "tareas.master_catalog.common.previous",
+            "tareas.master_catalog.common.search",
+            "tareas.master_catalog.common.search_action",
+            "tareas.master_catalog.common.status",
+            "tareas.master_catalog.common.unavailable",
+            "tareas.master_catalog.local.code",
+            "tareas.master_catalog.local.empty",
+            "tareas.master_catalog.local.list",
+            "tareas.master_catalog.local.source",
+            "tareas.master_catalog.local.title",
+            "tareas.master_catalog.provider.empty",
+            "tareas.master_catalog.provider.list",
+            "tareas.master_catalog.provider.rut",
+            "tareas.master_catalog.provider.title",
+        }
+        keys.update(_GENERIC_MASTER_KEYS.values())
+        keys.update(_GENERIC_MASTER_LABELS.values())
+        for language in ("sp", "en"):
+            self.assertTrue(
+                keys.issubset(CATALOGS[language]),
+                f"Missing master-catalog translations in {language}",
+            )
+        self.assertEqual(
+            {key for key in CATALOGS["sp"] if key in keys},
+            {key for key in CATALOGS["en"] if key in keys},
+        )
+
+    def test_department_master_catalog_has_approved_translation_parity(self):
+        prefix = "tareas.master_catalog.department."
+        keys = {
+            key for key in CATALOGS["sp"] if key.startswith(prefix)
+        }
+        self.assertEqual(len(keys), 39)
+        self.assertEqual(
+            keys,
+            {key for key in CATALOGS["en"] if key.startswith(prefix)},
+        )
+
     def test_hierarchy_detail_labels_have_catalog_parity_without_duplicate_keys(self):
         for language in ("sp", "en"):
             self.assertTrue(
