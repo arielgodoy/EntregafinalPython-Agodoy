@@ -206,6 +206,9 @@ class EventoMembresia(models.Model):
     rol_despues = models.CharField(max_length=10, choices=MembresiaDepartamental.Rol.choices)
     estado_despues = models.CharField(max_length=10, choices=MembresiaDepartamental.Estado.choices)
     version_despues = models.PositiveBigIntegerField()
+    huella_solicitud = models.CharField(max_length=64, null=True, blank=True)
+    revision_organizacion_esperada = models.PositiveBigIntegerField(null=True, blank=True)
+    revision_organizacion = models.PositiveBigIntegerField(null=True, blank=True)
     objects = MembershipQuerySet.as_manager()
 
     class Meta:

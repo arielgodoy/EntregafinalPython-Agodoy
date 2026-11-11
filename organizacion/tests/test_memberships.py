@@ -392,4 +392,5 @@ class MembershipMigrationTests(TransactionTestCase):
             for name in ("MembresiaDepartamental", "EventoMembresia", "ControlOrganizacionEmpresa"):
                 self.assertEqual(apps.get_model("organizacion", name).objects.count(), 0)
         finally:
-            MigrationExecutor(connection).migrate(after)
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())
