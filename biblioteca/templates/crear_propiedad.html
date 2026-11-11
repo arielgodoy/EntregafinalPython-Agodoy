@@ -236,6 +236,9 @@ function cerrarModalPropietario() {
 Agregar al input
 para Validar rut agregar al input : data-inputingreso="camporut" maxlength="12" placeholder="Ej: 12.345.678-9"
 -->
-<script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
+<script src="{% static 'js/funciones.js' %}"></script>
+<script>
+    window.Funciones.rut.vincularInput(document.getElementById("rutNuevoPropietario"));
+</script>
 
 {% endblock extra_js %}

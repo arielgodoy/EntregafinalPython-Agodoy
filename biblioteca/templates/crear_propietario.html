@@ -93,7 +93,7 @@ Ingresar Propietario
 </div>
 {% endblock content %}
 {% block extra_js %}
-<script type="module" src="{% static 'js/funcionesInputs.js' %}"></script>
+<script src="{% static 'js/funciones.js' %}"></script>
 <script>
     (function () {
         const form = document.getElementById("propietario-form");
@@ -101,6 +101,7 @@ Ingresar Propietario
         const submitButton = document.getElementById("guardar-propietario");
         if (!form) return;
 
+        window.Funciones.rut.vincularInput(document.getElementById("id_rut"));
         form.querySelector("#id_nombre")?.setAttribute("placeholder", "Nombre completo");
         form.querySelector("#id_telefono")?.setAttribute("placeholder", "+56 9 1234 5678");
 
