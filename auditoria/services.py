@@ -17,6 +17,7 @@ from django.db import DatabaseError, models, router
 from .models import (
     AuditoriaBibliotecaEvent,
     AuditoriaGestionDTEEvent,
+    AuditoriaOrganizacionEvent,
     AuditoriaTareasEvent,
     UserPresence,
     AuditArchiveBatch,
@@ -359,6 +360,7 @@ class AuditoriaService:
         'biblioteca': AuditoriaBibliotecaEvent,
         'gestiondte': AuditoriaGestionDTEEvent,
         'tareas': AuditoriaTareasEvent,
+        'organizacion': AuditoriaOrganizacionEvent,
     }
 
     @classmethod

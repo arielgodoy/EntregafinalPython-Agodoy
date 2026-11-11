@@ -83,7 +83,7 @@ class UpdateAuditTests(TestCase):
         vista_mod_propiedad = Vista.objects.create(nombre='Biblioteca - Modificar Propiedad')
         vista_mod_propietario = Vista.objects.create(nombre='Biblioteca - Modificar Propietario')
         vista_mod_tipo = Vista.objects.create(nombre='Biblioteca - Modificar Tipo Documento')
-        vista_enviar = Vista.objects.create(nombre='Biblioteca - Enviar Enlace Documento')
+        vista_enviar = Vista.objects.create(nombre='Biblioteca - Documentos')
         
         for vista in [vista_mod_propiedad, vista_mod_propietario, vista_mod_tipo]:
             Permiso.objects.create(
