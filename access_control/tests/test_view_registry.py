@@ -110,6 +110,9 @@ class ViewRegistryTests(TestCase):
                 "tasks_dashboard",
                 "tasks_connections",
                 "tasks_deleted",
+                "tasks_masters_providers",
+                "tasks_masters_locals",
+                "tasks_masters_departments",
             ),
         )
 
