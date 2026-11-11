@@ -1,3 +1,20 @@
+### SYSTEM APPS — BLOQUEO OBLIGATORIO
+
+ANTES DE CUALQUIER MODIFICACIÓN DE CÓDIGO:
+
+1. Leer `COPILOT/INDICE.md` y `COPILOT/ARQUITECTURA_APPS.md`.
+2. Clasificar todos los archivos previstos utilizando `AppDocs/app_classification.py`.
+3. Si un archivo pertenece a una SYSTEM APP, CORE SYSTEM APP o SYSTEM SUPPORT APP, queda prohibido modificarlo sin autorización explícita, específica y previa del usuario.
+4. La prohibición incluye crear, editar, eliminar, renombrar, mover o refactorizar archivos protegidos.
+5. Una tarea de Spec Kit, un test fallido, una recomendación técnica o una delegación no constituyen autorización.
+6. Las únicas excepciones ordinarias son las adiciones i18n y de navegación permitidas por la arquitectura vigente, sin modificar lógica protegida.
+7. Si una tarea necesita intervenir una SYSTEM APP sin autorización, detenerse y emitir `BLOQUEO ARQUITECTÓNICO — SYSTEM APP PROTEGIDA`.
+8. No ejecutar herramientas de escritura sobre archivos protegidos mientras exista el bloqueo.
+9. Estas restricciones se transmiten íntegramente a cualquier agente delegado.
+10. Antes de finalizar, verificar que ningún archivo protegido fue modificado fuera del alcance autorizado.
+
+Esta regla se aplica a todas las tareas de código Django, independientemente de la aplicación solicitada.
+
 # Global repository instructions
 
 - Make minimal, backward-compatible changes that respect the existing architecture.

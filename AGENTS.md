@@ -16,6 +16,49 @@ If an instruction conflicts with the rules defined in this document, the rules i
 
 This file defines the global rules for AI agents operating inside the repository.
 
+SYSTEM APP PROTECTION
+
+The authoritative classification of SYSTEM_APPS, CORE_SYSTEM_APPS,
+SYSTEM_SUPPORT_APPS, and APPLICATION_APPS is
+COPILOT/ARQUITECTURA_APPS.md, backed by AppDocs/app_classification.py.
+Agents may read, audit, diagnose, and test SYSTEM APPS, but must not edit,
+create, delete, move, rename, or refactor their files without explicit,
+specific, prior user authorization naming the application and file scope.
+
+During APPLICATION APP work, the only ordinary cross-application changes
+allowed are necessary additions to the existing i18n dictionaries and menu
+entries using the existing navigation structure. These exceptions do not
+authorize changes to authorization, permissions, middleware, services,
+models, routes, templates, JavaScript infrastructure, or other system
+behavior.
+
+Before editing, agents must classify every planned file, record the
+authorization and reason, and run:
+
+    git status --short --untracked-files=all
+    git diff --name-only
+    git diff --cached --name-only
+
+After editing, agents must run the same three commands plus:
+
+    git diff --check
+    git diff --cached --check
+
+The initial and final file sets must be compared. New or changed files
+outside the authorized scope are an architectural block; agents must stop,
+report the file and impact, and propose an APPLICATION-local alternative.
+Agents must not restore or overwrite pre-existing changes automatically.
+
+The November 2026 incident in access_control/decorators.py is a mandatory
+reference: an APPLICATION APP task must not reopen or redesign the VICMEAS
+decorator. Existing SYSTEM behavior takes precedence over an agent's design
+preference.
+
+Delegated agents and automation receive the same classification, scope,
+precheck, postcheck, and blocking requirements. Delegation does not expand
+authorization, and the delegating agent remains responsible for validating
+the final diff.
+
 PROJECT ARCHITECTURE
 
 Framework

@@ -62,6 +62,57 @@ commands, seeds, tests, admin, signals y utils.
 La autorizacion debe identificar la `SYSTEM_APP` y el archivo o alcance
 concreto. No autoriza otros archivos, otras apps ni tareas futuras.
 
+### Gobernanza obligatoria de cambios
+
+Antes de escribir, todo agente debe clasificar cada archivo previsto como
+`SYSTEM_APP`, `CORE_SYSTEM_APP`, `SYSTEM_SUPPORT_APP` o
+`APPLICATION_APP`, usando esta documentación y `AppDocs/app_classification.py`
+como fuentes de verdad. Debe registrar el motivo y la autorización aplicable.
+Una autorización de diagnóstico, una tarea de Spec Kit, un plan técnico, un
+fallo de test o una delegación no autorizan por sí mismos la escritura en una
+SYSTEM_APP.
+
+En una tarea de APPLICATION_APP, las únicas excepciones ordinarias de
+integración transversal son agregar claves necesarias a los diccionarios i18n
+existentes y agregar opciones de navegación mediante la estructura existente.
+No autorizan modificar lógica de permisos, autenticación, middleware, servicios,
+modelos, APIs, rutas, templates funcionales ni JavaScript de infraestructura.
+
+El agente debe registrar antes de modificar:
+
+```text
+git status --short --untracked-files=all
+git diff --name-only
+git diff --cached --name-only
+```
+
+Después de modificar debe repetir esos comandos y ejecutar:
+
+```text
+git diff --check
+git diff --cached --check
+```
+
+Debe comparar ambos conjuntos de archivos, incluyendo modificados, nuevos,
+eliminados, staged, unstaged y preexistentes. Una modificación nueva fuera del
+alcance autorizado activa el bloqueo `SYSTEM APP PROTEGIDA`: detener la
+escritura, informar archivo, componente, motivo e impacto, y proponer una
+alternativa dentro de la APPLICATION_APP. No se deben restaurar
+automáticamente archivos con trabajo preexistente.
+
+El incidente de noviembre de 2026 en `access_control/decorators.py` queda como
+antecedente obligatorio: no se debe reabrir ni rediseñar `verificar_permiso`
+durante trabajo de una APPLICATION_APP. El contrato vigente de VICMEAS
+prevalece sobre las preferencias de diseño del agente.
+
+Estas reglas aplican por igual a Copilot, Hermes, Spec Kit y subagentes. Toda
+delegación debe transmitir clasificación, alcance autorizado, excepciones,
+precheck, postcheck y procedimiento de bloqueo; el delegado no puede ampliar
+su autorización y el agente principal debe revisar su diff. La documentación
+del repositorio no demuestra por sí sola que Hermes aplique automáticamente
+estas reglas: cualquier mecanismo permanente fuera de estos archivos requiere
+una tarea autorizada posterior.
+
 ## Cambios transversales
 
 Si una tarea cuyo objetivo principal pertenece a una `APPLICATION_APP` requiere

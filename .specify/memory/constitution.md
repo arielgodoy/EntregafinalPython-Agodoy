@@ -28,6 +28,11 @@ Sync Impact Report
   APPLICATION_APPS, con alcance GLOBAL POR APP o POR EMPRESA, independencia entre apps
   y consumo exclusivo de APIs públicas SYSTEM/CORE. Afecta también a
   COPILOT/ARQUITECTURA_APPS.md y specs/001-tareas-internas/.
+- Enmienda 2026-11-10 (v1.6.0, MINOR): se formaliza la protección operativa de
+  SYSTEM_APPS durante trabajo de APPLICATION_APPS, incluyendo clasificación previa,
+  autorización específica, excepciones limitadas a i18n/navegación, bloqueo ante
+  cambios fuera de alcance y precheck/postcheck Git. Se aplica también a Copilot,
+  Hermes, Spec Kit y subagentes, sin afirmar enforcement automático.
 -->
 
 # AppDocs Constitution
@@ -168,6 +173,27 @@ alternativa local. Se prefiere siempre una solución dentro de la APPLICATION_AP
 Rationale: la propiedad local y la detención ante dependencias externas preservan la
 estabilidad transversal y el aislamiento arquitectónico.
 
+### VII.a. Verificación de alcance y delegación (NON-NEGOTIABLE)
+
+Antes de modificar archivos, el agente MUST clasificar su pertenencia a
+SYSTEM_APPS o APPLICATION_APPS y verificar autorización explícita para cada
+archivo protegido. En tareas de APPLICATION_APP, sólo se permiten como
+integración transversal ordinaria las entradas i18n necesarias y las opciones de
+navegación compatibles con la estructura existente.
+
+El agente MUST registrar el estado mediante `git status --short
+--untracked-files=all`, `git diff --name-only` y `git diff --cached --name-only`
+antes y después del cambio, y ejecutar `git diff --check` y
+`git diff --cached --check` al cierre. Debe comparar los conjuntos y detenerse
+ante cualquier modificación nueva fuera del alcance autorizado; no debe
+restaurar automáticamente cambios preexistentes.
+
+Estas obligaciones alcanzan a Copilot, Hermes, Spec Kit y subagentes. Una
+delegación no amplía el scope ni la autorización, y el agente principal MUST
+validar el diff final. La constitución no afirma que exista enforcement
+automático de Hermes; hooks, validadores CI o protección de filesystem requieren
+una tarea posterior autorizada.
+
 ### VIII. Cambios mínimos y focalizados
 
 Se prefieren cambios mínimos, focalizados y compatibles con la arquitectura
@@ -220,4 +246,4 @@ especificado.
   MINOR: nuevo principio o sección; PATCH: aclaraciones sin cambio semántico) y
   actualización del Sync Impact Report al inicio de este archivo.
 
-**Version**: 1.5.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-04
+**Version**: 1.6.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-11-10
